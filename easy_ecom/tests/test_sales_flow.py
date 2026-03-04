@@ -23,10 +23,10 @@ def test_confirm_sale(tmp_path: Path):
     store = setup_store(tmp_path)
     seq = SequenceService(SequencesRepo(store))
     inv = InventoryService(InventoryTxnRepo(store), seq)
-    inv.add_stock("c1", "p1", 10, 5, "sup", "")
+    inv.add_stock("c1", "Phone Case", 10, 5, "sup", "")
     fin = FinanceService(LedgerRepo(store), InventoryTxnRepo(store))
     svc = SalesService(SalesOrdersRepo(store), SalesOrderItemsRepo(store), InvoicesRepo(store), ShipmentsRepo(store), PaymentsRepo(store), inv, seq, fin)
-    result = svc.confirm_sale(SaleConfirm(client_id="c1", customer_id="cust1", items=[SaleItem(product_id="p1", qty=2, unit_selling_price=20)]), {"full_name": "X", "phone": "1", "address_line1": "Addr"})
+    result = svc.confirm_sale(SaleConfirm(client_id="c1", customer_id="cust1", items=[SaleItem(product_id="Phone Case", qty=2, unit_selling_price=20)]), {"full_name": "X", "phone": "1", "address_line1": "Addr"})
     assert result["invoice_no"].startswith("INV-")
     assert not LedgerRepo(store).all().empty
-    assert inv.available_qty("c1", "p1") == 8
+    assert inv.available_qty("c1", "Phone Case") == 8
