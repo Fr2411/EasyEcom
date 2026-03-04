@@ -28,12 +28,18 @@ client_id = st.session_state["user"]["client_id"]
 
 st.title("Sales")
 customer_id = st.text_input("Customer ID")
-product_id = st.text_input("Product ID")
+stock_df = inv.stock_by_lot(client_id)
+available_names = sorted(stock_df["product_name"].dropna().astype(str).unique().tolist()) if not stock_df.empty else []
+product_name = st.selectbox("Product name", available_names, index=None, placeholder="Select product with stock")
 qty = st.number_input("Qty", min_value=0.01)
 price = st.number_input("Unit selling price", min_value=0.01)
+if product_name:
+    st.caption(f"Available stock: {inv.available_qty(client_id, product_name):,.2f}")
 if st.button("Confirm sale"):
     try:
-        payload = SaleConfirm(client_id=client_id, customer_id=customer_id, items=[SaleItem(product_id=product_id, qty=float(qty), unit_selling_price=float(price))])
+        if not product_name:
+            raise ValueError("Please select a product")
+        payload = SaleConfirm(client_id=client_id, customer_id=customer_id, items=[SaleItem(product_id=product_name, qty=float(qty), unit_selling_price=float(price))])
         result = svc.confirm_sale(payload, {"full_name": "", "phone": "", "address_line1": ""})
         st.success(f"Order confirmed {result['order_id']}")
     except Exception as exc:
