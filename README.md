@@ -6,6 +6,8 @@ Enterprise-grade multi-tenant inventory, sales, and finance web app built with S
 - Multi-tenant architecture with strict `client_id` scoping.
 - RBAC roles: `SUPER_ADMIN`, `CLIENT_OWNER`, `CLIENT_MANAGER`, `CLIENT_EMPLOYEE`, `FINANCE_ONLY`.
 - Product catalog, inventory lots, FIFO depletion, sales flow (order/invoice/shipment), customer CRM, ledger finance.
+- Login-first app flow: login page is the landing page and successful login redirects to dashboard.
+- Inventory and sales UI are product-name driven (dropdowns) with stock-aware selection; Product IDs are system-generated.
 - Client and super-admin dashboards with KPI cards, date-filtered Plotly charts, and cross-client health monitoring.
 - Sequence generation per client/year (`INV`, `SHP`, `LOT`).
 - Append-only transaction tables and audit-ready architecture.
@@ -30,11 +32,14 @@ pip install -e .[dev]
 cp .env.example .env
 python easy_ecom/scripts/init_data.py
 streamlit run easy_ecom/app/main.py
+
+# opens on Login page; after authentication app redirects to Dashboard
 ```
 
 ## Critical Logic
-- Inventory uses `inventory_txn.csv` append-only with lot-level tracking.
-- OUT transactions allocate stock FIFO by lot in `InventoryService.allocate_fifo`.
+- Inventory uses `inventory_txn.csv` append-only with lot-level tracking and strict tenant filtering by `client_id`.
+- Product IDs are generated as `<product_name_normalized>_<lot_id>` when stock is added; users select by product name in UI.
+- OUT transactions allocate stock FIFO by lot in `InventoryService.allocate_fifo`, grouped by product name for intuitive sales execution.
 - Sales confirmation auto-generates order, invoice, shipment, inventory out rows, and earning ledger post.
 - Invoice status updates from payment aggregation.
 - Profit MTD = sales earnings - OUT transaction COGS - expense ledger.
