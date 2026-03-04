@@ -1,9 +1,16 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, field_validator
+
+from easy_ecom.domain.models.validators import validate_email_format
 
 
 class ClientCreate(BaseModel):
     business_name: str
     owner_name: str
     phone: str = ""
-    email: EmailStr
+    email: str
     address: str = ""
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        return validate_email_format(value)
