@@ -42,6 +42,7 @@ streamlit run easy_ecom/app/main.py
 ## Defaults
 - `ALLOW_BACKORDER=false` blocks overselling.
 - `CREATE_DEFAULT_CLIENT=false` avoids sample tenant creation by default.
+- Super admin bootstrap credentials are configured via env as `SUPER_ADMIN_EMAIL=frabby24@gmail.com` and `SUPER_ADMIN_PASSWORD=Fr@241189`.
 
 ## Quality
 Run checks:
