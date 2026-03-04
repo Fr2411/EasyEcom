@@ -6,6 +6,7 @@ Enterprise-grade multi-tenant inventory, sales, and finance web app built with S
 - Multi-tenant architecture with strict `client_id` scoping.
 - RBAC roles: `SUPER_ADMIN`, `CLIENT_OWNER`, `CLIENT_MANAGER`, `CLIENT_EMPLOYEE`, `FINANCE_ONLY`.
 - Product catalog, inventory lots, FIFO depletion, sales flow (order/invoice/shipment), customer CRM, ledger finance.
+- Client and super-admin dashboards with KPI cards, date-filtered Plotly charts, and cross-client health monitoring.
 - Sequence generation per client/year (`INV`, `SHP`, `LOT`).
 - Append-only transaction tables and audit-ready architecture.
 - CSV persistence with file locks and repository abstraction for DB migration readiness.
@@ -37,6 +38,9 @@ streamlit run easy_ecom/app/main.py
 - Sales confirmation auto-generates order, invoice, shipment, inventory out rows, and earning ledger post.
 - Invoice status updates from payment aggregation.
 - Profit MTD = sales earnings - OUT transaction COGS - expense ledger.
+- Dashboard KPIs include stock value, revenue/expenses/profit MTD, orders + AOV MTD, and outstanding invoices.
+- Dashboard analytics include revenue trends, inventory value by product, product aging, margin vs sell speed bubble, income vs expense trends, and lot profitability recovery.
+- Super admin dashboard supports global/specific-client toggle with aggregate bars (revenue and inventory value by client) and health flags (negative stock, inactive 14+ days).
 - User accounts are stored in `users.csv` with plain-text passwords (as requested) and compared directly at login.
 - Product features input accepts free-form text (line breaks, commas, or bullet points) and is normalized to JSON (`{"features": [...]}`) before persistence.
 
