@@ -38,6 +38,7 @@ streamlit run easy_ecom/app/main.py
 - Invoice status updates from payment aggregation.
 - Profit MTD = sales earnings - OUT transaction COGS - expense ledger.
 - User accounts are stored in `users.csv` with plain-text passwords (as requested) and compared directly at login.
+- Product features input accepts free-form text (line breaks, commas, or bullet points) and is normalized to JSON (`{"features": [...]}`) before persistence.
 
 ## Defaults
 - `ALLOW_BACKORDER=false` blocks overselling.
