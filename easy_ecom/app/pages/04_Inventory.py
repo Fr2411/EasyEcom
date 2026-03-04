@@ -18,7 +18,9 @@ if not can_access_page(roles, "Inventory"):
 store = CsvStore(settings.data_dir)
 seq = SequenceService(SequencesRepo(store))
 svc = InventoryService(InventoryTxnRepo(store), seq)
-client_id = st.session_state["user"]["client_id"]
+user = st.session_state["user"]
+client_id = user["client_id"]
+user_id = user["user_id"]
 
 st.title("Inventory")
 products_df = ProductsRepo(store).all()
@@ -36,7 +38,7 @@ if submit:
     try:
         if not product_name:
             raise ValueError("Please select a product")
-        lot_id = svc.add_stock(client_id, product_name, float(qty), float(unit_cost), supplier, note)
+        lot_id = svc.add_stock(client_id, product_name, float(qty), float(unit_cost), supplier, note, user_id=user_id)
         st.success(f"Created lot {lot_id}")
     except Exception as exc:
         st.error(str(exc))

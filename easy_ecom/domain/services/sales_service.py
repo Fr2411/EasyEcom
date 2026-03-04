@@ -31,7 +31,7 @@ class SalesService:
         self.seq_service = seq_service
         self.finance_service = finance_service
 
-    def confirm_sale(self, payload: SaleConfirm, customer_snapshot: dict[str, str]) -> dict[str, str]:
+    def confirm_sale(self, payload: SaleConfirm, customer_snapshot: dict[str, str], user_id: str = "") -> dict[str, str]:
         subtotal = sum(i.qty * i.unit_selling_price for i in payload.items)
         grand_total = subtotal - payload.discount + payload.tax
         order_id = new_uuid()
@@ -39,7 +39,7 @@ class SalesService:
 
         for item in payload.items:
             self.items_repo.append({"order_item_id": new_uuid(), "order_id": order_id, "product_id": item.product_id, "prd_description_snapshot": "", "qty": str(item.qty), "unit_selling_price": str(item.unit_selling_price), "total_selling_price": str(item.qty * item.unit_selling_price)})
-            self.inv_service.deduct_stock(payload.client_id, item.product_id, item.qty, "sale", order_id)
+            self.inv_service.deduct_stock(payload.client_id, item.product_id, item.qty, "sale", order_id, user_id=user_id)
 
         year = pd.Timestamp.utcnow().year
         invoice_id = new_uuid()
@@ -50,7 +50,7 @@ class SalesService:
         shipment_no = self.seq_service.next(payload.client_id, "SHIPMENT", year, "SHP")
         self.shipments_repo.append({"shipment_id": shipment_id, "client_id": payload.client_id, "shipment_no": shipment_no, "order_id": order_id, "customer_id": payload.customer_id, "timestamp": now_iso(), "status": "packed", "ship_to_name_snapshot": customer_snapshot.get("full_name", ""), "ship_to_phone_snapshot": customer_snapshot.get("phone", ""), "ship_to_address_snapshot": customer_snapshot.get("address_line1", ""), "courier": "", "tracking_no": ""})
 
-        self.finance_service.add_entry(payload.client_id, "earning", "Sales", grand_total, "sale", invoice_id, "Auto-posted sale")
+        self.finance_service.add_entry(payload.client_id, "earning", "Sales", grand_total, "sale", invoice_id, "Auto-posted sale", user_id=user_id)
         return {"order_id": order_id, "invoice_id": invoice_id, "shipment_id": shipment_id, "invoice_no": invoice_no, "shipment_no": shipment_no}
 
     def record_payment(self, client_id: str, invoice_id: str, amount_paid: float, method: str, note: str = "") -> None:
