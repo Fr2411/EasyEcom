@@ -16,7 +16,9 @@ if not can_access_finance(roles):
 
 store = CsvStore(settings.data_dir)
 svc = FinanceService(LedgerRepo(store), InventoryTxnRepo(store))
-client_id = st.session_state["user"]["client_id"]
+user = st.session_state["user"]
+client_id = user["client_id"]
+user_id = user["user_id"]
 
 st.title("Finance")
 with st.form("ledger"):
@@ -26,7 +28,7 @@ with st.form("ledger"):
     note = st.text_input("Note")
     submit = st.form_submit_button("Post")
 if submit:
-    svc.add_entry(client_id, entry_type, category, float(amount), "manual", "", note)
+    svc.add_entry(client_id, entry_type, category, float(amount), "manual", "", note, user_id=user_id)
     st.success("Posted")
 
 st.metric("Profit MTD", f"{svc.profit_mtd(client_id):.2f}")

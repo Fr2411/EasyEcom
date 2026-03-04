@@ -24,7 +24,9 @@ seq = SequenceService(SequencesRepo(store))
 inv = InventoryService(InventoryTxnRepo(store), seq)
 fin = FinanceService(LedgerRepo(store), InventoryTxnRepo(store))
 svc = SalesService(SalesOrdersRepo(store), SalesOrderItemsRepo(store), InvoicesRepo(store), ShipmentsRepo(store), PaymentsRepo(store), inv, seq, fin)
-client_id = st.session_state["user"]["client_id"]
+user = st.session_state["user"]
+client_id = user["client_id"]
+user_id = user["user_id"]
 
 st.title("Sales")
 customer_id = st.text_input("Customer ID")
@@ -40,7 +42,7 @@ if st.button("Confirm sale"):
         if not product_name:
             raise ValueError("Please select a product")
         payload = SaleConfirm(client_id=client_id, customer_id=customer_id, items=[SaleItem(product_id=product_name, qty=float(qty), unit_selling_price=float(price))])
-        result = svc.confirm_sale(payload, {"full_name": "", "phone": "", "address_line1": ""})
+        result = svc.confirm_sale(payload, {"full_name": "", "phone": "", "address_line1": ""}, user_id=user_id)
         st.success(f"Order confirmed {result['order_id']}")
     except Exception as exc:
         st.error(str(exc))
