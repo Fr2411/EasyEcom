@@ -22,6 +22,15 @@ def test_profit_mtd(tmp_path: Path):
     inv_svc.add_stock("c1", "p1", 10, 5, "s", "")
     inv_svc.deduct_stock("c1", "p1", 2, "sale", "o1")
     fin = FinanceService(LedgerRepo(store), InventoryTxnRepo(store))
-    fin.add_entry("c1", "earning", "Sales", 100, "sale", "i1")
-    fin.add_entry("c1", "expense", "Ops", 20, "manual", "e1")
+    fin.add_entry("c1", "earning", "Sales", 100, "sale", "i1", user_id="u1")
+    fin.add_entry("c1", "expense", "Ops", 20, "manual", "e1", user_id="u1")
     assert fin.profit_mtd("c1") == 70
+
+
+def test_finance_transactions_capture_user_id(tmp_path: Path):
+    store = setup_store(tmp_path)
+    fin = FinanceService(LedgerRepo(store), InventoryTxnRepo(store))
+    fin.add_entry("c1", "expense", "Ops", 20, "manual", "e1", user_id="u-456")
+
+    rows = LedgerRepo(store).all()
+    assert rows.iloc[0]["user_id"] == "u-456"

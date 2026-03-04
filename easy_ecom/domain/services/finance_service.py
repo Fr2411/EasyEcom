@@ -13,11 +13,11 @@ class FinanceService:
         self.ledger_repo = ledger_repo
         self.inventory_repo = inventory_repo
 
-    def add_entry(self, client_id: str, entry_type: str, category: str, amount: float, source_type: str, source_id: str, note: str = "") -> str:
+    def add_entry(self, client_id: str, entry_type: str, category: str, amount: float, source_type: str, source_id: str, note: str = "", user_id: str = "") -> str:
         if amount <= 0:
             raise ValueError("amount must be positive")
         entry_id = new_uuid()
-        self.ledger_repo.append({"entry_id": entry_id, "client_id": client_id, "timestamp": now_iso(), "entry_type": entry_type, "category": category, "amount": str(amount), "source_type": source_type, "source_id": source_id, "note": note})
+        self.ledger_repo.append({"entry_id": entry_id, "client_id": client_id, "timestamp": now_iso(), "user_id": user_id, "entry_type": entry_type, "category": category, "amount": str(amount), "source_type": source_type, "source_id": source_id, "note": note})
         return entry_id
 
     def profit_mtd(self, client_id: str) -> float:
