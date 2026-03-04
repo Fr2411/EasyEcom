@@ -31,15 +31,13 @@ python easy_ecom/scripts/init_data.py
 streamlit run easy_ecom/app/main.py
 ```
 
-`email-validator` is included as a runtime dependency for Pydantic's `EmailStr` fields used in user onboarding/login models.
-
 ## Critical Logic
 - Inventory uses `inventory_txn.csv` append-only with lot-level tracking.
 - OUT transactions allocate stock FIFO by lot in `InventoryService.allocate_fifo`.
 - Sales confirmation auto-generates order, invoice, shipment, inventory out rows, and earning ledger post.
 - Invoice status updates from payment aggregation.
 - Profit MTD = sales earnings - OUT transaction COGS - expense ledger.
-- User creation validates tenant-scoped identity inputs with Pydantic models, including strict email format validation via `EmailStr`.
+- User creation validates tenant-scoped identity inputs with Pydantic models, including normalized and validated email format checks.
 
 ## Defaults
 - `ALLOW_BACKORDER=false` blocks overselling.
