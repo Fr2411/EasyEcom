@@ -46,12 +46,12 @@ class InventoryService:
             return product_id.split("_LOT-", 1)[0].replace("_", " ")
         return product_id
 
-    def add_stock(self, client_id: str, product_name: str, qty: float, unit_cost: float, supplier_snapshot: str, note: str, source_type: str = "purchase", source_id: str = "") -> str:
+    def add_stock(self, client_id: str, product_name: str, qty: float, unit_cost: float, supplier_snapshot: str, note: str, source_type: str = "purchase", source_id: str = "", user_id: str = "") -> str:
         if qty <= 0 or unit_cost <= 0:
             raise ValueError("qty and unit_cost must be > 0")
         lot_id = self.seq_service.next(client_id, "LOT", pd.Timestamp.utcnow().year, "LOT")
         product_id = self.build_product_id(product_name, lot_id)
-        self.repo.append({"txn_id": new_uuid(), "client_id": client_id, "timestamp": now_iso(), "txn_type": "IN", "product_id": product_id, "product_name": product_name, "qty": str(qty), "unit_cost": str(unit_cost), "total_cost": str(qty * unit_cost), "supplier_snapshot": supplier_snapshot, "note": note, "source_type": source_type, "source_id": source_id, "lot_id": lot_id})
+        self.repo.append({"txn_id": new_uuid(), "client_id": client_id, "timestamp": now_iso(), "user_id": user_id, "txn_type": "IN", "product_id": product_id, "product_name": product_name, "qty": str(qty), "unit_cost": str(unit_cost), "total_cost": str(qty * unit_cost), "supplier_snapshot": supplier_snapshot, "note": note, "source_type": source_type, "source_id": source_id, "lot_id": lot_id})
         return lot_id
 
     def stock_by_lot(self, client_id: str) -> pd.DataFrame:
@@ -90,10 +90,10 @@ class InventoryService:
             raise ValueError("Insufficient stock")
         return allocations
 
-    def deduct_stock(self, client_id: str, product_name: str, qty: float, source_type: str, source_id: str, note: str = "") -> list[dict[str, float | str]]:
+    def deduct_stock(self, client_id: str, product_name: str, qty: float, source_type: str, source_id: str, note: str = "", user_id: str = "") -> list[dict[str, float | str]]:
         allocations = self.allocate_fifo(client_id, product_name, qty)
         for alloc in allocations:
             q = float(alloc["qty"])
             uc = float(alloc["unit_cost"])
-            self.repo.append({"txn_id": new_uuid(), "client_id": client_id, "timestamp": now_iso(), "txn_type": "OUT", "product_id": str(alloc["product_id"]), "product_name": str(alloc["product_name"]), "qty": str(q), "unit_cost": str(uc), "total_cost": str(q * uc), "supplier_snapshot": "", "note": note, "source_type": source_type, "source_id": source_id, "lot_id": str(alloc["lot_id"])})
+            self.repo.append({"txn_id": new_uuid(), "client_id": client_id, "timestamp": now_iso(), "user_id": user_id, "txn_type": "OUT", "product_id": str(alloc["product_id"]), "product_name": str(alloc["product_name"]), "qty": str(q), "unit_cost": str(uc), "total_cost": str(q * uc), "supplier_snapshot": "", "note": note, "source_type": source_type, "source_id": source_id, "lot_id": str(alloc["lot_id"])})
         return allocations
