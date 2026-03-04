@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from easy_ecom.core.ids import new_uuid
-from easy_ecom.core.security import hash_password, verify_password
 from easy_ecom.core.time_utils import now_iso
 from easy_ecom.domain.models.user import UserCreate
 from easy_ecom.data.repos.csv.users_repo import RolesRepo, UserRolesRepo, UsersRepo
@@ -21,7 +20,7 @@ class UserService:
                 "client_id": payload.client_id,
                 "name": payload.name,
                 "email": str(payload.email).lower(),
-                "password_hash": hash_password(payload.password),
+                "password": payload.password,
                 "is_active": "true",
                 "created_at": now_iso(),
             }
@@ -35,7 +34,7 @@ class UserService:
         if matches.empty:
             return None
         user = matches.iloc[0].to_dict()
-        if not verify_password(password, user["password_hash"]):
+        if password != user["password"]:
             return None
         roles_df = self.user_roles.all()
         roles = roles_df[roles_df["user_id"] == user["user_id"]]["role_code"].tolist()
