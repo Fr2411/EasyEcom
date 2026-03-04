@@ -16,5 +16,6 @@ if st.button("Login"):
     if user:
         st.session_state["user"] = user
         st.success("Logged in")
+        st.switch_page("pages/02_Dashboard.py")
     else:
         st.error("Invalid credentials")
