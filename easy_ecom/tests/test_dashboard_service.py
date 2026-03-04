@@ -179,7 +179,7 @@ def test_dashboard_kpis_and_charts_data(tmp_path: Path):
     assert kpis["Current Stock Value"] == 30.0
     assert kpis["Revenue MTD"] == 100.0
     assert kpis["Expenses MTD"] == 30.0
-    assert kpis["Profit MTD"] == 70.0
+    assert kpis["Profit MTD"] == 50.0
     assert kpis["Orders MTD"] == 1.0
     assert kpis["AOV MTD"] == 100.0
     assert kpis["Outstanding Invoices"] == 40.0

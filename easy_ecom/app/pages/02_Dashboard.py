@@ -9,8 +9,10 @@ from easy_ecom.data.repos.csv.clients_repo import ClientsRepo
 from easy_ecom.data.repos.csv.finance_repo import LedgerRepo
 from easy_ecom.data.repos.csv.inventory_repo import InventoryTxnRepo
 from easy_ecom.data.repos.csv.products_repo import ProductsRepo
-from easy_ecom.data.repos.csv.sales_repo import InvoicesRepo, SalesOrderItemsRepo, SalesOrdersRepo
+from easy_ecom.data.repos.csv.sales_repo import InvoicesRepo, PaymentsRepo, SalesOrderItemsRepo, SalesOrdersRepo
 from easy_ecom.data.store.csv_store import CsvStore
+from easy_ecom.core.audit import log_event
+from easy_ecom.data.repos.csv.audit_repo import AuditRepo
 from easy_ecom.domain.services.dashboard_service import DashboardService
 
 require_login()
@@ -23,6 +25,7 @@ svc = DashboardService(
     SalesOrderItemsRepo(store),
     ProductsRepo(store),
     ClientsRepo(store),
+    PaymentsRepo(store),
 )
 
 user = st.session_state["user"]
@@ -51,6 +54,13 @@ if "SUPER_ADMIN" in roles:
     current_scope_client = scoped_client
 else:
     current_scope_client = client_id
+
+
+warnings = svc.integrity_warnings(current_scope_client)
+if warnings:
+    st.warning("Data integrity warnings:\n- " + "\n- ".join(warnings))
+    for w in warnings:
+        log_event(AuditRepo(store), user.get("user_id", ""), current_scope_client or "", "dashboard_warning", "metrics", current_scope_client or "global", {"warning": w})
 
 kpis = svc.kpis(current_scope_client)
 cols = st.columns(4)

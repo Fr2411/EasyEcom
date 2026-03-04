@@ -39,14 +39,23 @@ streamlit run easy_ecom/app/main.py
 
 ## Critical Logic
 - Inventory uses `inventory_txn.csv` append-only with lot-level tracking, strict tenant filtering by `client_id`, and actor tracking through `user_id`.
-- Product IDs are generated as `<product_name_normalized>_<lot_id>` when stock is added; users select by product name in UI.
+- Legacy data may store lot-suffixed product IDs in inventory rows; dashboard metrics now canonicalize to stable `products.product_id` and a migration script is provided (`easy_ecom/scripts/migrate_product_ids.py`).
 - OUT transactions allocate stock FIFO by lot in `InventoryService.allocate_fifo`, grouped by product name for intuitive sales execution.
 - Sales confirmation auto-generates order, invoice, shipment, inventory out rows, and earning ledger post; generated inventory/ledger rows inherit the initiating `user_id`.
 - Invoice status updates from payment aggregation.
-- Profit MTD = sales earnings - OUT transaction COGS - expense ledger.
+- KPIs/charts are computed by `MetricsService` (`easy_ecom/domain/services/metrics_service.py`) as the single source of truth.
+- Revenue = ledger `entry_type=earning`; Expenses = ledger `entry_type=expense`; COGS = inventory OUT `total_cost`; Profit = Revenue - Expenses - COGS (date-range aware).
+- AOV = Revenue / confirmed orders count (guarded for divide-by-zero).
+- Outstanding invoices = unpaid/partial invoice `amount_due` minus aggregated payments.
+- Stock value by product = sum of positive lot balances (`current_qty_lot * unit_cost_lot`) aggregated to product.
+- Product aging = sold% `(total_in-current_qty)/total_in`, remaining% `current_qty/total_in` with zero guards.
+- Margin% = `(revenue-cogs)/revenue` with zero-revenue guard.
+- Sell speed = units sold in last 30 days / 30.
+- Lot recovery = revenue allocated to consumed lots using order+product unit-price allocation from OUT `source_id`.
 - Dashboard KPIs include stock value, revenue/expenses/profit MTD, orders + AOV MTD, and outstanding invoices.
 - Dashboard analytics include revenue trends, inventory value by product, product aging, margin vs sell speed bubble, income vs expense trends, and lot profitability recovery.
-- Super admin dashboard supports global/specific-client toggle with aggregate bars (revenue and inventory value by client) and health flags (negative stock, inactive 14+ days).
+- Super admin dashboard supports global/specific-client toggle with aggregate bars (revenue and inventory value by client) and health flags.
+- Data integrity warnings are surfaced in dashboard (negative stock, unmapped product IDs, missing lot IDs on OUT, numeric coercions) and are audit-logged.
 - User accounts are stored in `users.csv` with plain-text passwords (as requested) and compared directly at login.
 - Logged-in user email is shown in the top-left sidebar for quick operator context.
 - The default "main" entry in sidebar navigation is hidden after login to declutter tab navigation.
