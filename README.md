@@ -37,7 +37,7 @@ streamlit run easy_ecom/app/main.py
 - Sales confirmation auto-generates order, invoice, shipment, inventory out rows, and earning ledger post.
 - Invoice status updates from payment aggregation.
 - Profit MTD = sales earnings - OUT transaction COGS - expense ledger.
-- User creation validates tenant-scoped identity inputs with Pydantic models, including normalized and validated email format checks.
+- User accounts are stored in `users.csv` with plain-text passwords (as requested) and compared directly at login.
 
 ## Defaults
 - `ALLOW_BACKORDER=false` blocks overselling.
