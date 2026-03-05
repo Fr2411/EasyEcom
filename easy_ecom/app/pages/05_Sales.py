@@ -44,7 +44,20 @@ items_repo = SalesOrderItemsRepo(store)
 invoices_repo = InvoicesRepo(store)
 shipments_repo = ShipmentsRepo(store)
 payments_repo = PaymentsRepo(store)
-svc = SalesService(orders_repo, items_repo, invoices_repo, shipments_repo, payments_repo, inv, seq, fin, product_repo, customer_repo, AuditRepo(store))
+svc = SalesService(
+    orders_repo,
+    items_repo,
+    invoices_repo,
+    shipments_repo,
+    payments_repo,
+    inv,
+    seq,
+    fin,
+    product_repo,
+    customer_repo,
+    AuditRepo(store),
+    variants_repo,
+)
 
 user = st.session_state["user"]
 client_id = user["client_id"]
