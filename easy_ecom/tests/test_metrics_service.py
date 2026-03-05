@@ -97,3 +97,32 @@ def test_margin_includes_cogs_same_product_id(tmp_path: Path):
 
     d = build_svc(store).margin_by_product("c1")
     assert float(d.iloc[0]["margin_pct"]) == 40.0
+
+def test_sold_qty_mtd_calculation(tmp_path: Path):
+    store = setup_store(tmp_path)
+    now = pd.Timestamp.utcnow().strftime("%Y-%m-%dT10:00:00Z")
+    SalesOrdersRepo(store).append({"order_id": "o1", "client_id": "c1", "timestamp": now, "customer_id": "cu", "status": "confirmed", "subtotal": "60", "discount": "0", "tax": "0", "grand_total": "60", "delivery_cost": "0", "delivery_provider": "", "note": ""})
+    SalesOrderItemsRepo(store).append({"order_item_id": "i1", "order_id": "o1", "product_id": "p1", "prd_description_snapshot": "", "qty": "3", "unit_selling_price": "20", "total_selling_price": "60"})
+    svc = build_svc(store)
+    assert svc.sold_qty("c1", DateRange(svc.month_start(), pd.Timestamp.utcnow().tz_localize(None))) == 3.0
+
+
+def test_orders_mtd_calculation(tmp_path: Path):
+    store = setup_store(tmp_path)
+    now = pd.Timestamp.utcnow().strftime("%Y-%m-%dT10:00:00Z")
+    SalesOrdersRepo(store).append({"order_id": "o1", "client_id": "c1", "timestamp": now, "customer_id": "cu", "status": "confirmed", "subtotal": "60", "discount": "0", "tax": "0", "grand_total": "60", "delivery_cost": "0", "delivery_provider": "", "note": ""})
+    SalesOrdersRepo(store).append({"order_id": "o2", "client_id": "c1", "timestamp": now, "customer_id": "cu", "status": "draft", "subtotal": "0", "discount": "0", "tax": "0", "grand_total": "0", "delivery_cost": "0", "delivery_provider": "", "note": ""})
+    svc = build_svc(store)
+    assert svc.orders_count("c1", DateRange(svc.month_start(), pd.Timestamp.utcnow().tz_localize(None))) == 1.0
+
+
+def test_product_aging_qty_and_pct(tmp_path: Path):
+    store = setup_store(tmp_path)
+    now = pd.Timestamp.utcnow().strftime("%Y-%m-%dT10:00:00Z")
+    inv = InventoryTxnRepo(store)
+    inv.append({"txn_id": "1", "client_id": "c1", "timestamp": now, "user_id": "", "txn_type": "IN", "product_id": "p1", "qty": "10", "unit_cost": "5", "total_cost": "50", "supplier_snapshot": "", "note": "", "source_type": "purchase", "source_id": "", "lot_id": "L1"})
+    inv.append({"txn_id": "2", "client_id": "c1", "timestamp": now, "user_id": "", "txn_type": "OUT", "product_id": "p1", "qty": "4", "unit_cost": "5", "total_cost": "20", "supplier_snapshot": "", "note": "", "source_type": "sale", "source_id": "", "lot_id": "L1"})
+    d = build_svc(store).product_aging("c1")
+    assert float(d.iloc[0]["sold_qty"]) == 4.0
+    assert float(d.iloc[0]["current_qty"]) == 6.0
+    assert round(float(d.iloc[0]["remaining_pct"]), 2) == 60.0

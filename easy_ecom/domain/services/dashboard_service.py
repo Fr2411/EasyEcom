@@ -35,6 +35,7 @@ class DashboardService:
             "Revenue MTD": revenue,
             "Expenses MTD": expenses,
             "Profit MTD": self.metrics.profit(client_id, mtd),
+            "Sold Qty MTD": self.metrics.sold_qty(client_id, mtd),
             "Orders MTD": self.metrics.orders_count(client_id, mtd),
             "AOV MTD": self.metrics.aov(client_id, mtd),
             "Outstanding Invoices": self.metrics.outstanding_invoices_amount(client_id),
