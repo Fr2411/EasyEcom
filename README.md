@@ -40,6 +40,14 @@ streamlit run easy_ecom/app/main.py
 # opens on Login page; after authentication app redirects to Dashboard
 ```
 
+If you see `ModuleNotFoundError: No module named 'reportlab'`, reinstall project dependencies from the repo root:
+
+```bash
+pip install -e .[dev]
+# or minimum fix
+pip install reportlab
+```
+
 ## Critical Logic
 - Inventory uses `inventory_txn.csv` append-only with lot-level tracking, strict tenant filtering by `client_id`, and actor tracking through `user_id`.
 - Legacy sales item rows that stored `product_name` in `sales_order_items.product_id` are migrated with `easy_ecom/scripts/migrate_sales_items_product_id.py` (idempotent, tenant-scoped, preserves `product_name_snapshot`).

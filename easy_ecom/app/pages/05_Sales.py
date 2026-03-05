@@ -2,7 +2,7 @@ import pandas as pd
 import streamlit as st
 
 from easy_ecom.app.ui.components import require_login
-from easy_ecom.app.ui.documents import build_invoice_pdf, build_shipment_pdf
+from easy_ecom.app.ui.documents import PdfDependencyError, build_invoice_pdf, build_shipment_pdf
 from easy_ecom.app.ui.formatters import format_money
 from easy_ecom.core.config import settings
 from easy_ecom.core.rbac import can_access_page
@@ -238,7 +238,10 @@ with cart_tab:
         render_items_df = order_items.merge(product_names, on="product_id", how="left") if not order_items.empty else pd.DataFrame()
         render_items = render_items_df.to_dict(orient="records") if not render_items_df.empty else []
 
-        invoice_pdf = build_invoice_pdf(client, customer, order, render_items, invoice)
-        shipment_pdf = build_shipment_pdf(client, customer, order, render_items, shipment)
-        st.download_button("Download Invoice PDF", invoice_pdf, file_name=f"{last_confirm['invoice_no']}.pdf", mime="application/pdf")
-        st.download_button("Download Shipping Mark", shipment_pdf, file_name=f"{last_confirm['shipment_no']}.pdf", mime="application/pdf")
+        try:
+            invoice_pdf = build_invoice_pdf(client, customer, order, render_items, invoice)
+            shipment_pdf = build_shipment_pdf(client, customer, order, render_items, shipment)
+            st.download_button("Download Invoice PDF", invoice_pdf, file_name=f"{last_confirm['invoice_no']}.pdf", mime="application/pdf")
+            st.download_button("Download Shipping Mark", shipment_pdf, file_name=f"{last_confirm['shipment_no']}.pdf", mime="application/pdf")
+        except PdfDependencyError as exc:
+            st.warning(str(exc))

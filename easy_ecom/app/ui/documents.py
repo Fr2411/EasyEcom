@@ -2,11 +2,24 @@ from __future__ import annotations
 
 from io import BytesIO
 
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
+
+class PdfDependencyError(ImportError):
+    """Raised when optional PDF dependencies are not installed."""
 
 
-def _draw_header(c: canvas.Canvas, client: dict[str, str], title: str, number: str) -> None:
+def _load_reportlab() -> tuple[object, object]:
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.pdfgen import canvas
+    except ModuleNotFoundError as exc:
+        raise PdfDependencyError(
+            "PDF generation requires `reportlab`. Install dependencies with `pip install -e .` "
+            "(or `pip install reportlab`)."
+        ) from exc
+    return A4, canvas
+
+
+def _draw_header(c: object, client: dict[str, str], title: str, number: str) -> None:
     c.setFont("Helvetica-Bold", 16)
     c.drawString(40, 800, client.get("business_name", "EasyEcom"))
     c.setFont("Helvetica", 10)
@@ -17,6 +30,7 @@ def _draw_header(c: canvas.Canvas, client: dict[str, str], title: str, number: s
 
 
 def build_invoice_pdf(client: dict[str, str], customer: dict[str, str], order: dict[str, str], items: list[dict[str, str]], invoice: dict[str, str]) -> bytes:
+    A4, canvas = _load_reportlab()
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     _draw_header(c, client, "Invoice", invoice.get("invoice_no", ""))
@@ -60,6 +74,7 @@ def build_invoice_pdf(client: dict[str, str], customer: dict[str, str], order: d
 
 
 def build_shipment_pdf(client: dict[str, str], customer: dict[str, str], order: dict[str, str], items: list[dict[str, str]], shipment: dict[str, str]) -> bytes:
+    A4, canvas = _load_reportlab()
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     _draw_header(c, client, "Shipment", shipment.get("shipment_no", ""))
