@@ -97,3 +97,40 @@ def test_confirm_prevents_double_confirm(tmp_path: Path):
         assert False, "Expected ValueError"
     except ValueError as exc:
         assert "already confirmed" in str(exc)
+
+
+def test_cart_confirm_posts_delivery_expense(tmp_path: Path):
+    store, svc = setup_store(tmp_path)
+    seed_common_data(store)
+    seq = SequenceService(SequencesRepo(store))
+    inv = InventoryService(InventoryTxnRepo(store), seq)
+    inv.add_stock("c1", "p1", "Phone Case", 10, 5, "sup", "")
+    SalesOrdersRepo(store).append({"order_id": "o1", "client_id": "c1", "timestamp": "2025-01-01T00:00:00Z", "customer_id": "cu1", "status": "draft", "subtotal": "0", "discount": "0", "tax": "0", "grand_total": "0", "delivery_cost": "15", "delivery_provider": "DHL", "note": ""})
+    SalesOrderItemsRepo(store).append({"order_item_id": "i1", "order_id": "o1", "product_id": "p1", "prd_description_snapshot": "", "qty": "1", "unit_selling_price": "20", "total_selling_price": "20"})
+    svc.confirm_order("o1", {"client_id": "c1", "user_id": "u1"})
+    ledger = LedgerRepo(store).all()
+    delivery = ledger[(ledger["entry_type"] == "expense") & (ledger["category"] == "Delivery")]
+    assert len(delivery) == 1
+    assert float(delivery.iloc[0]["amount"]) == 15.0
+
+
+def test_cart_confirm_creates_invoice_shipment_pdfs(tmp_path: Path):
+    store, svc = setup_store(tmp_path)
+    seed_common_data(store)
+    seq = SequenceService(SequencesRepo(store))
+    inv = InventoryService(InventoryTxnRepo(store), seq)
+    inv.add_stock("c1", "p1", "Phone Case", 10, 5, "sup", "")
+    SalesOrdersRepo(store).append({"order_id": "o1", "client_id": "c1", "timestamp": "2025-01-01T00:00:00Z", "customer_id": "cu1", "status": "draft", "subtotal": "0", "discount": "0", "tax": "0", "grand_total": "0", "delivery_cost": "0", "delivery_provider": "", "note": ""})
+    SalesOrderItemsRepo(store).append({"order_item_id": "i1", "order_id": "o1", "product_id": "p1", "prd_description_snapshot": "", "qty": "1", "unit_selling_price": "20", "total_selling_price": "20"})
+    result = svc.confirm_order("o1", {"client_id": "c1", "user_id": "u1"})
+    assert result["invoice_no"].startswith("INV-") and result["shipment_no"].startswith("SHP-")
+
+
+def test_cart_lists_draft_orders_by_customer(tmp_path: Path):
+    store, svc = setup_store(tmp_path)
+    seed_common_data(store)
+    SalesOrdersRepo(store).append({"order_id": "o1", "client_id": "c1", "timestamp": "2025-01-01T00:00:00Z", "customer_id": "cu1", "status": "draft", "subtotal": "0", "discount": "0", "tax": "0", "grand_total": "0", "delivery_cost": "0", "delivery_provider": "", "note": ""})
+    SalesOrdersRepo(store).append({"order_id": "o2", "client_id": "c1", "timestamp": "2025-01-02T00:00:00Z", "customer_id": "cu2", "status": "draft", "subtotal": "0", "discount": "0", "tax": "0", "grand_total": "0", "delivery_cost": "0", "delivery_provider": "", "note": ""})
+    drafts = svc.list_draft_orders("c1")
+    grouped = drafts.groupby("customer_id").size().to_dict()
+    assert grouped == {"cu1": 1, "cu2": 1}
