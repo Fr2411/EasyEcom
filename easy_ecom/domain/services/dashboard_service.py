@@ -50,11 +50,16 @@ class DashboardService:
         return self.metrics.product_aging(client_id)
 
     def margin_sell_speed(self, client_id: str | None) -> pd.DataFrame:
-        m = self.metrics.margin_by_product(client_id)
-        s = self.metrics.sell_speed_by_product(client_id)
-        d = m.merge(s[["product_id", "sell_speed"]], on="product_id", how="left")
-        d["sell_speed"] = d["sell_speed"].fillna(0.0)
-        return d[["product_id", "product_name", "margin_pct", "sell_speed", "revenue"]].sort_values("revenue", ascending=False)
+        m = self.metrics.margin_by_product(client_id, self.metrics.last_n_days_range(30))
+        s = self.metrics.sell_speed_by_product(client_id, days=30)
+        d = m.merge(s[["product_id", "sell_speed_units_per_day", "units_sold_last_30d"]], on="product_id", how="outer")
+        d["product_name"] = d["product_name"].fillna(d.get("product_id", ""))
+        d["revenue_last_30d"] = d["revenue"].fillna(0.0)
+        d["cogs_last_30d"] = d["cogs"].fillna(0.0)
+        d["margin_pct"] = d["margin_pct"].fillna(0.0)
+        d["sell_speed_units_per_day"] = d["sell_speed_units_per_day"].fillna(0.0)
+        d["units_sold_last_30d"] = d["units_sold_last_30d"].fillna(0.0)
+        return d[["product_id", "product_name", "margin_pct", "sell_speed_units_per_day", "revenue_last_30d", "cogs_last_30d", "units_sold_last_30d"]].sort_values("revenue_last_30d", ascending=False)
 
     def income_expense_trend(self, client_id: str | None, freq: str, start_date: pd.Timestamp, end_date: pd.Timestamp) -> pd.DataFrame:
         return self.metrics.income_vs_expense_trend(client_id, freq, DateRange(start_date, end_date))

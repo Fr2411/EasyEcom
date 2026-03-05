@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 import pandas as pd
+import uuid
 
 from easy_ecom.data.repos.csv.finance_repo import LedgerRepo
 from easy_ecom.data.repos.csv.inventory_repo import InventoryTxnRepo
@@ -75,6 +76,19 @@ class MetricsService:
         end = pd.Timestamp(date_range.end).tz_localize(None)
         end = max(end, end.normalize() + pd.Timedelta(days=1) - pd.Timedelta(seconds=1))
         return d[(d[col] >= start) & (d[col] <= end)].copy()
+
+    @staticmethod
+    def _is_uuid(value: str) -> bool:
+        try:
+            uuid.UUID(str(value))
+            return True
+        except Exception:
+            return False
+
+    def last_n_days_range(self, days: int) -> DateRange:
+        end = pd.Timestamp.utcnow().tz_localize(None)
+        start = end - pd.Timedelta(days=days)
+        return DateRange(start=start, end=end)
 
     def _product_map(self, client_id: str | None) -> pd.DataFrame:
         products = self.scoped(self.products.all(), client_id)
@@ -225,14 +239,12 @@ class MetricsService:
             return pd.DataFrame(columns=["product_id", "product_name", "revenue", "cogs", "margin_pct"])
         valid_orders = orders[["order_id"]].drop_duplicates()
         s = items.merge(valid_orders, on="order_id", how="inner")
-        s["qty"] = self.to_float(s["qty"])
         s["total_selling_price"] = self.to_float(s["total_selling_price"])
         s = s.groupby("product_id", as_index=False).agg(revenue=("total_selling_price", "sum"))
 
         inv = self.apply_date_range(self.scoped(self.inv.all(), client_id), date_range)
         inv["total_cost"] = self.to_float(inv["total_cost"])
-        inv, _ = self._canonicalize_inventory_products(inv, client_id)
-        c = inv[inv["txn_type"] == "OUT"].groupby("product_key", as_index=False).agg(cogs=("total_cost", "sum")).rename(columns={"product_key": "product_id"})
+        c = inv[inv["txn_type"] == "OUT"].groupby("product_id", as_index=False).agg(cogs=("total_cost", "sum"))
         d = s.merge(c, on="product_id", how="left")
         d["cogs"] = d["cogs"].fillna(0.0)
         d["margin_pct"] = (((d["revenue"] - d["cogs"]) / d["revenue"].replace(0, pd.NA)).fillna(0.0) * 100)
@@ -241,18 +253,16 @@ class MetricsService:
         return d
 
     def sell_speed_by_product(self, client_id: str | None, days: int = 30) -> pd.DataFrame:
-        end = pd.Timestamp.utcnow().tz_localize(None)
-        start = end - pd.Timedelta(days=days)
-        rng = DateRange(start=start, end=end)
+        rng = self.last_n_days_range(days)
         inv = self.apply_date_range(self.scoped(self.inv.all(), client_id), rng)
         if inv.empty:
-            return pd.DataFrame(columns=["product_id", "sell_speed", "units_sold"])
+            return pd.DataFrame(columns=["product_id", "sell_speed_units_per_day", "units_sold_last_30d"])
         inv["qty"] = self.to_float(inv["qty"])
-        inv, _ = self._canonicalize_inventory_products(inv, client_id)
-        sold = inv[inv["txn_type"] == "OUT"].groupby("product_key", as_index=False).agg(units_sold=("qty", "sum"))
-        sold["sell_speed"] = sold["units_sold"] / float(days)
-        sold = sold.rename(columns={"product_key": "product_id"})
-        return sold.merge(self._product_map(client_id), on="product_id", how="left")
+        sold = inv[inv["txn_type"] == "OUT"].groupby("product_id", as_index=False).agg(units_sold_last_30d=("qty", "sum"))
+        sold["sell_speed_units_per_day"] = sold["units_sold_last_30d"] / float(days)
+        sold = sold.merge(self._product_map(client_id), on="product_id", how="left")
+        sold["product_name"] = sold["product_name"].fillna(sold["product_id"])
+        return sold
 
     def lot_profit_recovery(self, client_id: str | None) -> pd.DataFrame:
         inv = self.scoped(self.inv.all(), client_id)
@@ -327,4 +337,14 @@ class MetricsService:
             warnings.append("OUT transactions with missing lot_id detected.")
         _, map_warnings = self._canonicalize_inventory_products(inv, client_id)
         warnings.extend(map_warnings)
+
+        products = self._product_map(client_id)
+        product_ids = set(products["product_id"].astype(str).tolist()) if not products.empty else set()
+        items = self.order_items.all()
+        orders = self.scoped(self.orders.all(), client_id)
+        if not items.empty and not orders.empty and product_ids:
+            scoped_items = items.merge(orders[["order_id"]], on="order_id", how="inner")
+            missing = scoped_items[~scoped_items["product_id"].astype(str).isin(product_ids)]
+            if not missing.empty:
+                warnings.append(f"{len(missing)} sales order items have unknown product_id.")
         return warnings
