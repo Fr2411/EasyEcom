@@ -46,6 +46,7 @@ streamlit run easy_ecom/app/main.py
 - OUT transactions allocate stock FIFO by lot in `InventoryService.allocate_fifo`, keyed by stable `product_id` with lot kept in `lot_id`.
 - Sales confirmation auto-generates order, invoice, shipment, inventory out rows, and earning ledger post; generated inventory/ledger rows inherit the initiating `user_id`.
 - Sales page pre-fills item unit price from product default pricing; discounts are bounded by `max_discount_pct` and enforced in UI + service layer before cart/order writes.
+- Sales page includes a sales records grid that is strictly tenant-scoped (`client_id`) and shows per-order invoice/payment balance details for the logged-in client only.
 - Refund approval flow (`returns.csv`, `return_items.csv`, `refunds.csv`) is restricted to non-employee roles and posts ledger `expense` category `Refunds`.
 - Invoice status updates from payment aggregation.
 - KPIs/charts are computed by `MetricsService` (`easy_ecom/domain/services/metrics_service.py`) as the single source of truth.
