@@ -8,6 +8,7 @@ Enterprise-grade multi-tenant inventory, sales, and finance web app built with S
 - Product catalog, inventory lots, FIFO depletion, sales flow (order/invoice/shipment), customer CRM, ledger finance.
 - Client-level currency support (`currency_code` required, `currency_symbol` optional) with shared money formatter across dashboard/sales/finance screens.
 - Product master pricing controls (`default_selling_price`, `max_discount_pct`) with role-gated pricing editor in Inventory.
+- Sales workspace includes **Sell**, **Cart**, and **Sales Records** tabs so confirmed sales history remains visible alongside invoice/payment status.
 - Returns workflow with request/approval, refund records, automatic refund expense ledger posting, and optional restocking.
 - Login-first app flow: before authentication, sidebar navigation is hidden so only the login page is visible; successful login redirects to dashboard.
 - Inventory and sales persist stable `products.product_id` UUIDs end-to-end (sales items + inventory txns), while keeping product names as display snapshots.
@@ -54,7 +55,7 @@ pip install reportlab
 - OUT transactions allocate stock FIFO by lot in `InventoryService.allocate_fifo`, keyed by stable `product_id` with lot kept in `lot_id`.
 - Sales confirmation auto-generates order, invoice, shipment, inventory out rows, and earning ledger post; generated inventory/ledger rows inherit the initiating `user_id`.
 - Sales page pre-fills item unit price from product default pricing; discounts are bounded by `max_discount_pct` and enforced in UI + service layer before cart/order writes.
-- Sales page includes a sales records grid that is strictly tenant-scoped (`client_id`) and shows per-order invoice/payment balance details for the logged-in client only.
+- Sales page includes a sales records grid that is strictly tenant-scoped (`client_id`) and shows the latest 50 confirmed sales with per-order invoice/payment balance details for the logged-in client only.
 - Cart tab for draft sales orders groups carts by customer, supports draft line edits/removals, and confirms drafts into invoice + shipment with idempotency checks.
 - Invoice and shipping mark downloads are generated on-demand as PDFs using `reportlab` (`easy_ecom/app/ui/documents.py`).
 - Sales records grid normalizes invoice status into a dedicated `invoice_status` column before display, avoiding `status` column collisions with sales order status during joins.
