@@ -8,6 +8,15 @@ from easy_ecom.data.repos.base import BaseRepo
 class CustomersRepo(BaseRepo):
     table_name = "customers.csv"
 
+    def get(self, customer_id: str) -> dict[str, str] | None:
+        df = self.all()
+        if df.empty:
+            return None
+        row = df[df["customer_id"] == customer_id]
+        if row.empty:
+            return None
+        return row.iloc[0].to_dict()
+
     def find_by_name(self, client_id: str, name: str) -> pd.DataFrame:
         df = self.all()
         if df.empty:
