@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import pandas as pd
 
+from easy_ecom.core.audit import log_event
 from easy_ecom.core.ids import new_uuid
 from easy_ecom.core.time_utils import now_iso
+from easy_ecom.data.repos.csv.audit_repo import AuditRepo
+from easy_ecom.data.repos.csv.customers_repo import CustomersRepo
 from easy_ecom.data.repos.csv.products_repo import ProductsRepo
 from easy_ecom.data.repos.csv.sales_repo import InvoicesRepo, PaymentsRepo, SalesOrderItemsRepo, SalesOrdersRepo, ShipmentsRepo
 from easy_ecom.domain.models.sales import SaleConfirm, SaleItem
@@ -23,6 +26,8 @@ class SalesService:
         seq_service: SequenceService,
         finance_service: FinanceService,
         products_repo: ProductsRepo,
+        customers_repo: CustomersRepo | None = None,
+        audit_repo: AuditRepo | None = None,
     ):
         self.orders_repo = orders_repo
         self.items_repo = items_repo
@@ -33,12 +38,14 @@ class SalesService:
         self.seq_service = seq_service
         self.finance_service = finance_service
         self.products_repo = products_repo
+        self.customers_repo = customers_repo
+        self.audit_repo = audit_repo
 
-    def min_allowed_price(self, client_id: str, product_name: str) -> float:
+    def min_allowed_price(self, client_id: str, product_id: str) -> float:
         products = self.products_repo.all()
         if products.empty:
             raise ValueError("Product not found")
-        matched = products[(products["client_id"] == client_id) & (products["product_name"] == product_name)]
+        matched = products[(products["client_id"] == client_id) & (products["product_id"] == product_id)]
         if matched.empty:
             raise ValueError("Product not found")
         row = matched.iloc[0]
@@ -52,6 +59,61 @@ class SalesService:
         min_price = self.min_allowed_price(client_id, item.product_id)
         if item.unit_selling_price < min_price:
             raise ValueError(f"Price for {item.product_id} cannot be below {min_price:.2f}")
+
+    def resolve_customer_for_sale(self, client_id: str, customer_input: dict[str, str], matched_customer_id: str = "", user_id: str = "") -> str:
+        if self.customers_repo is None:
+            return customer_input.get("customer_id", "")
+        full_name = customer_input.get("full_name", "").strip()
+        if not full_name:
+            raise ValueError("Customer name is required")
+
+        fields = {
+            "full_name": full_name,
+            "phone": customer_input.get("phone", "").strip(),
+            "email": customer_input.get("email", "").strip(),
+            "address_line1": customer_input.get("address_line1", "").strip(),
+        }
+
+        if matched_customer_id:
+            customers = self.customers_repo.all()
+            scoped = customers[(customers["client_id"] == client_id) & (customers["customer_id"] == matched_customer_id)]
+            if scoped.empty:
+                raise ValueError("Selected customer does not belong to current client")
+            row = scoped.iloc[0]
+            patch = {k: v for k, v in fields.items() if str(row.get(k, "")) != v}
+            if patch:
+                self.customers_repo.update(matched_customer_id, patch)
+                if self.audit_repo is not None:
+                    log_event(self.audit_repo, user_id, client_id, "customer_auto_updated_from_sale", "customer", matched_customer_id, {"patch": patch})
+            return matched_customer_id
+
+        customer_id = new_uuid()
+        self.customers_repo.create(
+            {
+                "customer_id": customer_id,
+                "client_id": client_id,
+                "created_at": now_iso(),
+                "full_name": fields["full_name"],
+                "phone": fields["phone"],
+                "email": fields["email"],
+                "whatsapp": fields["phone"],
+                "address_line1": fields["address_line1"],
+                "address_line2": "",
+                "area": "",
+                "city": customer_input.get("city", "").strip(),
+                "state": "",
+                "postal_code": "",
+                "country": customer_input.get("country", "").strip(),
+                "preferred_contact_channel": "phone",
+                "marketing_opt_in": "false",
+                "tags": "",
+                "notes": "",
+                "is_active": "true",
+            }
+        )
+        if self.audit_repo is not None:
+            log_event(self.audit_repo, user_id, client_id, "customer_auto_created_from_sale", "customer", customer_id, fields)
+        return customer_id
 
     def confirm_sale(self, payload: SaleConfirm, customer_snapshot: dict[str, str], user_id: str = "") -> dict[str, str]:
         subtotal = sum(i.qty * i.unit_selling_price for i in payload.items)

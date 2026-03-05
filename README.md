@@ -10,7 +10,7 @@ Enterprise-grade multi-tenant inventory, sales, and finance web app built with S
 - Product master pricing controls (`default_selling_price`, `max_discount_pct`) with role-gated pricing editor in Inventory.
 - Returns workflow with request/approval, refund records, automatic refund expense ledger posting, and optional restocking.
 - Login-first app flow: before authentication, sidebar navigation is hidden so only the login page is visible; successful login redirects to dashboard.
-- Inventory and sales UI are product-name driven (dropdowns) with stock-aware selection; Product IDs are system-generated.
+- Inventory and sales persist stable `products.product_id` UUIDs end-to-end (sales items + inventory txns), while keeping product names as display snapshots.
 - Client and super-admin dashboards with KPI cards, date-filtered Plotly charts, and cross-client health monitoring.
 - Sequence generation per client/year (`INV`, `SHP`, `LOT`).
 - Append-only transaction tables and audit-ready architecture.
@@ -42,8 +42,8 @@ streamlit run easy_ecom/app/main.py
 
 ## Critical Logic
 - Inventory uses `inventory_txn.csv` append-only with lot-level tracking, strict tenant filtering by `client_id`, and actor tracking through `user_id`.
-- Legacy data may store lot-suffixed product IDs in inventory rows; dashboard metrics now canonicalize to stable `products.product_id` and a migration script is provided (`easy_ecom/scripts/migrate_product_ids.py`).
-- OUT transactions allocate stock FIFO by lot in `InventoryService.allocate_fifo`, grouped by product name for intuitive sales execution.
+- Legacy sales item rows that stored `product_name` in `sales_order_items.product_id` are migrated with `easy_ecom/scripts/migrate_sales_items_product_id.py` (idempotent, tenant-scoped, preserves `product_name_snapshot`).
+- OUT transactions allocate stock FIFO by lot in `InventoryService.allocate_fifo`, keyed by stable `product_id` with lot kept in `lot_id`.
 - Sales confirmation auto-generates order, invoice, shipment, inventory out rows, and earning ledger post; generated inventory/ledger rows inherit the initiating `user_id`.
 - Sales page pre-fills item unit price from product default pricing; discounts are bounded by `max_discount_pct` and enforced in UI + service layer before cart/order writes.
 - Refund approval flow (`returns.csv`, `return_items.csv`, `refunds.csv`) is restricted to non-employee roles and posts ledger `expense` category `Refunds`.
@@ -79,3 +79,15 @@ pytest
 ruff check .
 black --check .
 ```
+
+
+### Realtime refresh behavior
+- Dashboard, Inventory, Sales, and Customers pages include manual **Refresh** buttons.
+- Dashboard includes optional timed auto-refresh (5/10/15/30s) via `streamlit-autorefresh`.
+- Dashboard renders `Last refreshed at <timestamp>` for operator visibility.
+
+### Sales customer type-ahead + auto-save
+- Sales flow accepts freeform customer entry.
+- Case-insensitive exact name match is tenant-scoped and can disambiguate matching customers.
+- On sale confirm: unmatched customers are auto-created; matched customers are auto-updated when edited fields changed.
+- Auto-create/auto-update actions are audit-logged.

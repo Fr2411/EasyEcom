@@ -25,6 +25,8 @@ client_id = user["client_id"]
 user_id = user["user_id"]
 
 st.title("Inventory")
+if st.button("Refresh"):
+    st.rerun()
 products_df = ProductsRepo(store).all()
 product_svc = ProductService(ProductsRepo(store))
 client_products = products_df[products_df["client_id"] == client_id].copy() if not products_df.empty else products_df
@@ -41,7 +43,10 @@ if submit:
     try:
         if not product_name:
             raise ValueError("Please select a product")
-        lot_id = svc.add_stock(client_id, product_name, float(qty), float(unit_cost), supplier, note, user_id=user_id)
+        selected_product = product_svc.get_by_name(client_id, product_name)
+        if not selected_product:
+            raise ValueError("Product not found")
+        lot_id = svc.add_stock(client_id, selected_product["product_id"], product_name, float(qty), float(unit_cost), supplier, note, user_id=user_id)
         st.success(f"Created lot {lot_id}")
     except Exception as exc:
         st.error(str(exc))

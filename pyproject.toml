@@ -17,6 +17,7 @@ dependencies = [
   "python-dotenv>=1.0",
   "filelock>=3.14",
   "pydantic>=2.6",
+  "streamlit-autorefresh>=1.0",
 ]
 
 [project.optional-dependencies]

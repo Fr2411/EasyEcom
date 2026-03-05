@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pandas as pd
+
 from easy_ecom.core.ids import new_uuid
 from easy_ecom.core.time_utils import now_iso
 from easy_ecom.domain.models.customer import CustomerCreate
@@ -36,3 +38,9 @@ class CustomerService:
             }
         )
         return customer_id
+
+    def find_by_name(self, client_id: str, name: str) -> pd.DataFrame:
+        return self.repo.find_by_name(client_id, name)
+
+    def update(self, customer_id: str, patch: dict[str, str]) -> bool:
+        return self.repo.update(customer_id, patch)

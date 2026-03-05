@@ -64,7 +64,7 @@ def test_sell_speed_last_30_days(tmp_path: Path):
     ts = (pd.Timestamp.utcnow() - pd.Timedelta(days=10)).strftime("%Y-%m-%dT10:00:00Z")
     InventoryTxnRepo(store).append({"txn_id": "1", "client_id": "c1", "timestamp": ts, "user_id": "", "txn_type": "OUT", "product_id": "p1", "qty": "30", "unit_cost": "5", "total_cost": "150", "supplier_snapshot": "", "note": "", "source_type": "sale", "source_id": "", "lot_id": "L1"})
     d = build_svc(store).sell_speed_by_product("c1", days=30)
-    assert round(float(d.iloc[0]["sell_speed"]), 2) == 1.0
+    assert round(float(d.iloc[0]["sell_speed_units_per_day"]), 2) == 1.0
 
 
 def test_lot_profit_recovery_allocation_consistency(tmp_path: Path):
@@ -85,3 +85,15 @@ def test_client_scoping_no_cross_tenant_leak(tmp_path: Path):
     l.append({"entry_id": "1", "client_id": "c1", "timestamp": now, "user_id": "", "entry_type": "earning", "category": "sales", "amount": "100", "source_type": "sale", "source_id": "", "note": ""})
     l.append({"entry_id": "2", "client_id": "c2", "timestamp": now, "user_id": "", "entry_type": "earning", "category": "sales", "amount": "999", "source_type": "sale", "source_id": "", "note": ""})
     assert build_svc(store).revenue("c1") == 100.0
+
+
+def test_margin_includes_cogs_same_product_id(tmp_path: Path):
+    store = setup_store(tmp_path)
+    now = pd.Timestamp.utcnow().strftime("%Y-%m-%dT10:00:00Z")
+    ProductsRepo(store).append({"product_id": "11111111-1111-1111-1111-111111111111", "client_id": "c1", "supplier": "", "product_name": "Headphone", "category": "", "prd_description": "", "prd_features_json": "{}", "created_at": now, "is_active": "true"})
+    SalesOrdersRepo(store).append({"order_id": "o1", "client_id": "c1", "timestamp": now, "customer_id": "cu", "status": "confirmed", "subtotal": "100", "discount": "0", "tax": "0", "grand_total": "100", "note": ""})
+    SalesOrderItemsRepo(store).append({"order_item_id": "i1", "order_id": "o1", "product_id": "11111111-1111-1111-1111-111111111111", "prd_description_snapshot": "", "qty": "2", "unit_selling_price": "50", "total_selling_price": "100"})
+    InventoryTxnRepo(store).append({"txn_id": "out1", "client_id": "c1", "timestamp": now, "user_id": "", "txn_type": "OUT", "product_id": "11111111-1111-1111-1111-111111111111", "qty": "2", "unit_cost": "30", "total_cost": "60", "supplier_snapshot": "", "note": "", "source_type": "sale", "source_id": "o1", "lot_id": "L1"})
+
+    d = build_svc(store).margin_by_product("c1")
+    assert float(d.iloc[0]["margin_pct"]) == 40.0

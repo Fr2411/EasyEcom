@@ -18,6 +18,8 @@ store = CsvStore(settings.data_dir)
 svc = CustomerService(CustomersRepo(store))
 client_id = st.session_state["user"]["client_id"]
 st.title("Customers")
+if st.button("Refresh"):
+    st.rerun()
 with st.form("add_customer"):
     full_name = st.text_input("Full name")
     phone = st.text_input("Phone")

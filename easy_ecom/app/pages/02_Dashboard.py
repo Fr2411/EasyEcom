@@ -17,6 +17,11 @@ from easy_ecom.data.repos.csv.audit_repo import AuditRepo
 from easy_ecom.domain.services.dashboard_service import DashboardService
 from easy_ecom.domain.services.client_service import ClientService
 
+try:
+    from streamlit_autorefresh import st_autorefresh
+except Exception:
+    st_autorefresh = None
+
 require_login()
 store = CsvStore(settings.data_dir)
 svc = DashboardService(
@@ -37,6 +42,17 @@ all_clients = ClientsRepo(store).all()
 client_svc = ClientService(ClientsRepo(store))
 
 st.title("Dashboard")
+if st.button("Refresh"):
+    st.rerun()
+auto_refresh = st.toggle("Auto refresh", value=False)
+interval = st.selectbox("Auto refresh interval (seconds)", [5, 10, 15, 30], index=2, disabled=not auto_refresh)
+if auto_refresh and st_autorefresh is not None:
+    st_autorefresh(interval=interval * 1000, key="dashboard_auto_refresh")
+elif auto_refresh:
+    st.info("Install streamlit-autorefresh for timed reruns.")
+
+st.session_state["dashboard_last_refreshed_at"] = pd.Timestamp.utcnow().tz_localize(None)
+st.caption(f"Last refreshed at {st.session_state['dashboard_last_refreshed_at']:%Y-%m-%d %H:%M:%S} UTC")
 
 if "SUPER_ADMIN" in roles:
     st.subheader("Scope")
@@ -57,7 +73,6 @@ if "SUPER_ADMIN" in roles:
     current_scope_client = scoped_client
 else:
     current_scope_client = client_id
-
 
 warnings = svc.integrity_warnings(current_scope_client)
 if warnings:
@@ -116,12 +131,22 @@ margin_speed = svc.margin_sell_speed(current_scope_client)
 fig_margin = px.scatter(
     margin_speed,
     x="margin_pct",
-    y="sell_speed",
-    size="revenue",
+    y="sell_speed_units_per_day",
+    size="revenue_last_30d",
     hover_name="product_name",
+    hover_data={
+        "revenue_last_30d": ":.2f",
+        "cogs_last_30d": ":.2f",
+        "margin_pct": ":.2f",
+        "units_sold_last_30d": ":.2f",
+        "sell_speed_units_per_day": ":.2f",
+    },
     title="Margin % vs Sell Speed",
 )
-fig_margin.update_layout(xaxis_title="Margin %", yaxis_title="Sell Speed (units/day)")
+if not margin_speed.empty:
+    fig_margin.add_vline(x=float(margin_speed["margin_pct"].median()), line_dash="dash", line_color="gray")
+    fig_margin.add_hline(y=float(margin_speed["sell_speed_units_per_day"].median()), line_dash="dash", line_color="gray")
+fig_margin.update_layout(xaxis_title="Margin %", yaxis_title="Sell speed (units/day, last 30d)")
 st.plotly_chart(fig_margin, use_container_width=True)
 
 income_expense = svc.income_expense_trend(current_scope_client, freq, start_date, end_date)
