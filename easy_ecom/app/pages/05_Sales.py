@@ -41,7 +41,8 @@ orders_repo = SalesOrdersRepo(store)
 items_repo = SalesOrderItemsRepo(store)
 invoices_repo = InvoicesRepo(store)
 shipments_repo = ShipmentsRepo(store)
-svc = SalesService(orders_repo, items_repo, invoices_repo, shipments_repo, PaymentsRepo(store), inv, seq, fin, product_repo, customer_repo, AuditRepo(store))
+payments_repo = PaymentsRepo(store)
+svc = SalesService(orders_repo, items_repo, invoices_repo, shipments_repo, payments_repo, inv, seq, fin, product_repo, customer_repo, AuditRepo(store))
 
 user = st.session_state["user"]
 client_id = user["client_id"]
@@ -52,7 +53,7 @@ st.title("Sales")
 if st.button("Refresh"):
     st.rerun()
 
-sell_tab, cart_tab = st.tabs(["Sell", "Cart"])
+sell_tab, cart_tab, records_tab = st.tabs(["Sell", "Cart", "Sales Records"])
 
 with sell_tab:
     products_df = product_svc.list_by_client(client_id)
@@ -245,3 +246,76 @@ with cart_tab:
             st.download_button("Download Shipping Mark", shipment_pdf, file_name=f"{last_confirm['shipment_no']}.pdf", mime="application/pdf")
         except PdfDependencyError as exc:
             st.warning(str(exc))
+
+with records_tab:
+    st.subheader("Sales records")
+    records_search = st.text_input("Search invoice/order/customer", key="records_search")
+    records_sort_order = st.selectbox("Sort by date", ["Newest", "Oldest"], key="records_sort")
+
+    orders = orders_repo.all()
+    if orders.empty:
+        st.info("No sales records found.")
+    else:
+        confirmed_orders = orders[(orders["client_id"] == client_id) & (orders["status"] == "confirmed")].copy()
+        if confirmed_orders.empty:
+            st.info("No confirmed sales yet.")
+        else:
+            customers = customer_repo.all()
+            invoices = invoices_repo.all()
+            payments = payments_repo.all()
+
+            confirmed_orders["timestamp"] = pd.to_datetime(confirmed_orders["timestamp"], errors="coerce")
+            confirmed_orders["grand_total"] = confirmed_orders["grand_total"].astype(float)
+            confirmed_orders = confirmed_orders.sort_values("timestamp", ascending=False).head(50)
+            st.caption("Showing the latest 50 confirmed sales for this client.")
+
+            invoice_view_cols = ["invoice_id", "invoice_no", "order_id", "status"]
+            invoice_view = invoices[invoice_view_cols] if not invoices.empty else pd.DataFrame(columns=invoice_view_cols)
+            invoice_view = invoice_view.rename(columns={"status": "invoice_status"})
+            records = confirmed_orders.merge(invoice_view, on="order_id", how="left")
+
+            customer_cols = ["customer_id", "full_name", "phone"]
+            customer_view = customers[customer_cols] if not customers.empty else pd.DataFrame(columns=customer_cols)
+            records = records.merge(customer_view, on="customer_id", how="left")
+
+            if not payments.empty and "invoice_id" in records.columns:
+                payments["amount_paid"] = payments["amount_paid"].astype(float)
+                paid_summary = payments.groupby("invoice_id", as_index=False)["amount_paid"].sum()
+                records = records.merge(paid_summary, on="invoice_id", how="left")
+            else:
+                records["amount_paid"] = 0.0
+            records["amount_paid"] = records["amount_paid"].fillna(0.0)
+
+            records["full_name"] = records["full_name"].fillna("Unknown")
+            records["phone"] = records["phone"].fillna("")
+            records["invoice_no"] = records["invoice_no"].fillna("-")
+            records["invoice_status"] = records["invoice_status"].fillna("unpaid")
+
+            if records_search.strip():
+                token = records_search.strip().lower()
+                records = records[
+                    records["invoice_no"].astype(str).str.lower().str.contains(token)
+                    | records["order_id"].astype(str).str.lower().str.contains(token)
+                    | records["full_name"].astype(str).str.lower().str.contains(token)
+                    | records["phone"].astype(str).str.lower().str.contains(token)
+                ]
+
+            records = records.sort_values("timestamp", ascending=records_sort_order == "Oldest")
+
+            display = records[["timestamp", "invoice_no", "order_id", "full_name", "phone", "grand_total", "amount_paid", "invoice_status"]].copy()
+            display = display.rename(
+                columns={
+                    "timestamp": "Sale Date",
+                    "invoice_no": "Invoice No",
+                    "order_id": "Order ID",
+                    "full_name": "Customer",
+                    "phone": "Phone",
+                    "grand_total": "Total",
+                    "amount_paid": "Paid",
+                    "invoice_status": "Invoice Status",
+                }
+            )
+            display["Sale Date"] = display["Sale Date"].dt.strftime("%Y-%m-%d %H:%M:%S")
+            display["Total"] = display["Total"].apply(lambda value: format_money(float(value), currency_code, currency_symbol))
+            display["Paid"] = display["Paid"].apply(lambda value: format_money(float(value), currency_code, currency_symbol))
+            st.dataframe(display, use_container_width=True)
