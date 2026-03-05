@@ -73,6 +73,7 @@ class MetricsService:
             return d
         start = pd.Timestamp(date_range.start).tz_localize(None)
         end = pd.Timestamp(date_range.end).tz_localize(None)
+        end = max(end, end.normalize() + pd.Timedelta(days=1) - pd.Timedelta(seconds=1))
         return d[(d[col] >= start) & (d[col] <= end)].copy()
 
     def _product_map(self, client_id: str | None) -> pd.DataFrame:
