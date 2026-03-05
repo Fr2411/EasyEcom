@@ -163,6 +163,22 @@ class MetricsService:
             return 0.0
         return float(len(orders[orders["status"].fillna("") == "confirmed"]))
 
+    def sold_qty(self, client_id: str | None, date_range: DateRange | None = None) -> float:
+        orders = self.apply_date_range(self.scoped(self.orders.all(), client_id), date_range)
+        if orders.empty:
+            return 0.0
+        confirmed = orders[orders["status"].fillna("") == "confirmed"][["order_id"]]
+        if confirmed.empty:
+            return 0.0
+        items = self.order_items.all()
+        if items.empty:
+            return 0.0
+        d = items.merge(confirmed, on="order_id", how="inner")
+        if d.empty:
+            return 0.0
+        d["qty"] = self.to_float(d["qty"])
+        return float(d["qty"].sum())
+
     def aov(self, client_id: str | None, date_range: DateRange | None = None) -> float:
         cnt = self.orders_count(client_id, date_range)
         return float(self.revenue(client_id, date_range) / cnt) if cnt else 0.0
@@ -218,7 +234,7 @@ class MetricsService:
     def product_aging(self, client_id: str | None) -> pd.DataFrame:
         inv = self.scoped(self.inv.all(), client_id)
         if inv.empty:
-            return pd.DataFrame(columns=["product_id", "product_name", "sold_pct", "remaining_pct"])
+            return pd.DataFrame(columns=["product_id", "product_name", "total_in_qty", "current_qty", "sold_qty", "sold_pct", "remaining_pct"])
         inv["qty"] = self.to_float(inv["qty"])
         inv, _ = self._canonicalize_inventory_products(inv, client_id)
         total_in = inv[inv["txn_type"] == "IN"].groupby("product_key", as_index=False).agg(total_in_qty=("qty", "sum"))
@@ -226,7 +242,8 @@ class MetricsService:
         d = total_in.merge(current[["product_key", "current_qty"]], on="product_key", how="left")
         d["current_qty"] = d["current_qty"].fillna(0.0)
         d = d[d["total_in_qty"] > 0]
-        d["sold_pct"] = ((d["total_in_qty"] - d["current_qty"]) / d["total_in_qty"]).clip(lower=0, upper=1) * 100
+        d["sold_qty"] = (d["total_in_qty"] - d["current_qty"]).clip(lower=0)
+        d["sold_pct"] = (d["sold_qty"] / d["total_in_qty"]).clip(lower=0, upper=1) * 100
         d["remaining_pct"] = (d["current_qty"] / d["total_in_qty"]).clip(lower=0, upper=1) * 100
         d = d.rename(columns={"product_key": "product_id"}).merge(self._product_map(client_id), on="product_id", how="left")
         d["product_name"] = d["product_name"].fillna(d["product_id"])
@@ -237,7 +254,7 @@ class MetricsService:
         orders = self.apply_date_range(self.scoped(self.orders.all(), client_id), date_range)
         if items.empty or orders.empty:
             return pd.DataFrame(columns=["product_id", "product_name", "revenue", "cogs", "margin_pct"])
-        valid_orders = orders[["order_id"]].drop_duplicates()
+        valid_orders = orders[orders["status"].fillna("") == "confirmed"][["order_id"]].drop_duplicates()
         s = items.merge(valid_orders, on="order_id", how="inner")
         s["total_selling_price"] = self.to_float(s["total_selling_price"])
         s = s.groupby("product_id", as_index=False).agg(revenue=("total_selling_price", "sum"))

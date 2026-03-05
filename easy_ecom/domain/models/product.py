@@ -10,6 +10,9 @@ class ProductCreate(BaseModel):
     prd_features_json: str = "{}"
     default_selling_price: float = Field(gt=0)
     max_discount_pct: float = Field(ge=0, le=100, default=10.0)
+    sizes_csv: str = ""
+    colors_csv: str = ""
+    others_csv: str = ""
 
 
 class ProductPricingUpdate(BaseModel):

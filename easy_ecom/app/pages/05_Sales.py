@@ -11,6 +11,7 @@ from easy_ecom.data.repos.csv.clients_repo import ClientsRepo
 from easy_ecom.data.repos.csv.customers_repo import CustomersRepo
 from easy_ecom.data.repos.csv.finance_repo import LedgerRepo
 from easy_ecom.data.repos.csv.inventory_repo import InventoryTxnRepo
+from easy_ecom.data.repos.csv.product_variants_repo import ProductVariantsRepo
 from easy_ecom.data.repos.csv.products_repo import ProductsRepo
 from easy_ecom.data.repos.csv.sales_repo import InvoicesRepo, PaymentsRepo, SalesOrderItemsRepo, SalesOrdersRepo, ShipmentsRepo
 from easy_ecom.data.repos.csv.sequences_repo import SequencesRepo
@@ -33,7 +34,8 @@ seq = SequenceService(SequencesRepo(store))
 inv = InventoryService(InventoryTxnRepo(store), seq)
 fin = FinanceService(LedgerRepo(store), InventoryTxnRepo(store))
 product_repo = ProductsRepo(store)
-product_svc = ProductService(product_repo)
+variants_repo = ProductVariantsRepo(store)
+product_svc = ProductService(product_repo, variants_repo)
 customer_repo = CustomersRepo(store)
 clients_repo = ClientsRepo(store)
 client_svc = ClientService(clients_repo)
@@ -58,12 +60,16 @@ sell_tab, cart_tab, records_tab = st.tabs(["Sell", "Cart", "Sales Records"])
 with sell_tab:
     products_df = product_svc.list_by_client(client_id)
     product_options = sorted(products_df["product_name"].dropna().astype(str).unique().tolist()) if not products_df.empty else []
-    product_name = st.selectbox("Product name", product_options, index=None, placeholder="Select product with stock")
+    product_name = st.selectbox("Parent product", product_options, index=None, placeholder="Select product")
     selected_product = product_svc.get_by_name(client_id, product_name) if product_name else None
-    product_id = selected_product["product_id"] if selected_product else ""
+    variants = product_svc.list_variants(client_id, selected_product["product_id"]) if selected_product else []
+    variant_map = {v["variant_name"]: v for v in variants}
+    variant_name = st.selectbox("Variant", sorted(variant_map.keys()), index=None) if variants else None
+    selected_variant = variant_map.get(variant_name) if variant_name else None
+    product_id = selected_variant["variant_id"] if selected_variant else (selected_product["product_id"] if selected_product else "")
     qty = st.number_input("Qty", min_value=0.01)
-    default_price = float(selected_product.get("default_selling_price", 0.01)) if selected_product else 0.01
-    max_discount_pct = float(selected_product.get("max_discount_pct", 10.0)) if selected_product else 10.0
+    default_price = float((selected_variant or selected_product or {}).get("default_selling_price", 0.01)) if (selected_variant or selected_product) else 0.01
+    max_discount_pct = float((selected_variant or selected_product or {}).get("max_discount_pct", 10.0)) if (selected_variant or selected_product) else 10.0
     min_price = default_price * (1 - max_discount_pct / 100)
     price = st.number_input("Unit selling price", min_value=0.01, value=default_price)
     if product_id:
@@ -210,6 +216,14 @@ with cart_tab:
                                     st.error(str(exc))
 
                 totals = svc.compute_order_totals(selected_order_id)
+                current_delivery = float(order.get("delivery_cost", 0) or 0)
+                d1, d2 = st.columns(2)
+                new_delivery = d1.number_input("Delivery cost", min_value=0.0, value=current_delivery, key=f"delivery_{selected_order_id}")
+                provider = d2.text_input("Delivery provider", value=order.get("delivery_provider", ""), key=f"provider_{selected_order_id}")
+                if st.button("Save delivery", key=f"save_delivery_{selected_order_id}"):
+                    svc.update_delivery(selected_order_id, client_id, float(new_delivery), provider)
+                    st.success("Delivery updated")
+                    st.rerun()
                 st.markdown(f"**Total:** {format_money(totals['grand_total'], currency_code, currency_symbol)}")
                 if order.get("status") == "draft" and st.button("Confirm Order", key=f"confirm_detail_{selected_order_id}"):
                     try:
