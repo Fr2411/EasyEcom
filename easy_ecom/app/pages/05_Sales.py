@@ -1,16 +1,21 @@
 import streamlit as st
 
 from easy_ecom.app.ui.components import require_login
+from easy_ecom.app.ui.formatters import format_money
 from easy_ecom.core.config import settings
 from easy_ecom.core.rbac import can_access_page
+from easy_ecom.data.repos.csv.clients_repo import ClientsRepo
 from easy_ecom.data.store.csv_store import CsvStore
 from easy_ecom.data.repos.csv.finance_repo import LedgerRepo
 from easy_ecom.data.repos.csv.inventory_repo import InventoryTxnRepo
+from easy_ecom.data.repos.csv.products_repo import ProductsRepo
 from easy_ecom.data.repos.csv.sales_repo import InvoicesRepo, PaymentsRepo, SalesOrderItemsRepo, SalesOrdersRepo, ShipmentsRepo
 from easy_ecom.data.repos.csv.sequences_repo import SequencesRepo
 from easy_ecom.domain.models.sales import SaleConfirm, SaleItem
+from easy_ecom.domain.services.client_service import ClientService
 from easy_ecom.domain.services.finance_service import FinanceService
 from easy_ecom.domain.services.inventory_service import InventoryService, SequenceService
+from easy_ecom.domain.services.product_service import ProductService
 from easy_ecom.domain.services.sales_service import SalesService
 
 require_login()
@@ -23,24 +28,35 @@ store = CsvStore(settings.data_dir)
 seq = SequenceService(SequencesRepo(store))
 inv = InventoryService(InventoryTxnRepo(store), seq)
 fin = FinanceService(LedgerRepo(store), InventoryTxnRepo(store))
-svc = SalesService(SalesOrdersRepo(store), SalesOrderItemsRepo(store), InvoicesRepo(store), ShipmentsRepo(store), PaymentsRepo(store), inv, seq, fin)
+product_repo = ProductsRepo(store)
+product_svc = ProductService(product_repo)
+client_svc = ClientService(ClientsRepo(store))
+svc = SalesService(SalesOrdersRepo(store), SalesOrderItemsRepo(store), InvoicesRepo(store), ShipmentsRepo(store), PaymentsRepo(store), inv, seq, fin, product_repo)
 user = st.session_state["user"]
 client_id = user["client_id"]
 user_id = user["user_id"]
 
 st.title("Sales")
+currency_code, currency_symbol = client_svc.get_currency(client_id)
 customer_id = st.text_input("Customer ID")
 stock_df = inv.stock_by_lot(client_id)
 available_names = sorted(stock_df["product_name"].dropna().astype(str).unique().tolist()) if not stock_df.empty else []
 product_name = st.selectbox("Product name", available_names, index=None, placeholder="Select product with stock")
 qty = st.number_input("Qty", min_value=0.01)
-price = st.number_input("Unit selling price", min_value=0.01)
+selected_product = product_svc.get_by_name(client_id, product_name) if product_name else None
+default_price = float(selected_product.get("default_selling_price", 0.01)) if selected_product else 0.01
+max_discount_pct = float(selected_product.get("max_discount_pct", 10.0)) if selected_product else 10.0
+min_price = default_price * (1 - max_discount_pct / 100)
+price = st.number_input("Unit selling price", min_value=0.01, value=default_price)
 if product_name:
     st.caption(f"Available stock: {inv.available_qty(client_id, product_name):,.2f}")
+    st.caption(f"Minimum allowed price: {format_money(min_price, currency_code, currency_symbol)}")
 if st.button("Confirm sale"):
     try:
         if not product_name:
             raise ValueError("Please select a product")
+        if float(price) < min_price:
+            raise ValueError(f"Unit price cannot be below {format_money(min_price, currency_code, currency_symbol)}")
         payload = SaleConfirm(client_id=client_id, customer_id=customer_id, items=[SaleItem(product_id=product_name, qty=float(qty), unit_selling_price=float(price))])
         result = svc.confirm_sale(payload, {"full_name": "", "phone": "", "address_line1": ""}, user_id=user_id)
         st.success(f"Order confirmed {result['order_id']}")

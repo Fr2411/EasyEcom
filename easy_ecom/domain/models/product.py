@@ -8,3 +8,10 @@ class ProductCreate(BaseModel):
     category: str = "General"
     prd_description: str = ""
     prd_features_json: str = "{}"
+    default_selling_price: float = Field(gt=0)
+    max_discount_pct: float = Field(ge=0, le=100, default=10.0)
+
+
+class ProductPricingUpdate(BaseModel):
+    default_selling_price: float = Field(gt=0)
+    max_discount_pct: float = Field(ge=0, le=100, default=10.0)

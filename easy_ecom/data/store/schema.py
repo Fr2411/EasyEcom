@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 TABLE_SCHEMAS: dict[str, list[str]] = {
-    "clients.csv": ["client_id", "business_name", "owner_name", "phone", "email", "address", "website_url", "facebook_url", "instagram_url", "whatsapp_number", "created_at", "status", "notes"],
+    "clients.csv": ["client_id", "business_name", "owner_name", "phone", "email", "address", "currency_code", "currency_symbol", "website_url", "facebook_url", "instagram_url", "whatsapp_number", "created_at", "status", "notes"],
     "users.csv": ["user_id", "client_id", "name", "email", "password", "is_active", "created_at"],
     "roles.csv": ["role_code", "role_name", "description"],
     "user_roles.csv": ["user_id", "role_code"],
-    "products.csv": ["product_id", "client_id", "supplier", "product_name", "category", "prd_description", "prd_features_json", "created_at", "is_active"],
+    "products.csv": ["product_id", "client_id", "supplier", "product_name", "category", "prd_description", "prd_features_json", "default_selling_price", "max_discount_pct", "created_at", "is_active"],
     "customers.csv": ["customer_id", "client_id", "created_at", "full_name", "phone", "email", "whatsapp", "address_line1", "address_line2", "area", "city", "state", "postal_code", "country", "preferred_contact_channel", "marketing_opt_in", "tags", "notes", "is_active"],
     "inventory_txn.csv": ["txn_id", "client_id", "timestamp", "user_id", "txn_type", "product_id", "qty", "unit_cost", "total_cost", "supplier_snapshot", "note", "source_type", "source_id", "lot_id"],
     "sales_orders.csv": ["order_id", "client_id", "timestamp", "customer_id", "status", "subtotal", "discount", "tax", "grand_total", "note"],
@@ -16,6 +16,9 @@ TABLE_SCHEMAS: dict[str, list[str]] = {
     "ledger.csv": ["entry_id", "client_id", "timestamp", "user_id", "entry_type", "category", "amount", "source_type", "source_id", "note"],
     "sequences.csv": ["client_id", "sequence_key", "year", "last_number"],
     "audit_log.csv": ["event_id", "timestamp", "user_id", "client_id", "action", "entity_type", "entity_id", "details_json"],
+    "returns.csv": ["return_id", "client_id", "invoice_id", "order_id", "customer_id", "status", "requested_by_user_id", "approved_by_user_id", "requested_at", "approved_at", "reason", "note", "restock"],
+    "return_items.csv": ["return_item_id", "return_id", "product_id", "qty", "unit_selling_price", "refund_amount", "note"],
+    "refunds.csv": ["refund_id", "client_id", "return_id", "invoice_id", "order_id", "customer_id", "amount", "status", "requested_by_user_id", "approved_by_user_id", "created_at", "processed_at", "reason", "note"],
 }
 
 ROLES_SEED = [

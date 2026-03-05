@@ -6,6 +6,9 @@ Enterprise-grade multi-tenant inventory, sales, and finance web app built with S
 - Multi-tenant architecture with strict `client_id` scoping.
 - RBAC roles: `SUPER_ADMIN`, `CLIENT_OWNER`, `CLIENT_MANAGER`, `CLIENT_EMPLOYEE`, `FINANCE_ONLY`.
 - Product catalog, inventory lots, FIFO depletion, sales flow (order/invoice/shipment), customer CRM, ledger finance.
+- Client-level currency support (`currency_code` required, `currency_symbol` optional) with shared money formatter across dashboard/sales/finance screens.
+- Product master pricing controls (`default_selling_price`, `max_discount_pct`) with role-gated pricing editor in Inventory.
+- Returns workflow with request/approval, refund records, automatic refund expense ledger posting, and optional restocking.
 - Login-first app flow: before authentication, sidebar navigation is hidden so only the login page is visible; successful login redirects to dashboard.
 - Inventory and sales UI are product-name driven (dropdowns) with stock-aware selection; Product IDs are system-generated.
 - Client and super-admin dashboards with KPI cards, date-filtered Plotly charts, and cross-client health monitoring.
@@ -42,6 +45,8 @@ streamlit run easy_ecom/app/main.py
 - Legacy data may store lot-suffixed product IDs in inventory rows; dashboard metrics now canonicalize to stable `products.product_id` and a migration script is provided (`easy_ecom/scripts/migrate_product_ids.py`).
 - OUT transactions allocate stock FIFO by lot in `InventoryService.allocate_fifo`, grouped by product name for intuitive sales execution.
 - Sales confirmation auto-generates order, invoice, shipment, inventory out rows, and earning ledger post; generated inventory/ledger rows inherit the initiating `user_id`.
+- Sales page pre-fills item unit price from product default pricing; discounts are bounded by `max_discount_pct` and enforced in UI + service layer before cart/order writes.
+- Refund approval flow (`returns.csv`, `return_items.csv`, `refunds.csv`) is restricted to non-employee roles and posts ledger `expense` category `Refunds`.
 - Invoice status updates from payment aggregation.
 - KPIs/charts are computed by `MetricsService` (`easy_ecom/domain/services/metrics_service.py`) as the single source of truth.
 - Revenue = ledger `entry_type=earning`; Expenses = ledger `entry_type=expense`; COGS = inventory OUT `total_cost`; Profit = Revenue - Expenses - COGS (date-range aware).
@@ -57,6 +62,7 @@ streamlit run easy_ecom/app/main.py
 - Super admin dashboard supports global/specific-client toggle with aggregate bars (revenue and inventory value by client) and health flags.
 - Data integrity warnings are surfaced in dashboard (negative stock, unmapped product IDs, missing lot IDs on OUT, numeric coercions) and are audit-logged.
 - User accounts are stored in `users.csv` with plain-text passwords (as requested) and compared directly at login.
+- COGS excludes taxes by design; COGS is derived strictly from inventory OUT `total_cost` (= `qty * unit_cost` from lot transactions).
 - Logged-in user email is shown in the top-left sidebar for quick operator context.
 - The default "main" entry in sidebar navigation is hidden after login to declutter tab navigation.
 - Product features input accepts free-form text (line breaks, commas, or bullet points) and is normalized to JSON (`{"features": [...]}`) before persistence.
