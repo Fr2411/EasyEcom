@@ -4,8 +4,9 @@ import pandas as pd
 
 from easy_ecom.core.ids import new_uuid
 from easy_ecom.core.time_utils import now_iso
+from easy_ecom.data.repos.csv.products_repo import ProductsRepo
 from easy_ecom.data.repos.csv.sales_repo import InvoicesRepo, PaymentsRepo, SalesOrderItemsRepo, SalesOrdersRepo, ShipmentsRepo
-from easy_ecom.domain.models.sales import SaleConfirm
+from easy_ecom.domain.models.sales import SaleConfirm, SaleItem
 from easy_ecom.domain.services.finance_service import FinanceService
 from easy_ecom.domain.services.inventory_service import InventoryService, SequenceService
 
@@ -21,6 +22,7 @@ class SalesService:
         inv_service: InventoryService,
         seq_service: SequenceService,
         finance_service: FinanceService,
+        products_repo: ProductsRepo,
     ):
         self.orders_repo = orders_repo
         self.items_repo = items_repo
@@ -30,6 +32,26 @@ class SalesService:
         self.inv_service = inv_service
         self.seq_service = seq_service
         self.finance_service = finance_service
+        self.products_repo = products_repo
+
+    def min_allowed_price(self, client_id: str, product_name: str) -> float:
+        products = self.products_repo.all()
+        if products.empty:
+            raise ValueError("Product not found")
+        matched = products[(products["client_id"] == client_id) & (products["product_name"] == product_name)]
+        if matched.empty:
+            raise ValueError("Product not found")
+        row = matched.iloc[0]
+        default_price = float(row.get("default_selling_price", 0) or 0)
+        max_discount_pct = float(row.get("max_discount_pct", 10.0) or 10.0)
+        if default_price <= 0:
+            raise ValueError("Product default selling price must be configured")
+        return default_price * (1 - max_discount_pct / 100)
+
+    def validate_item_pricing(self, client_id: str, item: SaleItem) -> None:
+        min_price = self.min_allowed_price(client_id, item.product_id)
+        if item.unit_selling_price < min_price:
+            raise ValueError(f"Price for {item.product_id} cannot be below {min_price:.2f}")
 
     def confirm_sale(self, payload: SaleConfirm, customer_snapshot: dict[str, str], user_id: str = "") -> dict[str, str]:
         subtotal = sum(i.qty * i.unit_selling_price for i in payload.items)
@@ -38,6 +60,7 @@ class SalesService:
         self.orders_repo.append({"order_id": order_id, "client_id": payload.client_id, "timestamp": now_iso(), "customer_id": payload.customer_id, "status": "confirmed", "subtotal": str(subtotal), "discount": str(payload.discount), "tax": str(payload.tax), "grand_total": str(grand_total), "note": payload.note})
 
         for item in payload.items:
+            self.validate_item_pricing(payload.client_id, item)
             self.items_repo.append({"order_item_id": new_uuid(), "order_id": order_id, "product_id": item.product_id, "prd_description_snapshot": "", "qty": str(item.qty), "unit_selling_price": str(item.unit_selling_price), "total_selling_price": str(item.qty * item.unit_selling_price)})
             self.inv_service.deduct_stock(payload.client_id, item.product_id, item.qty, "sale", order_id, user_id=user_id)
 

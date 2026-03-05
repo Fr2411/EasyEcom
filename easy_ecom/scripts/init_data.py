@@ -46,6 +46,8 @@ def main() -> None:
                     "phone": "",
                     "email": "owner@example.com",
                     "address": "",
+                    "currency_code": "USD",
+                    "currency_symbol": "$",
                     "website_url": "",
                     "facebook_url": "",
                     "instagram_url": "",

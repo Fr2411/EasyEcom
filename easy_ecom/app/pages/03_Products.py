@@ -23,6 +23,8 @@ with st.form("add_product"):
         "Features",
         help="Enter one feature per line, comma-separated, or with bullet points.",
     )
+    default_selling_price = st.number_input("Default selling price", min_value=0.01)
+    max_discount_pct = st.number_input("Max discount %", min_value=0.0, max_value=100.0, value=10.0)
     submitted = st.form_submit_button("Add product")
 
 if submitted:
@@ -36,10 +38,12 @@ if submitted:
                 category=category,
                 prd_description=description,
                 prd_features_json=parsed_features,
+                default_selling_price=float(default_selling_price),
+                max_discount_pct=float(max_discount_pct),
             )
         )
         st.success("Product created")
     except Exception as exc:
         st.error(str(exc))
 
-st.dataframe(ProductsRepo(store).all().query("client_id == @client_id"))
+st.dataframe(svc.list_by_client(client_id))
