@@ -4,6 +4,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from easy_ecom.app.ui.components import require_login
+from easy_ecom.app.ui.formatters import format_money
 from easy_ecom.core.config import settings
 from easy_ecom.data.repos.csv.clients_repo import ClientsRepo
 from easy_ecom.data.repos.csv.finance_repo import LedgerRepo
@@ -14,6 +15,7 @@ from easy_ecom.data.store.csv_store import CsvStore
 from easy_ecom.core.audit import log_event
 from easy_ecom.data.repos.csv.audit_repo import AuditRepo
 from easy_ecom.domain.services.dashboard_service import DashboardService
+from easy_ecom.domain.services.client_service import ClientService
 
 require_login()
 store = CsvStore(settings.data_dir)
@@ -32,6 +34,7 @@ user = st.session_state["user"]
 roles = user["roles"].split(",")
 client_id = user["client_id"]
 all_clients = ClientsRepo(store).all()
+client_svc = ClientService(ClientsRepo(store))
 
 st.title("Dashboard")
 
@@ -63,9 +66,12 @@ if warnings:
         log_event(AuditRepo(store), user.get("user_id", ""), current_scope_client or "", "dashboard_warning", "metrics", current_scope_client or "global", {"warning": w})
 
 kpis = svc.kpis(current_scope_client)
+currency_code, currency_symbol = client_svc.get_currency(current_scope_client or client_id)
 cols = st.columns(4)
+money_kpis = {"Current Stock Value", "Revenue MTD", "Expenses MTD", "Profit MTD", "AOV MTD", "Outstanding Invoices"}
 for idx, (name, value) in enumerate(kpis.items()):
-    cols[idx % 4].metric(name, f"{value:,.2f}")
+    metric_value = format_money(value, currency_code, currency_symbol) if name in money_kpis else f"{value:,.2f}"
+    cols[idx % 4].metric(name, metric_value)
 
 st.divider()
 left_filter, right_filter = st.columns(2)

@@ -19,3 +19,15 @@ class ShipmentsRepo(BaseRepo):
 
 class PaymentsRepo(BaseRepo):
     table_name = "payments.csv"
+
+
+class ReturnsRepo(BaseRepo):
+    table_name = "returns.csv"
+
+
+class ReturnItemsRepo(BaseRepo):
+    table_name = "return_items.csv"
+
+
+class RefundsRepo(BaseRepo):
+    table_name = "refunds.csv"
