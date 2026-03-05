@@ -119,6 +119,7 @@ class ReturnsService:
             for _, item in items.iterrows():
                 self.inventory_service.add_stock(
                     client_id=client_id,
+                    product_id=str(item["product_id"]),
                     product_name=str(item["product_id"]),
                     qty=float(item["qty"]),
                     unit_cost=float(item["unit_selling_price"]),
