@@ -104,3 +104,11 @@ black --check .
 - Case-insensitive exact name match is tenant-scoped and can disambiguate matching customers.
 - On sale confirm: unmatched customers are auto-created; matched customers are auto-updated when edited fields changed.
 - Auto-create/auto-update actions are audit-logged.
+
+## Recent enterprise updates
+- Dashboard KPI now includes **Sold Qty MTD** and keeps Orders MTD as a secondary KPI.
+- Product aging analytics include sold/remaining quantities with percentages.
+- Added parent/variant model using `product_variants.csv` with per-variant stock and selling support.
+- Cart confirmation now supports delivery cost on draft orders and auto-posts Delivery expense to ledger.
+- Added migration scripts: `easy_ecom/scripts/migrate_sales_items_to_variants.py` and `easy_ecom/scripts/migrate_inventory_to_variants.py`.
+

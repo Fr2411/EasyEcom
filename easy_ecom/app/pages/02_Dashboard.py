@@ -120,11 +120,12 @@ st.plotly_chart(fig_stock, use_container_width=True)
 
 aging = svc.product_aging(current_scope_client)
 fig_aging = go.Figure()
-fig_aging.add_trace(go.Bar(name="Sold %", x=aging["product_name"], y=aging["sold_pct"]))
-fig_aging.add_trace(go.Bar(name="Remaining %", x=aging["product_name"], y=aging["remaining_pct"]))
+fig_aging.add_trace(go.Bar(name="Sold %", x=aging["product_name"], y=aging["sold_pct"], customdata=aging[["sold_qty","current_qty","total_in_qty"]], hovertemplate="%{x}<br>Sold %: %{y:.2f}<br>Sold Qty: %{customdata[0]:.2f}<br>Remaining Qty: %{customdata[1]:.2f}<br>Total In: %{customdata[2]:.2f}<extra></extra>"))
+fig_aging.add_trace(go.Bar(name="Remaining %", x=aging["product_name"], y=aging["remaining_pct"], customdata=aging[["sold_qty","current_qty","total_in_qty"]], hovertemplate="%{x}<br>Remaining %: %{y:.2f}<br>Sold Qty: %{customdata[0]:.2f}<br>Remaining Qty: %{customdata[1]:.2f}<br>Total In: %{customdata[2]:.2f}<extra></extra>"))
 fig_aging.update_layout(
-    title="Product Aging: Sold vs Remaining", barmode="group", yaxis_title="Percent"
+    title="Product Aging: Sold vs Remaining", barmode="group", yaxis_title="Percent", legend_title="Aging Metrics"
 )
+st.dataframe(aging[["product_name", "sold_qty", "current_qty", "total_in_qty", "sold_pct", "remaining_pct"]], use_container_width=True)
 st.plotly_chart(fig_aging, use_container_width=True)
 
 margin_speed = svc.margin_sell_speed(current_scope_client)
@@ -146,8 +147,15 @@ fig_margin = px.scatter(
 if not margin_speed.empty:
     fig_margin.add_vline(x=float(margin_speed["margin_pct"].median()), line_dash="dash", line_color="gray")
     fig_margin.add_hline(y=float(margin_speed["sell_speed_units_per_day"].median()), line_dash="dash", line_color="gray")
-fig_margin.update_layout(xaxis_title="Margin %", yaxis_title="Sell speed (units/day, last 30d)")
+fig_margin.update_layout(xaxis_title="Margin % (higher is better)", yaxis_title="Sell Speed (units/day)", legend_title="Revenue Bubble Size")
+fig_margin.add_annotation(xref="paper", yref="paper", x=0.15, y=0.95, text="High Margin + Slow Moving (Market More)", showarrow=False)
+fig_margin.add_annotation(xref="paper", yref="paper", x=0.85, y=0.95, text="High Margin + Fast Moving (Stars)", showarrow=False)
+fig_margin.add_annotation(xref="paper", yref="paper", x=0.15, y=0.1, text="Low Margin + Slow Moving (Clear/Drop)", showarrow=False)
+fig_margin.add_annotation(xref="paper", yref="paper", x=0.85, y=0.1, text="Low Margin + Fast Moving (Reprice/Reduce Cost)", showarrow=False)
+
 st.plotly_chart(fig_margin, use_container_width=True)
+with st.expander("How to read this chart"):
+    st.write("Right side means better margin. Upper area means faster movement. Bigger bubbles mean more revenue in last 30 days.")
 
 income_expense = svc.income_expense_trend(current_scope_client, freq, start_date, end_date)
 fig_ie = go.Figure()
