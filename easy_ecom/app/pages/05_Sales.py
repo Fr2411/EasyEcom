@@ -118,6 +118,7 @@ else:
     else:
         invoices_df = pd.DataFrame(columns=invoice_cols)
     invoice_view = invoices_df[invoice_cols] if all(col in invoices_df.columns for col in invoice_cols) else pd.DataFrame(columns=invoice_cols)
+    invoice_view = invoice_view.rename(columns={"status": "invoice_status"})
 
     if not payments_df.empty and not invoices_df.empty:
         client_payments = payments_df[payments_df["client_id"] == client_id].copy()
@@ -140,8 +141,10 @@ else:
     records["timestamp"] = pd.to_datetime(records["timestamp"], errors="coerce")
     records = records.sort_values("timestamp", ascending=False)
 
-    display_df = records[["timestamp", "order_id", "invoice_no", "full_name", "status", "grand_total", "amount_paid", "balance_due"]].copy()
-    display_df = display_df.rename(columns={"full_name": "customer_name", "status": "invoice_status"})
+    records["invoice_status"] = records.get("invoice_status", pd.Series("", index=records.index)).fillna("")
+
+    display_df = records[["timestamp", "order_id", "invoice_no", "full_name", "invoice_status", "grand_total", "amount_paid", "balance_due"]].copy()
+    display_df = display_df.rename(columns={"full_name": "customer_name"})
     display_df["timestamp"] = display_df["timestamp"].dt.strftime("%Y-%m-%d %H:%M:%S")
     for amount_col in ["grand_total", "amount_paid", "balance_due"]:
         display_df[amount_col] = display_df[amount_col].apply(lambda amount: format_money(float(amount), currency_code, currency_symbol))
