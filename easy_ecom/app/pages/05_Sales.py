@@ -1,4 +1,5 @@
 import streamlit as st
+import pandas as pd
 
 from easy_ecom.app.ui.components import require_login
 from easy_ecom.app.ui.formatters import format_money
@@ -100,3 +101,49 @@ if st.button("Confirm sale"):
         st.success(f"Order confirmed {result['order_id']}")
     except Exception as exc:
         st.error(str(exc))
+
+st.subheader("Sales records")
+orders_df = SalesOrdersRepo(store).all().copy()
+invoices_df = InvoicesRepo(store).all().copy()
+payments_df = PaymentsRepo(store).all().copy()
+customers_df = customer_repo.all().copy()
+
+client_orders = orders_df[orders_df["client_id"] == client_id].copy() if not orders_df.empty else pd.DataFrame()
+if client_orders.empty:
+    st.info("No sales records found for this client yet.")
+else:
+    invoice_cols = ["order_id", "invoice_no", "invoice_id", "status"]
+    if not invoices_df.empty:
+        invoices_df = invoices_df[invoices_df["client_id"] == client_id].copy()
+    else:
+        invoices_df = pd.DataFrame(columns=invoice_cols)
+    invoice_view = invoices_df[invoice_cols] if all(col in invoices_df.columns for col in invoice_cols) else pd.DataFrame(columns=invoice_cols)
+
+    if not payments_df.empty and not invoices_df.empty:
+        client_payments = payments_df[payments_df["client_id"] == client_id].copy()
+        payment_totals = client_payments.groupby("invoice_id", as_index=False)["amount_paid"].sum()
+        payment_totals["amount_paid"] = payment_totals["amount_paid"].astype(float)
+    else:
+        payment_totals = pd.DataFrame(columns=["invoice_id", "amount_paid"])
+
+    records = client_orders.merge(invoice_view, on="order_id", how="left")
+    records = records.merge(payment_totals, on="invoice_id", how="left")
+    records["amount_paid"] = records["amount_paid"].fillna(0.0)
+
+    customer_view = customers_df[["customer_id", "full_name"]] if not customers_df.empty else pd.DataFrame(columns=["customer_id", "full_name"])
+    records = records.merge(customer_view, on="customer_id", how="left")
+    records["full_name"] = records["full_name"].fillna("")
+
+    records["subtotal"] = records["subtotal"].astype(float)
+    records["grand_total"] = records["grand_total"].astype(float)
+    records["balance_due"] = (records["grand_total"] - records["amount_paid"]).clip(lower=0.0)
+    records["timestamp"] = pd.to_datetime(records["timestamp"], errors="coerce")
+    records = records.sort_values("timestamp", ascending=False)
+
+    display_df = records[["timestamp", "order_id", "invoice_no", "full_name", "status", "grand_total", "amount_paid", "balance_due"]].copy()
+    display_df = display_df.rename(columns={"full_name": "customer_name", "status": "invoice_status"})
+    display_df["timestamp"] = display_df["timestamp"].dt.strftime("%Y-%m-%d %H:%M:%S")
+    for amount_col in ["grand_total", "amount_paid", "balance_due"]:
+        display_df[amount_col] = display_df[amount_col].apply(lambda amount: format_money(float(amount), currency_code, currency_symbol))
+
+    st.dataframe(display_df, use_container_width=True)
