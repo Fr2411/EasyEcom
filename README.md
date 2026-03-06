@@ -51,20 +51,20 @@ pip install reportlab
 ```
 
 ## Critical Logic
-- Inventory uses `inventory_txn.csv` append-only with lot-level tracking, strict tenant filtering by `client_id`, and actor tracking through `user_id`.
+- Inventory uses `inventory_txn.csv` append-only with lot-level tracking, strict tenant filtering by `client_id`, actor tracking through `user_id`, and shared canonical product normalization (legacy lot-id/product-name references are mapped or flagged, not silently dropped).
 - Legacy sales item rows that stored `product_name` in `sales_order_items.product_id` are migrated with `easy_ecom/scripts/migrate_sales_items_product_id.py` (idempotent, tenant-scoped, preserves `product_name_snapshot`).
 - OUT transactions allocate stock FIFO by lot in `InventoryService.allocate_fifo`, keyed by stable `product_id` with lot kept in `lot_id`.
 - Sales confirmation auto-generates order, invoice, shipment, inventory out rows, and earning ledger post; generated inventory/ledger rows inherit the initiating `user_id`.
 - Sales page pre-fills item unit price from product default pricing; discounts are bounded by `max_discount_pct` and enforced in UI + service layer before cart/order writes.
 - Sales page wires `ProductVariantsRepo` into `SalesService` so variant IDs selected in Sell tab resolve correctly during minimum-price validation and confirmation (prevents false "Product not found" for valid variants).
-- Sales page includes a sales records grid that is strictly tenant-scoped (`client_id`) and shows the latest 50 confirmed sales with per-order invoice/payment balance details for the logged-in client only.
+- Sales page includes a tenant-scoped (`client_id`) latest-50 confirmed sales grid sourced from reconciled confirmed orders, with item-presence and ledger-posting/mismatch flags for operational-financial alignment.
 - Cart tab for draft sales orders groups carts by customer, supports draft line edits/removals, and confirms drafts into invoice + shipment with idempotency checks.
 - Invoice and shipping mark downloads are generated on-demand as PDFs using `reportlab` (`easy_ecom/app/ui/documents.py`).
 - Sales records grid normalizes invoice status into a dedicated `invoice_status` column before display, avoiding `status` column collisions with sales order status during joins.
 - Refund approval flow (`returns.csv`, `return_items.csv`, `refunds.csv`) is restricted to non-employee roles and posts ledger `expense` category `Refunds`.
 - Invoice status updates from payment aggregation.
-- KPIs/charts are computed by `MetricsService` (`easy_ecom/domain/services/metrics_service.py`) as the single source of truth.
-- Revenue = ledger `entry_type=earning`; Expenses = ledger `entry_type=expense`; COGS = inventory OUT `total_cost`; Profit = Revenue - Expenses - COGS (date-range aware).
+- KPIs/charts and operational records now share `DataReconciliationService` (`easy_ecom/domain/services/data_reconciliation_service.py`) so Inventory, Sales Records, and Dashboard use the same normalized/reconciled rows.
+- Revenue (operational truth) = sum of confirmed `sales_orders.grand_total`; ledger earning rows are treated as financial reflection and surfaced for reconciliation when orphaned/mismatched. Expenses = ledger `entry_type=expense`; COGS = inventory OUT `total_cost`; Profit = Revenue - Expenses - COGS (date-range aware).
 - AOV = Revenue / confirmed orders count (guarded for divide-by-zero).
 - Outstanding invoices = unpaid/partial invoice `amount_due` minus aggregated payments.
 - Stock value by product = sum of positive lot balances (`current_qty_lot * unit_cost_lot`) aggregated to product.
@@ -75,7 +75,8 @@ pip install reportlab
 - Dashboard KPIs include stock value, revenue/expenses/profit MTD, orders + AOV MTD, and outstanding invoices.
 - Dashboard analytics include revenue trends, inventory value by product, product aging, margin vs sell speed bubble, income vs expense trends, and lot profitability recovery.
 - Super admin dashboard supports global/specific-client toggle with aggregate bars (revenue and inventory value by client) and health flags.
-- Data integrity warnings are surfaced in dashboard (negative stock, unmapped product IDs, missing lot IDs on OUT, numeric coercions) and are audit-logged.
+- Data integrity warnings are surfaced in dashboard (negative stock, unmapped product IDs, missing lot IDs on OUT, numeric coercions), with admin-reviewable structured issue rows from reconciliation checks.
+- Optional repair script `easy_ecom/scripts/reconcile_legacy_references.py` provides dry-run by default and `--apply` mode to rewrite fixable legacy inventory product references while reporting orphan ledger earnings.
 - User accounts are stored in `users.csv` with plain-text passwords (as requested) and compared directly at login.
 - Authentication is restricted to `SUPER_ADMIN` only; non-super-admin user records cannot log in.
 - Super admin authentication is always sourced from `.env` (`SUPER_ADMIN_EMAIL`, `SUPER_ADMIN_PASSWORD`), and login still works even if `users.csv` is empty.

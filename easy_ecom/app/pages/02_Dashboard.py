@@ -10,7 +10,12 @@ from easy_ecom.data.repos.csv.clients_repo import ClientsRepo
 from easy_ecom.data.repos.csv.finance_repo import LedgerRepo
 from easy_ecom.data.repos.csv.inventory_repo import InventoryTxnRepo
 from easy_ecom.data.repos.csv.products_repo import ProductsRepo
-from easy_ecom.data.repos.csv.sales_repo import InvoicesRepo, PaymentsRepo, SalesOrderItemsRepo, SalesOrdersRepo
+from easy_ecom.data.repos.csv.sales_repo import (
+    InvoicesRepo,
+    PaymentsRepo,
+    SalesOrderItemsRepo,
+    SalesOrdersRepo,
+)
 from easy_ecom.data.store.csv_store import CsvStore
 from easy_ecom.core.audit import log_event
 from easy_ecom.data.repos.csv.audit_repo import AuditRepo
@@ -45,14 +50,18 @@ st.title("Dashboard")
 if st.button("Refresh"):
     st.rerun()
 auto_refresh = st.toggle("Auto refresh", value=False)
-interval = st.selectbox("Auto refresh interval (seconds)", [5, 10, 15, 30], index=2, disabled=not auto_refresh)
+interval = st.selectbox(
+    "Auto refresh interval (seconds)", [5, 10, 15, 30], index=2, disabled=not auto_refresh
+)
 if auto_refresh and st_autorefresh is not None:
     st_autorefresh(interval=interval * 1000, key="dashboard_auto_refresh")
 elif auto_refresh:
     st.info("Install streamlit-autorefresh for timed reruns.")
 
 st.session_state["dashboard_last_refreshed_at"] = pd.Timestamp.utcnow().tz_localize(None)
-st.caption(f"Last refreshed at {st.session_state['dashboard_last_refreshed_at']:%Y-%m-%d %H:%M:%S} UTC")
+st.caption(
+    f"Last refreshed at {st.session_state['dashboard_last_refreshed_at']:%Y-%m-%d %H:%M:%S} UTC"
+)
 
 if "SUPER_ADMIN" in roles:
     st.subheader("Scope")
@@ -78,14 +87,39 @@ warnings = svc.integrity_warnings(current_scope_client)
 if warnings:
     st.warning("Data integrity warnings:\n- " + "\n- ".join(warnings))
     for w in warnings:
-        log_event(AuditRepo(store), user.get("user_id", ""), current_scope_client or "", "dashboard_warning", "metrics", current_scope_client or "global", {"warning": w})
+        log_event(
+            AuditRepo(store),
+            user.get("user_id", ""),
+            current_scope_client or "",
+            "dashboard_warning",
+            "metrics",
+            current_scope_client or "global",
+            {"warning": w},
+        )
+
+if "SUPER_ADMIN" in roles:
+    issues = svc.integrity_issues(current_scope_client)
+    if issues:
+        st.subheader("Data Issues (admin review)")
+        st.dataframe(issues, use_container_width=True)
 
 kpis = svc.kpis(current_scope_client)
 currency_code, currency_symbol = client_svc.get_currency(current_scope_client or client_id)
 cols = st.columns(4)
-money_kpis = {"Current Stock Value", "Revenue MTD", "Expenses MTD", "Profit MTD", "AOV MTD", "Outstanding Invoices"}
+money_kpis = {
+    "Current Stock Value",
+    "Revenue MTD",
+    "Expenses MTD",
+    "Profit MTD",
+    "AOV MTD",
+    "Outstanding Invoices",
+}
 for idx, (name, value) in enumerate(kpis.items()):
-    metric_value = format_money(value, currency_code, currency_symbol) if name in money_kpis else f"{value:,.2f}"
+    metric_value = (
+        format_money(value, currency_code, currency_symbol)
+        if name in money_kpis
+        else f"{value:,.2f}"
+    )
     cols[idx % 4].metric(name, metric_value)
 
 st.divider()
@@ -120,12 +154,34 @@ st.plotly_chart(fig_stock, use_container_width=True)
 
 aging = svc.product_aging(current_scope_client)
 fig_aging = go.Figure()
-fig_aging.add_trace(go.Bar(name="Sold %", x=aging["product_name"], y=aging["sold_pct"], customdata=aging[["sold_qty","current_qty","total_in_qty"]], hovertemplate="%{x}<br>Sold %: %{y:.2f}<br>Sold Qty: %{customdata[0]:.2f}<br>Remaining Qty: %{customdata[1]:.2f}<br>Total In: %{customdata[2]:.2f}<extra></extra>"))
-fig_aging.add_trace(go.Bar(name="Remaining %", x=aging["product_name"], y=aging["remaining_pct"], customdata=aging[["sold_qty","current_qty","total_in_qty"]], hovertemplate="%{x}<br>Remaining %: %{y:.2f}<br>Sold Qty: %{customdata[0]:.2f}<br>Remaining Qty: %{customdata[1]:.2f}<br>Total In: %{customdata[2]:.2f}<extra></extra>"))
-fig_aging.update_layout(
-    title="Product Aging: Sold vs Remaining", barmode="group", yaxis_title="Percent", legend_title="Aging Metrics"
+fig_aging.add_trace(
+    go.Bar(
+        name="Sold %",
+        x=aging["product_name"],
+        y=aging["sold_pct"],
+        customdata=aging[["sold_qty", "current_qty", "total_in_qty"]],
+        hovertemplate="%{x}<br>Sold %: %{y:.2f}<br>Sold Qty: %{customdata[0]:.2f}<br>Remaining Qty: %{customdata[1]:.2f}<br>Total In: %{customdata[2]:.2f}<extra></extra>",
+    )
 )
-st.dataframe(aging[["product_name", "sold_qty", "current_qty", "total_in_qty", "sold_pct", "remaining_pct"]], use_container_width=True)
+fig_aging.add_trace(
+    go.Bar(
+        name="Remaining %",
+        x=aging["product_name"],
+        y=aging["remaining_pct"],
+        customdata=aging[["sold_qty", "current_qty", "total_in_qty"]],
+        hovertemplate="%{x}<br>Remaining %: %{y:.2f}<br>Sold Qty: %{customdata[0]:.2f}<br>Remaining Qty: %{customdata[1]:.2f}<br>Total In: %{customdata[2]:.2f}<extra></extra>",
+    )
+)
+fig_aging.update_layout(
+    title="Product Aging: Sold vs Remaining",
+    barmode="group",
+    yaxis_title="Percent",
+    legend_title="Aging Metrics",
+)
+st.dataframe(
+    aging[["product_name", "sold_qty", "current_qty", "total_in_qty", "sold_pct", "remaining_pct"]],
+    use_container_width=True,
+)
 st.plotly_chart(fig_aging, use_container_width=True)
 
 margin_speed = svc.margin_sell_speed(current_scope_client)
@@ -145,17 +201,57 @@ fig_margin = px.scatter(
     title="Margin % vs Sell Speed",
 )
 if not margin_speed.empty:
-    fig_margin.add_vline(x=float(margin_speed["margin_pct"].median()), line_dash="dash", line_color="gray")
-    fig_margin.add_hline(y=float(margin_speed["sell_speed_units_per_day"].median()), line_dash="dash", line_color="gray")
-fig_margin.update_layout(xaxis_title="Margin % (higher is better)", yaxis_title="Sell Speed (units/day)", legend_title="Revenue Bubble Size")
-fig_margin.add_annotation(xref="paper", yref="paper", x=0.15, y=0.95, text="High Margin + Slow Moving (Market More)", showarrow=False)
-fig_margin.add_annotation(xref="paper", yref="paper", x=0.85, y=0.95, text="High Margin + Fast Moving (Stars)", showarrow=False)
-fig_margin.add_annotation(xref="paper", yref="paper", x=0.15, y=0.1, text="Low Margin + Slow Moving (Clear/Drop)", showarrow=False)
-fig_margin.add_annotation(xref="paper", yref="paper", x=0.85, y=0.1, text="Low Margin + Fast Moving (Reprice/Reduce Cost)", showarrow=False)
+    fig_margin.add_vline(
+        x=float(margin_speed["margin_pct"].median()), line_dash="dash", line_color="gray"
+    )
+    fig_margin.add_hline(
+        y=float(margin_speed["sell_speed_units_per_day"].median()),
+        line_dash="dash",
+        line_color="gray",
+    )
+fig_margin.update_layout(
+    xaxis_title="Margin % (higher is better)",
+    yaxis_title="Sell Speed (units/day)",
+    legend_title="Revenue Bubble Size",
+)
+fig_margin.add_annotation(
+    xref="paper",
+    yref="paper",
+    x=0.15,
+    y=0.95,
+    text="High Margin + Slow Moving (Market More)",
+    showarrow=False,
+)
+fig_margin.add_annotation(
+    xref="paper",
+    yref="paper",
+    x=0.85,
+    y=0.95,
+    text="High Margin + Fast Moving (Stars)",
+    showarrow=False,
+)
+fig_margin.add_annotation(
+    xref="paper",
+    yref="paper",
+    x=0.15,
+    y=0.1,
+    text="Low Margin + Slow Moving (Clear/Drop)",
+    showarrow=False,
+)
+fig_margin.add_annotation(
+    xref="paper",
+    yref="paper",
+    x=0.85,
+    y=0.1,
+    text="Low Margin + Fast Moving (Reprice/Reduce Cost)",
+    showarrow=False,
+)
 
 st.plotly_chart(fig_margin, use_container_width=True)
 with st.expander("How to read this chart"):
-    st.write("Right side means better margin. Upper area means faster movement. Bigger bubbles mean more revenue in last 30 days.")
+    st.write(
+        "Right side means better margin. Upper area means faster movement. Bigger bubbles mean more revenue in last 30 days."
+    )
 
 income_expense = svc.income_expense_trend(current_scope_client, freq, start_date, end_date)
 fig_ie = go.Figure()
