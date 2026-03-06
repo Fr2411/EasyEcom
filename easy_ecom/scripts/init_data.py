@@ -18,7 +18,9 @@ def main() -> None:
             store.append("roles.csv", role)
 
     users = store.read("users.csv")
-    if users[users["email"].str.lower() == settings.super_admin_email.lower()].empty:
+    admin_email = settings.super_admin_email.strip().lower()
+    admin_password = settings.super_admin_password
+    if admin_email and admin_password and users[users["email"].str.lower() == admin_email].empty:
         admin_id = new_uuid()
         store.append(
             "users.csv",
@@ -26,8 +28,8 @@ def main() -> None:
                 "user_id": admin_id,
                 "client_id": "GLOBAL",
                 "name": "Super Admin",
-                "email": settings.super_admin_email.lower(),
-                "password": settings.super_admin_password,
+                "email": admin_email,
+                "password": admin_password,
                 "is_active": "true",
                 "created_at": now_iso(),
             },

@@ -77,6 +77,8 @@ pip install reportlab
 - Super admin dashboard supports global/specific-client toggle with aggregate bars (revenue and inventory value by client) and health flags.
 - Data integrity warnings are surfaced in dashboard (negative stock, unmapped product IDs, missing lot IDs on OUT, numeric coercions) and are audit-logged.
 - User accounts are stored in `users.csv` with plain-text passwords (as requested) and compared directly at login.
+- Authentication is restricted to `SUPER_ADMIN` only; non-super-admin user records cannot log in.
+- Super admin authentication is always sourced from `.env` (`SUPER_ADMIN_EMAIL`, `SUPER_ADMIN_PASSWORD`), and login still works even if `users.csv` is empty.
 - COGS excludes taxes by design; COGS is derived strictly from inventory OUT `total_cost` (= `qty * unit_cost` from lot transactions).
 - Logged-in user email is shown in the top-left sidebar for quick operator context.
 - The default "main" entry in sidebar navigation is hidden after login to declutter tab navigation.
@@ -86,7 +88,7 @@ pip install reportlab
 ## Defaults
 - `ALLOW_BACKORDER=false` blocks overselling.
 - `CREATE_DEFAULT_CLIENT=false` avoids sample tenant creation by default.
-- Super admin bootstrap credentials are configured via env as `SUPER_ADMIN_EMAIL=frabby24@gmail.com` and `SUPER_ADMIN_PASSWORD=Fr@241189`.
+- Set super admin bootstrap/login credentials in `.env` via `SUPER_ADMIN_EMAIL` and `SUPER_ADMIN_PASSWORD` (required for super admin login).
 
 ## Quality
 Run checks:
