@@ -27,6 +27,7 @@ svc = InventoryService(InventoryTxnRepo(store), seq)
 recon = DataReconciliationService(
     InventoryTxnRepo(store),
     ProductsRepo(store),
+    ProductVariantsRepo(store),
     SalesOrdersRepo(store),
     SalesOrderItemsRepo(store),
     LedgerRepo(store),
@@ -83,7 +84,19 @@ if parent_name:
 
 stock_rows = svc.stock_by_lot_with_issues(client_id)
 st.dataframe(
-    stock_rows[["product_name", "product_id", "lot_id", "qty", "unit_cost"]],
+    stock_rows[
+        [
+            "product_name",
+            "product_id",
+            "parent_product_name",
+            "parent_product_id",
+            "variant_name",
+            "variant_id",
+            "lot_id",
+            "qty",
+            "unit_cost",
+        ]
+    ],
     use_container_width=True,
 )
 
@@ -94,7 +107,20 @@ if "SUPER_ADMIN" in roles:
             "Unmapped inventory rows detected. These are included in totals but need data repair."
         )
         st.dataframe(
-            unmapped[["product_name", "product_id", "lot_id", "qty", "unit_cost", "issue_reason"]],
+            unmapped[
+                [
+                    "product_name",
+                    "product_id",
+                    "parent_product_name",
+                    "parent_product_id",
+                    "variant_name",
+                    "variant_id",
+                    "lot_id",
+                    "qty",
+                    "unit_cost",
+                    "issue_reason",
+                ]
+            ],
             use_container_width=True,
         )
     issues = recon.integrity_issues(client_id)

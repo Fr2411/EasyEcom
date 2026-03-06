@@ -5,6 +5,7 @@ import argparse
 from easy_ecom.core.config import settings
 from easy_ecom.data.repos.csv.finance_repo import LedgerRepo
 from easy_ecom.data.repos.csv.inventory_repo import InventoryTxnRepo
+from easy_ecom.data.repos.csv.product_variants_repo import ProductVariantsRepo
 from easy_ecom.data.repos.csv.products_repo import ProductsRepo
 from easy_ecom.data.repos.csv.sales_repo import SalesOrderItemsRepo, SalesOrdersRepo
 from easy_ecom.data.store.csv_store import CsvStore
@@ -17,6 +18,7 @@ def run(client_id: str | None = None, apply: bool = False) -> int:
     recon = DataReconciliationService(
         inv_repo,
         ProductsRepo(store),
+        ProductVariantsRepo(store),
         SalesOrdersRepo(store),
         SalesOrderItemsRepo(store),
         LedgerRepo(store),

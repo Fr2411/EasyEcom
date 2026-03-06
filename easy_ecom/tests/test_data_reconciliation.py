@@ -2,6 +2,7 @@ from pathlib import Path
 
 from easy_ecom.data.repos.csv.finance_repo import LedgerRepo
 from easy_ecom.data.repos.csv.inventory_repo import InventoryTxnRepo
+from easy_ecom.data.repos.csv.product_variants_repo import ProductVariantsRepo
 from easy_ecom.data.repos.csv.products_repo import ProductsRepo
 from easy_ecom.data.repos.csv.sales_repo import SalesOrderItemsRepo, SalesOrdersRepo
 from easy_ecom.data.repos.csv.sequences_repo import SequencesRepo
@@ -29,6 +30,7 @@ def build_metrics(store: CsvStore) -> MetricsService:
         PaymentsRepo(store),
         SalesOrderItemsRepo(store),
         ProductsRepo(store),
+        ProductVariantsRepo(store),
     )
 
 
@@ -170,6 +172,7 @@ def test_confirmed_sales_reconcile_with_metrics_revenue(tmp_path: Path):
     recon = DataReconciliationService(
         InventoryTxnRepo(store),
         ProductsRepo(store),
+        ProductVariantsRepo(store),
         SalesOrdersRepo(store),
         SalesOrderItemsRepo(store),
         LedgerRepo(store),
@@ -221,6 +224,7 @@ def test_orphan_ledger_and_unmapped_inventory_are_flagged(tmp_path: Path):
     recon = DataReconciliationService(
         InventoryTxnRepo(store),
         ProductsRepo(store),
+        ProductVariantsRepo(store),
         SalesOrdersRepo(store),
         SalesOrderItemsRepo(store),
         LedgerRepo(store),
@@ -269,9 +273,260 @@ def test_reconciliation_preserves_client_scoping(tmp_path: Path):
     recon = DataReconciliationService(
         InventoryTxnRepo(store),
         ProductsRepo(store),
+        ProductVariantsRepo(store),
         SalesOrdersRepo(store),
         SalesOrderItemsRepo(store),
         LedgerRepo(store),
     )
     c1 = recon.confirmed_sales_with_reconciliation("c1")
     assert list(c1["order_id"]) == ["o1"]
+
+
+def test_normalized_inventory_rows_resolves_variant_rows(tmp_path: Path):
+    store = setup_store(tmp_path)
+    now = "2026-01-01T10:00:00Z"
+    ProductsRepo(store).append(
+        {
+            "product_id": "p1",
+            "client_id": "c1",
+            "supplier": "",
+            "product_name": "Tee",
+            "category": "",
+            "prd_description": "",
+            "prd_features_json": "{}",
+            "created_at": now,
+            "is_active": "true",
+        }
+    )
+    ProductVariantsRepo(store).append(
+        {
+            "variant_id": "v1",
+            "client_id": "c1",
+            "parent_product_id": "p1",
+            "variant_name": "Size:L | Color:Black",
+            "size": "L",
+            "color": "Black",
+            "other": "",
+            "sku_code": "",
+            "default_selling_price": "200",
+            "max_discount_pct": "10",
+            "is_active": "true",
+            "created_at": now,
+        }
+    )
+    InventoryTxnRepo(store).append(
+        {
+            "txn_id": "t1",
+            "client_id": "c1",
+            "timestamp": now,
+            "user_id": "",
+            "txn_type": "IN",
+            "product_id": "v1",
+            "product_name": "Size:L | Color:Black",
+            "qty": "4",
+            "unit_cost": "50",
+            "total_cost": "200",
+            "supplier_snapshot": "",
+            "note": "",
+            "source_type": "purchase",
+            "source_id": "",
+            "lot_id": "L1",
+        }
+    )
+
+    recon = DataReconciliationService(
+        InventoryTxnRepo(store),
+        ProductsRepo(store),
+        ProductVariantsRepo(store),
+        SalesOrdersRepo(store),
+        SalesOrderItemsRepo(store),
+        LedgerRepo(store),
+    )
+    normalized = recon.normalized_inventory_rows("c1")
+    row = normalized.iloc[0]
+    assert row["canonical_product_id"] == "p1"
+    assert row["parent_product_id"] == "p1"
+    assert row["parent_product_name"] == "Tee"
+    assert row["variant_id"] == "v1"
+    assert row["variant_name"] == "Size:L | Color:Black"
+    assert bool(row["is_unmapped"]) is False
+    assert row["issue_reason"] == ""
+
+
+def test_normalized_inventory_rows_preserves_parent_product_rows(tmp_path: Path):
+    store = setup_store(tmp_path)
+    now = "2026-01-01T10:00:00Z"
+    ProductsRepo(store).append(
+        {
+            "product_id": "p1",
+            "client_id": "c1",
+            "supplier": "",
+            "product_name": "Headphone",
+            "category": "",
+            "prd_description": "",
+            "prd_features_json": "{}",
+            "created_at": now,
+            "is_active": "true",
+        }
+    )
+    InventoryTxnRepo(store).append(
+        {
+            "txn_id": "t1",
+            "client_id": "c1",
+            "timestamp": now,
+            "user_id": "",
+            "txn_type": "IN",
+            "product_id": "p1",
+            "product_name": "Headphone",
+            "qty": "2",
+            "unit_cost": "60",
+            "total_cost": "120",
+            "supplier_snapshot": "",
+            "note": "",
+            "source_type": "purchase",
+            "source_id": "",
+            "lot_id": "L1",
+        }
+    )
+
+    normalized = DataReconciliationService(
+        InventoryTxnRepo(store),
+        ProductsRepo(store),
+        ProductVariantsRepo(store),
+        SalesOrdersRepo(store),
+        SalesOrderItemsRepo(store),
+        LedgerRepo(store),
+    ).normalized_inventory_rows("c1")
+    row = normalized.iloc[0]
+    assert row["canonical_product_id"] == "p1"
+    assert row["variant_id"] == ""
+    assert row["parent_product_id"] == "p1"
+    assert bool(row["is_unmapped"]) is False
+
+
+def test_normalized_inventory_rows_marks_only_truly_broken_rows_unmapped(tmp_path: Path):
+    store = setup_store(tmp_path)
+    now = "2026-01-01T10:00:00Z"
+    ProductsRepo(store).append(
+        {
+            "product_id": "p1",
+            "client_id": "c1",
+            "supplier": "",
+            "product_name": "Headphone",
+            "category": "",
+            "prd_description": "",
+            "prd_features_json": "{}",
+            "created_at": now,
+            "is_active": "true",
+        }
+    )
+    InventoryTxnRepo(store).append(
+        {
+            "txn_id": "t1",
+            "client_id": "c1",
+            "timestamp": now,
+            "user_id": "",
+            "txn_type": "IN",
+            "product_id": "broken",
+            "product_name": "Legacy",
+            "qty": "1",
+            "unit_cost": "10",
+            "total_cost": "10",
+            "supplier_snapshot": "",
+            "note": "",
+            "source_type": "purchase",
+            "source_id": "",
+            "lot_id": "L1",
+        }
+    )
+
+    recon = DataReconciliationService(
+        InventoryTxnRepo(store),
+        ProductsRepo(store),
+        ProductVariantsRepo(store),
+        SalesOrdersRepo(store),
+        SalesOrderItemsRepo(store),
+        LedgerRepo(store),
+    )
+    normalized = recon.normalized_inventory_rows("c1")
+    assert bool(normalized.iloc[0]["is_unmapped"]) is True
+    issues = recon.integrity_issues("c1")
+    assert any(i.issue_type == "inventory_unmapped_product" for i in issues)
+
+
+def test_variant_resolution_respects_tenant_scope(tmp_path: Path):
+    store = setup_store(tmp_path)
+    now = "2026-01-01T10:00:00Z"
+    ProductsRepo(store).append(
+        {
+            "product_id": "p1",
+            "client_id": "c1",
+            "supplier": "",
+            "product_name": "Shared Name",
+            "category": "",
+            "prd_description": "",
+            "prd_features_json": "{}",
+            "created_at": now,
+            "is_active": "true",
+        }
+    )
+    ProductsRepo(store).append(
+        {
+            "product_id": "p2",
+            "client_id": "c2",
+            "supplier": "",
+            "product_name": "Other",
+            "category": "",
+            "prd_description": "",
+            "prd_features_json": "{}",
+            "created_at": now,
+            "is_active": "true",
+        }
+    )
+    ProductVariantsRepo(store).append(
+        {
+            "variant_id": "v2",
+            "client_id": "c2",
+            "parent_product_id": "p2",
+            "variant_name": "Size:M | Color:Blue",
+            "size": "M",
+            "color": "Blue",
+            "other": "",
+            "sku_code": "",
+            "default_selling_price": "220",
+            "max_discount_pct": "10",
+            "is_active": "true",
+            "created_at": now,
+        }
+    )
+    InventoryTxnRepo(store).append(
+        {
+            "txn_id": "t1",
+            "client_id": "c1",
+            "timestamp": now,
+            "user_id": "",
+            "txn_type": "IN",
+            "product_id": "v2",
+            "product_name": "Size:M | Color:Blue",
+            "qty": "3",
+            "unit_cost": "30",
+            "total_cost": "90",
+            "supplier_snapshot": "",
+            "note": "",
+            "source_type": "purchase",
+            "source_id": "",
+            "lot_id": "L1",
+        }
+    )
+
+    normalized = DataReconciliationService(
+        InventoryTxnRepo(store),
+        ProductsRepo(store),
+        ProductVariantsRepo(store),
+        SalesOrdersRepo(store),
+        SalesOrderItemsRepo(store),
+        LedgerRepo(store),
+    ).normalized_inventory_rows("c1")
+    row = normalized.iloc[0]
+    assert bool(row["is_unmapped"]) is True
+    assert row["issue_reason"] == "unmapped_product_id"
