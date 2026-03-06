@@ -5,6 +5,7 @@ import pandas as pd
 from easy_ecom.data.repos.csv.clients_repo import ClientsRepo
 from easy_ecom.data.repos.csv.finance_repo import LedgerRepo
 from easy_ecom.data.repos.csv.inventory_repo import InventoryTxnRepo
+from easy_ecom.data.repos.csv.product_variants_repo import ProductVariantsRepo
 from easy_ecom.data.repos.csv.products_repo import ProductsRepo
 from easy_ecom.data.repos.csv.sales_repo import InvoicesRepo, SalesOrderItemsRepo, SalesOrdersRepo
 from easy_ecom.data.store.csv_store import CsvStore
@@ -27,6 +28,7 @@ def build_service(store: CsvStore) -> DashboardService:
         InvoicesRepo(store),
         SalesOrderItemsRepo(store),
         ProductsRepo(store),
+        ProductVariantsRepo(store),
         ClientsRepo(store),
     )
 
