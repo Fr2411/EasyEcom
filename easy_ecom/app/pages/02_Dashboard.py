@@ -105,14 +105,21 @@ if "SUPER_ADMIN" in roles:
         st.subheader("Data Issues (admin review)")
         st.dataframe(issues, use_container_width=True)
 
+scorecard = svc.reconciliation_health_scorecard(current_scope_client)
+if scorecard:
+    st.subheader("Reconciliation Health Scorecard")
+    st.dataframe([scorecard], use_container_width=True)
+
 kpis = svc.kpis(current_scope_client)
 currency_code, currency_symbol = client_svc.get_currency(current_scope_client or client_id)
 cols = st.columns(4)
 money_kpis = {
     "Current Stock Value",
     "Revenue MTD",
+    "COGS MTD",
+    "Gross Profit MTD",
     "Expenses MTD",
-    "Profit MTD",
+    "Net Operating Profit MTD",
     "AOV MTD",
     "Outstanding Invoices",
 }
@@ -149,7 +156,11 @@ st.plotly_chart(fig_revenue, use_container_width=True)
 
 stock_value = svc.stock_value_by_product(current_scope_client)
 fig_stock = px.bar(
-    stock_value, x="product_name", y="stock_value", title="Stock Value by Product", text_auto=".2s"
+    stock_value,
+    x="product_name",
+    y="stock_value",
+    title="Stock Value by Parent Product",
+    text_auto=".2s",
 )
 fig_stock.update_layout(xaxis_title="Product", yaxis_title="Stock Value")
 st.plotly_chart(fig_stock, use_container_width=True)
@@ -200,7 +211,7 @@ fig_margin = px.scatter(
         "units_sold_last_30d": ":.2f",
         "sell_speed_units_per_day": ":.2f",
     },
-    title="Margin % vs Sell Speed",
+    title="Gross Margin % vs Sell Speed (Parent Product)",
 )
 if not margin_speed.empty:
     fig_margin.add_vline(
@@ -272,6 +283,16 @@ fig_ie.add_trace(
 )
 fig_ie.update_layout(title="Income vs Expense Trend", xaxis_title="Period", yaxis_title="Amount")
 st.plotly_chart(fig_ie, use_container_width=True)
+
+if not income_expense.empty:
+    fig_net_profit = px.line(
+        income_expense,
+        x="period",
+        y="profit",
+        markers=True,
+        title="Net Operating Profit Trend",
+    )
+    st.plotly_chart(fig_net_profit, use_container_width=True)
 
 lot_profit = svc.lot_profitability(current_scope_client)
 fig_lot = go.Figure()

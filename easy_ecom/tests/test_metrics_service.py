@@ -254,6 +254,22 @@ def test_lot_profit_recovery_allocation_consistency(tmp_path: Path):
             "lot_id": "L1",
         }
     )
+    SalesOrdersRepo(store).append(
+        {
+            "order_id": "o1",
+            "client_id": "c1",
+            "timestamp": now,
+            "customer_id": "cu",
+            "status": "confirmed",
+            "subtotal": "100",
+            "discount": "0",
+            "tax": "0",
+            "grand_total": "100",
+            "delivery_cost": "0",
+            "delivery_provider": "",
+            "note": "",
+        }
+    )
     SalesOrderItemsRepo(store).append(
         {
             "order_item_id": "i1",
@@ -497,3 +513,254 @@ def test_product_aging_qty_and_pct(tmp_path: Path):
     assert float(d.iloc[0]["sold_qty"]) == 4.0
     assert float(d.iloc[0]["current_qty"]) == 6.0
     assert round(float(d.iloc[0]["remaining_pct"]), 2) == 60.0
+
+
+def test_margin_rolls_variant_sales_to_parent_product(tmp_path: Path):
+    store = setup_store(tmp_path)
+    now = pd.Timestamp.utcnow().strftime("%Y-%m-%dT10:00:00Z")
+    ProductsRepo(store).append(
+        {
+            "product_id": "p1",
+            "client_id": "c1",
+            "supplier": "",
+            "product_name": "Tee",
+            "category": "",
+            "prd_description": "",
+            "prd_features_json": "{}",
+            "created_at": now,
+            "is_active": "true",
+        }
+    )
+    ProductVariantsRepo(store).append(
+        {
+            "variant_id": "v1",
+            "client_id": "c1",
+            "parent_product_id": "p1",
+            "variant_name": "Size:L",
+            "size": "L",
+            "color": "",
+            "other": "",
+            "sku_code": "",
+            "default_selling_price": "100",
+            "max_discount_pct": "10",
+            "is_active": "true",
+            "created_at": now,
+        }
+    )
+    SalesOrdersRepo(store).append(
+        {
+            "order_id": "o1",
+            "client_id": "c1",
+            "timestamp": now,
+            "customer_id": "cu",
+            "status": "confirmed",
+            "subtotal": "120",
+            "discount": "0",
+            "tax": "0",
+            "grand_total": "120",
+            "delivery_cost": "0",
+            "delivery_provider": "",
+            "note": "",
+        }
+    )
+    SalesOrderItemsRepo(store).append(
+        {
+            "order_item_id": "i1",
+            "order_id": "o1",
+            "product_id": "v1",
+            "prd_description_snapshot": "",
+            "qty": "2",
+            "unit_selling_price": "60",
+            "total_selling_price": "120",
+        }
+    )
+    InventoryTxnRepo(store).append(
+        {
+            "txn_id": "out1",
+            "client_id": "c1",
+            "timestamp": now,
+            "user_id": "",
+            "txn_type": "OUT",
+            "product_id": "v1",
+            "qty": "2",
+            "unit_cost": "30",
+            "total_cost": "60",
+            "supplier_snapshot": "",
+            "note": "",
+            "source_type": "sale",
+            "source_id": "o1",
+            "lot_id": "L1",
+        }
+    )
+
+    d = build_svc(store).margin_by_product("c1")
+    assert float(d.iloc[0]["revenue"]) == 120.0
+    assert float(d.iloc[0]["cogs"]) == 60.0
+    assert float(d.iloc[0]["margin_pct"]) == 50.0
+    assert d.iloc[0]["product_id"] == "p1"
+
+
+def test_integrity_warnings_do_not_flag_valid_variant_identity_as_unknown(tmp_path: Path):
+    store = setup_store(tmp_path)
+    now = pd.Timestamp.utcnow().strftime("%Y-%m-%dT10:00:00Z")
+    ProductsRepo(store).append(
+        {
+            "product_id": "p1",
+            "client_id": "c1",
+            "supplier": "",
+            "product_name": "Tee",
+            "category": "",
+            "prd_description": "",
+            "prd_features_json": "{}",
+            "created_at": now,
+            "is_active": "true",
+        }
+    )
+    ProductVariantsRepo(store).append(
+        {
+            "variant_id": "v1",
+            "client_id": "c1",
+            "parent_product_id": "p1",
+            "variant_name": "Size:L",
+            "size": "L",
+            "color": "",
+            "other": "",
+            "sku_code": "",
+            "default_selling_price": "100",
+            "max_discount_pct": "10",
+            "is_active": "true",
+            "created_at": now,
+        }
+    )
+    SalesOrdersRepo(store).append(
+        {
+            "order_id": "o1",
+            "client_id": "c1",
+            "timestamp": now,
+            "customer_id": "cu",
+            "status": "confirmed",
+            "subtotal": "100",
+            "discount": "0",
+            "tax": "0",
+            "grand_total": "100",
+            "delivery_cost": "0",
+            "delivery_provider": "",
+            "note": "",
+        }
+    )
+    SalesOrderItemsRepo(store).append(
+        {
+            "order_item_id": "i1",
+            "order_id": "o1",
+            "product_id": "v1",
+            "prd_description_snapshot": "",
+            "qty": "1",
+            "unit_selling_price": "100",
+            "total_selling_price": "100",
+        }
+    )
+
+    warnings = build_svc(store).integrity_warnings("c1")
+    assert not any("unknown product_id" in w.lower() for w in warnings)
+    assert any("valid variant identities" in w.lower() for w in warnings)
+
+
+def test_lot_profit_recovery_aligns_variant_sales_to_parent_identity(tmp_path: Path):
+    store = setup_store(tmp_path)
+    now = pd.Timestamp.utcnow().strftime("%Y-%m-%dT10:00:00Z")
+    ProductsRepo(store).append(
+        {
+            "product_id": "p1",
+            "client_id": "c1",
+            "supplier": "",
+            "product_name": "Tee",
+            "category": "",
+            "prd_description": "",
+            "prd_features_json": "{}",
+            "created_at": now,
+            "is_active": "true",
+        }
+    )
+    ProductVariantsRepo(store).append(
+        {
+            "variant_id": "v1",
+            "client_id": "c1",
+            "parent_product_id": "p1",
+            "variant_name": "Size:L",
+            "size": "L",
+            "color": "",
+            "other": "",
+            "sku_code": "",
+            "default_selling_price": "100",
+            "max_discount_pct": "10",
+            "is_active": "true",
+            "created_at": now,
+        }
+    )
+    InventoryTxnRepo(store).append(
+        {
+            "txn_id": "in1",
+            "client_id": "c1",
+            "timestamp": now,
+            "user_id": "",
+            "txn_type": "IN",
+            "product_id": "v1",
+            "qty": "2",
+            "unit_cost": "30",
+            "total_cost": "60",
+            "supplier_snapshot": "",
+            "note": "",
+            "source_type": "purchase",
+            "source_id": "",
+            "lot_id": "L1",
+        }
+    )
+    InventoryTxnRepo(store).append(
+        {
+            "txn_id": "out1",
+            "client_id": "c1",
+            "timestamp": now,
+            "user_id": "",
+            "txn_type": "OUT",
+            "product_id": "v1",
+            "qty": "2",
+            "unit_cost": "30",
+            "total_cost": "60",
+            "supplier_snapshot": "",
+            "note": "",
+            "source_type": "sale",
+            "source_id": "o1",
+            "lot_id": "L1",
+        }
+    )
+    SalesOrdersRepo(store).append(
+        {
+            "order_id": "o1",
+            "client_id": "c1",
+            "timestamp": now,
+            "customer_id": "cu",
+            "status": "confirmed",
+            "subtotal": "120",
+            "discount": "0",
+            "tax": "0",
+            "grand_total": "120",
+            "delivery_cost": "0",
+            "delivery_provider": "",
+            "note": "",
+        }
+    )
+    SalesOrderItemsRepo(store).append(
+        {
+            "order_item_id": "i1",
+            "order_id": "o1",
+            "product_id": "v1",
+            "prd_description_snapshot": "",
+            "qty": "2",
+            "unit_selling_price": "60",
+            "total_selling_price": "120",
+        }
+    )
+
+    d = build_svc(store).lot_profit_recovery("c1")
+    assert float(d.iloc[0]["recovered_revenue"]) == 120.0
+    assert d.iloc[0]["product_id"] == "p1"

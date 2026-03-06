@@ -389,6 +389,222 @@ class DataReconciliationService:
         d = d.sort_values("timestamp", ascending=False)
         return d.head(latest_limit) if latest_limit else d
 
+    def normalized_sales_items(self, client_id: str | None) -> pd.DataFrame:
+        columns = [
+            "order_item_id",
+            "order_id",
+            "client_id",
+            "order_status",
+            "order_timestamp",
+            "inventory_product_id",
+            "parent_product_id",
+            "variant_id",
+            "canonical_product_id",
+            "product_name_snapshot",
+            "variant_name_snapshot",
+            "raw_product_id",
+            "identity_status",
+            "identity_issue_reason",
+            "qty",
+            "unit_selling_price",
+            "line_total",
+            "has_ledger_earning",
+            "ledger_earning_amount",
+            "ledger_mismatch",
+        ]
+        if self.order_items_repo is None:
+            return pd.DataFrame(columns=columns)
+
+        items = self.order_items_repo.all()
+        if items.empty:
+            return pd.DataFrame(columns=columns)
+
+        orders = (
+            self._scope(self.orders_repo.all(), client_id)
+            if self.orders_repo is not None
+            else pd.DataFrame(columns=["order_id", "client_id", "status", "timestamp", "grand_total"])
+        )
+        if orders.empty:
+            return pd.DataFrame(columns=columns)
+
+        order_view = orders[["order_id", "client_id", "status", "timestamp", "grand_total"]].rename(
+            columns={"status": "order_status", "timestamp": "order_timestamp"}
+        )
+        d = items.merge(order_view, on="order_id", how="inner")
+        if d.empty:
+            return pd.DataFrame(columns=columns)
+
+        d["raw_product_id"] = d.get("product_id", "").astype(str).str.strip()
+        d["prd_description_snapshot"] = (
+            d.get("prd_description_snapshot", pd.Series("", index=d.index)).astype(str)
+        )
+        d["qty"] = self._to_float(d.get("qty", pd.Series(0.0, index=d.index)))
+        d["unit_selling_price"] = self._to_float(
+            d.get("unit_selling_price", pd.Series(0.0, index=d.index))
+        )
+        d["line_total"] = self._to_float(
+            d.get("total_selling_price", pd.Series(0.0, index=d.index))
+        )
+
+        products = self.product_map(client_id)
+        product_ids = set(products["product_id"].astype(str)) if not products.empty else set()
+        product_names = (
+            products.set_index(products["product_name"].astype(str).str.strip().str.lower())["product_id"].to_dict()
+            if not products.empty
+            else {}
+        )
+        product_name_by_id = (
+            products.set_index(products["product_id"].astype(str))["product_name"].to_dict()
+            if not products.empty
+            else {}
+        )
+
+        variants = self.variant_map(client_id)
+        variant_by_id = (
+            variants.set_index(variants["variant_id"].astype(str)).to_dict(orient="index")
+            if not variants.empty
+            else {}
+        )
+
+        def resolve(row: pd.Series) -> dict[str, str]:
+            raw_pid = str(row.get("raw_product_id", "")).strip()
+            desc = str(row.get("prd_description_snapshot", "")).strip()
+            if raw_pid in product_ids:
+                pname = str(product_name_by_id.get(raw_pid, "")).strip() or desc or raw_pid
+                return {
+                    "inventory_product_id": raw_pid,
+                    "parent_product_id": raw_pid,
+                    "variant_id": "",
+                    "canonical_product_id": raw_pid,
+                    "product_name_snapshot": pname,
+                    "variant_name_snapshot": "",
+                    "identity_status": "valid_parent_item",
+                    "identity_issue_reason": "",
+                }
+            if raw_pid in variant_by_id:
+                vm = variant_by_id[raw_pid]
+                parent = str(vm.get("parent_product_id", "")).strip()
+                parent_name = str(vm.get("parent_product_name", "")).strip() or desc or parent
+                variant_name = str(vm.get("variant_name", "")).strip()
+                return {
+                    "inventory_product_id": raw_pid,
+                    "parent_product_id": parent,
+                    "variant_id": raw_pid,
+                    "canonical_product_id": parent,
+                    "product_name_snapshot": parent_name,
+                    "variant_name_snapshot": variant_name,
+                    "identity_status": "valid_variant_item",
+                    "identity_issue_reason": "",
+                }
+            if raw_pid and raw_pid.lower() in product_names:
+                mapped_parent = str(product_names[raw_pid.lower()]).strip()
+                pname = str(product_name_by_id.get(mapped_parent, "")).strip() or raw_pid
+                return {
+                    "inventory_product_id": mapped_parent,
+                    "parent_product_id": mapped_parent,
+                    "variant_id": "",
+                    "canonical_product_id": mapped_parent,
+                    "product_name_snapshot": pname,
+                    "variant_name_snapshot": "",
+                    "identity_status": "legacy_repairable_row",
+                    "identity_issue_reason": "mapped_from_legacy_product_name_in_product_id",
+                }
+            if desc and desc.lower() in product_names:
+                mapped_parent = str(product_names[desc.lower()]).strip()
+                pname = str(product_name_by_id.get(mapped_parent, "")).strip() or desc
+                return {
+                    "inventory_product_id": mapped_parent,
+                    "parent_product_id": mapped_parent,
+                    "variant_id": "",
+                    "canonical_product_id": mapped_parent,
+                    "product_name_snapshot": pname,
+                    "variant_name_snapshot": "",
+                    "identity_status": "legacy_repairable_row",
+                    "identity_issue_reason": "mapped_from_legacy_description_snapshot",
+                }
+            unresolved = raw_pid or desc or "UNMAPPED::MISSING"
+            return {
+                "inventory_product_id": unresolved,
+                "parent_product_id": unresolved,
+                "variant_id": "",
+                "canonical_product_id": unresolved,
+                "product_name_snapshot": desc or unresolved,
+                "variant_name_snapshot": "",
+                "identity_status": "unknown_or_broken_row",
+                "identity_issue_reason": "unknown_product_reference",
+            }
+
+        resolved = d.apply(resolve, axis=1)
+        for col in [
+            "inventory_product_id",
+            "parent_product_id",
+            "variant_id",
+            "canonical_product_id",
+            "product_name_snapshot",
+            "variant_name_snapshot",
+            "identity_status",
+            "identity_issue_reason",
+        ]:
+            d[col] = resolved.apply(lambda v: v[col])
+
+        confirmed_sales = self.confirmed_sales_with_reconciliation(client_id, latest_limit=None)
+        if confirmed_sales.empty:
+            d["has_ledger_earning"] = False
+            d["ledger_earning_amount"] = 0.0
+            d["ledger_mismatch"] = False
+        else:
+            ledger_cols = confirmed_sales[
+                ["order_id", "has_ledger_earning", "ledger_earning_amount", "ledger_mismatch"]
+            ]
+            d = d.merge(ledger_cols, on="order_id", how="left")
+            d["has_ledger_earning"] = d["has_ledger_earning"].fillna(False).astype(bool)
+            d["ledger_earning_amount"] = d["ledger_earning_amount"].fillna(0.0)
+            d["ledger_mismatch"] = d["ledger_mismatch"].fillna(False).astype(bool)
+
+        return d[columns].copy()
+
+    def reconciliation_health_summary(self, client_id: str | None) -> dict[str, int]:
+        sales = self.confirmed_sales_with_reconciliation(client_id, latest_limit=None)
+        sales_items = self.normalized_sales_items(client_id)
+        inv = self.normalized_inventory_rows(client_id)
+        issues = self.integrity_issues(client_id)
+
+        return {
+            "confirmed_sales_with_items": int(
+                len(sales[(sales["has_items"])]) if not sales.empty else 0
+            ),
+            "confirmed_sales_missing_items": int(
+                len(sales[~sales["has_items"]]) if not sales.empty else 0
+            ),
+            "confirmed_sales_with_ledger_post": int(
+                len(sales[sales["has_ledger_earning"]]) if not sales.empty else 0
+            ),
+            "orphan_ledger_sale_earnings": int(
+                len([i for i in issues if i.issue_type == "orphan_ledger_earning"])
+            ),
+            "valid_variant_linked_sales_items": int(
+                len(sales_items[sales_items["identity_status"] == "valid_variant_item"])
+                if not sales_items.empty
+                else 0
+            ),
+            "legacy_repairable_sales_item_rows": int(
+                len(sales_items[sales_items["identity_status"] == "legacy_repairable_row"])
+                if not sales_items.empty
+                else 0
+            ),
+            "truly_broken_sales_item_identities": int(
+                len(sales_items[sales_items["identity_status"] == "unknown_or_broken_row"])
+                if not sales_items.empty
+                else 0
+            ),
+            "unmapped_inventory_rows": int(
+                len(inv[inv["is_unmapped"]]) if not inv.empty else 0
+            ),
+            "client_mismatch_issues": int(
+                len([i for i in issues if i.issue_type == "client_id_mismatch_linked_records"])
+            ),
+        }
+
     def orphan_ledger_earnings(self, client_id: str | None) -> pd.DataFrame:
         if self.ledger_repo is None or self.orders_repo is None:
             return pd.DataFrame(
@@ -513,7 +729,6 @@ class DataReconciliationService:
             )
             items = self.order_items_repo.all()
             if not items.empty and not order_ids.empty:
-                linked_items = items.merge(order_ids, on="order_id", how="inner")
                 inv_all = self.inventory_repo.all()
                 if not inv_all.empty:
                     linked_out = self._scope(inv_all, client_id)
@@ -535,4 +750,17 @@ class DataReconciliationService:
                                 message="Inventory sale transaction source_id does not match any scoped sales order.",
                             )
                         )
+        sales_items = self.normalized_sales_items(client_id)
+        if not sales_items.empty:
+            broken_rows = sales_items[sales_items["identity_status"] == "unknown_or_broken_row"]
+            for _, row in broken_rows.iterrows():
+                issues.append(
+                    ReconciliationIssue(
+                        issue_type="sales_item_invalid_identity",
+                        severity="error",
+                        client_id=str(row.get("client_id", client_id or "")),
+                        reference_id=str(row.get("order_item_id", "")),
+                        message="Sales order item has unknown/broken product identity.",
+                    )
+                )
         return issues
