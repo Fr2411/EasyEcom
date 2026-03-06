@@ -66,7 +66,12 @@ svc = SalesService(
     variants_repo,
 )
 recon = DataReconciliationService(
-    InventoryTxnRepo(store), product_repo, orders_repo, items_repo, LedgerRepo(store)
+    InventoryTxnRepo(store),
+    product_repo,
+    variants_repo,
+    orders_repo,
+    items_repo,
+    LedgerRepo(store),
 )
 
 user = st.session_state["user"]

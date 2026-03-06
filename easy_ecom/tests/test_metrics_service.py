@@ -4,6 +4,7 @@ import pandas as pd
 
 from easy_ecom.data.repos.csv.finance_repo import LedgerRepo
 from easy_ecom.data.repos.csv.inventory_repo import InventoryTxnRepo
+from easy_ecom.data.repos.csv.product_variants_repo import ProductVariantsRepo
 from easy_ecom.data.repos.csv.products_repo import ProductsRepo
 from easy_ecom.data.repos.csv.sales_repo import (
     InvoicesRepo,
@@ -32,6 +33,7 @@ def build_svc(store: CsvStore) -> MetricsService:
         PaymentsRepo(store),
         SalesOrderItemsRepo(store),
         ProductsRepo(store),
+        ProductVariantsRepo(store),
     )
 
 

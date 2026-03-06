@@ -6,6 +6,7 @@ import pandas as pd
 
 from easy_ecom.data.repos.csv.finance_repo import LedgerRepo
 from easy_ecom.data.repos.csv.inventory_repo import InventoryTxnRepo
+from easy_ecom.data.repos.csv.product_variants_repo import ProductVariantsRepo
 from easy_ecom.data.repos.csv.products_repo import ProductsRepo
 from easy_ecom.data.repos.csv.sales_repo import SalesOrderItemsRepo, SalesOrdersRepo
 
@@ -26,12 +27,14 @@ class DataReconciliationService:
         self,
         inventory_repo: InventoryTxnRepo,
         products_repo: ProductsRepo,
+        variants_repo: ProductVariantsRepo | None,
         orders_repo: SalesOrdersRepo | None,
         order_items_repo: SalesOrderItemsRepo | None,
         ledger_repo: LedgerRepo | None,
     ):
         self.inventory_repo = inventory_repo
         self.products_repo = products_repo
+        self.variants_repo = variants_repo
         self.orders_repo = orders_repo
         self.order_items_repo = order_items_repo
         self.ledger_repo = ledger_repo
@@ -52,6 +55,23 @@ class DataReconciliationService:
             return pd.DataFrame(columns=["product_id", "product_name"])
         return products[["product_id", "product_name"]].drop_duplicates()
 
+    def variant_map(self, client_id: str | None) -> pd.DataFrame:
+        if self.variants_repo is None:
+            return pd.DataFrame(
+                columns=["variant_id", "variant_name", "parent_product_id", "parent_product_name"]
+            )
+        variants = self._scope(self.variants_repo.all(), client_id)
+        if variants.empty:
+            return pd.DataFrame(
+                columns=["variant_id", "variant_name", "parent_product_id", "parent_product_name"]
+            )
+        parent = self.product_map(client_id).rename(
+            columns={"product_id": "parent_product_id", "product_name": "parent_product_name"}
+        )
+        return variants[["variant_id", "variant_name", "parent_product_id"]].merge(
+            parent, on="parent_product_id", how="left"
+        )
+
     def normalized_inventory_rows(self, client_id: str | None) -> pd.DataFrame:
         inv = self._scope(self.inventory_repo.all(), client_id)
         if inv.empty:
@@ -64,6 +84,12 @@ class DataReconciliationService:
                     "product_name",
                     "canonical_product_id",
                     "canonical_product_name",
+                    "inventory_product_id",
+                    "inventory_product_name",
+                    "parent_product_id",
+                    "parent_product_name",
+                    "variant_id",
+                    "variant_name",
                     "lot_id",
                     "qty",
                     "unit_cost",
@@ -87,7 +113,13 @@ class DataReconciliationService:
         )
 
         products = self.product_map(client_id)
+        variants = self.variant_map(client_id)
         by_id = set(products["product_id"].astype(str)) if not products.empty else set()
+        variant_by_id = (
+            variants.set_index(variants["variant_id"].astype(str)).to_dict(orient="index")
+            if not variants.empty
+            else {}
+        )
         by_name = (
             products.set_index(products["product_name"].astype(str).str.strip().str.lower())[
                 "product_id"
@@ -96,34 +128,106 @@ class DataReconciliationService:
             else {}
         )
 
-        def resolve(row: pd.Series) -> tuple[str, str]:
+        def resolve(row: pd.Series) -> dict[str, str]:
             raw_pid = str(row.get("product_id", "")).strip()
             raw_name = str(row.get("product_name", "")).strip()
             if raw_pid in by_id:
-                return raw_pid, ""
+                return {
+                    "canonical_product_id": raw_pid,
+                    "parent_product_id": raw_pid,
+                    "variant_id": "",
+                    "variant_name": "",
+                    "issue_reason": "",
+                }
+            if raw_pid in variant_by_id:
+                v = variant_by_id[raw_pid]
+                parent_product_id = str(v.get("parent_product_id", "")).strip()
+                return {
+                    "canonical_product_id": parent_product_id,
+                    "parent_product_id": parent_product_id,
+                    "variant_id": raw_pid,
+                    "variant_name": str(v.get("variant_name", "")).strip(),
+                    "issue_reason": "",
+                }
             if raw_name and raw_name.lower() in by_name:
-                return str(by_name[raw_name.lower()]), "mapped_from_product_name"
+                mapped = str(by_name[raw_name.lower()])
+                return {
+                    "canonical_product_id": mapped,
+                    "parent_product_id": mapped,
+                    "variant_id": "",
+                    "variant_name": "",
+                    "issue_reason": "mapped_from_product_name",
+                }
             if raw_pid and "_LOT-" in raw_pid:
                 prefix = raw_pid.split("_LOT-", 1)[0].strip()
                 if prefix in by_id:
-                    return prefix, "mapped_from_legacy_lot_product_id"
+                    return {
+                        "canonical_product_id": prefix,
+                        "parent_product_id": prefix,
+                        "variant_id": "",
+                        "variant_name": "",
+                        "issue_reason": "mapped_from_legacy_lot_product_id",
+                    }
             if raw_pid:
-                return raw_pid, "unmapped_product_id"
+                return {
+                    "canonical_product_id": raw_pid,
+                    "parent_product_id": raw_pid,
+                    "variant_id": "",
+                    "variant_name": "",
+                    "issue_reason": "unmapped_product_id",
+                }
             if raw_name:
-                return f"UNMAPPED::{raw_name}", "missing_product_id_mapped_to_name_key"
-            return "UNMAPPED::MISSING", "missing_product_reference"
+                missing = f"UNMAPPED::{raw_name}"
+                return {
+                    "canonical_product_id": missing,
+                    "parent_product_id": missing,
+                    "variant_id": "",
+                    "variant_name": "",
+                    "issue_reason": "missing_product_id_mapped_to_name_key",
+                }
+            return {
+                "canonical_product_id": "UNMAPPED::MISSING",
+                "parent_product_id": "UNMAPPED::MISSING",
+                "variant_id": "",
+                "variant_name": "",
+                "issue_reason": "missing_product_reference",
+            }
 
         resolved = d.apply(resolve, axis=1)
-        d["canonical_product_id"] = resolved.apply(lambda v: v[0])
-        d["issue_reason"] = resolved.apply(lambda v: v[1])
+        d["canonical_product_id"] = resolved.apply(lambda v: v["canonical_product_id"])
+        d["parent_product_id"] = resolved.apply(lambda v: v["parent_product_id"])
+        d["variant_id"] = resolved.apply(lambda v: v["variant_id"])
+        d["variant_name"] = resolved.apply(lambda v: v["variant_name"])
+        d["issue_reason"] = resolved.apply(lambda v: v["issue_reason"])
         d["is_unmapped"] = (~d["canonical_product_id"].isin(by_id)).astype(bool) if by_id else True
 
         named = products.rename(
             columns={"product_id": "canonical_product_id", "product_name": "canonical_product_name"}
         )
         d = d.merge(named, on="canonical_product_id", how="left")
+        d = d.merge(
+            products.rename(
+                columns={"product_id": "parent_product_id", "product_name": "parent_product_name"}
+            ),
+            on="parent_product_id",
+            how="left",
+        )
         d["canonical_product_name"] = (
             d["canonical_product_name"].fillna(d["product_name"]).fillna(d["canonical_product_id"])
+        )
+        d["parent_product_name"] = (
+            d["parent_product_name"]
+            .fillna(d["canonical_product_name"])
+            .fillna(d["parent_product_id"])
+        )
+        d["variant_name"] = d["variant_name"].where(
+            d["variant_name"].astype(str).str.strip() != "", d["product_name"]
+        )
+        d["inventory_product_id"] = d["variant_id"].where(
+            d["variant_id"].astype(str).str.strip() != "", d["canonical_product_id"]
+        )
+        d["inventory_product_name"] = d["variant_name"].where(
+            d["variant_id"].astype(str).str.strip() != "", d["canonical_product_name"]
         )
         return d
 
@@ -134,6 +238,10 @@ class DataReconciliationService:
                 columns=[
                     "product_name",
                     "product_id",
+                    "parent_product_id",
+                    "parent_product_name",
+                    "variant_id",
+                    "variant_name",
                     "lot_id",
                     "qty",
                     "unit_cost",
@@ -148,8 +256,12 @@ class DataReconciliationService:
         g = (
             d.groupby(
                 [
-                    "canonical_product_name",
-                    "canonical_product_id",
+                    "inventory_product_name",
+                    "inventory_product_id",
+                    "parent_product_id",
+                    "parent_product_name",
+                    "variant_id",
+                    "variant_name",
                     "lot_id",
                     "is_unmapped",
                     "issue_reason",
@@ -159,8 +271,8 @@ class DataReconciliationService:
             .agg(qty=("signed_qty", "sum"), unit_cost=("unit_cost", "last"))
             .rename(
                 columns={
-                    "canonical_product_name": "product_name",
-                    "canonical_product_id": "product_id",
+                    "inventory_product_name": "product_name",
+                    "inventory_product_id": "product_id",
                 }
             )
         )

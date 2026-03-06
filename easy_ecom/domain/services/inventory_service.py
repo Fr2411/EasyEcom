@@ -6,6 +6,7 @@ from easy_ecom.core.config import settings
 from easy_ecom.core.ids import new_uuid
 from easy_ecom.core.time_utils import now_iso
 from easy_ecom.data.repos.csv.inventory_repo import InventoryTxnRepo
+from easy_ecom.data.repos.csv.product_variants_repo import ProductVariantsRepo
 from easy_ecom.data.repos.csv.products_repo import ProductsRepo
 from easy_ecom.data.repos.csv.sequences_repo import SequencesRepo
 from easy_ecom.domain.services.data_reconciliation_service import DataReconciliationService
@@ -45,7 +46,7 @@ class InventoryService:
         self.repo = repo
         self.seq_service = seq_service
         self.reconciliation = DataReconciliationService(
-            repo, ProductsRepo(repo.store), None, None, None
+            repo, ProductsRepo(repo.store), ProductVariantsRepo(repo.store), None, None, None
         )
 
     @staticmethod

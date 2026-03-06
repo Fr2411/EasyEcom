@@ -5,6 +5,7 @@ import pandas as pd
 from easy_ecom.data.repos.csv.clients_repo import ClientsRepo
 from easy_ecom.data.repos.csv.finance_repo import LedgerRepo
 from easy_ecom.data.repos.csv.inventory_repo import InventoryTxnRepo
+from easy_ecom.data.repos.csv.product_variants_repo import ProductVariantsRepo
 from easy_ecom.data.repos.csv.products_repo import ProductsRepo
 from easy_ecom.data.repos.csv.sales_repo import (
     InvoicesRepo,
@@ -24,6 +25,7 @@ class DashboardService:
         invoices: InvoicesRepo,
         order_items: SalesOrderItemsRepo,
         products: ProductsRepo,
+        variants: ProductVariantsRepo,
         clients: ClientsRepo,
         payments: PaymentsRepo | None = None,
     ):
@@ -36,6 +38,7 @@ class DashboardService:
             payments or PaymentsRepo(inv.store),
             order_items,
             products,
+            variants,
         )
 
     def kpis(self, client_id: str | None) -> dict[str, float]:
