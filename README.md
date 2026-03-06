@@ -17,6 +17,7 @@ Enterprise-grade multi-tenant inventory, sales, and finance web app built with S
 - Append-only transaction tables and audit-ready architecture.
 - Inventory and finance transactions persist `user_id` to keep operator-level traceability for manual and auto-posted entries.
 - CSV persistence with file locks and repository abstraction for DB migration readiness.
+- Super Admin **Data Manager** tab (inside Admin page) for controlled CSV inspection/editing with schema checks, backups, high-risk save confirmation, and direct CSV download.
 
 ## Project Structure
 Implemented under `easy_ecom/` with layers:
@@ -80,6 +81,7 @@ pip install reportlab
 - Logged-in user email is shown in the top-left sidebar for quick operator context.
 - The default "main" entry in sidebar navigation is hidden after login to declutter tab navigation.
 - Product features input accepts free-form text (line breaks, commas, or bullet points) and is normalized to JSON (`{"features": [...]}`) before persistence.
+- Admin Data Manager validates required table columns from schema, creates timestamped backups before overwrite, and flags high-risk tables (`users`, `roles`, `ledger`, inventory/sales transaction files) with extra save confirmation.
 
 ## Defaults
 - `ALLOW_BACKORDER=false` blocks overselling.
