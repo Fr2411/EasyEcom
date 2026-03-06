@@ -239,3 +239,43 @@ def test_dashboard_exposes_reconciliation_health_scorecard(tmp_path: Path):
     score = svc.reconciliation_health_scorecard("c1")
     assert "confirmed_sales_with_items" in score
     assert "truly_broken_sales_item_identities" in score
+
+
+def test_dashboard_business_sections_data(tmp_path: Path):
+    store = setup_store(tmp_path)
+    clients = ClientsRepo(store)
+    products = ProductsRepo(store)
+    inv = InventoryTxnRepo(store)
+    ledger = LedgerRepo(store)
+    orders = SalesOrdersRepo(store)
+    items = SalesOrderItemsRepo(store)
+    invoices = InvoicesRepo(store)
+
+    now = pd.Timestamp.utcnow().strftime("%Y-%m-%dT10:00:00")
+    clients.append({"client_id": "c1", "business_name": "Alpha", "owner_name": "O", "phone": "", "email": "", "address": "", "website_url": "", "facebook_url": "", "instagram_url": "", "whatsapp_number": "", "created_at": now, "status": "active", "notes": ""})
+    products.append({"product_id": "p1", "client_id": "c1", "supplier": "sup", "product_name": "Product 1", "category": "cat", "prd_description": "", "prd_features_json": "{}", "created_at": now, "is_active": "True"})
+
+    inv.append({"txn_id": "t1", "client_id": "c1", "timestamp": now, "txn_type": "IN", "product_id": "p1", "qty": "10", "unit_cost": "5", "total_cost": "50", "supplier_snapshot": "", "note": "", "source_type": "purchase", "source_id": "", "lot_id": "L1"})
+    inv.append({"txn_id": "t2", "client_id": "c1", "timestamp": now, "txn_type": "OUT", "product_id": "p1", "qty": "4", "unit_cost": "5", "total_cost": "20", "supplier_snapshot": "", "note": "", "source_type": "sale", "source_id": "o1", "lot_id": "L1"})
+
+    ledger.append({"entry_id": "e1", "client_id": "c1", "timestamp": now, "entry_type": "earning", "category": "sales", "amount": "100", "source_type": "sale", "source_id": "o1", "note": ""})
+    ledger.append({"entry_id": "e2", "client_id": "c1", "timestamp": now, "entry_type": "expense", "category": "ops", "amount": "30", "source_type": "manual", "source_id": "x", "note": ""})
+
+    orders.append({"order_id": "o1", "client_id": "c1", "timestamp": now, "customer_id": "cu1", "status": "confirmed", "subtotal": "100", "discount": "0", "tax": "0", "grand_total": "100", "note": ""})
+    items.append({"order_item_id": "i1", "order_id": "o1", "product_id": "p1", "prd_description_snapshot": "", "qty": "4", "unit_selling_price": "25", "total_selling_price": "100"})
+    invoices.append({"invoice_id": "in1", "client_id": "c1", "invoice_no": "INV-1", "order_id": "o1", "customer_id": "cu1", "timestamp": now, "amount_due": "100", "status": "unpaid"})
+
+    svc = build_service(store)
+    snapshot = svc.business_health_snapshot("c1")
+    assert snapshot["Revenue"] == 100.0
+    assert snapshot["Gross Profit"] == 80.0
+    assert snapshot["Net Operating Profit"] == 50.0
+    assert snapshot["Gross Margin %"] == 80.0
+    assert snapshot["Outstanding Receivables"] == 100.0
+
+    trend = svc.trend_summary("c1", "D", pd.Timestamp.utcnow() - pd.Timedelta(days=2), pd.Timestamp.utcnow())
+    assert set(["revenue", "gross_profit", "net_operating_profit", "expenses", "inventory_value"]).issubset(set(trend.columns))
+
+    fin = svc.financial_health("c1", "D", pd.Timestamp.utcnow() - pd.Timedelta(days=2), pd.Timestamp.utcnow())
+    assert fin["outstanding_invoices"] == 100.0
+    assert fin["unpaid_confirmed_sales"] == 100.0

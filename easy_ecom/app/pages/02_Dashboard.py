@@ -5,7 +5,9 @@ import streamlit as st
 
 from easy_ecom.app.ui.components import require_login
 from easy_ecom.app.ui.formatters import format_money
+from easy_ecom.core.audit import log_event
 from easy_ecom.core.config import settings
+from easy_ecom.data.repos.csv.audit_repo import AuditRepo
 from easy_ecom.data.repos.csv.clients_repo import ClientsRepo
 from easy_ecom.data.repos.csv.finance_repo import LedgerRepo
 from easy_ecom.data.repos.csv.inventory_repo import InventoryTxnRepo
@@ -18,15 +20,14 @@ from easy_ecom.data.repos.csv.sales_repo import (
     SalesOrdersRepo,
 )
 from easy_ecom.data.store.csv_store import CsvStore
-from easy_ecom.core.audit import log_event
-from easy_ecom.data.repos.csv.audit_repo import AuditRepo
-from easy_ecom.domain.services.dashboard_service import DashboardService
 from easy_ecom.domain.services.client_service import ClientService
+from easy_ecom.domain.services.dashboard_service import DashboardService
 
 try:
     from streamlit_autorefresh import st_autorefresh
 except Exception:
     st_autorefresh = None
+
 
 require_login()
 store = CsvStore(settings.data_dir)
@@ -48,7 +49,9 @@ client_id = user["client_id"]
 all_clients = ClientsRepo(store).all()
 client_svc = ClientService(ClientsRepo(store))
 
-st.title("Dashboard")
+st.title("Business Health Dashboard")
+st.caption("Decision-focused dashboard for profitability, product performance, inventory, receivables, and data trust.")
+
 if st.button("Refresh"):
     st.rerun()
 auto_refresh = st.toggle("Auto refresh", value=False)
@@ -85,60 +88,16 @@ if "SUPER_ADMIN" in roles:
 else:
     current_scope_client = client_id
 
-warnings = svc.integrity_warnings(current_scope_client)
-if warnings:
-    st.warning("Data integrity warnings:\n- " + "\n- ".join(warnings))
-    for w in warnings:
-        log_event(
-            AuditRepo(store),
-            user.get("user_id", ""),
-            current_scope_client or "",
-            "dashboard_warning",
-            "metrics",
-            current_scope_client or "global",
-            {"warning": w},
-        )
-
-if "SUPER_ADMIN" in roles:
-    issues = svc.integrity_issues(current_scope_client)
-    if issues:
-        st.subheader("Data Issues (admin review)")
-        st.dataframe(issues, use_container_width=True)
-
-scorecard = svc.reconciliation_health_scorecard(current_scope_client)
-if scorecard:
-    st.subheader("Reconciliation Health Scorecard")
-    st.dataframe([scorecard], use_container_width=True)
-
-kpis = svc.kpis(current_scope_client)
 currency_code, currency_symbol = client_svc.get_currency(current_scope_client or client_id)
-cols = st.columns(4)
-money_kpis = {
-    "Current Stock Value",
-    "Revenue MTD",
-    "COGS MTD",
-    "Gross Profit MTD",
-    "Expenses MTD",
-    "Net Operating Profit MTD",
-    "AOV MTD",
-    "Outstanding Invoices",
-}
-for idx, (name, value) in enumerate(kpis.items()):
-    metric_value = (
-        format_money(value, currency_code, currency_symbol)
-        if name in money_kpis
-        else f"{value:,.2f}"
-    )
-    cols[idx % 4].metric(name, metric_value)
 
 st.divider()
-left_filter, right_filter = st.columns(2)
-with left_filter:
-    freq_label = st.selectbox("Trend granularity", ["Daily", "Weekly", "Monthly"], index=0)
+flt_a, flt_b = st.columns(2)
+with flt_a:
+    freq_label = st.selectbox("Trend granularity", ["Daily", "Weekly", "Monthly"], index=1)
     freq_map = {"Daily": "D", "Weekly": "W", "Monthly": "M"}
-with right_filter:
+with flt_b:
     end_default = pd.Timestamp.utcnow().tz_localize(None).date()
-    start_default = end_default - pd.Timedelta(days=30)
+    start_default = end_default - pd.Timedelta(days=60)
     date_range = st.date_input("Date filter", value=(start_default, end_default))
 
 if isinstance(date_range, tuple) and len(date_range) == 2:
@@ -150,53 +109,72 @@ else:
 
 freq = freq_map[freq_label]
 
-revenue_trend = svc.revenue_trend(current_scope_client, freq, start_date, end_date)
-fig_revenue = px.line(revenue_trend, x="period", y="revenue", markers=True, title="Revenue Trend")
-st.plotly_chart(fig_revenue, use_container_width=True)
+# Section 1 — Business Health Snapshot
+st.header("1) Business Health Snapshot")
+snapshot = svc.business_health_snapshot(current_scope_client)
 
-stock_value = svc.stock_value_by_product(current_scope_client)
-fig_stock = px.bar(
-    stock_value,
-    x="product_name",
-    y="stock_value",
-    title="Stock Value by Parent Product",
-    text_auto=".2s",
-)
-fig_stock.update_layout(xaxis_title="Product", yaxis_title="Stock Value")
-st.plotly_chart(fig_stock, use_container_width=True)
+kpi_meta = [
+    ("Revenue", "Confirmed sales totals.", "money"),
+    ("Gross Profit", "Revenue - COGS.", "money"),
+    ("Net Operating Profit", "Revenue - COGS - Expenses.", "money"),
+    ("Gross Margin %", "Gross Profit / Revenue.", "pct"),
+    ("Inventory Value", "Current positive stock lots at unit cost.", "money"),
+    ("Outstanding Receivables", "Unpaid + partial invoices after payments.", "money"),
+    ("Data Health Score", "Starts at 100 and decreases with reconciliation issues.", "pct"),
+]
+kpi_cols = st.columns(4)
+for i, (name, help_txt, fmt) in enumerate(kpi_meta):
+    col = kpi_cols[i % 4]
+    val = float(snapshot.get(name, 0.0))
+    if fmt == "money":
+        shown = format_money(val, currency_code, currency_symbol)
+    else:
+        shown = f"{val:,.1f}%"
+    delta_color = "off"
+    if name in {"Gross Margin %", "Data Health Score"}:
+        delta = "Healthy" if val >= 70 else "Watch"
+        col.metric(name, shown, delta=delta, delta_color=delta_color)
+    else:
+        col.metric(name, shown)
+    col.caption(help_txt)
 
-aging = svc.product_aging(current_scope_client)
-fig_aging = go.Figure()
-fig_aging.add_trace(
-    go.Bar(
-        name="Sold %",
-        x=aging["product_name"],
-        y=aging["sold_pct"],
-        customdata=aging[["sold_qty", "current_qty", "total_in_qty"]],
-        hovertemplate="%{x}<br>Sold %: %{y:.2f}<br>Sold Qty: %{customdata[0]:.2f}<br>Remaining Qty: %{customdata[1]:.2f}<br>Total In: %{customdata[2]:.2f}<extra></extra>",
-    )
-)
-fig_aging.add_trace(
-    go.Bar(
-        name="Remaining %",
-        x=aging["product_name"],
-        y=aging["remaining_pct"],
-        customdata=aging[["sold_qty", "current_qty", "total_in_qty"]],
-        hovertemplate="%{x}<br>Remaining %: %{y:.2f}<br>Sold Qty: %{customdata[0]:.2f}<br>Remaining Qty: %{customdata[1]:.2f}<br>Total In: %{customdata[2]:.2f}<extra></extra>",
-    )
-)
-fig_aging.update_layout(
-    title="Product Aging: Sold vs Remaining",
-    barmode="group",
-    yaxis_title="Percent",
-    legend_title="Aging Metrics",
-)
-st.dataframe(
-    aging[["product_name", "sold_qty", "current_qty", "total_in_qty", "sold_pct", "remaining_pct"]],
-    use_container_width=True,
-)
-st.plotly_chart(fig_aging, use_container_width=True)
+# Section 2 — Trend View
+st.header("2) Trend View")
+trend = svc.trend_summary(current_scope_client, freq, start_date, end_date)
+if trend.empty:
+    st.info("No trend data for selected range.")
+else:
+    trend_fig = go.Figure()
+    trend_fig.add_trace(go.Scatter(x=trend["period"], y=trend["revenue"], mode="lines+markers", name="Revenue"))
+    trend_fig.add_trace(go.Scatter(x=trend["period"], y=trend["gross_profit"], mode="lines+markers", name="Gross Profit"))
+    trend_fig.add_trace(go.Scatter(x=trend["period"], y=trend["net_operating_profit"], mode="lines+markers", name="Net Operating Profit"))
+    trend_fig.add_trace(go.Scatter(x=trend["period"], y=trend["expenses"], mode="lines+markers", name="Expenses"))
+    trend_fig.update_layout(title="Revenue, Gross Profit, Net Operating Profit, and Expenses", yaxis_title="Amount")
+    st.plotly_chart(trend_fig, use_container_width=True)
 
+    inv_fig = px.area(trend, x="period", y="inventory_value", title="Inventory Value Trend")
+    inv_fig.update_layout(yaxis_title="Inventory Value")
+    st.plotly_chart(inv_fig, use_container_width=True)
+
+# Section 3 — Product Performance
+st.header("3) Product Performance")
+perf = svc.product_performance(current_scope_client)
+left, right = st.columns(2)
+with left:
+    st.subheader("Top Products by Revenue (last 30 days)")
+    st.dataframe(perf["top_revenue"][["product_name", "revenue", "gross_profit", "margin_pct"]], use_container_width=True)
+    st.subheader("Lowest-Margin Products (last 30 days)")
+    st.dataframe(perf["lowest_margin"][["product_name", "revenue", "gross_profit", "margin_pct"]], use_container_width=True)
+with right:
+    st.subheader("Top Products by Gross Profit (last 30 days)")
+    st.dataframe(perf["top_gross_profit"][["product_name", "gross_profit", "revenue", "margin_pct"]], use_container_width=True)
+    st.subheader("Slow-Moving Products (last 30 days)")
+    st.dataframe(perf["slow_moving"][["product_name", "sell_speed_units_per_day", "units_sold_last_30d", "stock_value"]], use_container_width=True)
+
+st.subheader("Aging / Dead Stock Candidates")
+st.dataframe(perf["aging_dead_stock"][["product_name", "stock_value", "units_sold_last_30d", "sell_speed_units_per_day"]], use_container_width=True)
+
+st.subheader("Gross Margin % vs Sale Speed (Featured)")
 margin_speed = svc.margin_sell_speed(current_scope_client)
 fig_margin = px.scatter(
     margin_speed,
@@ -211,111 +189,80 @@ fig_margin = px.scatter(
         "units_sold_last_30d": ":.2f",
         "sell_speed_units_per_day": ":.2f",
     },
-    title="Gross Margin % vs Sell Speed (Parent Product)",
+    title="Gross Margin % vs Sale Speed (Parent Product)",
 )
 if not margin_speed.empty:
-    fig_margin.add_vline(
-        x=float(margin_speed["margin_pct"].median()), line_dash="dash", line_color="gray"
-    )
-    fig_margin.add_hline(
-        y=float(margin_speed["sell_speed_units_per_day"].median()),
-        line_dash="dash",
-        line_color="gray",
-    )
+    fig_margin.add_vline(x=float(margin_speed["margin_pct"].median()), line_dash="dash", line_color="gray")
+    fig_margin.add_hline(y=float(margin_speed["sell_speed_units_per_day"].median()), line_dash="dash", line_color="gray")
 fig_margin.update_layout(
-    xaxis_title="Margin % (higher is better)",
-    yaxis_title="Sell Speed (units/day)",
-    legend_title="Revenue Bubble Size",
+    xaxis_title="Gross Margin % (right is better)",
+    yaxis_title="Sale Speed (units/day; up is better)",
 )
-fig_margin.add_annotation(
-    xref="paper",
-    yref="paper",
-    x=0.15,
-    y=0.95,
-    text="High Margin + Slow Moving (Market More)",
-    showarrow=False,
-)
-fig_margin.add_annotation(
-    xref="paper",
-    yref="paper",
-    x=0.85,
-    y=0.95,
-    text="High Margin + Fast Moving (Stars)",
-    showarrow=False,
-)
-fig_margin.add_annotation(
-    xref="paper",
-    yref="paper",
-    x=0.15,
-    y=0.1,
-    text="Low Margin + Slow Moving (Clear/Drop)",
-    showarrow=False,
-)
-fig_margin.add_annotation(
-    xref="paper",
-    yref="paper",
-    x=0.85,
-    y=0.1,
-    text="Low Margin + Fast Moving (Reprice/Reduce Cost)",
-    showarrow=False,
-)
-
 st.plotly_chart(fig_margin, use_container_width=True)
-with st.expander("How to read this chart"):
-    st.write(
-        "Right side means better margin. Upper area means faster movement. Bigger bubbles mean more revenue in last 30 days."
-    )
+st.caption(
+    "Business meaning: upper-right = strongest products (high margin + high speed). "
+    "Lower-left = weakest products (low margin + slow movement)."
+)
 
-income_expense = svc.income_expense_trend(current_scope_client, freq, start_date, end_date)
-fig_ie = go.Figure()
-fig_ie.add_trace(
-    go.Scatter(
-        x=income_expense["period"], y=income_expense["income"], mode="lines+markers", name="Income"
-    )
-)
-fig_ie.add_trace(
-    go.Scatter(
-        x=income_expense["period"],
-        y=income_expense["expense"],
-        mode="lines+markers",
-        name="Expense",
-    )
-)
-fig_ie.update_layout(title="Income vs Expense Trend", xaxis_title="Period", yaxis_title="Amount")
-st.plotly_chart(fig_ie, use_container_width=True)
+# Section 4 — Inventory Health
+st.header("4) Inventory Health")
+inv_health = svc.inventory_health(current_scope_client)
+inv_cols = st.columns(4)
+inv_cols[0].metric("Current Stock Value", format_money(inv_health["current_stock_value"], currency_code, currency_symbol))
+inv_cols[1].metric("Low Stock Products", f"{int(inv_health['low_stock_count'])}")
+inv_cols[2].metric("Out of Stock Products", f"{int(inv_health['out_of_stock_count'])}")
+inv_cols[3].metric("Top-5 Stock Concentration", f"{float(inv_health['top_5_stock_concentration_pct']):.1f}%")
+st.dataframe(inv_health["aging"][["product_name", "sold_pct", "remaining_pct", "sold_qty", "current_qty"]], use_container_width=True)
 
-if not income_expense.empty:
-    fig_net_profit = px.line(
-        income_expense,
-        x="period",
-        y="profit",
-        markers=True,
-        title="Net Operating Profit Trend",
-    )
-    st.plotly_chart(fig_net_profit, use_container_width=True)
+# Section 5 — Financial / Receivables Health
+st.header("5) Financial / Receivables Health")
+fin = svc.financial_health(current_scope_client, freq, start_date, end_date)
+fin_cols = st.columns(3)
+fin_cols[0].metric("Outstanding Invoices", format_money(fin["outstanding_invoices"], currency_code, currency_symbol))
+fin_cols[1].metric("Unpaid Confirmed Sales", format_money(fin["unpaid_confirmed_sales"], currency_code, currency_symbol))
+fin_cols[2].metric("Expense Pressure", f"{float(fin['expense_pressure_pct']):.1f}% of revenue")
 
-lot_profit = svc.lot_profitability(current_scope_client)
-fig_lot = go.Figure()
-fig_lot.add_trace(go.Bar(name="Lot Cost", x=lot_profit["lot_id"], y=lot_profit["total_cost"]))
-fig_lot.add_trace(
-    go.Bar(name="Recovered Revenue", x=lot_profit["lot_id"], y=lot_profit["recovered_revenue"])
-)
-fig_lot.update_layout(
-    title="Lot Profitability Recovery", barmode="group", xaxis_title="Lot", yaxis_title="Amount"
-)
-st.plotly_chart(fig_lot, use_container_width=True)
+recv = fin["receivables_trend"]
+if not recv.empty:
+    st.plotly_chart(px.line(recv, x="period", y="outstanding_receivables", markers=True, title="Receivables Trend"), use_container_width=True)
+
+exp = fin["expense_trend"]
+if not exp.empty:
+    st.plotly_chart(px.bar(exp, x="period", y="expenses", title="Expense Trend"), use_container_width=True)
+
+# Section 6 — Data Trust / Reconciliation
+st.header("6) Data Trust / Reconciliation")
+scorecard = svc.reconciliation_health_scorecard(current_scope_client)
+if scorecard:
+    if "SUPER_ADMIN" in roles:
+        st.dataframe([scorecard], use_container_width=True)
+        issues = svc.integrity_issues(current_scope_client)
+        if issues:
+            st.warning(f"{len(issues)} reconciliation issues detected. Review details below.")
+            st.dataframe(issues, use_container_width=True)
+    else:
+        warnings = svc.integrity_warnings(current_scope_client)
+        if warnings:
+            st.warning("Data trust alerts:\n- " + "\n- ".join(warnings[:5]))
+        else:
+            st.success("Data trust status: Good (no active integrity warnings).")
+
+warnings = svc.integrity_warnings(current_scope_client)
+for w in warnings:
+    log_event(
+        AuditRepo(store),
+        user.get("user_id", ""),
+        current_scope_client or "",
+        "dashboard_warning",
+        "metrics",
+        current_scope_client or "global",
+        {"warning": w},
+    )
 
 if "SUPER_ADMIN" in roles and current_scope_client in (None, ""):
-    st.subheader("Super Admin Global Charts")
+    st.subheader("Super Admin Global Monitoring")
     rev_client = svc.revenue_by_client()
-    fig_rev_client = px.bar(rev_client, x="business_name", y="revenue", title="Revenue by Client")
-    st.plotly_chart(fig_rev_client, use_container_width=True)
-
     inv_client = svc.inventory_value_by_client()
-    fig_inv_client = px.bar(
-        inv_client, x="business_name", y="stock_value", title="Inventory Value by Client"
-    )
-    st.plotly_chart(fig_inv_client, use_container_width=True)
-
-    st.markdown("### Client Health Flags")
+    st.plotly_chart(px.bar(rev_client, x="business_name", y="revenue", title="Revenue by Client"), use_container_width=True)
+    st.plotly_chart(px.bar(inv_client, x="business_name", y="stock_value", title="Inventory Value by Client"), use_container_width=True)
     st.dataframe(svc.client_health_flags(), use_container_width=True)
