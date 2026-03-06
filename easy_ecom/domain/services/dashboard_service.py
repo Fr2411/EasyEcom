@@ -53,8 +53,10 @@ class DashboardService:
         return {
             "Current Stock Value": stock_value,
             "Revenue MTD": revenue,
+            "COGS MTD": self.metrics.cogs(client_id, mtd),
+            "Gross Profit MTD": self.metrics.gross_profit(client_id, mtd),
             "Expenses MTD": expenses,
-            "Profit MTD": self.metrics.profit(client_id, mtd),
+            "Net Operating Profit MTD": self.metrics.net_operating_profit(client_id, mtd),
             "Sold Qty MTD": self.metrics.sold_qty(client_id, mtd),
             "Orders MTD": self.metrics.orders_count(client_id, mtd),
             "AOV MTD": self.metrics.aov(client_id, mtd),
@@ -155,3 +157,6 @@ class DashboardService:
 
     def integrity_issues(self, client_id: str | None) -> list[dict[str, str]]:
         return self.metrics.integrity_issues(client_id)
+
+    def reconciliation_health_scorecard(self, client_id: str | None) -> dict[str, int]:
+        return self.metrics.reconciliation_health_scorecard(client_id)

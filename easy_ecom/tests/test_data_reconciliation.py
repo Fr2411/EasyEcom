@@ -591,3 +591,147 @@ def test_variant_resolution_respects_tenant_scope(tmp_path: Path):
     row = normalized.iloc[0]
     assert bool(row["is_unmapped"]) is True
     assert row["issue_reason"] == "unmapped_product_id"
+
+
+def test_normalized_sales_items_support_parent_variant_and_legacy_identity(tmp_path: Path):
+    store = setup_store(tmp_path)
+    now = "2026-01-01T10:00:00Z"
+    ProductsRepo(store).append(
+        {
+            "product_id": "p1",
+            "client_id": "c1",
+            "supplier": "",
+            "product_name": "Tee",
+            "category": "",
+            "prd_description": "",
+            "prd_features_json": "{}",
+            "created_at": now,
+            "is_active": "true",
+        }
+    )
+    ProductVariantsRepo(store).append(
+        {
+            "variant_id": "v1",
+            "client_id": "c1",
+            "parent_product_id": "p1",
+            "variant_name": "Size:L",
+            "size": "L",
+            "color": "",
+            "other": "",
+            "sku_code": "",
+            "default_selling_price": "100",
+            "max_discount_pct": "10",
+            "is_active": "true",
+            "created_at": now,
+        }
+    )
+    SalesOrdersRepo(store).append(
+        {
+            "order_id": "o1",
+            "client_id": "c1",
+            "timestamp": now,
+            "customer_id": "cu",
+            "status": "confirmed",
+            "subtotal": "300",
+            "discount": "0",
+            "tax": "0",
+            "grand_total": "300",
+            "delivery_cost": "0",
+            "delivery_provider": "",
+            "note": "",
+        }
+    )
+    items = SalesOrderItemsRepo(store)
+    items.append(
+        {
+            "order_item_id": "i1",
+            "order_id": "o1",
+            "product_id": "p1",
+            "prd_description_snapshot": "",
+            "qty": "1",
+            "unit_selling_price": "100",
+            "total_selling_price": "100",
+        }
+    )
+    items.append(
+        {
+            "order_item_id": "i2",
+            "order_id": "o1",
+            "product_id": "v1",
+            "prd_description_snapshot": "",
+            "qty": "1",
+            "unit_selling_price": "100",
+            "total_selling_price": "100",
+        }
+    )
+    items.append(
+        {
+            "order_item_id": "i3",
+            "order_id": "o1",
+            "product_id": "Tee",
+            "prd_description_snapshot": "",
+            "qty": "1",
+            "unit_selling_price": "100",
+            "total_selling_price": "100",
+        }
+    )
+
+    recon = DataReconciliationService(
+        InventoryTxnRepo(store),
+        ProductsRepo(store),
+        ProductVariantsRepo(store),
+        SalesOrdersRepo(store),
+        SalesOrderItemsRepo(store),
+        LedgerRepo(store),
+    )
+    normalized = recon.normalized_sales_items("c1")
+    by_id = {row["order_item_id"]: row for _, row in normalized.iterrows()}
+    assert by_id["i1"]["identity_status"] == "valid_parent_item"
+    assert by_id["i2"]["identity_status"] == "valid_variant_item"
+    assert by_id["i2"]["canonical_product_id"] == "p1"
+    assert by_id["i3"]["identity_status"] == "legacy_repairable_row"
+
+
+def test_health_summary_counts_broken_sales_identity(tmp_path: Path):
+    store = setup_store(tmp_path)
+    now = "2026-01-01T10:00:00Z"
+    SalesOrdersRepo(store).append(
+        {
+            "order_id": "o1",
+            "client_id": "c1",
+            "timestamp": now,
+            "customer_id": "cu",
+            "status": "confirmed",
+            "subtotal": "50",
+            "discount": "0",
+            "tax": "0",
+            "grand_total": "50",
+            "delivery_cost": "0",
+            "delivery_provider": "",
+            "note": "",
+        }
+    )
+    SalesOrderItemsRepo(store).append(
+        {
+            "order_item_id": "i1",
+            "order_id": "o1",
+            "product_id": "broken-id",
+            "prd_description_snapshot": "",
+            "qty": "1",
+            "unit_selling_price": "50",
+            "total_selling_price": "50",
+        }
+    )
+
+    recon = DataReconciliationService(
+        InventoryTxnRepo(store),
+        ProductsRepo(store),
+        ProductVariantsRepo(store),
+        SalesOrdersRepo(store),
+        SalesOrderItemsRepo(store),
+        LedgerRepo(store),
+    )
+    score = recon.reconciliation_health_summary("c1")
+    assert score["truly_broken_sales_item_identities"] == 1
+    issues = recon.integrity_issues("c1")
+    assert any(i.issue_type == "sales_item_invalid_identity" for i in issues)
