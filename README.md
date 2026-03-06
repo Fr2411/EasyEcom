@@ -98,12 +98,24 @@ black --check .
 This repo includes `apprunner.yaml` at the repository root for AWS App Runner deployments.
 
 - Runtime: `python311`
-- Pre-run step installs the package with `pip3 install .`
-- Start command initializes CSV data and launches Streamlit on port `8080`
+- Pre-run step installs the package with `python3 -m pip install .` (required for Python 3.11 revised build flow)
+- Runtime command delegates to `startup.sh` so initialization runs once, then `exec` hands over to Streamlit as the long-running foreground process
+
+`startup.sh`:
+- Runs `python3 -m easy_ecom.scripts.init_data`
+- Starts Streamlit bound to `0.0.0.0` on `PORT` (defaults to `8080`)
 
 ```bash
-python3 -m easy_ecom.scripts.init_data && python3 -m streamlit run easy_ecom/app/main.py --server.address 0.0.0.0 --server.port 8080 --server.headless true
+./startup.sh
 ```
+
+### Recommended App Runner console settings (MVP / lowest cost)
+- Source directory: repository root (`/`)
+- Runtime: Python 3.11 (managed)
+- Port: `8080`
+- Health check path: `/`
+- CPU/Memory: `0.25 vCPU / 0.5 GB` to start (lowest practical baseline)
+- Auto deploy trigger: `Manual` for cost control during MVP; switch to `Automatic` after release cadence stabilizes
 
 
 ### Realtime refresh behavior
