@@ -72,6 +72,7 @@ recon = DataReconciliationService(
     orders_repo,
     items_repo,
     LedgerRepo(store),
+    invoices_repo,
 )
 
 user = st.session_state["user"]
