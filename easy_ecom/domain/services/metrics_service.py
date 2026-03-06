@@ -8,6 +8,7 @@ import uuid
 
 from easy_ecom.data.repos.csv.finance_repo import LedgerRepo
 from easy_ecom.data.repos.csv.inventory_repo import InventoryTxnRepo
+from easy_ecom.data.repos.csv.product_variants_repo import ProductVariantsRepo
 from easy_ecom.data.repos.csv.products_repo import ProductsRepo
 from easy_ecom.data.repos.csv.sales_repo import (
     InvoicesRepo,
@@ -42,6 +43,7 @@ class MetricsService:
         payments: PaymentsRepo,
         order_items: SalesOrderItemsRepo,
         products: ProductsRepo,
+        variants: ProductVariantsRepo,
     ):
         self.inv = inv
         self.ledger = ledger
@@ -50,7 +52,10 @@ class MetricsService:
         self.payments = payments
         self.order_items = order_items
         self.products = products
-        self.reconciliation = DataReconciliationService(inv, products, orders, order_items, ledger)
+        self.variants = variants
+        self.reconciliation = DataReconciliationService(
+            inv, products, variants, orders, order_items, ledger
+        )
 
     @staticmethod
     def to_float(series: pd.Series) -> pd.Series:

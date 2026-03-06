@@ -11,7 +11,7 @@ Enterprise-grade multi-tenant inventory, sales, and finance web app built with S
 - Sales workspace includes **Sell**, **Cart**, and **Sales Records** tabs so confirmed sales history remains visible alongside invoice/payment status.
 - Returns workflow with request/approval, refund records, automatic refund expense ledger posting, and optional restocking.
 - Login-first app flow: before authentication, sidebar navigation is hidden so only the login page is visible; successful login redirects to dashboard, and the sidebar top-left always shows the EasyEcom app brand.
-- Inventory and sales persist stable `products.product_id` UUIDs end-to-end (sales items + inventory txns), while keeping product names as display snapshots.
+- Inventory and sales can persist either parent `products.product_id` or `product_variants.variant_id` (variant-level stock/sales), while keeping product names as display snapshots.
 - Client and super-admin dashboards with KPI cards, date-filtered Plotly charts, and cross-client health monitoring.
 - Sequence generation per client/year (`INV`, `SHP`, `LOT`).
 - Append-only transaction tables and audit-ready architecture.
@@ -51,9 +51,9 @@ pip install reportlab
 ```
 
 ## Critical Logic
-- Inventory uses `inventory_txn.csv` append-only with lot-level tracking, strict tenant filtering by `client_id`, actor tracking through `user_id`, and shared canonical product normalization (legacy lot-id/product-name references are mapped or flagged, not silently dropped).
+- Inventory uses `inventory_txn.csv` append-only with lot-level tracking, strict tenant filtering by `client_id`, actor tracking through `user_id`, and shared canonical product normalization (products first, then variants, with legacy lot-id/product-name references mapped when possible and only truly broken rows flagged).
 - Legacy sales item rows that stored `product_name` in `sales_order_items.product_id` are migrated with `easy_ecom/scripts/migrate_sales_items_product_id.py` (idempotent, tenant-scoped, preserves `product_name_snapshot`).
-- OUT transactions allocate stock FIFO by lot in `InventoryService.allocate_fifo`, keyed by stable `product_id` with lot kept in `lot_id`.
+- OUT transactions allocate stock FIFO by lot in `InventoryService.allocate_fifo`, keyed by operational inventory identity (`variant_id` for variant rows, otherwise parent `product_id`) with lot kept in `lot_id`.
 - Sales confirmation auto-generates order, invoice, shipment, inventory out rows, and earning ledger post; generated inventory/ledger rows inherit the initiating `user_id`.
 - Sales page pre-fills item unit price from product default pricing; discounts are bounded by `max_discount_pct` and enforced in UI + service layer before cart/order writes.
 - Sales page wires `ProductVariantsRepo` into `SalesService` so variant IDs selected in Sell tab resolve correctly during minimum-price validation and confirmation (prevents false "Product not found" for valid variants).
@@ -63,7 +63,7 @@ pip install reportlab
 - Sales records grid normalizes invoice status into a dedicated `invoice_status` column before display, avoiding `status` column collisions with sales order status during joins.
 - Refund approval flow (`returns.csv`, `return_items.csv`, `refunds.csv`) is restricted to non-employee roles and posts ledger `expense` category `Refunds`.
 - Invoice status updates from payment aggregation.
-- KPIs/charts and operational records now share `DataReconciliationService` (`easy_ecom/domain/services/data_reconciliation_service.py`) so Inventory, Sales Records, and Dashboard use the same normalized/reconciled rows.
+- KPIs/charts and operational records now share `DataReconciliationService` (`easy_ecom/domain/services/data_reconciliation_service.py`) so Inventory, Sales Records, and Dashboard use the same normalized/reconciled rows, including variant-aware fields (`parent_product_id/name`, `variant_id/name`) plus canonical parent identity for analytics.
 - Revenue (operational truth) = sum of confirmed `sales_orders.grand_total`; ledger earning rows are treated as financial reflection and surfaced for reconciliation when orphaned/mismatched. Expenses = ledger `entry_type=expense`; COGS = inventory OUT `total_cost`; Profit = Revenue - Expenses - COGS (date-range aware).
 - AOV = Revenue / confirmed orders count (guarded for divide-by-zero).
 - Outstanding invoices = unpaid/partial invoice `amount_due` minus aggregated payments.
