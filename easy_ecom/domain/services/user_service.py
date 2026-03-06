@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from easy_ecom.core.config import settings
 from easy_ecom.core.ids import new_uuid
 from easy_ecom.core.time_utils import now_iso
 from easy_ecom.domain.models.user import UserCreate
@@ -28,7 +29,26 @@ class UserService:
         self.user_roles.append({"user_id": user_id, "role_code": payload.role_code})
         return user_id
 
+    def _env_super_admin_login(self, email: str, password: str) -> dict[str, str] | None:
+        admin_email = settings.super_admin_email.strip().lower()
+        admin_password = settings.super_admin_password
+        if not admin_email or not admin_password:
+            return None
+        if email.lower() != admin_email or password != admin_password:
+            return None
+        return {
+            "user_id": "ENV_SUPER_ADMIN",
+            "client_id": "GLOBAL",
+            "roles": "SUPER_ADMIN",
+            "name": "Super Admin",
+            "email": admin_email,
+        }
+
     def login(self, email: str, password: str) -> dict[str, str] | None:
+        env_admin = self._env_super_admin_login(email, password)
+        if env_admin:
+            return env_admin
+
         users = self.users.all()
         matches = users[users["email"].str.lower() == email.lower()]
         if matches.empty:
@@ -38,7 +58,15 @@ class UserService:
             return None
         roles_df = self.user_roles.all()
         roles = roles_df[roles_df["user_id"] == user["user_id"]]["role_code"].tolist()
-        return {"user_id": user["user_id"], "client_id": user["client_id"], "roles": ",".join(roles), "name": user["name"], "email": user["email"]}
+        if "SUPER_ADMIN" not in roles:
+            return None
+        return {
+            "user_id": user["user_id"],
+            "client_id": user["client_id"],
+            "roles": ",".join(roles),
+            "name": user["name"],
+            "email": user["email"],
+        }
 
     def list_users(self, client_id: str):
         users = self.users.all()

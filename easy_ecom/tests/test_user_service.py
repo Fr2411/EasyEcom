@@ -1,4 +1,5 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 from easy_ecom.data.repos.csv.users_repo import RolesRepo, UserRolesRepo, UsersRepo
 from easy_ecom.data.store.csv_store import CsvStore
@@ -14,7 +15,7 @@ def setup_store(tmp_path: Path) -> CsvStore:
     return store
 
 
-def test_user_password_is_stored_in_plain_text_and_login_supports_it(tmp_path: Path):
+def test_user_password_is_stored_in_plain_text(tmp_path: Path):
     store = setup_store(tmp_path)
     svc = UserService(UsersRepo(store), RolesRepo(store), UserRolesRepo(store))
 
@@ -32,6 +33,38 @@ def test_user_password_is_stored_in_plain_text_and_login_supports_it(tmp_path: P
     saved = users_df[users_df["user_id"] == user_id].iloc[0]
     assert saved["password"] == "my-secret"
 
-    result = svc.login("not-an-email", "my-secret")
+
+def test_only_super_admin_can_login_from_csv(tmp_path: Path):
+    store = setup_store(tmp_path)
+    svc = UserService(UsersRepo(store), RolesRepo(store), UserRolesRepo(store))
+
+    svc.create(
+        UserCreate(
+            client_id="c1",
+            name="Alice",
+            email="owner@example.com",
+            password="my-secret",
+            role_code="CLIENT_OWNER",
+        )
+    )
+
+    result = svc.login("owner@example.com", "my-secret")
+    assert result is None
+
+
+def test_super_admin_can_login_even_without_users_csv_data(tmp_path: Path, monkeypatch):
+    from easy_ecom.domain.services import user_service as user_service_module
+
+    monkeypatch.setattr(
+        user_service_module,
+        "settings",
+        SimpleNamespace(super_admin_email="super@example.com", super_admin_password="super-secret"),
+    )
+
+    store = setup_store(tmp_path)
+    svc = UserService(UsersRepo(store), RolesRepo(store), UserRolesRepo(store))
+
+    result = svc.login("super@example.com", "super-secret")
     assert result is not None
-    assert result["user_id"] == user_id
+    assert result["roles"] == "SUPER_ADMIN"
+    assert result["user_id"] == "ENV_SUPER_ADMIN"
