@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from typing import Literal
 
 import pandas as pd
-import uuid
 
 from easy_ecom.data.repos.csv.finance_repo import LedgerRepo
 from easy_ecom.data.repos.csv.inventory_repo import InventoryTxnRepo
@@ -30,8 +29,9 @@ class DateRange:
 class MetricsService:
     """Single source of truth for dashboard and finance metrics.
 
-    Accounting source of truth for revenue/expense is `ledger.csv`.
-    COGS source of truth is `inventory_txn.csv` OUT rows (`total_cost`).
+    Revenue operational source of truth is confirmed sales orders.
+    COGS source of truth is inventory OUT rows (`total_cost`).
+    Expenses source of truth is ledger `expense` entries.
     """
 
     def __init__(
@@ -95,14 +95,6 @@ class MetricsService:
         end = max(end, end.normalize() + pd.Timedelta(days=1) - pd.Timedelta(seconds=1))
         return d[(d[col] >= start) & (d[col] <= end)].copy()
 
-    @staticmethod
-    def _is_uuid(value: str) -> bool:
-        try:
-            uuid.UUID(str(value))
-            return True
-        except Exception:
-            return False
-
     def last_n_days_range(self, days: int) -> DateRange:
         end = pd.Timestamp.utcnow().tz_localize(None)
         start = end - pd.Timedelta(days=days)
@@ -141,11 +133,15 @@ class MetricsService:
         return float(inv[inv["txn_type"] == "OUT"]["total_cost"].sum())
 
     def profit(self, client_id: str | None, date_range: DateRange | None = None) -> float:
-        return float(
-            self.revenue(client_id, date_range)
-            - self.expenses(client_id, date_range)
-            - self.cogs(client_id, date_range)
-        )
+        return self.net_operating_profit(client_id, date_range)
+
+    def gross_profit(self, client_id: str | None, date_range: DateRange | None = None) -> float:
+        return float(self.revenue(client_id, date_range) - self.cogs(client_id, date_range))
+
+    def net_operating_profit(
+        self, client_id: str | None, date_range: DateRange | None = None
+    ) -> float:
+        return float(self.gross_profit(client_id, date_range) - self.expenses(client_id, date_range))
 
     def orders_count(self, client_id: str | None, date_range: DateRange | None = None) -> float:
         orders = self.apply_date_range(self.scoped(self.orders.all(), client_id), date_range)
@@ -154,20 +150,13 @@ class MetricsService:
         return float(len(orders[orders["status"].fillna("") == "confirmed"]))
 
     def sold_qty(self, client_id: str | None, date_range: DateRange | None = None) -> float:
-        orders = self.apply_date_range(self.scoped(self.orders.all(), client_id), date_range)
-        if orders.empty:
-            return 0.0
-        confirmed = orders[orders["status"].fillna("") == "confirmed"][["order_id"]]
-        if confirmed.empty:
-            return 0.0
-        items = self.order_items.all()
-        if items.empty:
-            return 0.0
-        d = items.merge(confirmed, on="order_id", how="inner")
+        d = self.reconciliation.normalized_sales_items(client_id)
         if d.empty:
             return 0.0
-        d["qty"] = self.to_float(d["qty"])
-        return float(d["qty"].sum())
+        if date_range is not None:
+            d = self.apply_date_range(d, date_range, col="order_timestamp")
+        confirmed = d[d["order_status"].fillna("") == "confirmed"]
+        return float(self.to_float(confirmed["qty"]).sum()) if not confirmed.empty else 0.0
 
     def aov(self, client_id: str | None, date_range: DateRange | None = None) -> float:
         cnt = self.orders_count(client_id, date_range)
@@ -272,18 +261,16 @@ class MetricsService:
     def margin_by_product(
         self, client_id: str | None, date_range: DateRange | None = None
     ) -> pd.DataFrame:
-        items = self.order_items.all()
-        orders = self.apply_date_range(self.scoped(self.orders.all(), client_id), date_range)
-        if items.empty or orders.empty:
+        sales = self.reconciliation.normalized_sales_items(client_id)
+        if sales.empty:
             return pd.DataFrame(
                 columns=["product_id", "product_name", "revenue", "cogs", "margin_pct"]
             )
-        valid_orders = orders[orders["status"].fillna("") == "confirmed"][
-            ["order_id"]
-        ].drop_duplicates()
-        s = items.merge(valid_orders, on="order_id", how="inner")
-        s["total_selling_price"] = self.to_float(s["total_selling_price"])
-        s = s.groupby("product_id", as_index=False).agg(revenue=("total_selling_price", "sum"))
+        if date_range is not None:
+            sales = self.apply_date_range(sales, date_range, col="order_timestamp")
+        sales = sales[sales["order_status"].fillna("") == "confirmed"].copy()
+        s = sales.groupby("canonical_product_id", as_index=False).agg(revenue=("line_total", "sum"))
+        s = s.rename(columns={"canonical_product_id": "product_id"})
 
         inv = self.apply_date_range(
             self.reconciliation.normalized_inventory_rows(client_id), date_range
@@ -342,16 +329,22 @@ class MetricsService:
             in_lots["recovered_revenue"] = 0.0
             return in_lots
 
-        items = self.order_items.all().copy()
-        if items.empty:
+        sales = self.reconciliation.normalized_sales_items(client_id)
+        sales = sales[sales["order_status"].fillna("") == "confirmed"].copy()
+        if sales.empty:
             in_lots["recovered_revenue"] = 0.0
             return in_lots
-        items["qty"] = self.to_float(items["qty"])
-        items["total_selling_price"] = self.to_float(items["total_selling_price"])
-        items = items.rename(columns={"order_id": "source_id", "qty": "sold_qty"})
+        sales = sales.rename(
+            columns={
+                "order_id": "source_id",
+                "canonical_product_id": "product_id",
+                "qty": "sold_qty",
+                "line_total": "total_selling_price",
+            }
+        )
 
         alloc = out_lots.merge(
-            items[["source_id", "product_id", "sold_qty", "total_selling_price"]],
+            sales[["source_id", "product_id", "sold_qty", "total_selling_price"]],
             on=["source_id", "product_id"],
             how="left",
         )
@@ -429,18 +422,25 @@ class MetricsService:
         if any(i.issue_type == "sales_order_without_items" for i in issues):
             warnings.append("Confirmed sales orders without items detected.")
 
-        products = self._product_map(client_id)
-        product_ids = (
-            set(products["product_id"].astype(str).tolist()) if not products.empty else set()
-        )
-        items = self.order_items.all()
-        orders = self.scoped(self.orders.all(), client_id)
-        if not items.empty and not orders.empty and product_ids:
-            scoped_items = items.merge(orders[["order_id"]], on="order_id", how="inner")
-            missing = scoped_items[~scoped_items["product_id"].astype(str).isin(product_ids)]
-            if not missing.empty:
-                warnings.append(f"{len(missing)} sales order items have unknown product_id.")
+        sales = self.reconciliation.normalized_sales_items(client_id)
+        if not sales.empty:
+            variant_valid = int(len(sales[sales["identity_status"] == "valid_variant_item"]))
+            if variant_valid:
+                warnings.append(
+                    f"{variant_valid} sales items use valid variant identities (expected in variant-enabled catalog)."
+                )
+            legacy_rows = int(len(sales[sales["identity_status"] == "legacy_repairable_row"]))
+            if legacy_rows:
+                warnings.append(
+                    f"{legacy_rows} sales order items are legacy-repairable identity rows."
+                )
+            broken = int(len(sales[sales["identity_status"] == "unknown_or_broken_row"]))
+            if broken:
+                warnings.append(f"{broken} sales order items have truly unknown/broken product identity.")
         return warnings
+
+    def reconciliation_health_scorecard(self, client_id: str | None) -> dict[str, int]:
+        return self.reconciliation.reconciliation_health_summary(client_id)
 
     def integrity_issues(self, client_id: str | None) -> list[dict[str, str]]:
         return [
