@@ -180,8 +180,10 @@ def test_dashboard_kpis_and_charts_data(tmp_path: Path):
 
     assert kpis["Current Stock Value"] == 30.0
     assert kpis["Revenue MTD"] == 100.0
+    assert kpis["COGS MTD"] == 20.0
+    assert kpis["Gross Profit MTD"] == 80.0
     assert kpis["Expenses MTD"] == 30.0
-    assert kpis["Profit MTD"] == 50.0
+    assert kpis["Net Operating Profit MTD"] == 50.0
     assert kpis["Orders MTD"] == 1.0
     assert kpis["AOV MTD"] == 100.0
     assert kpis["Outstanding Invoices"] == 40.0
@@ -196,3 +198,44 @@ def test_dashboard_kpis_and_charts_data(tmp_path: Path):
         "c1", "D", pd.Timestamp.utcnow() - pd.Timedelta(days=2), pd.Timestamp.utcnow()
     ).empty
     assert not svc.lot_profitability("c1").empty
+
+
+def test_dashboard_exposes_reconciliation_health_scorecard(tmp_path: Path):
+    store = setup_store(tmp_path)
+    clients = ClientsRepo(store)
+    now = pd.Timestamp.utcnow().strftime("%Y-%m-%dT10:00:00")
+    clients.append(
+        {
+            "client_id": "c1",
+            "business_name": "Alpha",
+            "owner_name": "O",
+            "phone": "",
+            "email": "",
+            "address": "",
+            "website_url": "",
+            "facebook_url": "",
+            "instagram_url": "",
+            "whatsapp_number": "",
+            "created_at": now,
+            "status": "active",
+            "notes": "",
+        }
+    )
+    SalesOrdersRepo(store).append(
+        {
+            "order_id": "o1",
+            "client_id": "c1",
+            "timestamp": now,
+            "customer_id": "cu1",
+            "status": "confirmed",
+            "subtotal": "100",
+            "discount": "0",
+            "tax": "0",
+            "grand_total": "100",
+            "note": "",
+        }
+    )
+    svc = build_service(store)
+    score = svc.reconciliation_health_scorecard("c1")
+    assert "confirmed_sales_with_items" in score
+    assert "truly_broken_sales_item_identities" in score

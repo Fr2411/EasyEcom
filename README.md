@@ -65,18 +65,22 @@ pip install reportlab
 - Refund approval flow (`returns.csv`, `return_items.csv`, `refunds.csv`) is restricted to non-employee roles and posts ledger `expense` category `Refunds`.
 - Invoice status updates from payment aggregation.
 - KPIs/charts and operational records now share `DataReconciliationService` (`easy_ecom/domain/services/data_reconciliation_service.py`) so Inventory, Sales Records, and Dashboard use the same normalized/reconciled rows, including variant-aware fields (`parent_product_id/name`, `variant_id/name`) plus canonical parent identity for analytics.
+- Sales analytics now run through a shared normalized sales-items layer in `DataReconciliationService.normalized_sales_items`, exposing `inventory_product_id` (operational stock unit), `parent_product_id`, nullable `variant_id`, `canonical_product_id` (parent analytics key), product/variant snapshots, qty/price/line totals, order status, and ledger linkage flags.
 - Revenue (operational truth) = sum of confirmed `sales_orders.grand_total`; ledger earning rows are treated as financial reflection and surfaced for reconciliation when orphaned/mismatched. Expenses = ledger `entry_type=expense`; COGS = inventory OUT `total_cost`; Profit = Revenue - Expenses - COGS (date-range aware).
+- Profit terms are now explicit: **Gross Profit = Revenue - COGS** and **Net Operating Profit = Revenue - COGS - Expenses**. Dashboard cards/charts use these names consistently.
 - AOV = Revenue / confirmed orders count (guarded for divide-by-zero).
 - Outstanding invoices = unpaid/partial invoice `amount_due` minus aggregated payments.
 - Stock value by product = sum of positive lot balances (`current_qty_lot * unit_cost_lot`) aggregated to product.
 - Product aging = sold% `(total_in-current_qty)/total_in`, remaining% `current_qty/total_in` with zero guards.
-- Margin% = `(revenue-cogs)/revenue` with zero-revenue guard.
+- Margin% = `(revenue-cogs)/revenue` with zero-revenue guard, and margin rollups now aggregate variant sales to parent product (`canonical_product_id`).
 - Sell speed = units sold in last 30 days / 30.
-- Lot recovery = revenue allocated to consumed lots using order+product unit-price allocation from OUT `source_id`.
-- Dashboard KPIs include stock value, revenue/expenses/profit MTD, orders + AOV MTD, and outstanding invoices.
+- Lot recovery = revenue allocated to consumed lots using normalized confirmed sales items joined by `(order_id, canonical_product_id)`, preventing parent/variant mismatch drift.
+- Dashboard KPIs include stock value, revenue/COGS/gross profit/expenses/net operating profit MTD, sold qty + orders + AOV MTD, and outstanding invoices.
 - Dashboard analytics include revenue trends, inventory value by product, product aging, margin vs sell speed bubble, income vs expense trends, and lot profitability recovery.
 - Super admin dashboard supports global/specific-client toggle with aggregate bars (revenue and inventory value by client) and health flags.
 - Data integrity warnings are surfaced in dashboard (negative stock, unmapped product IDs, missing lot IDs on OUT, numeric coercions), with admin-reviewable structured issue rows from reconciliation checks.
+- Sales integrity warnings now classify identity quality correctly: valid parent item, valid variant item, legacy-repairable row, and truly broken/unknown row (only truly broken rows are flagged as errors).
+- Dashboard/admin includes a structured reconciliation health scorecard (`confirmed sales with items`, `confirmed sales missing items`, `confirmed sales with ledger post`, `orphan ledger sale earnings`, `valid variant-linked sales items`, `legacy repairable sales rows`, `truly broken sales identities`, `unmapped inventory rows`, `client mismatch issues`).
 - Optional repair script `easy_ecom/scripts/reconcile_legacy_references.py` provides dry-run by default and `--apply` mode to rewrite fixable legacy inventory product references while reporting orphan ledger earnings.
 - User accounts are stored in `users.csv` with plain-text passwords (as requested) and compared directly at login.
 - Authentication is restricted to `SUPER_ADMIN` only; non-super-admin user records cannot log in.
