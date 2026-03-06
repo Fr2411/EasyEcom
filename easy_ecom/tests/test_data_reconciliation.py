@@ -184,6 +184,67 @@ def test_confirmed_sales_reconcile_with_metrics_revenue(tmp_path: Path):
     assert metrics.revenue("c1") == 150.0
 
 
+
+
+def test_orphan_ledger_ignores_sale_entries_linked_via_invoice(tmp_path: Path):
+    store = setup_store(tmp_path)
+    now = "2026-01-01T10:00:00Z"
+    SalesOrdersRepo(store).append(
+        {
+            "order_id": "o1",
+            "client_id": "c1",
+            "timestamp": now,
+            "customer_id": "cu",
+            "status": "confirmed",
+            "subtotal": "99",
+            "discount": "0",
+            "tax": "0",
+            "grand_total": "99",
+            "delivery_cost": "0",
+            "delivery_provider": "",
+            "note": "",
+        }
+    )
+    InvoicesRepo(store).append(
+        {
+            "invoice_id": "inv-1",
+            "client_id": "c1",
+            "invoice_no": "INV-1",
+            "order_id": "o1",
+            "customer_id": "cu",
+            "timestamp": now,
+            "amount_due": "99",
+            "status": "unpaid",
+        }
+    )
+    LedgerRepo(store).append(
+        {
+            "entry_id": "e1",
+            "client_id": "c1",
+            "timestamp": now,
+            "user_id": "",
+            "entry_type": "earning",
+            "category": "sales",
+            "amount": "99",
+            "source_type": "sale",
+            "source_id": "inv-1",
+            "note": "",
+        }
+    )
+
+    recon = DataReconciliationService(
+        InventoryTxnRepo(store),
+        ProductsRepo(store),
+        ProductVariantsRepo(store),
+        SalesOrdersRepo(store),
+        SalesOrderItemsRepo(store),
+        LedgerRepo(store),
+        InvoicesRepo(store),
+    )
+
+    orphan = recon.orphan_ledger_earnings("c1")
+    assert orphan.empty
+
 def test_orphan_ledger_and_unmapped_inventory_are_flagged(tmp_path: Path):
     store = setup_store(tmp_path)
     now = "2026-01-01T10:00:00Z"

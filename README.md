@@ -58,6 +58,7 @@ pip install reportlab
 - Sales page pre-fills item unit price from product default pricing; discounts are bounded by `max_discount_pct` and enforced in UI + service layer before cart/order writes.
 - Sales page wires `ProductVariantsRepo` into `SalesService` so variant IDs selected in Sell tab resolve correctly during minimum-price validation and confirmation (prevents false "Product not found" for valid variants).
 - Sales page includes a tenant-scoped (`client_id`) latest-50 confirmed sales grid sourced from reconciled confirmed orders, with item-presence and ledger-posting/mismatch flags for operational-financial alignment.
+- Reconciliation now treats ledger `earning` rows with `source_type=sale` as valid when `source_id` points to either a sales `order_id` or an `invoice_id` that maps to an order, preventing false orphan-ledger warnings in Sales Records.
 - Cart tab for draft sales orders groups carts by customer, supports draft line edits/removals, and confirms drafts into invoice + shipment with idempotency checks.
 - Invoice and shipping mark downloads are generated on-demand as PDFs using `reportlab` (`easy_ecom/app/ui/documents.py`).
 - Sales records grid normalizes invoice status into a dedicated `invoice_status` column before display, avoiding `status` column collisions with sales order status during joins.

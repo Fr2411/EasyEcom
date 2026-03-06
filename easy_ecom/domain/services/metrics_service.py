@@ -54,7 +54,7 @@ class MetricsService:
         self.products = products
         self.variants = variants
         self.reconciliation = DataReconciliationService(
-            inv, products, variants, orders, order_items, ledger
+            inv, products, variants, orders, order_items, ledger, invoices
         )
 
     @staticmethod
