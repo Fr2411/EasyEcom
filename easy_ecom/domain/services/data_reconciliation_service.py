@@ -8,7 +8,7 @@ from easy_ecom.data.repos.csv.finance_repo import LedgerRepo
 from easy_ecom.data.repos.csv.inventory_repo import InventoryTxnRepo
 from easy_ecom.data.repos.csv.product_variants_repo import ProductVariantsRepo
 from easy_ecom.data.repos.csv.products_repo import ProductsRepo
-from easy_ecom.data.repos.csv.sales_repo import SalesOrderItemsRepo, SalesOrdersRepo
+from easy_ecom.data.repos.csv.sales_repo import InvoicesRepo, SalesOrderItemsRepo, SalesOrdersRepo
 
 
 @dataclass(frozen=True)
@@ -31,6 +31,7 @@ class DataReconciliationService:
         orders_repo: SalesOrdersRepo | None,
         order_items_repo: SalesOrderItemsRepo | None,
         ledger_repo: LedgerRepo | None,
+        invoices_repo: InvoicesRepo | None = None,
     ):
         self.inventory_repo = inventory_repo
         self.products_repo = products_repo
@@ -38,6 +39,30 @@ class DataReconciliationService:
         self.orders_repo = orders_repo
         self.order_items_repo = order_items_repo
         self.ledger_repo = ledger_repo
+        self.invoices_repo = invoices_repo
+
+    def _sale_source_to_order_id(self, client_id: str | None) -> dict[str, str]:
+        if self.invoices_repo is None:
+            return {}
+        invoices = self._scope(self.invoices_repo.all(), client_id)
+        if invoices.empty:
+            return {}
+        invoice_ids = invoices.get("invoice_id", pd.Series(dtype=str)).astype(str).str.strip()
+        order_ids = invoices.get("order_id", pd.Series(dtype=str)).astype(str).str.strip()
+        return {
+            invoice_id: order_id
+            for invoice_id, order_id in zip(invoice_ids, order_ids)
+            if invoice_id and order_id
+        }
+
+    def _normalize_sale_source_order_ids(
+        self, source_ids: pd.Series, client_id: str | None
+    ) -> pd.Series:
+        normalized = source_ids.astype(str).str.strip()
+        mapping = self._sale_source_to_order_id(client_id)
+        if mapping:
+            normalized = normalized.replace(mapping)
+        return normalized
 
     @staticmethod
     def _to_float(series: pd.Series) -> pd.Series:
@@ -341,11 +366,13 @@ class DataReconciliationService:
             earn = ledger[
                 (ledger["entry_type"] == "earning") & (ledger["source_type"] == "sale")
             ].copy()
+            earn["order_id"] = self._normalize_sale_source_order_ids(
+                earn.get("source_id", pd.Series("", index=earn.index)), client_id
+            )
             earn["amount"] = self._to_float(earn.get("amount", pd.Series(dtype=float)))
             ledger_sum = (
-                earn.groupby("source_id", as_index=False)
+                earn.groupby("order_id", as_index=False)
                 .agg(ledger_earning_amount=("amount", "sum"))
-                .rename(columns={"source_id": "order_id"})
             )
         else:
             ledger_sum = pd.DataFrame(columns=["order_id", "ledger_earning_amount"])
@@ -402,7 +429,10 @@ class DataReconciliationService:
             )
         orders = self._scope(self.orders_repo.all(), client_id)
         order_ids = set(orders["order_id"].astype(str)) if not orders.empty else set()
-        missing = earning[~earning["source_id"].astype(str).isin(order_ids)].copy()
+        normalized_sources = self._normalize_sale_source_order_ids(
+            earning.get("source_id", pd.Series("", index=earning.index)), client_id
+        )
+        missing = earning[~normalized_sources.isin(order_ids)].copy()
         if missing.empty:
             return pd.DataFrame(
                 columns=[
