@@ -389,6 +389,88 @@ class MetricsService:
         trend["profit"] = trend["income"] - trend["expense"]
         return trend[["period", "income", "expense", "profit"]].sort_values("period")
 
+    def expense_trend(
+        self, client_id: str | None, granularity: Granularity, date_range: DateRange
+    ) -> pd.DataFrame:
+        d = self.apply_date_range(self.scoped(self.ledger.all(), client_id), date_range)
+        if d.empty:
+            return pd.DataFrame(columns=["period", "expenses"])
+        d = d[d["entry_type"] == "expense"].copy()
+        if d.empty:
+            return pd.DataFrame(columns=["period", "expenses"])
+        d["amount"] = self.to_float(d["amount"])
+        d["period"] = d["timestamp"].dt.to_period(granularity).dt.to_timestamp()
+        return d.groupby("period", as_index=False).agg(expenses=("amount", "sum")).sort_values(
+            "period"
+        )
+
+    def inventory_value_trend(
+        self, client_id: str | None, granularity: Granularity, date_range: DateRange
+    ) -> pd.DataFrame:
+        inv = self.apply_date_range(
+            self.reconciliation.normalized_inventory_rows(client_id), date_range
+        )
+        if inv.empty:
+            return pd.DataFrame(columns=["period", "inventory_value"])
+        inbound = {"IN", "ADJUST+", "ADJUST"}
+        inv["signed_qty"] = inv.apply(
+            lambda r: r["qty"] if r["txn_type"] in inbound else -r["qty"], axis=1
+        )
+        inv["signed_cost"] = inv["signed_qty"] * inv["unit_cost"]
+        inv["period"] = inv["timestamp"].dt.to_period(granularity).dt.to_timestamp()
+        period_cost = (
+            inv.groupby("period", as_index=False)
+            .agg(net_cost_change=("signed_cost", "sum"))
+            .sort_values("period")
+        )
+        period_cost["inventory_value"] = period_cost["net_cost_change"].cumsum().clip(lower=0.0)
+        return period_cost[["period", "inventory_value"]]
+
+    def receivables_trend(
+        self, client_id: str | None, granularity: Granularity, date_range: DateRange
+    ) -> pd.DataFrame:
+        invoices = self.apply_date_range(self.scoped(self.invoices.all(), client_id), date_range)
+        if invoices.empty:
+            return pd.DataFrame(columns=["period", "outstanding_receivables"])
+        invoices = invoices[invoices["status"].isin(["unpaid", "partial"])].copy()
+        if invoices.empty:
+            return pd.DataFrame(columns=["period", "outstanding_receivables"])
+        invoices["amount_due"] = self.to_float(invoices["amount_due"])
+        payments = self.scoped(self.payments.all(), client_id)
+        if not payments.empty:
+            payments = self.parse_timestamp(payments)
+            payments["amount_paid"] = self.to_float(payments["amount_paid"])
+            paid = payments.groupby("invoice_id", as_index=False).agg(total_paid=("amount_paid", "sum"))
+            invoices = invoices.merge(paid, on="invoice_id", how="left")
+        invoices["total_paid"] = invoices.get("total_paid", 0.0)
+        invoices["outstanding"] = (invoices["amount_due"] - invoices["total_paid"]).clip(lower=0.0)
+        invoices["period"] = invoices["timestamp"].dt.to_period(granularity).dt.to_timestamp()
+        return invoices.groupby("period", as_index=False).agg(
+            outstanding_receivables=("outstanding", "sum")
+        ).sort_values("period")
+
+    def unpaid_confirmed_sales_amount(self, client_id: str | None) -> float:
+        orders = self.scoped(self.orders.all(), client_id)
+        invoices = self.scoped(self.invoices.all(), client_id)
+        if orders.empty or invoices.empty:
+            return 0.0
+        confirmed = orders[orders["status"].fillna("") == "confirmed"]
+        if confirmed.empty:
+            return 0.0
+        unpaid = invoices[invoices["status"].isin(["unpaid", "partial"])].copy()
+        if unpaid.empty:
+            return 0.0
+        unpaid["amount_due"] = self.to_float(unpaid["amount_due"])
+        payments = self.scoped(self.payments.all(), client_id)
+        if not payments.empty:
+            payments["amount_paid"] = self.to_float(payments["amount_paid"])
+            paid = payments.groupby("invoice_id", as_index=False).agg(total_paid=("amount_paid", "sum"))
+            unpaid = unpaid.merge(paid, on="invoice_id", how="left")
+        unpaid["total_paid"] = unpaid.get("total_paid", 0.0)
+        unpaid["outstanding"] = (unpaid["amount_due"] - unpaid["total_paid"]).clip(lower=0.0)
+        unpaid = unpaid[unpaid["order_id"].astype(str).isin(set(confirmed["order_id"].astype(str)))]
+        return float(unpaid["outstanding"].sum())
+
     def integrity_warnings(self, client_id: str | None) -> list[str]:
         warnings: list[str] = []
         inv = self.scoped(self.inv.all(), client_id)

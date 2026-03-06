@@ -75,8 +75,12 @@ pip install reportlab
 - Margin% = `(revenue-cogs)/revenue` with zero-revenue guard, and margin rollups now aggregate variant sales to parent product (`canonical_product_id`).
 - Sell speed = units sold in last 30 days / 30.
 - Lot recovery = revenue allocated to consumed lots using normalized confirmed sales items joined by `(order_id, canonical_product_id)`, preventing parent/variant mismatch drift.
-- Dashboard KPIs include stock value, revenue/COGS/gross profit/expenses/net operating profit MTD, sold qty + orders + AOV MTD, and outstanding invoices.
-- Dashboard analytics include revenue trends, inventory value by product, product aging, margin vs sell speed bubble, income vs expense trends, and lot profitability recovery.
+- Dashboard is redesigned into six business sections: (1) Business Health Snapshot, (2) Trend View, (3) Product Performance, (4) Inventory Health, (5) Financial/Receivables Health, and (6) Data Trust/Reconciliation.
+- Dashboard KPI naming now uses locked formulas: Revenue = confirmed sales totals; COGS = inventory OUT tied to sales; Gross Profit = Revenue - COGS; Net Operating Profit = Revenue - COGS - Expenses; Gross Margin % = Gross Profit / Revenue.
+- Dashboard snapshot cards now include Revenue, Gross Profit, Net Operating Profit, Gross Margin %, Inventory Value, Outstanding Receivables, and Data Health Score.
+- Trend view now presents revenue, gross profit, net operating profit, expenses, and inventory value trends without duplicated or ambiguous chart semantics.
+- Product performance section keeps the Gross Margin % vs Sale Speed chart (parent-product rollup) and adds top/bottom product rankings for revenue, gross profit, margin risk, and slow/dead stock.
+- Financial/receivables section adds unpaid confirmed sales and receivables trends, while data trust section surfaces simplified trust for non-admin and detailed reconciliation counts/issues for super admin.
 - Super admin dashboard supports global/specific-client toggle with aggregate bars (revenue and inventory value by client) and health flags.
 - Data integrity warnings are surfaced in dashboard (negative stock, unmapped product IDs, missing lot IDs on OUT, numeric coercions), with admin-reviewable structured issue rows from reconciliation checks.
 - Sales integrity warnings now classify identity quality correctly: valid parent item, valid variant item, legacy-repairable row, and truly broken/unknown row (only truly broken rows are flagged as errors).
