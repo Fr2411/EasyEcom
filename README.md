@@ -94,6 +94,17 @@ ruff check .
 black --check .
 ```
 
+## AWS App Runner
+This repo includes `apprunner.yaml` at the repository root for AWS App Runner deployments.
+
+- Runtime: `python311`
+- Pre-run step installs the package with `pip3 install .`
+- Start command initializes CSV data and launches Streamlit on port `8080`
+
+```bash
+python3 -m easy_ecom.scripts.init_data && python3 -m streamlit run easy_ecom/app/main.py --server.address 0.0.0.0 --server.port 8080 --server.headless true
+```
+
 
 ### Realtime refresh behavior
 - Dashboard, Inventory, Sales, and Customers pages include manual **Refresh** buttons.
@@ -112,4 +123,3 @@ black --check .
 - Added parent/variant model using `product_variants.csv` with per-variant stock and selling support.
 - Cart confirmation now supports delivery cost on draft orders and auto-posts Delivery expense to ledger.
 - Added migration scripts: `easy_ecom/scripts/migrate_sales_items_to_variants.py` and `easy_ecom/scripts/migrate_inventory_to_variants.py`.
-

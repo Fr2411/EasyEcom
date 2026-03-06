@@ -1,0 +1,15 @@
+version: 1.0
+runtime: python311
+
+build:
+  commands:
+    build:
+      - echo "Build phase complete"
+
+run:
+  runtime-version: 3.11
+  pre-run:
+    - pip3 install .
+  command: python3 -m easy_ecom.scripts.init_data && python3 -m streamlit run easy_ecom/app/main.py --server.address 0.0.0.0 --server.port 8080 --server.headless true
+  network:
+    port: 8080
