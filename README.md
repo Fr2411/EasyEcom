@@ -10,7 +10,7 @@ Enterprise-grade multi-tenant inventory, sales, and finance web app built with S
 - Product master pricing controls (`default_selling_price`, `max_discount_pct`) with role-gated pricing editor in Inventory.
 - Sales workspace includes **Sell**, **Cart**, and **Sales Records** tabs so confirmed sales history remains visible alongside invoice/payment status.
 - Returns workflow with request/approval, refund records, automatic refund expense ledger posting, and optional restocking.
-- Login-first app flow: before authentication, sidebar navigation is hidden so only the login page is visible; successful login redirects to dashboard.
+- Login-first app flow: before authentication, sidebar navigation is hidden so only the login page is visible; successful login redirects to dashboard, and the sidebar top-left always shows the EasyEcom app brand.
 - Inventory and sales persist stable `products.product_id` UUIDs end-to-end (sales items + inventory txns), while keeping product names as display snapshots.
 - Client and super-admin dashboards with KPI cards, date-filtered Plotly charts, and cross-client health monitoring.
 - Sequence generation per client/year (`INV`, `SHP`, `LOT`).
