@@ -3,6 +3,10 @@ from __future__ import annotations
 import streamlit as st
 
 
+def show_app_brand() -> None:
+    st.sidebar.markdown("## EasyEcom")
+
+
 def hide_sidebar_navigation() -> None:
     st.markdown(
         """
@@ -36,10 +40,12 @@ def show_logged_in_user() -> None:
 def require_login() -> bool:
     if "user" not in st.session_state:
         hide_sidebar_navigation()
+        show_app_brand()
         st.warning("Please login first")
         st.switch_page("pages/01_Login.py")
         st.stop()
     hide_main_page_tab()
+    show_app_brand()
     show_logged_in_user()
     return True
 
