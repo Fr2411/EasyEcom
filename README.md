@@ -229,6 +229,7 @@ The initial API layer includes:
 
 - CORS middleware configured from `CORS_ALLOW_ORIGINS` (localhost defaults) plus `*.amplifyapp.com` via regex.
 - `GET /health` returning `{"status": "ok"}`.
-- Central router registration (`easy_ecom/api/routers/__init__.py`) with a dedicated `health` router so follow-up routes can be added in-place without touching app startup flow.
+- `GET /session/me` temporary stub returning a hardcoded authenticated user payload for frontend/session wiring (no real auth yet).
+- Central router registration (`easy_ecom/api/routers/__init__.py`) with dedicated routers (`health`, `session`) so follow-up routes can be added in-place without touching app startup flow.
 
-This keeps the current CSV-backed service/repository architecture intact while establishing a stable API entrypoint for adding `/session/me` and `/products-stock/*` routes in the next step.
+This keeps the current CSV-backed service/repository architecture intact while establishing a stable API entrypoint for incremental route delivery.

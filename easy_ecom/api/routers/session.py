@@ -1,14 +1,15 @@
-from fastapi import APIRouter, Depends
-
-from easy_ecom.api.dependencies import RequestUser, get_current_user
+from fastapi import APIRouter
 
 router = APIRouter(prefix="/session", tags=["session"])
 
 
 @router.get("/me")
-def session_me(user: RequestUser = Depends(get_current_user)) -> dict[str, str | list[str]]:
+def session_me() -> dict[str, str | bool | None]:
     return {
-        "user_id": user.user_id,
-        "client_id": user.client_id,
-        "roles": user.roles,
+        "user_id": "dev-super-admin",
+        "email": "admin@easyecom.local",
+        "name": "Super Admin",
+        "role": "SUPER_ADMIN",
+        "client_id": None,
+        "is_authenticated": True,
     }
