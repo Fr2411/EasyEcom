@@ -7,7 +7,7 @@ Enterprise-grade multi-tenant inventory, sales, and finance web app built with S
 - RBAC roles: `SUPER_ADMIN`, `CLIENT_OWNER`, `CLIENT_MANAGER`, `CLIENT_EMPLOYEE`, `FINANCE_ONLY`.
 - Product catalog, inventory lots, FIFO depletion, sales flow (order/invoice/shipment), customer CRM, ledger finance.
 - Client-level currency support (`currency_code` required, `currency_symbol` optional) with shared money formatter across dashboard/sales/finance screens.
-- Unified **Catalog & Stock** workspace now runs as a compact operator workflow: one search/add box, compact product master fields, dual-mode variant editing (existing-grid vs new-generation), shared-cost helper, and inline stock posting on save.
+- Unified **Catalog & Stock** workspace now runs as a compact operator workflow with a single searchable product chooser (includes inline “Add new product”), compact product master fields, dual-mode variant editing (existing-grid + add-row vs new-generation + add-row), shared-cost helper, and inline stock posting on save.
 - Product master pricing controls (`default_selling_price`, `max_discount_pct`) are managed directly in Catalog & Stock during save.
 - Sales workspace includes **Sell**, **Cart**, and **Sales Records** tabs so confirmed sales history remains visible alongside invoice/payment status.
 - Returns workflow with request/approval, refund records, automatic refund expense ledger posting, and optional restocking.

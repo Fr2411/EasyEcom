@@ -126,26 +126,48 @@ client_id = user["client_id"]
 user_id = user["user_id"]
 
 st.title("Catalog & Stock")
-st.caption("Compact workspace to search/add product, edit variants, and post stock in one flow.")
+st.caption("Compact workspace for product setup, variant entry, and stock posting.")
 
-query = st.text_input("Search or add product", placeholder="Type to search...", key="catalog_query")
-search_term = query.strip()
-add_option = f'Add new product: "{search_term or "New Product"}"'
-suggestions = svc.suggest_products(client_id, search_term)
-option_map = {add_option: ""}
-for item in suggestions:
-    option_map[f"{item['product_name']} ({item['product_id'][:8]})"] = str(item["product_id"])
+for stale_key in ["catalog_query", "catalog_choice", "catalog_selection_token"]:
+    st.session_state.pop(stale_key, None)
 
-choice = st.selectbox("Select product", options=list(option_map.keys()), key="catalog_choice")
-selected_product_id = option_map.get(choice, "")
-workspace = svc.load_workspace(client_id, search_term, selected_product_id)
+chooser_seed = str(st.session_state.get("catalog_chooser", "")).strip()
+suggestions = svc.suggest_products(client_id, chooser_seed)
+existing_option_map = {
+    f"{item['product_name']} ({item['product_id'][:8]})": str(item["product_id"])
+    for item in suggestions
+}
+add_new_label = f'➕ Add new product: "{chooser_seed or "New Product"}"'
+chooser_options = [add_new_label, *existing_option_map.keys()]
+
+choice = st.selectbox(
+    "Product",
+    options=chooser_options,
+    index=0,
+    accept_new_options=True,
+    placeholder="Search existing product or type a new one",
+    key="catalog_chooser",
+    label_visibility="collapsed",
+)
+
+typed_choice = str(choice or "").strip()
+selected_product_id = existing_option_map.get(typed_choice, "")
+typed_product_name = ""
+if typed_choice and typed_choice not in existing_option_map and typed_choice != add_new_label:
+    typed_product_name = typed_choice
+workspace_search = typed_product_name or chooser_seed
+workspace = svc.load_workspace(client_id, workspace_search, selected_product_id)
 is_existing = bool(workspace["is_existing"])
 product = workspace["product"] if isinstance(workspace["product"], dict) else {}
-resolved_name = str(product.get("product_name", "")).strip() if is_existing else search_term
+resolved_name = (
+    str(product.get("product_name", "")).strip()
+    if is_existing
+    else (typed_product_name or workspace_search)
+)
 
-selection_token = f"{selected_product_id}|{resolved_name}|{is_existing}"
-if st.session_state.get("catalog_selection_token") != selection_token:
-    st.session_state["catalog_selection_token"] = selection_token
+workspace_token = f"{selected_product_id}|{resolved_name}|{is_existing}"
+if st.session_state.get("catalog_workspace_token") != workspace_token:
+    st.session_state["catalog_workspace_token"] = workspace_token
     st.session_state["catalog_product_name"] = resolved_name
     st.session_state["catalog_supplier"] = str(product.get("supplier", "")) if product else ""
     st.session_state["catalog_category"] = (
@@ -170,17 +192,17 @@ if st.session_state.get("catalog_selection_token") != selection_token:
         )
     ]
 
-if is_existing:
-    st.success(f"Existing product mode: {resolved_name}")
-else:
-    st.info("New product mode")
+st.caption(f"Mode: {'Existing product' if is_existing else 'New product'}")
 
 supplier_options = list(dict.fromkeys(workspace["supplier_options"] + ["+ Add new supplier..."]))
 category_options = list(dict.fromkeys(workspace["category_options"] + ["+ Add new category..."]))
 
-info_col1, info_col2, info_col3 = st.columns([2, 1.3, 1.3])
+info_col1, info_col2, info_col3 = st.columns([1.8, 1.2, 1.2])
 with info_col1:
-    product_name = st.text_input("Product Name", key="catalog_product_name")
+    product_name = st.text_input(
+        "Product Name", key="catalog_product_name", label_visibility="collapsed"
+    )
+    st.caption("Product name")
 with info_col2:
     supplier_choice = st.selectbox(
         "Supplier",
@@ -191,12 +213,14 @@ with info_col2:
             else 0
         ),
         key="catalog_supplier_choice",
+        label_visibility="collapsed",
     )
     supplier = (
-        st.text_input("New Supplier", key="catalog_supplier")
+        st.text_input("New Supplier", key="catalog_supplier", label_visibility="collapsed")
         if supplier_choice == "+ Add new supplier..."
         else supplier_choice
     )
+    st.caption("Supplier")
 with info_col3:
     category_choice = st.selectbox(
         "Category",
@@ -207,18 +231,26 @@ with info_col3:
             else 0
         ),
         key="catalog_category_choice",
+        label_visibility="collapsed",
     )
     category = (
-        st.text_input("New Category", key="catalog_category")
+        st.text_input("New Category", key="catalog_category", label_visibility="collapsed")
         if category_choice == "+ Add new category..."
         else category_choice
     )
+    st.caption("Category")
 
-meta_col1, meta_col2, meta_col3, meta_col4 = st.columns([2, 2, 1, 1])
+meta_col1, meta_col2, meta_col3, meta_col4 = st.columns([1.8, 1.8, 1, 1])
 with meta_col1:
-    description = st.text_input("Description", key="catalog_description")
+    description = st.text_input(
+        "Description", key="catalog_description", label_visibility="collapsed"
+    )
+    st.caption("Description")
 with meta_col2:
-    features = st.text_input("Features (comma-separated)", key="catalog_features")
+    features = st.text_input(
+        "Features (comma-separated)", key="catalog_features", label_visibility="collapsed"
+    )
+    st.caption("Features")
 with meta_col3:
     default_selling_price = st.number_input(
         "Default Selling Price", min_value=0.0, key="catalog_default_price"
@@ -233,15 +265,31 @@ with meta_col4:
 
 if is_existing:
     action_cols = st.columns([1, 4])
-    if action_cols[0].button("Add Variant", use_container_width=True):
+    if action_cols[0].button("+ Add Variant", use_container_width=True):
         rows = list(st.session_state.get("catalog_variant_rows", []))
         rows.append(_blank_variant_row(default_selling_price, max_discount_pct))
         st.session_state["catalog_variant_rows"] = rows
 else:
-    gen_cols = st.columns([1.2, 1.2, 1.2, 1])
-    sizes_csv = gen_cols[0].text_input("size values", key="catalog_sizes_csv")
-    colors_csv = gen_cols[1].text_input("color values", key="catalog_colors_csv")
-    others_csv = gen_cols[2].text_input("other values", key="catalog_others_csv")
+    gen_cols = st.columns([1.2, 1.2, 1.2, 0.8, 0.8])
+    sizes_csv = gen_cols[0].text_input(
+        "size values",
+        key="catalog_sizes_csv",
+        label_visibility="collapsed",
+        placeholder="Sizes",
+    )
+    colors_csv = gen_cols[1].text_input(
+        "color values",
+        key="catalog_colors_csv",
+        label_visibility="collapsed",
+        placeholder="Colors",
+    )
+    others_csv = gen_cols[2].text_input(
+        "other values",
+        key="catalog_others_csv",
+        label_visibility="collapsed",
+        placeholder="Other",
+    )
+    gen_cols[3].caption("Generator")
     if gen_cols[3].button("Generate Variants", use_container_width=True):
         generated = svc.generate_variant_rows(
             sizes_csv=sizes_csv,
@@ -279,6 +327,10 @@ else:
                 }
             )
         st.session_state["catalog_variant_rows"] = merged
+    if gen_cols[4].button("+ Add Row", use_container_width=True):
+        rows = list(st.session_state.get("catalog_variant_rows", []))
+        rows.append(_blank_variant_row(default_selling_price, max_discount_pct))
+        st.session_state["catalog_variant_rows"] = rows
 
 same_cost = st.checkbox("Same cost for all variants", key="catalog_same_cost")
 if same_cost:
