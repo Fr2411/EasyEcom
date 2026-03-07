@@ -7,7 +7,7 @@ import { ProductIdentityForm } from '@/components/products-stock/product-identit
 import { VariantGenerator } from '@/components/products-stock/variant-generator';
 import { VariantGrid } from '@/components/products-stock/variant-grid';
 import { SaveSummary } from '@/components/products-stock/save-summary';
-import { getProductsStockSnapshot, saveProductStock } from '@/lib/mocks/products-stock';
+import { getProductsStockSnapshot, saveProductStock } from '@/lib/api/products-stock';
 import {
   createEmptyVariant,
   generateVariantsFromInputs,
@@ -124,7 +124,7 @@ export function ProductsStockWorkspace() {
       variants
     });
     setIsSaving(false);
-    setValidationMessage('Saved successfully (mock).');
+    setValidationMessage('Saved successfully.');
   };
 
   return (
