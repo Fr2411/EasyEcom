@@ -72,7 +72,7 @@ POSTGRES_MAX_OVERFLOW=10
 # POSTGRES_DSN=postgresql+psycopg://easy_ecom:easy_ecom@localhost:5432/easy_ecom
 ```
 
-When `STORAGE_BACKEND=postgres`, the backend initializes SQLAlchemy engine/session and ensures schema for the Products & Stock slice tables: `clients`, `users`, `categories`, `suppliers`, `products`, `product_variants`, `inventory_txn`.
+When `STORAGE_BACKEND=postgres`, the backend initializes SQLAlchemy engine/session via `easy_ecom/data/store/postgres_db.py` and ensures schema for the Products & Stock slice tables from `easy_ecom/data/store/postgres_models.py`: `clients`, `users`, `categories`, `suppliers`, `products`, `product_variants`, `inventory_txn`.
 
 `DATABASE_URL` is the preferred optional connection string. If not set, the backend falls back to `POSTGRES_DSN` and then to host/port/user/password/database settings.
 
