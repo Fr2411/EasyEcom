@@ -219,16 +219,16 @@ black --check .
 
 ## FastAPI API skeleton
 
-Backend API bootstrap is wired through `easy_ecom/api/app.py` and is bootable with uvicorn:
+Backend API bootstrap is wired through `easy_ecom/api/main.py` and is bootable with uvicorn:
 
 ```bash
-uvicorn easy_ecom.api.app:app --reload
+uvicorn easy_ecom.api.main:app --reload
 ```
 
 The initial API layer includes:
 
 - CORS middleware configured from `CORS_ALLOW_ORIGINS` (localhost defaults) plus `*.amplifyapp.com` via regex.
 - `GET /health` returning `{"status": "ok"}`.
-- Central router registration (`easy_ecom/api/routers/__init__.py`) so follow-up routes can be added in-place without touching app startup flow.
+- Central router registration (`easy_ecom/api/routers/__init__.py`) with a dedicated `health` router so follow-up routes can be added in-place without touching app startup flow.
 
 This keeps the current CSV-backed service/repository architecture intact while establishing a stable API entrypoint for adding `/session/me` and `/products-stock/*` routes in the next step.
