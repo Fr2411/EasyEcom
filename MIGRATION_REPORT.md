@@ -1,40 +1,41 @@
-# Streamlit to Next.js Migration Report (Phase 1-5 kickoff)
+# Frontend Migration Foundation Report
 
-## 1) Streamlit page inventory and migration map
+## Branch status
+- Migration foundation exists on branch `work`.
+- This branch contains the Next.js frontend scaffold and Amplify configuration.
 
-| Streamlit page | Purpose | Next.js route | API endpoints (current/required) | State/RBAC blockers |
-|---|---|---|---|---|
-| `01_Login.py` | Email/password auth and session bootstrap | `/login` | `POST /auth/login` | Streamlit session state replaced by browser storage + auth headers |
-| `02_Dashboard.py` | KPI health dashboard, trend controls, scope switch for super admin | `/dashboard` | `GET /dashboard/summary` (+ future trend/performance endpoints) | Streamlit global session state stores user/client scope and refresh controls |
-| `03_Catalog_&_Stock.py` | Product search/add, variant grid editing, stock posting | `/products-stock` | `GET /products/search`, `GET /products/{id}`, `POST /products/upsert`, `GET /stock/explorer`, `POST /inventory/add` | Streamlit `data_editor` state and multi-step tokenized workspace need client-managed state |
-| `05_Sales.py` | Draft/order workspace, pricing, payment, fulfillment actions | `/sales` | `POST /sales/create` (+ future order lifecycle endpoints) | Streamlit keeps many selected order/customer keys in session; split into API resources |
-| `06_Customers.py` | Customer CRUD/search | (future) `/customers` | (future) `/customers/*` | Pending |
-| `07_Finance.py` | Ledger, receivables, finance controls | (future) `/finance` | (future) `/finance/*` | Pending |
-| `08_Admin.py` | Admin-only controls | (future) `/admin` | (future) `/admin/*` | Pending |
-| `09_Settings.py` | Client/user settings | (future) `/settings` | (future) `/settings/*` | Pending |
-| `10_Returns.py` | Returns/refund workflow | (future) `/returns` | (future) `/returns/*` | Pending |
+## Implemented foundation
 
-## 2) What was implemented now
+### 1) Next.js app at repo root
+- Created `frontend/` as a standalone Next.js App Router application.
+- Included `frontend/package.json` with Next.js, React, TypeScript, and scripts (`dev`, `build`, `start`, `lint`, `typecheck`, `test`).
 
-- Added `easy_ecom/api` FastAPI layer with thin routers and schema contracts.
-- Reused existing Python services (`UserService`, `DashboardService`, `CatalogStockService`, `InventoryService`, `SalesService`) as business logic source of truth.
-- Added initial endpoints requested for login, dashboard summary, products search/detail/upsert, stock explorer, inventory add, and sales create.
-- Added Next.js TypeScript app (`frontend`) with App Router and first mirrored routes:
-  - `/login`
-  - `/dashboard`
-  - `/products-stock`
-  - `/sales`
-- Added Amplify-oriented config (`frontend/amplify.yml`) and API env variable usage (`NEXT_PUBLIC_API_BASE_URL`).
-- Added backend API contract test and a frontend render smoke test.
+### 2) App Router routes scaffolded
+- `/`
+- `/dashboard`
+- `/products-stock`
+- `/sales`
+- `/customers`
+- `/purchases`
+- `/settings`
 
-## 3) Remaining parity gaps (documented)
+All routes are scaffolded as App Router pages under `frontend/app/(app)/...`.
 
-- Dashboard currently mirrors KPI summary first; full trend/product/financial chart parity still pending.
-- Products & Stock route mirrors core search/upsert flow but not full Streamlit variant editor behavior.
-- Sales route mirrors confirm-sale path but not full draft/payment/fulfillment lifecycle controls yet.
-- Auth currently uses header-based API auth context after login; token/session hardening is pending.
+### 3) Shared app shell
+- Sidebar component for workspace navigation.
+- Top header component.
+- Responsive content layout that collapses to single-column on smaller screens.
 
-## 4) Streamlit status
+### 4) Amplify configuration
+- Root `amplify.yml` configured to build/deploy from `frontend/` using `.next` artifacts.
+- `frontend/amplify.yml` included for frontend-local Amplify workflows.
 
-- Streamlit app is retained and still runnable.
-- No Streamlit pages were removed yet (deprecation should happen after route-by-route parity sign-off).
+### 5) Documentation updates
+- README now states:
+  - Frontend is Next.js on Amplify (`frontend/`).
+  - Backend is Python services under `easy_ecom/`.
+  - Streamlit UI is legacy/deprecated.
+
+## Notes
+- Legacy Streamlit remains runnable for parity checks and controlled transition.
+- The migration in this phase is a structural foundation (shell + routes + deployment config), not full feature parity.
