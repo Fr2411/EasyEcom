@@ -13,7 +13,14 @@ from easy_ecom.data.repos.csv.finance_repo import LedgerRepo
 from easy_ecom.data.repos.csv.inventory_repo import InventoryTxnRepo
 from easy_ecom.data.repos.csv.product_variants_repo import ProductVariantsRepo
 from easy_ecom.data.repos.csv.products_repo import ProductsRepo
-from easy_ecom.data.repos.csv.sales_repo import InvoicesRepo, PaymentsRepo, SalesOrderItemsRepo, SalesOrdersRepo, ShipmentsRepo
+from easy_ecom.data.repos.factory import build_product_stock_repos
+from easy_ecom.data.repos.csv.sales_repo import (
+    InvoicesRepo,
+    PaymentsRepo,
+    SalesOrderItemsRepo,
+    SalesOrdersRepo,
+    ShipmentsRepo,
+)
 from easy_ecom.data.repos.csv.sequences_repo import SequencesRepo
 from easy_ecom.data.repos.csv.users_repo import RolesRepo, UserRolesRepo, UsersRepo
 from easy_ecom.data.store.csv_store import CsvStore
@@ -36,10 +43,21 @@ class RequestUser:
 class ServiceContainer:
     def __init__(self) -> None:
         self.store = CsvStore(settings.data_dir)
-        self.users = UserService(UsersRepo(self.store), RolesRepo(self.store), UserRolesRepo(self.store))
+        self.users = UserService(
+            UsersRepo(self.store), RolesRepo(self.store), UserRolesRepo(self.store)
+        )
         self.sequence = SequenceService(SequencesRepo(self.store))
-        self.inventory = InventoryService(InventoryTxnRepo(self.store), self.sequence)
-        self.products = ProductService(ProductsRepo(self.store), ProductVariantsRepo(self.store))
+
+        product_stock_repos = build_product_stock_repos(settings, self.store)
+        self.products = ProductService(
+            product_stock_repos.products, product_stock_repos.product_variants
+        )
+        self.inventory = InventoryService(
+            product_stock_repos.inventory_txn,
+            self.sequence,
+            products_repo=product_stock_repos.products,
+            variants_repo=product_stock_repos.product_variants,
+        )
         self.catalog_stock = CatalogStockService(self.products, self.inventory)
         self.dashboard = DashboardService(
             InventoryTxnRepo(self.store),
