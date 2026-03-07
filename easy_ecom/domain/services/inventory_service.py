@@ -5,7 +5,7 @@ import pandas as pd
 from easy_ecom.core.config import settings
 from easy_ecom.core.ids import new_uuid
 from easy_ecom.core.time_utils import now_iso
-from easy_ecom.data.repos.csv.inventory_repo import InventoryTxnRepo
+from easy_ecom.data.repos.base import TabularRepo
 from easy_ecom.data.repos.csv.product_variants_repo import ProductVariantsRepo
 from easy_ecom.data.repos.csv.products_repo import ProductsRepo
 from easy_ecom.data.repos.csv.sequences_repo import SequencesRepo
@@ -42,11 +42,25 @@ class SequenceService:
 
 
 class InventoryService:
-    def __init__(self, repo: InventoryTxnRepo, seq_service: SequenceService):
+    def __init__(
+        self,
+        repo: TabularRepo,
+        seq_service: SequenceService,
+        products_repo: TabularRepo | None = None,
+        variants_repo: TabularRepo | None = None,
+    ):
         self.repo = repo
         self.seq_service = seq_service
+
+        if products_repo is None:
+            if not hasattr(repo, "store"):
+                raise ValueError("products_repo is required for non-CSV inventory repositories")
+            products_repo = ProductsRepo(repo.store)
+        if variants_repo is None and hasattr(repo, "store"):
+            variants_repo = ProductVariantsRepo(repo.store)
+
         self.reconciliation = DataReconciliationService(
-            repo, ProductsRepo(repo.store), ProductVariantsRepo(repo.store), None, None, None
+            repo, products_repo, variants_repo, None, None, None
         )
 
     @staticmethod

@@ -4,11 +4,7 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from easy_ecom.data.repos.csv.finance_repo import LedgerRepo
-from easy_ecom.data.repos.csv.inventory_repo import InventoryTxnRepo
-from easy_ecom.data.repos.csv.product_variants_repo import ProductVariantsRepo
-from easy_ecom.data.repos.csv.products_repo import ProductsRepo
-from easy_ecom.data.repos.csv.sales_repo import InvoicesRepo, SalesOrderItemsRepo, SalesOrdersRepo
+from easy_ecom.data.repos.base import TabularRepo
 
 
 @dataclass(frozen=True)
@@ -25,13 +21,13 @@ class DataReconciliationService:
 
     def __init__(
         self,
-        inventory_repo: InventoryTxnRepo,
-        products_repo: ProductsRepo,
-        variants_repo: ProductVariantsRepo | None,
-        orders_repo: SalesOrdersRepo | None,
-        order_items_repo: SalesOrderItemsRepo | None,
-        ledger_repo: LedgerRepo | None,
-        invoices_repo: InvoicesRepo | None = None,
+        inventory_repo: TabularRepo,
+        products_repo: TabularRepo,
+        variants_repo: TabularRepo | None,
+        orders_repo: TabularRepo | None,
+        order_items_repo: TabularRepo | None,
+        ledger_repo: TabularRepo | None,
+        invoices_repo: TabularRepo | None = None,
     ):
         self.inventory_repo = inventory_repo
         self.products_repo = products_repo
@@ -370,9 +366,8 @@ class DataReconciliationService:
                 earn.get("source_id", pd.Series("", index=earn.index)), client_id
             )
             earn["amount"] = self._to_float(earn.get("amount", pd.Series(dtype=float)))
-            ledger_sum = (
-                earn.groupby("order_id", as_index=False)
-                .agg(ledger_earning_amount=("amount", "sum"))
+            ledger_sum = earn.groupby("order_id", as_index=False).agg(
+                ledger_earning_amount=("amount", "sum")
             )
         else:
             ledger_sum = pd.DataFrame(columns=["order_id", "ledger_earning_amount"])
@@ -422,7 +417,9 @@ class DataReconciliationService:
         orders = (
             self._scope(self.orders_repo.all(), client_id)
             if self.orders_repo is not None
-            else pd.DataFrame(columns=["order_id", "client_id", "status", "timestamp", "grand_total"])
+            else pd.DataFrame(
+                columns=["order_id", "client_id", "status", "timestamp", "grand_total"]
+            )
         )
         if orders.empty:
             return pd.DataFrame(columns=columns)
@@ -435,9 +432,9 @@ class DataReconciliationService:
             return pd.DataFrame(columns=columns)
 
         d["raw_product_id"] = d.get("product_id", "").astype(str).str.strip()
-        d["prd_description_snapshot"] = (
-            d.get("prd_description_snapshot", pd.Series("", index=d.index)).astype(str)
-        )
+        d["prd_description_snapshot"] = d.get(
+            "prd_description_snapshot", pd.Series("", index=d.index)
+        ).astype(str)
         d["qty"] = self._to_float(d.get("qty", pd.Series(0.0, index=d.index)))
         d["unit_selling_price"] = self._to_float(
             d.get("unit_selling_price", pd.Series(0.0, index=d.index))
@@ -449,7 +446,9 @@ class DataReconciliationService:
         products = self.product_map(client_id)
         product_ids = set(products["product_id"].astype(str)) if not products.empty else set()
         product_names = (
-            products.set_index(products["product_name"].astype(str).str.strip().str.lower())["product_id"].to_dict()
+            products.set_index(products["product_name"].astype(str).str.strip().str.lower())[
+                "product_id"
+            ].to_dict()
             if not products.empty
             else {}
         )
@@ -597,9 +596,7 @@ class DataReconciliationService:
                 if not sales_items.empty
                 else 0
             ),
-            "unmapped_inventory_rows": int(
-                len(inv[inv["is_unmapped"]]) if not inv.empty else 0
-            ),
+            "unmapped_inventory_rows": int(len(inv[inv["is_unmapped"]]) if not inv.empty else 0),
             "client_mismatch_issues": int(
                 len([i for i in issues if i.issue_type == "client_id_mismatch_linked_records"])
             ),
