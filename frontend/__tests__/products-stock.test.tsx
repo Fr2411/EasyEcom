@@ -1,6 +1,49 @@
 import React from 'react';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
+
+vi.mock('@/lib/api/products-stock', () => ({
+  getProductsStockSnapshot: vi.fn(async () => ({
+    products: [
+      {
+        id: 'p-100',
+        identity: {
+          productName: 'Urban Fit Tee',
+          supplier: 'Nova Textiles',
+          category: 'Apparel',
+          description: 'Premium cotton crew-neck t-shirt.',
+          features: ['180 GSM', 'Bio-washed', 'Regular fit']
+        },
+        variants: [
+          {
+            id: 'v-1001',
+            label: 'S / Black',
+            size: 'S',
+            color: 'Black',
+            qty: 42,
+            cost: 8.75,
+            defaultSellingPrice: 16.5,
+            maxDiscountPct: 10
+          },
+          {
+            id: 'v-1002',
+            label: 'M / White',
+            size: 'M',
+            color: 'White',
+            qty: 33,
+            cost: 8.75,
+            defaultSellingPrice: 16.5,
+            maxDiscountPct: 10
+          }
+        ]
+      }
+    ],
+    suppliers: ['Nova Textiles', 'HydroWorks', 'Peak Source'],
+    categories: ['Apparel', 'Lifestyle', 'Accessories']
+  })),
+  saveProductStock: vi.fn(async () => ({ success: true as const }))
+}));
+
 import { ProductsStockWorkspace } from '@/components/products-stock/products-stock-workspace';
 
 afterEach(() => {
