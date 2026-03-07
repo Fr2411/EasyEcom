@@ -217,13 +217,18 @@ ruff check .
 black --check .
 ```
 
-## FastAPI API skeleton (Products & Stock)
+## FastAPI API skeleton
 
-Current backend API includes these foundational endpoints for the Next.js integration path:
+Backend API bootstrap is wired through `easy_ecom/api/app.py` and is bootable with uvicorn:
 
-- `GET /health`
-- `GET /session/me` (header-based session identity passthrough)
-- `GET /products-stock/snapshot` (stock explorer snapshot)
-- `POST /products-stock/save` (catalog + stock save workflow)
+```bash
+uvicorn easy_ecom.api.app:app --reload
+```
 
-These routes currently run on top of CSV repositories through the existing domain services so the PostgreSQL/RDS migration path remains service/repository-compatible.
+The initial API layer includes:
+
+- CORS middleware configured from `CORS_ALLOW_ORIGINS` (localhost defaults) plus `*.amplifyapp.com` via regex.
+- `GET /health` returning `{"status": "ok"}`.
+- Central router registration (`easy_ecom/api/routers/__init__.py`) so follow-up routes can be added in-place without touching app startup flow.
+
+This keeps the current CSV-backed service/repository architecture intact while establishing a stable API entrypoint for adding `/session/me` and `/products-stock/*` routes in the next step.
