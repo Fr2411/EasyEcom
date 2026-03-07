@@ -78,6 +78,37 @@ When `STORAGE_BACKEND=postgres`, the backend initializes SQLAlchemy engine/sessi
 
 CSV repositories remain intact and default, so existing behavior is preserved unless explicitly switched.
 
+### One-time Products & Stock CSV → Postgres import (bounded phase)
+
+This phase adds a deterministic migration utility for **Products & Stock only** and keeps CSV as the live default backend.
+
+- Script: `easy_ecom/scripts/import_products_stock_to_postgres.py`
+- Imported Postgres tables (FK-safe order): `clients`, `users`, `categories`, `suppliers`, `products`, `product_variants`, `inventory_txn`
+- Source of truth for this phase remains CSV; API behavior and default backend are unchanged.
+
+Run the import:
+
+```bash
+python -m easy_ecom.scripts.import_products_stock_to_postgres
+```
+
+Run validation only (count comparison CSV vs Postgres):
+
+```bash
+python -m easy_ecom.scripts.import_products_stock_to_postgres --validate-only
+```
+
+Optional data directory override:
+
+```bash
+python -m easy_ecom.scripts.import_products_stock_to_postgres --data-dir /path/to/csv_dir
+```
+
+Notes:
+- The importer never mutates/deletes CSV source files.
+- `categories` / `suppliers` are read from optional `categories.csv` / `suppliers.csv` if present; otherwise they are deterministically derived from `products.csv`.
+- Existing IDs are preserved from CSV-backed tables where available.
+
 
 ```bash
 # comma-separated exact origins (defaults to localhost Next.js dev origins)
