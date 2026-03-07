@@ -198,7 +198,7 @@ Invoices are financial documents and are updated to mirror payment/refund status
 ## Defaults
 - `ALLOW_BACKORDER=false` blocks overselling.
 - `CREATE_DEFAULT_CLIENT=false` avoids sample tenant creation by default.
-- Set super admin bootstrap/login credentials in `.env` via `SUPER_ADMIN_EMAIL` and `SUPER_ADMIN_PASSWORD` (required for super admin login).
+- Project default super admin credentials are prefilled as `SUPER_ADMIN_EMAIL=frabby24@gmail.com` and `SUPER_ADMIN_PASSWORD=Fr@241189` in `.env.example` (copy/update in `.env` as needed) to preserve super-admin-only login even when `users.csv` is empty/inaccessible.
 
 ## Quality
 Run checks:
