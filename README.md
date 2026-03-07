@@ -50,6 +50,36 @@ pip install -e .[dev]
 pip install reportlab
 ```
 
+
+## Order Lifecycle (New)
+EasyEcom now uses explicit lifecycle dimensions instead of a single confirm-all status:
+
+- `order_status`: `draft -> placed -> confirmed -> cancelled/closed`
+- `payment_status`: `unpaid`, `partially_paid`, `paid`, `partially_refunded`, `refunded`, `failed`
+- `fulfillment_status`: `unfulfilled`, `ready_to_pack`, `packed`, `shipped`, `delivered`, `delivery_failed`, `returned`
+- `return_status`: `none`, `return_requested`, `approved`, `received`, `inspected`, `refund_approved`, `refund_completed`, `rejected`
+
+### Lifecycle rules
+- Draft orders are editable carts.
+- `place_order_from_draft` locks commercial values and customer snapshot and ensures one invoice per order.
+- `confirm_order` is the operational acceptance point and **stock deduction point** (stock is validated at place/confirm, deducted on confirm).
+- Payments are recorded separately (`record_payment`) and support partial payments; overpayments are blocked by default.
+- Shipments are never auto-created on place/confirm and must be created explicitly (`create_shipment_for_order`).
+- Returns and refunds are separated: request/approve/receive/inspect/issue_refund.
+
+### Single-source commercial totals
+Everywhere in code and UI:
+
+`subtotal = sum(qty * unit_selling_price)`  
+`grand_total = subtotal - discount + tax + delivery_cost`
+
+Financial fields maintained on orders/invoices:
+- `amount_paid`: successful payment aggregate
+- `amount_refunded`: successful refund aggregate
+- `balance_due = grand_total - amount_paid + amount_refunded`
+
+Invoices are financial documents and are updated to mirror payment/refund status and due balance.
+
 ## Critical Logic
 - Inventory uses `inventory_txn.csv` append-only with lot-level tracking, strict tenant filtering by `client_id`, actor tracking through `user_id`, and shared canonical product normalization (products first, then variants, with legacy lot-id/product-name references mapped when possible and only truly broken rows flagged).
 - Legacy sales item rows that stored `product_name` in `sales_order_items.product_id` are migrated with `easy_ecom/scripts/migrate_sales_items_product_id.py` (idempotent, tenant-scoped, preserves `product_name_snapshot`).
