@@ -45,7 +45,7 @@ def test_return_approval_permission_and_refund_ledger(tmp_path: Path):
     seq = SequenceService(SequencesRepo(store))
     inv = InventoryService(InventoryTxnRepo(store), seq)
     fin = FinanceService(LedgerRepo(store), InventoryTxnRepo(store))
-    svc = ReturnsService(ReturnsRepo(store), ReturnItemsRepo(store), RefundsRepo(store), fin, inv)
+    svc = ReturnsService(ReturnsRepo(store), ReturnItemsRepo(store), RefundsRepo(store), fin, inv, SalesOrdersRepo(store))
     return_id = svc.create_request(ReturnRequestCreate(client_id="c1", invoice_id="inv1", order_id="ord1", customer_id="cust1", requested_by_user_id="u_emp", reason="Damaged", restock=False, items=[ReturnItem(product_id="Phone Case", qty=1, unit_selling_price=100)]))
 
     with pytest.raises(PermissionError):
@@ -53,6 +53,7 @@ def test_return_approval_permission_and_refund_ledger(tmp_path: Path):
 
     status = svc.approve_request("c1", return_id, "u_mgr", ["CLIENT_MANAGER"], True)
     assert status == "APPROVED"
+    svc.issue_refund(return_id, 100, "manual", user_ctx={"client_id": "c1", "user_id": "u_mgr"})
     refunds = RefundsRepo(store).all()
     assert len(refunds) == 1
     assert float(refunds.iloc[0]["amount"]) == 100
