@@ -1,10 +1,7 @@
 from easy_ecom.core.config import Settings
 from easy_ecom.data.repos.postgres.products_stock_repo import ProductsPostgresRepo
-from easy_ecom.data.store.postgres import (
-    build_postgres_engine,
-    build_session_factory,
-    init_postgres_schema,
-)
+from easy_ecom.data.store.postgres import init_postgres_schema
+from easy_ecom.data.store.postgres_db import build_postgres_engine, build_session_factory
 
 
 def test_postgres_engine_and_session_factory(monkeypatch, tmp_path):

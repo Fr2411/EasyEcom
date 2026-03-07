@@ -39,6 +39,14 @@ def test_backend_selector_returns_postgres_repos(monkeypatch, tmp_path: Path):
     assert isinstance(repos.inventory_txn, InventoryTxnPostgresRepo)
 
 
+
+def test_database_url_is_optional(monkeypatch):
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+
+    cfg = Settings()
+
+    assert cfg.database_url is None
+
 def test_database_url_overrides_postgres_dsn(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///from_database_url.db")
     monkeypatch.setenv("POSTGRES_DSN", "sqlite+pysqlite:///from_postgres_dsn.db")
