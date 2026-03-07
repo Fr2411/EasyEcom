@@ -87,6 +87,16 @@ if st.button("Refresh"):
 sell_tab, cart_tab, records_tab = st.tabs(["Sell", "Cart", "Sales Records"])
 
 with sell_tab:
+    for key, default in [
+        ("selected_cart_order_id", ""),
+        ("sales_selected_customer_id", ""),
+        ("sales_selected_customer_label", ""),
+        ("sales_last_cart_result", None),
+        ("sales_force_new_cart", False),
+    ]:
+        if key not in st.session_state:
+            st.session_state[key] = default
+
     products_df = product_svc.list_by_client(client_id)
     product_options = (
         sorted(products_df["product_name"].dropna().astype(str).unique().tolist())
@@ -112,19 +122,17 @@ with sell_tab:
         if selected_variant
         else (selected_product["product_id"] if selected_product else "")
     )
-    qty = st.number_input("Qty", min_value=0.01)
-    default_price = (
-        float((selected_variant or selected_product or {}).get("default_selling_price", 0.01))
-        if (selected_variant or selected_product)
-        else 0.01
+
+    qty = st.number_input("Qty", min_value=0.01, value=1.0)
+    default_price = float(
+        (selected_variant or selected_product or {}).get("default_selling_price", 0.01) or 0.01
     )
-    max_discount_pct = (
-        float((selected_variant or selected_product or {}).get("max_discount_pct", 10.0))
-        if (selected_variant or selected_product)
-        else 10.0
+    max_discount_pct = float(
+        (selected_variant or selected_product or {}).get("max_discount_pct", 10.0) or 10.0
     )
     min_price = default_price * (1 - max_discount_pct / 100)
     price = st.number_input("Unit selling price", min_value=0.01, value=default_price)
+
     if product_id:
         st.caption(f"Available stock: {inv.available_qty(client_id, product_id):,.2f}")
         st.caption(
@@ -147,16 +155,23 @@ with sell_tab:
         ]
         selected_label = st.selectbox("Matched customers", options, index=0)
         matched_customer_id = selected_label.split(" | ")[0]
+        st.session_state["sales_selected_customer_id"] = matched_customer_id
+        st.session_state["sales_selected_customer_label"] = selected_label
         selected_match = matches[matches["customer_id"] == matched_customer_id].iloc[0]
 
-    phone_value = selected_match["phone"] if selected_match is not None else ""
-    email_value = selected_match["email"] if selected_match is not None else ""
-    address_value = selected_match["address_line1"] if selected_match is not None else ""
-    phone = st.text_input("Phone", value=phone_value)
-    email = st.text_input("Email", value=email_value)
-    address_line1 = st.text_input("Address", value=address_value)
+    phone = st.text_input(
+        "Phone", value=selected_match["phone"] if selected_match is not None else ""
+    )
+    email = st.text_input(
+        "Email", value=selected_match["email"] if selected_match is not None else ""
+    )
+    address_line1 = st.text_input(
+        "Address", value=selected_match["address_line1"] if selected_match is not None else ""
+    )
+    city = st.text_input("City", value=selected_match["city"] if selected_match is not None else "")
 
-    if st.button("Confirm sale"):
+    c1, c2, c3 = st.columns(3)
+    if c1.button("Add to Cart", type="primary"):
         try:
             if not product_id:
                 raise ValueError("Please select a product")
@@ -164,7 +179,6 @@ with sell_tab:
                 raise ValueError(
                     f"Unit price cannot be below {format_money(min_price, currency_code, currency_symbol)}"
                 )
-
             resolved_customer_id = svc.resolve_customer_for_sale(
                 client_id,
                 {
@@ -172,38 +186,88 @@ with sell_tab:
                     "phone": phone,
                     "email": email,
                     "address_line1": address_line1,
+                    "city": city,
                 },
                 matched_customer_id=matched_customer_id,
                 user_id=user_id,
             )
-
-            payload = SaleConfirm(
-                client_id=client_id,
-                customer_id=resolved_customer_id,
-                items=[
-                    SaleItem(product_id=product_id, qty=float(qty), unit_selling_price=float(price))
-                ],
+            draft_id = svc.get_or_create_customer_draft(
+                client_id,
+                resolved_customer_id,
+                force_new=bool(st.session_state.get("sales_force_new_cart", False)),
             )
-            result = svc.confirm_sale(
-                payload,
-                {"full_name": customer_name, "phone": phone, "address_line1": address_line1},
-                user_id=user_id,
+            svc.add_item_to_draft(
+                draft_id,
+                client_id,
+                SaleItem(product_id=product_id, qty=float(qty), unit_selling_price=float(price)),
             )
-            st.success(f"Order confirmed {result['order_id']}")
+            st.session_state["selected_cart_order_id"] = draft_id
+            st.session_state["sales_last_cart_result"] = {
+                "order_id": draft_id,
+                "customer_id": resolved_customer_id,
+            }
+            st.session_state["sales_force_new_cart"] = False
+            st.success(f"Added to draft cart: {draft_id}")
         except Exception as exc:
             st.error(str(exc))
 
+    if c2.button("Start New Cart"):
+        st.session_state["sales_force_new_cart"] = True
+        st.session_state["selected_cart_order_id"] = ""
+        st.info("New cart mode enabled. Next Add to Cart will create a new draft.")
+
+    if c3.button("Go to Cart"):
+        st.info("Open the Cart tab to continue editing the selected draft order.")
+
+    with st.expander("Quick confirm sale (legacy flow)", expanded=False):
+        if st.button("Confirm sale"):
+            try:
+                if not product_id:
+                    raise ValueError("Please select a product")
+                if float(price) < min_price:
+                    raise ValueError(
+                        f"Unit price cannot be below {format_money(min_price, currency_code, currency_symbol)}"
+                    )
+                resolved_customer_id = svc.resolve_customer_for_sale(
+                    client_id,
+                    {
+                        "full_name": customer_name,
+                        "phone": phone,
+                        "email": email,
+                        "address_line1": address_line1,
+                        "city": city,
+                    },
+                    matched_customer_id=matched_customer_id,
+                    user_id=user_id,
+                )
+                payload = SaleConfirm(
+                    client_id=client_id,
+                    customer_id=resolved_customer_id,
+                    items=[
+                        SaleItem(
+                            product_id=product_id, qty=float(qty), unit_selling_price=float(price)
+                        )
+                    ],
+                )
+                result = svc.confirm_sale(
+                    payload,
+                    {"full_name": customer_name, "phone": phone, "address_line1": address_line1},
+                    user_id=user_id,
+                )
+                st.success(f"Order confirmed {result['order_id']}")
+            except Exception as exc:
+                st.error(str(exc))
+
 with cart_tab:
+    st.subheader("Draft cart list")
     search = st.text_input("Search customer name/phone", key="cart_search")
     sort_order = st.selectbox("Sort", ["Newest", "Oldest"], key="cart_sort")
     non_empty_only = st.checkbox("Only carts with items", value=False)
 
     drafts = svc.list_draft_orders(client_id)
     customers_df = customer_repo.all()
-    if drafts.empty:
-        st.info("No draft carts found.")
-    else:
-        customer_cols = ["customer_id", "full_name", "phone", "city"]
+    if not drafts.empty:
+        customer_cols = ["customer_id", "full_name", "phone", "email", "address_line1", "city"]
         customer_view = (
             customers_df[customer_cols]
             if not customers_df.empty
@@ -212,11 +276,13 @@ with cart_tab:
         carts = drafts.merge(customer_view, on="customer_id", how="left")
         carts["full_name"] = carts["full_name"].fillna("Unknown")
         carts["phone"] = carts["phone"].fillna("")
-        carts["city"] = carts["city"].fillna("")
         carts["timestamp"] = pd.to_datetime(carts["timestamp"], errors="coerce")
-        carts["subtotal"] = carts.apply(
-            lambda row: svc.compute_order_totals(row["order_id"])["subtotal"], axis=1
-        )
+
+        totals = [
+            svc.compute_order_totals(str(row.order_id)) for row in carts.itertuples(index=False)
+        ]
+        carts["subtotal"] = [t["subtotal"] for t in totals]
+        carts["grand_total"] = [t["grand_total"] for t in totals]
 
         if search.strip():
             token = search.strip().lower()
@@ -227,162 +293,182 @@ with cart_tab:
         if non_empty_only:
             carts = carts[carts["item_count"] > 0]
 
-        carts = carts.sort_values(
-            ["full_name", "timestamp"], ascending=[True, sort_order == "Oldest"]
-        )
+        carts = carts.sort_values("timestamp", ascending=sort_order == "Oldest")
 
-        summary = carts[
-            ["full_name", "phone", "order_id", "timestamp", "item_count", "subtotal"]
-        ].copy()
-        summary = summary.rename(
-            columns={
-                "full_name": "Customer Name",
-                "phone": "Phone",
-                "order_id": "Draft Order ID",
-                "timestamp": "Created",
-                "item_count": "#Items",
-                "subtotal": "Subtotal",
-            }
-        )
-        summary["Created"] = summary["Created"].dt.strftime("%Y-%m-%d %H:%M:%S")
-        summary["Subtotal"] = summary["Subtotal"].apply(
-            lambda x: format_money(float(x), currency_code, currency_symbol)
-        )
-        st.dataframe(summary, use_container_width=True)
-
-        grouped = carts.groupby("full_name", sort=False)
-        for customer_name, gdf in grouped:
-            with st.expander(f"{customer_name} ({len(gdf)} draft cart(s))", expanded=False):
-                for row in gdf.itertuples(index=False):
-                    cols = st.columns([3, 2, 1, 1, 1])
-                    cols[0].markdown(f"**{row.order_id[:8]}...**  \\n{row.phone} {row.city}")
-                    cols[1].write(format_money(float(row.subtotal), currency_code, currency_symbol))
-                    cols[2].write(f"Items: {int(row.item_count)}")
-                    if cols[3].button("Open", key=f"open_{row.order_id}"):
-                        st.session_state["selected_cart_order_id"] = row.order_id
-                    if cols[4].button("Cancel", key=f"cancel_{row.order_id}"):
-                        if svc.cancel_draft_order(row.order_id):
-                            st.success("Draft cart cancelled")
-                            st.rerun()
-                    if st.button("Confirm", key=f"confirm_inline_{row.order_id}"):
-                        try:
-                            result = svc.confirm_order(
-                                row.order_id, {"client_id": client_id, "user_id": user_id}
-                            )
-                            st.success(
-                                f"Confirmed: {result['invoice_no']} / {result['shipment_no']}"
-                            )
-                            st.session_state["last_confirm_result"] = {
-                                **result,
-                                "order_id": row.order_id,
-                            }
-                            st.rerun()
-                        except Exception as exc:
-                            st.error(str(exc))
+        for row in carts.itertuples(index=False):
+            cols = st.columns([2.4, 1.6, 1.2, 1, 1, 1, 1])
+            cols[0].markdown(f"**{row.full_name}**  \n{row.phone}")
+            cols[1].write(f"{row.timestamp}")
+            cols[2].write(f"Items: {int(row.item_count)}")
+            cols[3].write(format_money(float(row.subtotal), currency_code, currency_symbol))
+            cols[4].write(format_money(float(row.grand_total), currency_code, currency_symbol))
+            if cols[5].button("Open", key=f"open_{row.order_id}"):
+                st.session_state["selected_cart_order_id"] = row.order_id
+                st.rerun()
+            if cols[6].button("Confirm", key=f"confirm_inline_{row.order_id}"):
+                try:
+                    result = svc.confirm_order(
+                        row.order_id, {"client_id": client_id, "user_id": user_id}
+                    )
+                    st.session_state["sales_last_cart_result"] = {
+                        **result,
+                        "order_id": row.order_id,
+                    }
+                    st.success(f"Confirmed: {result['invoice_no']} / {result['shipment_no']}")
+                    st.rerun()
+                except Exception as exc:
+                    st.error(str(exc))
+            caux = st.columns([1, 1, 5])
+            if caux[0].button("Cancel", key=f"cancel_{row.order_id}"):
+                if svc.cancel_draft_order(row.order_id):
+                    st.success("Draft cart cancelled")
+                    if st.session_state.get("selected_cart_order_id") == row.order_id:
+                        st.session_state["selected_cart_order_id"] = ""
+                    st.rerun()
+            if caux[1].button("Empty", key=f"empty_{row.order_id}"):
+                try:
+                    svc.empty_draft_order(row.order_id, client_id)
+                    st.success("Draft cart emptied")
+                    st.rerun()
+                except Exception as exc:
+                    st.error(str(exc))
+            st.divider()
+    else:
+        st.info("No draft carts found.")
 
     selected_order_id = st.session_state.get("selected_cart_order_id", "")
+    st.subheader("Selected cart workspace")
     if selected_order_id:
         order = svc.get_order(selected_order_id)
         if order and order.get("client_id") == client_id:
-            order_items = svc.get_order_items(selected_order_id)
             customer = customer_repo.get(order.get("customer_id", "")) or {}
-            st.subheader("Cart details")
-            st.write(f"Customer: {customer.get('full_name', '')} ({customer.get('phone', '')})")
-            st.write(f"Address: {customer.get('address_line1', '')} {customer.get('city', '')}")
+            st.markdown("**Customer**")
+            st.write(
+                f"{customer.get('full_name', '')} | {customer.get('phone', '')} | {customer.get('email', '')}"
+            )
+            st.write(f"{customer.get('address_line1', '')} {customer.get('city', '')}")
 
-            if not order_items.empty:
-                products_lookup = (
-                    product_repo.all()[["product_id", "product_name"]]
-                    if not product_repo.all().empty
-                    else pd.DataFrame(columns=["product_id", "product_name"])
-                )
-                line_df = order_items.merge(products_lookup, on="product_id", how="left")
-                line_df["qty"] = line_df["qty"].astype(float)
-                line_df["unit_selling_price"] = line_df["unit_selling_price"].astype(float)
-                line_df["line_total"] = line_df["qty"] * line_df["unit_selling_price"]
-                st.dataframe(
-                    line_df[["product_name", "qty", "unit_selling_price", "line_total"]],
-                    use_container_width=True,
-                )
-
-                if order.get("status") == "draft":
-                    for item in line_df.itertuples(index=False):
-                        with st.container(border=True):
-                            st.write(f"{item.product_name or item.product_id}")
-                            ec1, ec2, ec3 = st.columns(3)
-                            new_qty = ec1.number_input(
-                                "Qty",
-                                min_value=0.01,
-                                value=float(item.qty),
-                                key=f"qty_{item.order_item_id}",
-                            )
-                            new_price = ec2.number_input(
-                                "Unit price",
-                                min_value=0.01,
-                                value=float(item.unit_selling_price),
-                                key=f"price_{item.order_item_id}",
-                            )
-                            if ec3.button("Save", key=f"save_{item.order_item_id}"):
-                                try:
-                                    svc.update_draft_item(
-                                        item.order_item_id,
-                                        float(new_qty),
-                                        float(new_price),
-                                        client_id,
-                                    )
-                                    st.success("Line updated")
-                                    st.rerun()
-                                except Exception as exc:
-                                    st.error(str(exc))
-                            if st.button("Remove", key=f"remove_{item.order_item_id}"):
-                                try:
-                                    svc.remove_draft_item(item.order_item_id, client_id)
-                                    st.success("Line removed")
-                                    st.rerun()
-                                except Exception as exc:
-                                    st.error(str(exc))
-
-                totals = svc.compute_order_totals(selected_order_id)
-                current_delivery = float(order.get("delivery_cost", 0) or 0)
-                d1, d2 = st.columns(2)
-                new_delivery = d1.number_input(
-                    "Delivery cost",
-                    min_value=0.0,
-                    value=current_delivery,
-                    key=f"delivery_{selected_order_id}",
-                )
-                provider = d2.text_input(
-                    "Delivery provider",
-                    value=order.get("delivery_provider", ""),
-                    key=f"provider_{selected_order_id}",
-                )
-                if st.button("Save delivery", key=f"save_delivery_{selected_order_id}"):
-                    svc.update_delivery(selected_order_id, client_id, float(new_delivery), provider)
-                    st.success("Delivery updated")
+            p1, p2, p3 = st.columns(3)
+            discount = p1.number_input(
+                "Discount",
+                min_value=0.0,
+                value=float(order.get("discount", 0) or 0),
+                key=f"discount_{selected_order_id}",
+            )
+            tax = p2.number_input(
+                "Tax",
+                min_value=0.0,
+                value=float(order.get("tax", 0) or 0),
+                key=f"tax_{selected_order_id}",
+            )
+            delivery_cost = p3.number_input(
+                "Delivery cost",
+                min_value=0.0,
+                value=float(order.get("delivery_cost", 0) or 0),
+                key=f"delivery_{selected_order_id}",
+            )
+            provider = st.text_input(
+                "Delivery provider",
+                value=order.get("delivery_provider", ""),
+                key=f"provider_{selected_order_id}",
+            )
+            note = st.text_area(
+                "Note", value=order.get("note", ""), key=f"note_{selected_order_id}"
+            )
+            if st.button("Save pricing/meta", key=f"save_pricing_{selected_order_id}"):
+                try:
+                    svc.update_order_pricing(
+                        selected_order_id,
+                        client_id,
+                        float(discount),
+                        float(tax),
+                        float(delivery_cost),
+                        provider,
+                        note,
+                    )
+                    st.success("Cart pricing/meta updated")
                     st.rerun()
-                st.markdown(
-                    f"**Total:** {format_money(totals['grand_total'], currency_code, currency_symbol)}"
-                )
-                if order.get("status") == "draft" and st.button(
-                    "Confirm Order", key=f"confirm_detail_{selected_order_id}"
-                ):
-                    try:
-                        result = svc.confirm_order(
-                            selected_order_id, {"client_id": client_id, "user_id": user_id}
-                        )
-                        st.success(
-                            f"Invoice {result['invoice_no']} | Shipment {result['shipment_no']}"
-                        )
-                        st.session_state["last_confirm_result"] = {
-                            **result,
-                            "order_id": selected_order_id,
-                        }
-                        st.rerun()
-                    except Exception as exc:
-                        st.error(str(exc))
+                except Exception as exc:
+                    st.error(str(exc))
 
-    last_confirm = st.session_state.get("last_confirm_result")
-    if last_confirm:
+            line_df = svc.resolve_order_items(client_id, selected_order_id)
+            if line_df.empty:
+                st.info("This draft cart is empty.")
+            else:
+                for item in line_df.itertuples(index=False):
+                    with st.container(border=True):
+                        st.write(f"{item.product_display_name}")
+                        st.caption(
+                            f"Available stock: {item.available_qty:,.2f} | Minimum allowed price: {format_money(float(item.minimum_allowed_price), currency_code, currency_symbol)}"
+                        )
+                        ec1, ec2, ec3, ec4 = st.columns(4)
+                        new_qty = ec1.number_input(
+                            "Qty",
+                            min_value=0.01,
+                            value=float(item.qty),
+                            key=f"qty_{item.order_item_id}",
+                        )
+                        new_price = ec2.number_input(
+                            "Unit price",
+                            min_value=0.01,
+                            value=float(item.unit_selling_price),
+                            key=f"price_{item.order_item_id}",
+                        )
+                        ec3.write(
+                            format_money(float(item.line_total), currency_code, currency_symbol)
+                        )
+                        if ec4.button("Save line", key=f"save_{item.order_item_id}"):
+                            try:
+                                svc.update_draft_item(
+                                    item.order_item_id, float(new_qty), float(new_price), client_id
+                                )
+                                st.success("Line updated")
+                                st.rerun()
+                            except Exception as exc:
+                                st.error(str(exc))
+                        if st.button("Remove line", key=f"remove_{item.order_item_id}"):
+                            try:
+                                svc.remove_draft_item(item.order_item_id, client_id)
+                                st.success("Line removed")
+                                st.rerun()
+                            except Exception as exc:
+                                st.error(str(exc))
+
+            totals = svc.compute_order_totals(selected_order_id)
+            st.markdown(
+                f"Subtotal: **{format_money(totals['subtotal'], currency_code, currency_symbol)}**"
+            )
+            st.markdown(
+                f"Discount: **{format_money(totals['discount'], currency_code, currency_symbol)}**"
+            )
+            st.markdown(f"Tax: **{format_money(totals['tax'], currency_code, currency_symbol)}**")
+            st.markdown(
+                f"Delivery: **{format_money(totals['delivery_cost'], currency_code, currency_symbol)}**"
+            )
+            st.markdown(
+                f"Grand Total: **{format_money(totals['grand_total'], currency_code, currency_symbol)}**"
+            )
+
+            if order.get("status") == "draft" and st.button(
+                "Confirm Order", key=f"confirm_detail_{selected_order_id}"
+            ):
+                try:
+                    result = svc.confirm_order(
+                        selected_order_id, {"client_id": client_id, "user_id": user_id}
+                    )
+                    st.success(f"Invoice {result['invoice_no']} | Shipment {result['shipment_no']}")
+                    st.session_state["sales_last_cart_result"] = {
+                        **result,
+                        "order_id": selected_order_id,
+                    }
+                    st.rerun()
+                except Exception as exc:
+                    st.error(str(exc))
+        else:
+            st.warning("Selected cart not found for this client.")
+
+    last_confirm = st.session_state.get("sales_last_cart_result")
+    if last_confirm and last_confirm.get("invoice_id"):
         order_id = last_confirm["order_id"]
         order = svc.get_order(order_id) or {}
         order_items = svc.get_order_items(order_id)
