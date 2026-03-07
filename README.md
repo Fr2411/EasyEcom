@@ -88,6 +88,20 @@ pip install reportlab
 - `frontend/amplify.yml` is also included for frontend-local build/deploy configuration.
 - Set `NEXT_PUBLIC_API_BASE_URL` in Amplify environment variables.
 
+
+
+### Products & Stock frontend workspace (production page)
+- Route: `frontend/app/(app)/products-stock/page.tsx` now renders a real compact operator workspace (no placeholder shell copy).
+- UI is composed from reusable components under `frontend/components/products-stock/`:
+  - `product-chooser.tsx`: single searchable chooser with inline `Add new product: "<typed>"` option.
+  - `product-identity.tsx`: compact identity form (name/supplier/category/description/features) with searchable supplier/category and inline add.
+  - `variant-generator.tsx`: new-product mode CSV-driven variant generation (size/color/other).
+  - `variant-grid.tsx`: editable compact variants table with qty/cost/price/max discount, remove action, and same-cost helper.
+  - `save-summary.tsx`: sticky save/reset bar, validation feedback, and live summary totals.
+- Data source is currently mocked through `frontend/lib/mocks/products-stock.ts` using an API-like contract (`getProductsStockSnapshot`, `saveProductStock`) so backend wiring can replace it later with minimal UI changes.
+- Variant math and transformation helpers live in `frontend/lib/products-stock/variant-utils.ts` and are reused by the workspace flow.
+- Test coverage for the page behavior is in `frontend/__tests__/products-stock.test.tsx`.
+
 ## AWS App Runner
 This repo includes `apprunner.yaml` at the repository root for legacy Python/Streamlit hosting on AWS App Runner.
 
