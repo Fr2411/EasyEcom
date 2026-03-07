@@ -48,7 +48,9 @@ class Settings:
     storage_backend: str = field(
         default_factory=lambda: os.getenv("STORAGE_BACKEND", "csv").strip().lower()
     )
-    database_url: str = field(default_factory=lambda: os.getenv("DATABASE_URL", "").strip())
+    database_url: str | None = field(
+        default_factory=lambda: (os.getenv("DATABASE_URL", "").strip() or None)
+    )
     postgres_host: str = field(default_factory=lambda: os.getenv("POSTGRES_HOST", "localhost"))
     postgres_port: int = field(default_factory=lambda: _to_int(os.getenv("POSTGRES_PORT"), 5432))
     postgres_db: str = field(default_factory=lambda: os.getenv("POSTGRES_DB", "easy_ecom"))
