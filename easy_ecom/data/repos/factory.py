@@ -28,7 +28,7 @@ class ProductStockRepos:
 
 
 def build_product_stock_repos(settings: Settings, csv_store: CsvStore) -> ProductStockRepos:
-    if settings.storage_backend == "POSTGRES":
+    if settings.storage_backend.strip().lower() == "postgres":
         engine = build_postgres_engine(settings)
         init_postgres_schema(engine)
         session_factory = build_session_factory(engine)

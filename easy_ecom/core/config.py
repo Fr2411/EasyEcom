@@ -46,8 +46,9 @@ class Settings:
         default_factory=lambda: _to_bool(os.getenv("CREATE_DEFAULT_CLIENT"), False)
     )
     storage_backend: str = field(
-        default_factory=lambda: os.getenv("STORAGE_BACKEND", "CSV").strip().upper()
+        default_factory=lambda: os.getenv("STORAGE_BACKEND", "csv").strip().lower()
     )
+    database_url: str = field(default_factory=lambda: os.getenv("DATABASE_URL", "").strip())
     postgres_host: str = field(default_factory=lambda: os.getenv("POSTGRES_HOST", "localhost"))
     postgres_port: int = field(default_factory=lambda: _to_int(os.getenv("POSTGRES_PORT"), 5432))
     postgres_db: str = field(default_factory=lambda: os.getenv("POSTGRES_DB", "easy_ecom"))
@@ -74,6 +75,8 @@ class Settings:
 
     @property
     def postgres_dsn(self) -> str:
+        if self.database_url:
+            return self.database_url
         if self.postgres_dsn_override:
             return self.postgres_dsn_override
         return (

@@ -54,10 +54,10 @@ Products & Stock now supports a configuration-based repository backend selector 
 
 ```bash
 # keep current behavior
-STORAGE_BACKEND=CSV
+STORAGE_BACKEND=csv
 
 # enable PostgreSQL-backed Products & Stock repositories
-STORAGE_BACKEND=POSTGRES
+STORAGE_BACKEND=postgres
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
 POSTGRES_DB=easy_ecom
@@ -68,10 +68,13 @@ POSTGRES_POOL_SIZE=5
 POSTGRES_MAX_OVERFLOW=10
 
 # optional full DSN override (useful for tests/local variants)
+# DATABASE_URL=postgresql+psycopg://easy_ecom:easy_ecom@localhost:5432/easy_ecom
 # POSTGRES_DSN=postgresql+psycopg://easy_ecom:easy_ecom@localhost:5432/easy_ecom
 ```
 
-When `STORAGE_BACKEND=POSTGRES`, the backend initializes SQLAlchemy engine/session and ensures schema for the Products & Stock slice tables: `clients`, `users`, `categories`, `suppliers`, `products`, `product_variants`, `inventory_txn`.
+When `STORAGE_BACKEND=postgres`, the backend initializes SQLAlchemy engine/session and ensures schema for the Products & Stock slice tables: `clients`, `users`, `categories`, `suppliers`, `products`, `product_variants`, `inventory_txn`.
+
+`DATABASE_URL` is the preferred optional connection string. If not set, the backend falls back to `POSTGRES_DSN` and then to host/port/user/password/database settings.
 
 CSV repositories remain intact and default, so existing behavior is preserved unless explicitly switched.
 
