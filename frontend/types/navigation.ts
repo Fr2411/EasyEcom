@@ -4,6 +4,7 @@ export type NavigationItem = {
 };
 
 export const NAV_ITEMS: NavigationItem[] = [
+  { href: '/', label: 'Home' },
   { href: '/dashboard', label: 'Dashboard' },
   { href: '/products-stock', label: 'Products & Stock' },
   { href: '/sales', label: 'Sales' },
