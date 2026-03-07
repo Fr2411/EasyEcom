@@ -1,12 +1,15 @@
-import { ReactNode } from 'react';
-import { AppShell } from '../components/AppShell';
+import type { Metadata } from 'next';
+import './globals.css';
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export const metadata: Metadata = {
+  title: 'EasyEcom Frontend',
+  description: 'Next.js SaaS frontend for EasyEcom operations.'
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body>
-        <AppShell>{children}</AppShell>
-      </body>
+      <body>{children}</body>
     </html>
   );
 }
