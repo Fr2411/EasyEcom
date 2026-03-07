@@ -184,43 +184,47 @@ This repo includes `apprunner.yaml` at the repository root for AWS App Runner de
 - Cart confirmation now supports delivery cost on draft orders and auto-posts Delivery expense to ledger.
 - Added migration scripts: `easy_ecom/scripts/migrate_sales_items_to_variants.py` and `easy_ecom/scripts/migrate_inventory_to_variants.py`.
 
-## API + Next.js mirror migration (in progress)
+## Frontend migration status (Next.js + Amplify)
 
-### New structure
-- `easy_ecom/api/`: FastAPI layer (thin routers + schemas).
-- `frontend/`: Next.js (TypeScript, App Router) mirror frontend target.
-- `easy_ecom/app/`: existing Streamlit app retained during phased migration.
+### Direction update
+- Streamlit UI is now **deprecated for product UI work** and retained only for temporary maintenance.
+- The production frontend target is `frontend/` (Next.js App Router, TypeScript).
+- Backend business logic remains in Python services and FastAPI routes during phased migration.
 
-### Run backend API locally
+### Frontend structure
+- `frontend/app/`: App Router entry + route groups.
+- `frontend/components/layout/`: reusable shell layout pieces (sidebar + top header + app shell).
+- `frontend/components/ui/`: small reusable UI primitives for page scaffolds.
+- `frontend/lib/api/`: API client utilities.
+- `frontend/lib/env.ts`: strict public environment variable contract.
+- `frontend/types/`: shared route/navigation types.
+
+### Routes scaffolded
+- `/dashboard`
+- `/products-stock` (**priority shell ready first**)
+- `/sales`
+- `/customers`
+- `/purchases`
+- `/settings`
+
+### Local run
 ```bash
+# backend
 pip install .
 uvicorn easy_ecom.api.app:app --reload --port 8000
-```
 
-### Run frontend locally
-```bash
+# frontend
 cd frontend
 npm install
-NEXT_PUBLIC_API_BASE_URL=http://localhost:8000 npm run dev
+cp .env.example .env.local
+npm run dev
 ```
 
-### Frontend/API connection contract
-- Frontend uses `NEXT_PUBLIC_API_BASE_URL` for all API calls.
-- Login uses `POST /auth/login` and stores returned user context in browser storage.
-- Protected requests send:
-  - `X-User-Id`
-  - `X-Client-Id`
-  - `X-Roles`
+### Amplify deployment
+- `frontend/amplify.yml` is included for CI/CD build/deploy steps.
+- Set `NEXT_PUBLIC_API_BASE_URL` in Amplify environment variables.
+- `next.config.js` uses `output: 'standalone'` for production packaging.
 
-### Initial mirrored routes delivered
-- `/login` ↔ Streamlit `01_Login.py`
-- `/dashboard` ↔ Streamlit `02_Dashboard.py` (KPI summary parity-first)
-- `/products-stock` ↔ Streamlit `03_Catalog_&_Stock.py` (search/upsert core path)
-- `/sales` ↔ Streamlit `05_Sales.py` (confirm-sale core path)
+### Streamlit deprecation marker
+- See `easy_ecom/app/DEPRECATED.md` for deprecation policy and transition guardrails.
 
-### Amplify readiness notes
-- Frontend includes `frontend/amplify.yml` and `next.config.js` standalone output.
-- No AWS values are hardcoded; only environment-based API URL wiring is required.
-
-### Current parity status
-- Full workflow parity is not complete yet (see `MIGRATION_REPORT.md` for remaining gaps and mapping).
