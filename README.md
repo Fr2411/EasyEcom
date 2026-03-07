@@ -60,6 +60,8 @@ pip install reportlab
 - Sales page includes a tenant-scoped (`client_id`) latest-50 confirmed sales grid sourced from reconciled confirmed orders, with item-presence and ledger-posting/mismatch flags for operational-financial alignment.
 - Reconciliation now treats ledger `earning` rows with `source_type=sale` as valid when `source_id` points to either a sales `order_id` or an `invoice_id` that maps to an order, preventing false orphan-ledger warnings in Sales Records.
 - Cart tab for draft sales orders groups carts by customer, supports draft line edits/removals, and confirms drafts into invoice + shipment with idempotency checks.
+- Sales now follows a cart-first draft workflow: Sell tab adds lines into per-customer draft carts (with optional force-new-cart), Cart tab provides full draft workspace (pricing/meta, line edits, empty/cancel/confirm), and confirmation remains all-or-nothing with stock + price revalidation.
+- Cart/order totals use a consistent formula across draft compute + confirmation + invoice + ledger posting: `grand_total = subtotal - discount + tax + delivery_cost`; delivery customer charge stays in grand total while delivery expense is posted separately when configured.
 - Invoice and shipping mark downloads are generated on-demand as PDFs using `reportlab` (`easy_ecom/app/ui/documents.py`).
 - Sales records grid normalizes invoice status into a dedicated `invoice_status` column before display, avoiding `status` column collisions with sales order status during joins.
 - Refund approval flow (`returns.csv`, `return_items.csv`, `refunds.csv`) is restricted to non-employee roles and posts ledger `expense` category `Refunds`.
