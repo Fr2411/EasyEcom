@@ -107,7 +107,7 @@ pip install reportlab
   - `variant-generator.tsx`: new-product mode CSV-driven variant generation (size/color/other).
   - `variant-grid.tsx`: editable compact variants table with qty/cost/price/max discount, remove action, and same-cost helper.
   - `save-summary.tsx`: sticky save/reset bar, validation feedback, and live summary totals.
-- Data source is currently mocked through `frontend/lib/mocks/products-stock.ts` using an API-like contract (`getProductsStockSnapshot`, `saveProductStock`) so backend wiring can replace it later with minimal UI changes.
+- Products & Stock frontend now calls real FastAPI endpoints through `frontend/lib/api/products-stock.ts` (`GET /products-stock/snapshot`, `POST /products-stock/save`) using `NEXT_PUBLIC_API_BASE_URL`, while preserving the existing workspace UI contract.
 - Variant math and transformation helpers live in `frontend/lib/products-stock/variant-utils.ts` and are reused by the workspace flow.
 - Test coverage for the page behavior is in `frontend/__tests__/products-stock.test.tsx`.
 
