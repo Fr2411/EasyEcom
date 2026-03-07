@@ -1,6 +1,11 @@
 # Easy_Ecom
 
-Enterprise-grade multi-tenant inventory, sales, and finance web app built with Streamlit + CSV persistence.
+Enterprise-grade multi-tenant commerce platform with a **Next.js frontend** and **Python backend services**.
+
+## Architecture (Current Direction)
+- **Frontend (primary UI):** `frontend/` (Next.js App Router, TypeScript), targeted for AWS Amplify deployment.
+- **Backend:** Python application and service/domain layers under `easy_ecom/`.
+- **Legacy UI:** Streamlit app remains temporarily for maintenance and parity checks, but is **deprecated as product UI**.
 
 ## Features
 - Multi-tenant architecture with strict `client_id` scoping.
@@ -11,36 +16,47 @@ Enterprise-grade multi-tenant inventory, sales, and finance web app built with S
 - Product master pricing controls (`default_selling_price`, `max_discount_pct`) are managed directly in Catalog & Stock during save.
 - Sales workspace includes **Sell**, **Cart**, and **Sales Records** tabs so confirmed sales history remains visible alongside invoice/payment status.
 - Returns workflow with request/approval, refund records, automatic refund expense ledger posting, and optional restocking.
-- Login-first app flow: before authentication, sidebar navigation is hidden so only the login page is visible; successful login redirects to dashboard, and the sidebar top-left always shows the EasyEcom app brand.
 - Inventory and sales can persist either parent `products.product_id` or `product_variants.variant_id` (variant-level stock/sales), while keeping product names as display snapshots.
 - Client and super-admin dashboards with KPI cards, date-filtered Plotly charts, and cross-client health monitoring.
 - Sequence generation per client/year (`INV`, `SHP`, `LOT`).
 - Append-only transaction tables and audit-ready architecture.
 - Inventory and finance transactions persist `user_id` to keep operator-level traceability for manual and auto-posted entries.
 - CSV persistence with file locks and repository abstraction for DB migration readiness.
-- Super Admin **Data Manager** tab (inside Admin page) for controlled CSV inspection/editing with schema checks, backups, high-risk save confirmation, and direct CSV download.
 
 ## Project Structure
-Implemented under `easy_ecom/` with layers:
-- `app/` Streamlit pages and UI.
-- `core/` config, security, RBAC, IDs, audit utility.
-- `domain/models` Pydantic validation contracts.
-- `domain/services` business logic.
-- `data/store` CSV schema and storage.
-- `data/repos` repository adapters.
-- `scripts/init_data.py` table bootstrapping + role seed + super admin creation.
-- `tests/` core service tests.
+- `frontend/`: Next.js frontend app (App Router, route shells, navigation).
+- `easy_ecom/`: Python backend code.
+  - `app/`: Legacy Streamlit pages and UI (**deprecated for primary product UI**).
+  - `core/`: config, security, RBAC, IDs, audit utility.
+  - `domain/models`: Pydantic validation contracts.
+  - `domain/services`: business logic.
+  - `data/store`: CSV schema and storage.
+  - `data/repos`: repository adapters.
+  - `scripts/init_data.py`: table bootstrapping + role seed + super admin creation.
+  - `tests/`: core service tests.
 
 ## Setup
+
+### Backend (Python service)
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -e .[dev]
 cp .env.example .env
 python easy_ecom/scripts/init_data.py
-streamlit run easy_ecom/app/main.py
+```
 
-# opens on Login page; after authentication app redirects to Dashboard
+### Frontend (Next.js primary UI)
+```bash
+cd frontend
+npm install
+cp .env.example .env.local
+npm run dev
+```
+
+### Optional: legacy Streamlit UI (deprecated)
+```bash
+streamlit run easy_ecom/app/main.py
 ```
 
 If you see `ModuleNotFoundError: No module named 'reportlab'`, reinstall project dependencies from the repo root:
@@ -49,6 +65,42 @@ If you see `ModuleNotFoundError: No module named 'reportlab'`, reinstall project
 pip install -e .[dev]
 # or minimum fix
 pip install reportlab
+```
+
+## Frontend migration foundation (Next.js + Amplify)
+
+### Routes scaffolded (App Router)
+- `/`
+- `/dashboard`
+- `/products-stock` (priority shell)
+- `/sales`
+- `/customers`
+- `/purchases`
+- `/settings`
+
+### Shared app shell
+- Reusable sidebar
+- Reusable top header
+- Responsive content layout
+
+### Amplify deployment
+- `amplify.yml` at repository root configures Amplify for the `frontend/` app.
+- `frontend/amplify.yml` is also included for frontend-local build/deploy configuration.
+- Set `NEXT_PUBLIC_API_BASE_URL` in Amplify environment variables.
+
+## AWS App Runner
+This repo includes `apprunner.yaml` at the repository root for legacy Python/Streamlit hosting on AWS App Runner.
+
+- Runtime: `python311`
+- Pre-run step installs the package with `python3 -m pip install .` (required for Python 3.11 revised build flow)
+- Runtime command delegates to `startup.sh` so initialization runs once, then `exec` hands over to Streamlit as the long-running foreground process
+
+`startup.sh`:
+- Runs `python3 -m easy_ecom.scripts.init_data`
+- Starts Streamlit bound to `0.0.0.0` on `PORT` (defaults to `8080`)
+
+```bash
+./startup.sh
 ```
 
 
@@ -141,90 +193,4 @@ pytest
 ruff check .
 black --check .
 ```
-
-## AWS App Runner
-This repo includes `apprunner.yaml` at the repository root for AWS App Runner deployments.
-
-- Runtime: `python311`
-- Pre-run step installs the package with `python3 -m pip install .` (required for Python 3.11 revised build flow)
-- Runtime command delegates to `startup.sh` so initialization runs once, then `exec` hands over to Streamlit as the long-running foreground process
-
-`startup.sh`:
-- Runs `python3 -m easy_ecom.scripts.init_data`
-- Starts Streamlit bound to `0.0.0.0` on `PORT` (defaults to `8080`)
-
-```bash
-./startup.sh
-```
-
-### Recommended App Runner console settings (MVP / lowest cost)
-- Source directory: repository root (`/`)
-- Runtime: Python 3.11 (managed)
-- Port: `8080`
-- Health check path: `/`
-- CPU/Memory: `0.25 vCPU / 0.5 GB` to start (lowest practical baseline)
-- Auto deploy trigger: `Manual` for cost control during MVP; switch to `Automatic` after release cadence stabilizes
-
-
-### Realtime refresh behavior
-- Dashboard, Inventory, Sales, and Customers pages include manual **Refresh** buttons.
-- Dashboard includes optional timed auto-refresh (5/10/15/30s) via `streamlit-autorefresh`.
-- Dashboard renders `Last refreshed at <timestamp>` for operator visibility.
-
-### Sales customer type-ahead + auto-save
-- Sales flow accepts freeform customer entry.
-- Case-insensitive exact name match is tenant-scoped and can disambiguate matching customers.
-- On sale confirm: unmatched customers are auto-created; matched customers are auto-updated when edited fields changed.
-- Auto-create/auto-update actions are audit-logged.
-
-## Recent enterprise updates
-- Dashboard KPI now includes **Sold Qty MTD** and keeps Orders MTD as a secondary KPI.
-- Product aging analytics include sold/remaining quantities with percentages.
-- Added parent/variant model using `product_variants.csv` with per-variant stock and selling support.
-- Cart confirmation now supports delivery cost on draft orders and auto-posts Delivery expense to ledger.
-- Added migration scripts: `easy_ecom/scripts/migrate_sales_items_to_variants.py` and `easy_ecom/scripts/migrate_inventory_to_variants.py`.
-
-## Frontend migration status (Next.js + Amplify)
-
-### Direction update
-- Streamlit UI is now **deprecated for product UI work** and retained only for temporary maintenance.
-- The production frontend target is `frontend/` (Next.js App Router, TypeScript).
-- Backend business logic remains in Python services and FastAPI routes during phased migration.
-
-### Frontend structure
-- `frontend/app/`: App Router entry + route groups.
-- `frontend/components/layout/`: reusable shell layout pieces (sidebar + top header + app shell).
-- `frontend/components/ui/`: small reusable UI primitives for page scaffolds.
-- `frontend/lib/api/`: API client utilities.
-- `frontend/lib/env.ts`: strict public environment variable contract.
-- `frontend/types/`: shared route/navigation types.
-
-### Routes scaffolded
-- `/dashboard`
-- `/products-stock` (**priority shell ready first**)
-- `/sales`
-- `/customers`
-- `/purchases`
-- `/settings`
-
-### Local run
-```bash
-# backend
-pip install .
-uvicorn easy_ecom.api.app:app --reload --port 8000
-
-# frontend
-cd frontend
-npm install
-cp .env.example .env.local
-npm run dev
-```
-
-### Amplify deployment
-- `frontend/amplify.yml` is included for CI/CD build/deploy steps.
-- Set `NEXT_PUBLIC_API_BASE_URL` in Amplify environment variables.
-- `next.config.js` uses `output: 'standalone'` for production packaging.
-
-### Streamlit deprecation marker
-- See `easy_ecom/app/DEPRECATED.md` for deprecation policy and transition guardrails.
 
