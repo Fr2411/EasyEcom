@@ -7,7 +7,8 @@ Enterprise-grade multi-tenant inventory, sales, and finance web app built with S
 - RBAC roles: `SUPER_ADMIN`, `CLIENT_OWNER`, `CLIENT_MANAGER`, `CLIENT_EMPLOYEE`, `FINANCE_ONLY`.
 - Product catalog, inventory lots, FIFO depletion, sales flow (order/invoice/shipment), customer CRM, ledger finance.
 - Client-level currency support (`currency_code` required, `currency_symbol` optional) with shared money formatter across dashboard/sales/finance screens.
-- Product master pricing controls (`default_selling_price`, `max_discount_pct`) with role-gated pricing editor in Inventory.
+- Unified **Catalog & Stock** workspace replaces separate Products/Inventory creation pages with tenant-scoped product search, editable master fields, variant upsert, and inline stock posting.
+- Product master pricing controls (`default_selling_price`, `max_discount_pct`) are managed directly in Catalog & Stock during save.
 - Sales workspace includes **Sell**, **Cart**, and **Sales Records** tabs so confirmed sales history remains visible alongside invoice/payment status.
 - Returns workflow with request/approval, refund records, automatic refund expense ledger posting, and optional restocking.
 - Login-first app flow: before authentication, sidebar navigation is hidden so only the login page is visible; successful login redirects to dashboard, and the sidebar top-left always shows the EasyEcom app brand.
@@ -126,6 +127,7 @@ Invoices are financial documents and are updated to mirror payment/refund status
 - The default "main" entry in sidebar navigation is hidden after login to declutter tab navigation.
 - Product features input accepts free-form text (line breaks, commas, or bullet points) and is normalized to JSON (`{"features": [...]}`) before persistence.
 - Admin Data Manager validates required table columns from schema, creates timestamped backups before overwrite, and flags high-risk tables (`users`, `roles`, `ledger`, inventory/sales transaction files) with extra save confirmation.
+- Catalog & Stock stock explorer provides parent-product rollups (available qty, variant count, default selling price, average cost, stock value) with interactive variant-level drill-down while preserving append-only inventory transactions and FIFO usage in downstream sales.
 
 ## Defaults
 - `ALLOW_BACKORDER=false` blocks overselling.
