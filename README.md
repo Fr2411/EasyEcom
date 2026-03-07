@@ -48,6 +48,34 @@ python easy_ecom/scripts/init_data.py
 
 Optional backend CORS configuration for frontend environments:
 
+### Storage backend configuration (CSV default, PostgreSQL foundation)
+
+Products & Stock now supports a configuration-based repository backend selector while keeping CSV as the live default.
+
+```bash
+# keep current behavior
+STORAGE_BACKEND=CSV
+
+# enable PostgreSQL-backed Products & Stock repositories
+STORAGE_BACKEND=POSTGRES
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_DB=easy_ecom
+POSTGRES_USER=easy_ecom
+POSTGRES_PASSWORD=easy_ecom
+POSTGRES_ECHO=false
+POSTGRES_POOL_SIZE=5
+POSTGRES_MAX_OVERFLOW=10
+
+# optional full DSN override (useful for tests/local variants)
+# POSTGRES_DSN=postgresql+psycopg://easy_ecom:easy_ecom@localhost:5432/easy_ecom
+```
+
+When `STORAGE_BACKEND=POSTGRES`, the backend initializes SQLAlchemy engine/session and ensures schema for the Products & Stock slice tables: `clients`, `users`, `categories`, `suppliers`, `products`, `product_variants`, `inventory_txn`.
+
+CSV repositories remain intact and default, so existing behavior is preserved unless explicitly switched.
+
+
 ```bash
 # comma-separated exact origins (defaults to localhost Next.js dev origins)
 CORS_ALLOW_ORIGINS=http://localhost:3000,http://127.0.0.1:3000

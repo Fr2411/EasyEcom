@@ -1,8 +1,18 @@
 from __future__ import annotations
 
+from typing import Protocol
+
 import pandas as pd
 
 from easy_ecom.data.store.csv_store import CsvStore
+
+
+class TabularRepo(Protocol):
+    def all(self) -> pd.DataFrame: ...
+
+    def append(self, row: dict[str, str]) -> None: ...
+
+    def save(self, df: pd.DataFrame) -> None: ...
 
 
 class BaseRepo:

@@ -4,13 +4,12 @@ import itertools
 
 from easy_ecom.core.ids import new_uuid
 from easy_ecom.core.time_utils import now_iso
-from easy_ecom.data.repos.csv.product_variants_repo import ProductVariantsRepo
-from easy_ecom.data.repos.csv.products_repo import ProductsRepo
+from easy_ecom.data.repos.base import TabularRepo
 from easy_ecom.domain.models.product import ProductCreate, ProductPricingUpdate
 
 
 class ProductService:
-    def __init__(self, repo: ProductsRepo, variants_repo: ProductVariantsRepo | None = None):
+    def __init__(self, repo: TabularRepo, variants_repo: TabularRepo | None = None):
         self.repo = repo
         self.variants_repo = variants_repo
 
