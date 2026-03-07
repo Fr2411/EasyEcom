@@ -183,3 +183,44 @@ This repo includes `apprunner.yaml` at the repository root for AWS App Runner de
 - Added parent/variant model using `product_variants.csv` with per-variant stock and selling support.
 - Cart confirmation now supports delivery cost on draft orders and auto-posts Delivery expense to ledger.
 - Added migration scripts: `easy_ecom/scripts/migrate_sales_items_to_variants.py` and `easy_ecom/scripts/migrate_inventory_to_variants.py`.
+
+## API + Next.js mirror migration (in progress)
+
+### New structure
+- `easy_ecom/api/`: FastAPI layer (thin routers + schemas).
+- `frontend/`: Next.js (TypeScript, App Router) mirror frontend target.
+- `easy_ecom/app/`: existing Streamlit app retained during phased migration.
+
+### Run backend API locally
+```bash
+pip install .
+uvicorn easy_ecom.api.app:app --reload --port 8000
+```
+
+### Run frontend locally
+```bash
+cd frontend
+npm install
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8000 npm run dev
+```
+
+### Frontend/API connection contract
+- Frontend uses `NEXT_PUBLIC_API_BASE_URL` for all API calls.
+- Login uses `POST /auth/login` and stores returned user context in browser storage.
+- Protected requests send:
+  - `X-User-Id`
+  - `X-Client-Id`
+  - `X-Roles`
+
+### Initial mirrored routes delivered
+- `/login` ↔ Streamlit `01_Login.py`
+- `/dashboard` ↔ Streamlit `02_Dashboard.py` (KPI summary parity-first)
+- `/products-stock` ↔ Streamlit `03_Catalog_&_Stock.py` (search/upsert core path)
+- `/sales` ↔ Streamlit `05_Sales.py` (confirm-sale core path)
+
+### Amplify readiness notes
+- Frontend includes `frontend/amplify.yml` and `next.config.js` standalone output.
+- No AWS values are hardcoded; only environment-based API URL wiring is required.
+
+### Current parity status
+- Full workflow parity is not complete yet (see `MIGRATION_REPORT.md` for remaining gaps and mapping).
