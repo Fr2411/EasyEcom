@@ -16,7 +16,7 @@ def test_backend_selector_defaults_to_csv(monkeypatch):
 
     cfg = Settings()
 
-    assert cfg.storage_backend == "CSV"
+    assert cfg.storage_backend == "csv"
 
 
 def test_backend_selector_returns_csv_repos_for_default(tmp_path: Path):
@@ -28,8 +28,8 @@ def test_backend_selector_returns_csv_repos_for_default(tmp_path: Path):
 
 def test_backend_selector_returns_postgres_repos(monkeypatch, tmp_path: Path):
     sqlite_path = tmp_path / "products_stock.db"
-    monkeypatch.setenv("STORAGE_BACKEND", "POSTGRES")
-    monkeypatch.setenv("POSTGRES_DSN", f"sqlite+pysqlite:///{sqlite_path}")
+    monkeypatch.setenv("STORAGE_BACKEND", "postgres")
+    monkeypatch.setenv("DATABASE_URL", f"sqlite+pysqlite:///{sqlite_path}")
     cfg = Settings()
 
     repos = build_product_stock_repos(cfg, CsvStore(tmp_path / "csv"))
@@ -37,3 +37,12 @@ def test_backend_selector_returns_postgres_repos(monkeypatch, tmp_path: Path):
     assert isinstance(repos.products, ProductsPostgresRepo)
     assert isinstance(repos.product_variants, ProductVariantsPostgresRepo)
     assert isinstance(repos.inventory_txn, InventoryTxnPostgresRepo)
+
+
+def test_database_url_overrides_postgres_dsn(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///from_database_url.db")
+    monkeypatch.setenv("POSTGRES_DSN", "sqlite+pysqlite:///from_postgres_dsn.db")
+
+    cfg = Settings()
+
+    assert cfg.postgres_dsn == "sqlite+pysqlite:///from_database_url.db"

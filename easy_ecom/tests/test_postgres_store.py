@@ -7,9 +7,21 @@ from easy_ecom.data.store.postgres import (
 )
 
 
+def test_postgres_engine_and_session_factory(monkeypatch, tmp_path):
+    sqlite_path = tmp_path / "init.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite+pysqlite:///{sqlite_path}")
+
+    settings = Settings()
+    engine = build_postgres_engine(settings)
+    session_factory = build_session_factory(engine)
+
+    with session_factory() as session:
+        assert session.bind is engine
+
+
 def test_init_postgres_schema_and_products_repo_roundtrip(monkeypatch, tmp_path):
     sqlite_path = tmp_path / "store.db"
-    monkeypatch.setenv("POSTGRES_DSN", f"sqlite+pysqlite:///{sqlite_path}")
+    monkeypatch.setenv("DATABASE_URL", f"sqlite+pysqlite:///{sqlite_path}")
 
     engine = build_postgres_engine(Settings())
     init_postgres_schema(engine)
