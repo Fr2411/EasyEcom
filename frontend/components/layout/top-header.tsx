@@ -2,10 +2,10 @@ export function TopHeader() {
   return (
     <header className="top-header">
       <div>
-        <p className="eyebrow">Workspace</p>
-        <p className="header-title">Production Frontend Shell</p>
+        <p className="eyebrow">EasyEcom</p>
+        <p className="header-title">Operations Workspace</p>
       </div>
-      <div className="header-pill">AWS Amplify Ready</div>
+      <div className="header-pill">Catalog + Inventory</div>
     </header>
   );
 }
