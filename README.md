@@ -46,6 +46,15 @@ cp .env.example .env
 python easy_ecom/scripts/init_data.py
 ```
 
+Optional backend CORS configuration for frontend environments:
+
+```bash
+# comma-separated exact origins (defaults to localhost Next.js dev origins)
+CORS_ALLOW_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+```
+
+`*.amplifyapp.com` origins are also allowed via regex in the FastAPI app middleware.
+
 ### Frontend (Next.js primary UI)
 ```bash
 cd frontend
@@ -208,3 +217,13 @@ ruff check .
 black --check .
 ```
 
+## FastAPI API skeleton (Products & Stock)
+
+Current backend API includes these foundational endpoints for the Next.js integration path:
+
+- `GET /health`
+- `GET /session/me` (header-based session identity passthrough)
+- `GET /products-stock/snapshot` (stock explorer snapshot)
+- `POST /products-stock/save` (catalog + stock save workflow)
+
+These routes currently run on top of CSV repositories through the existing domain services so the PostgreSQL/RDS migration path remains service/repository-compatible.

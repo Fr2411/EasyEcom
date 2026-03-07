@@ -80,6 +80,7 @@ def test_core_api_endpoints() -> None:
     client = TestClient(app)
 
     assert client.post("/auth/login", json={"email": "admin@example.com", "password": "secret"}).status_code == 200
+    assert client.get("/session/me").status_code == 200
     assert client.get("/dashboard/summary").status_code == 200
     assert client.get("/products/search", params={"q": "wid"}).status_code == 200
     assert client.get("/products/p1").status_code == 200
@@ -103,6 +104,26 @@ def test_core_api_endpoints() -> None:
         },
     ).status_code == 200
     assert client.get("/stock/explorer").status_code == 200
+    assert client.get("/products-stock/snapshot").status_code == 200
+    assert client.post(
+        "/products-stock/save",
+        json={
+            "typed_product_name": "Widget",
+            "variant_entries": [
+                {
+                    "variant_id": "",
+                    "variant_label": "Default",
+                    "size": "",
+                    "color": "",
+                    "other": "",
+                    "qty": 1,
+                    "unit_cost": 2,
+                    "default_selling_price": 10,
+                    "max_discount_pct": 10,
+                }
+            ],
+        },
+    ).status_code == 200
     assert client.post(
         "/inventory/add",
         json={"product_id": "p1", "product_name": "Widget", "qty": 1, "unit_cost": 1},
