@@ -41,7 +41,10 @@ class ProductService:
 
     def create(self, payload: ProductCreate) -> str:
         df = self.repo.all()
-        dup = df[(df["client_id"] == payload.client_id) & (df["product_name"].str.lower() == payload.product_name.lower())]
+        dup = df[
+            (df["client_id"] == payload.client_id)
+            & (df["product_name"].str.lower() == payload.product_name.lower())
+        ]
         if not dup.empty:
             raise ValueError("Duplicate product name for this client")
         product_id = new_uuid()
@@ -66,7 +69,13 @@ class ProductService:
             }
         )
         if self.variants_repo is not None:
-            self.generate_variants(payload.client_id, product_id, payload.sizes_csv, payload.colors_csv, payload.others_csv)
+            self.generate_variants(
+                payload.client_id,
+                product_id,
+                payload.sizes_csv,
+                payload.colors_csv,
+                payload.others_csv,
+            )
         return product_id
 
     def list_by_client(self, client_id: str):
@@ -75,16 +84,39 @@ class ProductService:
             return df
         return df[df["client_id"] == client_id].copy()
 
+    def get_by_id(self, client_id: str, product_id: str) -> dict[str, str] | None:
+        product_id = str(product_id or "").strip()
+        if not product_id:
+            return None
+        df = self.list_by_client(client_id)
+        if df.empty:
+            return None
+        match = df[df["product_id"].astype(str) == product_id]
+        if match.empty:
+            return None
+        return match.iloc[0].to_dict()
+
     def list_variants(self, client_id: str, parent_product_id: str):
         if self.variants_repo is None:
             return []
         d = self.variants_repo.all()
         if d.empty:
             return []
-        scoped = d[(d["client_id"] == client_id) & (d["parent_product_id"] == parent_product_id) & (d["is_active"].astype(str).str.lower() == "true")].copy()
+        scoped = d[
+            (d["client_id"] == client_id)
+            & (d["parent_product_id"] == parent_product_id)
+            & (d["is_active"].astype(str).str.lower() == "true")
+        ].copy()
         return scoped.sort_values("variant_name").to_dict(orient="records")
 
-    def generate_variants(self, client_id: str, parent_product_id: str, sizes_csv: str, colors_csv: str, others_csv: str) -> list[dict[str, str]]:
+    def generate_variants(
+        self,
+        client_id: str,
+        parent_product_id: str,
+        sizes_csv: str,
+        colors_csv: str,
+        others_csv: str,
+    ) -> list[dict[str, str]]:
         if self.variants_repo is None:
             return []
         products = self.list_by_client(client_id)
@@ -99,8 +131,13 @@ class ProductService:
         all_rows = self.variants_repo.all()
         existing_keys: set[str] = set()
         if not all_rows.empty:
-            scoped = all_rows[(all_rows["client_id"] == client_id) & (all_rows["parent_product_id"] == parent_product_id)]
-            existing_keys = set((scoped["size"] + "|" + scoped["color"] + "|" + scoped["other"]).tolist())
+            scoped = all_rows[
+                (all_rows["client_id"] == client_id)
+                & (all_rows["parent_product_id"] == parent_product_id)
+            ]
+            existing_keys = set(
+                (scoped["size"] + "|" + scoped["color"] + "|" + scoped["other"]).tolist()
+            )
 
         created: list[dict[str, str]] = []
         for size, color, other in itertools.product(sizes, colors, others):
@@ -154,7 +191,9 @@ class ProductService:
         d = self.variants_repo.all()
         if d.empty:
             return d
-        scoped = d[(d["client_id"] == client_id) & (d["is_active"].astype(str).str.lower() == "true")]
+        scoped = d[
+            (d["client_id"] == client_id) & (d["is_active"].astype(str).str.lower() == "true")
+        ]
         return scoped.copy()
 
     def update_master(
@@ -171,13 +210,18 @@ class ProductService:
         max_discount_pct: float,
     ) -> None:
         products = self.repo.all()
-        idx = products[(products["client_id"] == client_id) & (products["product_id"] == product_id)].index
+        idx = products[
+            (products["client_id"] == client_id) & (products["product_id"] == product_id)
+        ].index
         if len(idx) == 0:
             raise ValueError("Product not found for this client")
         dup = products[
             (products["client_id"] == client_id)
             & (products["product_id"] != product_id)
-            & (products["product_name"].fillna("").astype(str).str.lower() == product_name.strip().lower())
+            & (
+                products["product_name"].fillna("").astype(str).str.lower()
+                == product_name.strip().lower()
+            )
         ]
         if not dup.empty:
             raise ValueError("Duplicate product name for this client")
@@ -199,6 +243,8 @@ class ProductService:
         size: str,
         color: str,
         other: str,
+        default_selling_price: float | None = None,
+        max_discount_pct: float | None = None,
     ) -> tuple[dict[str, str], bool]:
         if self.variants_repo is None:
             raise ValueError("Variant repository not configured")
@@ -216,6 +262,15 @@ class ProductService:
             ]
             if not scoped.empty:
                 row = scoped.iloc[0].to_dict()
+                if default_selling_price is not None or max_discount_pct is not None:
+                    i = scoped.index[0]
+                    if default_selling_price is not None:
+                        variants.loc[i, "default_selling_price"] = str(default_selling_price)
+                        row["default_selling_price"] = str(default_selling_price)
+                    if max_discount_pct is not None:
+                        variants.loc[i, "max_discount_pct"] = str(max_discount_pct)
+                        row["max_discount_pct"] = str(max_discount_pct)
+                    self.variants_repo.save(variants)
                 return row, False
 
         products = self.list_by_client(client_id)
@@ -235,17 +290,29 @@ class ProductService:
             "color": color,
             "other": other,
             "sku_code": sku_code,
-            "default_selling_price": str(product.get("default_selling_price", "0")),
-            "max_discount_pct": str(product.get("max_discount_pct", "0")),
+            "default_selling_price": str(
+                default_selling_price
+                if default_selling_price is not None
+                else product.get("default_selling_price", "0")
+            ),
+            "max_discount_pct": str(
+                max_discount_pct
+                if max_discount_pct is not None
+                else product.get("max_discount_pct", "0")
+            ),
             "is_active": "true",
             "created_at": now_iso(),
         }
         self.variants_repo.append(record)
         return record, True
 
-    def update_pricing(self, client_id: str, product_id: str, payload: ProductPricingUpdate) -> None:
+    def update_pricing(
+        self, client_id: str, product_id: str, payload: ProductPricingUpdate
+    ) -> None:
         products = self.repo.all()
-        idx = products[(products["client_id"] == client_id) & (products["product_id"] == product_id)].index
+        idx = products[
+            (products["client_id"] == client_id) & (products["product_id"] == product_id)
+        ].index
         if len(idx) == 0:
             raise ValueError("Product not found for this client")
         i = idx[0]
