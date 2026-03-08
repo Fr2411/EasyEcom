@@ -40,6 +40,16 @@ IMPORT_ORDER: tuple[str, ...] = (
     "inventory_txn",
 )
 
+TABLE_KEY_COLUMNS: dict[str, str] = {
+    "clients": "client_id",
+    "users": "user_id",
+    "categories": "category_id",
+    "suppliers": "supplier_id",
+    "products": "product_id",
+    "product_variants": "variant_id",
+    "inventory_txn": "txn_id",
+}
+
 
 @dataclass(frozen=True)
 class ImportContext:
@@ -286,8 +296,9 @@ def run_import(context: ImportContext, printer: Callable[[str], None] = print) -
 
 def validate_counts(
     context: ImportContext, printer: Callable[[str], None] = print
-) -> tuple[bool, dict[str, tuple[int, int]]]:
+) -> tuple[bool, dict[str, tuple[int, int]], dict[str, tuple[int, int]]]:
     comparison: dict[str, tuple[int, int]] = {}
+    key_comparison: dict[str, tuple[int, int]] = {}
     all_match = True
     printer("CSV vs Postgres row-count validation:")
     for table in IMPORT_ORDER:
@@ -298,7 +309,21 @@ def validate_counts(
         if status == "MISMATCH":
             all_match = False
         printer(f"- {table}: csv={csv_count}, postgres={pg_count} [{status}]")
-    return all_match, comparison
+
+    printer("CSV vs Postgres key-count validation:")
+    for table in IMPORT_ORDER:
+        key_column = TABLE_KEY_COLUMNS[table]
+        csv_keys = set(context.source_rows[table][key_column].astype(str))
+        pg_keys = set(context.target_repos[table].all()[key_column].astype(str))
+        csv_key_count = len(csv_keys)
+        pg_key_count = len(pg_keys)
+        key_comparison[table] = (csv_key_count, pg_key_count)
+        status = "OK" if csv_key_count == pg_key_count else "MISMATCH"
+        if status == "MISMATCH":
+            all_match = False
+        printer(f"- {table} ({key_column}): csv={csv_key_count}, postgres={pg_key_count} [{status}]")
+
+    return all_match, comparison, key_comparison
 
 
 def parse_args() -> argparse.Namespace:
@@ -332,14 +357,14 @@ def main() -> int:
     context = build_import_context(settings)
 
     if args.validate_only:
-        ok, _ = validate_counts(context)
+        ok, _, _ = validate_counts(context)
         return 0 if ok else 1
 
     run_import(context)
     if args.skip_validate:
         return 0
 
-    ok, _ = validate_counts(context)
+    ok, _, _ = validate_counts(context)
     return 0 if ok else 1
 
 
