@@ -92,7 +92,7 @@ Run the import:
 python -m easy_ecom.scripts.import_products_stock_to_postgres
 ```
 
-Run validation only (count comparison CSV vs Postgres):
+Run validation only (row counts + key counts comparison CSV vs Postgres):
 
 ```bash
 python -m easy_ecom.scripts.import_products_stock_to_postgres --validate-only
