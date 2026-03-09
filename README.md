@@ -71,7 +71,9 @@ Key frontend vars (`frontend/.env.example`):
 - `POST /auth/login` validates credentials against PostgreSQL, then issues signed cookie `easy_ecom_session` (`HttpOnly`, same-site/secure flags from backend config).
 - Session payload stores `user_id`, `client_id`, `email`, `name`, `roles`, and expiry (`exp`) signed by `SESSION_SECRET`.
 - `GET /auth/me` now uses strict session payload validation: missing cookie, bad signature, malformed payload, expired payload, or missing roles return `401 Unauthorized` (never `500`).
-- Frontend bootstrap (`AuthProvider`) keeps `credentials: include` and treats `401` as logged-out state while logging unexpected API failures for visibility.
+- Frontend middleware and env parsing normalize `NEXT_PUBLIC_SESSION_COOKIE_NAME` so quoted values (for example, `"easy_ecom_session"`) still resolve correctly.
+- Frontend bootstrap (`AuthProvider`) keeps `credentials: include` and distinguishes auth bootstrap failures: `401` (`unauthorized`), `5xx` (`server`), and network failures (`network`) for safer client routing behavior.
+- Protected app routes are wrapped in `AuthRouteGuard` and only redirect to `/login` on confirmed `401` from `/auth/me`; login routes redirect authenticated users to `/dashboard`.
 - Login page only redirects to `/dashboard` after a successful `/auth/me` verification.
 
 ## Migration and legacy
