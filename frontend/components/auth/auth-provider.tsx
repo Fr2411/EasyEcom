@@ -1,6 +1,7 @@
 'use client';
 import { createContext, useContext, useEffect, useState } from 'react';
 import { getCurrentUser, type SessionUser } from '@/lib/api/auth';
+import { ApiError } from '@/lib/api/client';
 
 const AuthContext = createContext<{ user: SessionUser | null; loading: boolean }>({ user: null, loading: true });
 
@@ -8,7 +9,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
-    getCurrentUser().then(setUser).catch(() => setUser(null)).finally(() => setLoading(false));
+    getCurrentUser()
+      .then(setUser)
+      .catch((error: unknown) => {
+        if (error instanceof ApiError && error.status === 401) {
+          setUser(null);
+          return;
+        }
+        console.error('Failed to bootstrap auth session', error);
+        setUser(null);
+      })
+      .finally(() => setLoading(false));
   }, []);
   return <AuthContext.Provider value={{ user, loading }}>{children}</AuthContext.Provider>;
 }
