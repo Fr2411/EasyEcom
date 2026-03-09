@@ -4,12 +4,12 @@ from easy_ecom.core.config import settings
 from easy_ecom.core.ids import new_uuid
 from easy_ecom.core.time_utils import now_iso
 from easy_ecom.core.security import hash_password
-from easy_ecom.data.store.csv_store import CsvStore
+from easy_ecom.data.store.runtime import build_runtime_store
 from easy_ecom.data.store.schema import ROLES_SEED, TABLE_SCHEMAS
 
 
 def main() -> None:
-    store = CsvStore(settings.data_dir)
+    store = build_runtime_store(settings)
     for table, cols in TABLE_SCHEMAS.items():
         store.ensure_table(table, cols)
 

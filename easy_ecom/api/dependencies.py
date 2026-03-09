@@ -8,7 +8,6 @@ from easy_ecom.core.config import settings
 from easy_ecom.core.rbac import can_access_page
 from easy_ecom.core.session import SessionSigner
 from easy_ecom.data.repos.csv.audit_repo import AuditRepo
-from easy_ecom.data.repos.csv.auth_repo import CsvAuthRepo
 from easy_ecom.data.repos.csv.clients_repo import ClientsRepo
 from easy_ecom.data.repos.csv.customers_repo import CustomersRepo
 from easy_ecom.data.repos.csv.finance_repo import LedgerRepo
@@ -24,10 +23,10 @@ from easy_ecom.data.repos.csv.sales_repo import (
 )
 from easy_ecom.data.repos.csv.sequences_repo import SequencesRepo
 from easy_ecom.data.repos.csv.users_repo import RolesRepo, UserRolesRepo, UsersRepo
-from easy_ecom.data.repos.factory import build_product_stock_repos
 from easy_ecom.data.repos.postgres.auth_repo import PostgresAuthRepo
-from easy_ecom.data.store.csv_store import CsvStore
 from easy_ecom.data.store.postgres_db import build_postgres_engine, build_session_factory
+from easy_ecom.data.store.runtime import build_runtime_store
+from easy_ecom.data.store.schema import TABLE_SCHEMAS
 from easy_ecom.domain.models.auth import AuthenticatedUser
 from easy_ecom.domain.services.auth_service import AuthService
 from easy_ecom.domain.services.catalog_stock_service import CatalogStockService
@@ -48,36 +47,37 @@ class RequestUser:
 
 class ServiceContainer:
     def __init__(self) -> None:
-        self.store = CsvStore(settings.data_dir)
+        self.store = build_runtime_store(settings)
+        for table, columns in TABLE_SCHEMAS.items():
+            self.store.ensure_table(table, columns)
+
         self.users = UserService(
             UsersRepo(self.store), RolesRepo(self.store), UserRolesRepo(self.store)
         )
         self.sequence = SequenceService(SequencesRepo(self.store))
-        if settings.storage_backend == "postgres":
-            engine = build_postgres_engine(settings)
-            self.auth = AuthService(PostgresAuthRepo(build_session_factory(engine)))
-        else:
-            self.auth = AuthService(CsvAuthRepo(UsersRepo(self.store), UserRolesRepo(self.store)))
 
-        product_stock_repos = build_product_stock_repos(settings, self.store)
-        self.products = ProductService(
-            product_stock_repos.products, product_stock_repos.product_variants
-        )
+        engine = build_postgres_engine(settings)
+        self.auth = AuthService(PostgresAuthRepo(build_session_factory(engine)))
+
+        products_repo = ProductsRepo(self.store)
+        variants_repo = ProductVariantsRepo(self.store)
+        inventory_repo = InventoryTxnRepo(self.store)
+        self.products = ProductService(products_repo, variants_repo)
         self.inventory = InventoryService(
-            product_stock_repos.inventory_txn,
+            inventory_repo,
             self.sequence,
-            products_repo=product_stock_repos.products,
-            variants_repo=product_stock_repos.product_variants,
+            products_repo=products_repo,
+            variants_repo=variants_repo,
         )
         self.catalog_stock = CatalogStockService(self.products, self.inventory)
         self.dashboard = DashboardService(
-            InventoryTxnRepo(self.store),
+            inventory_repo,
             LedgerRepo(self.store),
             SalesOrdersRepo(self.store),
             InvoicesRepo(self.store),
             SalesOrderItemsRepo(self.store),
-            ProductsRepo(self.store),
-            ProductVariantsRepo(self.store),
+            products_repo,
+            variants_repo,
             ClientsRepo(self.store),
             PaymentsRepo(self.store),
         )
@@ -89,13 +89,12 @@ class ServiceContainer:
             PaymentsRepo(self.store),
             self.inventory,
             self.sequence,
-            FinanceService(LedgerRepo(self.store), InventoryTxnRepo(self.store)),
-            ProductsRepo(self.store),
+            FinanceService(LedgerRepo(self.store), inventory_repo),
+            products_repo,
             CustomersRepo(self.store),
             AuditRepo(self.store),
-            ProductVariantsRepo(self.store),
+            variants_repo,
         )
-
 
 
 def _signer() -> SessionSigner:

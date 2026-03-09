@@ -46,7 +46,7 @@ class Settings:
         default_factory=lambda: _to_bool(os.getenv("CREATE_DEFAULT_CLIENT"), False)
     )
     storage_backend: str = field(
-        default_factory=lambda: os.getenv("STORAGE_BACKEND", "csv").strip().lower()
+        default_factory=lambda: os.getenv("STORAGE_BACKEND", "postgres").strip().lower()
     )
     database_url: str | None = field(
         default_factory=lambda: (os.getenv("DATABASE_URL", "").strip() or None)
