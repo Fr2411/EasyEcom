@@ -118,3 +118,31 @@ class InventoryTxnModel(Base):
     source_type: Mapped[str] = mapped_column(String(64), default="")
     source_id: Mapped[str] = mapped_column(String(64), default="")
     lot_id: Mapped[str] = mapped_column(String(64), default="")
+
+
+class ImportRunModel(Base):
+    __tablename__ = "import_runs"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    entity_name: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
+    source_file: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), index=True, nullable=False, default="running")
+    total_rows: Mapped[str] = mapped_column(String(32), default="0")
+    inserted_rows: Mapped[str] = mapped_column(String(32), default="0")
+    updated_rows: Mapped[str] = mapped_column(String(32), default="0")
+    skipped_rows: Mapped[str] = mapped_column(String(32), default="0")
+    failed_rows: Mapped[str] = mapped_column(String(32), default="0")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    started_at: Mapped[str] = mapped_column(String(64), default="")
+    finished_at: Mapped[str] = mapped_column(String(64), default="")
+
+
+class ImportErrorModel(Base):
+    __tablename__ = "import_errors"
+
+    error_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    import_run_id: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    row_number: Mapped[str] = mapped_column(String(32), default="")
+    raw_data: Mapped[str] = mapped_column(Text, default="")
+    error_message: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[str] = mapped_column(String(64), default="")

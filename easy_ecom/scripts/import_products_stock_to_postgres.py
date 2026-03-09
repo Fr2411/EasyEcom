@@ -23,6 +23,7 @@ from easy_ecom.data.repos.postgres.products_stock_repo import (
     SuppliersPostgresRepo,
     UsersPostgresRepo,
 )
+from easy_ecom.data.store import postgres_models  # noqa: F401
 from easy_ecom.data.store.csv_store import CsvStore
 from easy_ecom.data.store.postgres import (
     build_postgres_engine,
