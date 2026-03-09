@@ -8,7 +8,8 @@ export async function apiClient<T>(path: string, init?: RequestInit): Promise<T>
       'Content-Type': 'application/json',
       ...(init?.headers ?? {})
     },
-    cache: 'no-store'
+    cache: 'no-store',
+    credentials: 'include'
   });
 
   if (!response.ok) {
