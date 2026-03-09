@@ -1,3 +1,5 @@
+import { getSessionCookieName } from '@/lib/auth/session-cookie';
+
 const requiredPublicEnv = {
   NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL
 };
@@ -8,6 +10,7 @@ export function getPublicEnv() {
   }
 
   return {
-    apiBaseUrl: requiredPublicEnv.NEXT_PUBLIC_API_BASE_URL
+    apiBaseUrl: requiredPublicEnv.NEXT_PUBLIC_API_BASE_URL,
+    sessionCookieName: getSessionCookieName()
   };
 }
