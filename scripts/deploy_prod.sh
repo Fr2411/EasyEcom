@@ -1,34 +1,46 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+EC2_HOST="44.197.250.127"
+EC2_USER="ec2-user"
+SSH_KEY="$HOME/Downloads/EasyEcomKey.pem"
+
 echo "[deploy] Backend production deploy script"
 echo "[deploy] Reminder: use this for backend and/or database schema changes only."
 echo "[deploy] Frontend changes deploy separately via Amplify after merge to main."
-
 echo "[deploy] Connecting to EC2 and running deploy steps..."
-ssh -o IPQoS=throughput -o IdentitiesOnly=yes -i ~/Downloads/EasyEcomKey.pem ec2-user@44.197.250.127 <<'EOF_REMOTE'
+
+ssh -T \
+  -o IPQoS=throughput \
+  -o IdentitiesOnly=yes \
+  -i "$SSH_KEY" \
+  "${EC2_USER}@${EC2_HOST}" <<'REMOTE'
 set -euo pipefail
 
-echo "[remote] Entering project directory"
-cd /home/ec2-user/EasyEcom
+PROJECT_DIR="/home/ec2-user/EasyEcom"
+VENV_DIR="$PROJECT_DIR/.venv"
+SERVICE_NAME="easy-ecom.service"
 
-echo "[remote] Pulling latest main"
+echo "[remote] Entering project directory"
+cd "$PROJECT_DIR"
+
+echo "[remote] Pulling latest code from main"
 git pull origin main
 
 echo "[remote] Activating virtual environment"
-source /home/ec2-user/EasyEcom/.venv/bin/activate
+source "$VENV_DIR/bin/activate"
 
-echo "[remote] Installing package"
+echo "[remote] Installing dependencies"
 pip install -e .
 
-echo "[remote] Running migrations"
+echo "[remote] Running database migrations"
 alembic upgrade head
 
-echo "[remote] Restarting service"
-sudo systemctl restart easy-ecom.service
+echo "[remote] Restarting backend service"
+sudo systemctl restart "$SERVICE_NAME"
 
 echo "[remote] Service status"
-sudo systemctl status easy-ecom.service --no-pager
-EOF_REMOTE
+sudo systemctl status "$SERVICE_NAME" --no-pager
 
-echo "[deploy] Production backend deploy completed successfully."
+echo "[remote] Deployment completed successfully"
+REMOTE
