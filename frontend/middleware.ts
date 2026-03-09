@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { getSessionCookieName, hasUsableSessionCookie } from '@/lib/auth/session-cookie';
 
-const SESSION_COOKIE = process.env.NEXT_PUBLIC_SESSION_COOKIE_NAME ?? 'easy_ecom_session';
+const SESSION_COOKIE = getSessionCookieName();
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -9,7 +10,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const hasSession = Boolean(request.cookies.get(SESSION_COOKIE)?.value);
+  const hasSession = hasUsableSessionCookie(request.cookies.get(SESSION_COOKIE)?.value);
 
   if (!hasSession && pathname !== '/login') {
     return NextResponse.redirect(new URL('/login', request.url));
