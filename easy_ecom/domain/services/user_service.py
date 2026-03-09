@@ -3,6 +3,7 @@ from __future__ import annotations
 from easy_ecom.core.config import settings
 from easy_ecom.core.ids import new_uuid
 from easy_ecom.core.time_utils import now_iso
+from easy_ecom.core.security import hash_password
 from easy_ecom.domain.models.user import UserCreate
 from easy_ecom.data.repos.csv.users_repo import RolesRepo, UserRolesRepo, UsersRepo
 
@@ -21,7 +22,8 @@ class UserService:
                 "client_id": payload.client_id,
                 "name": payload.name,
                 "email": str(payload.email).lower(),
-                "password": payload.password,
+                "password": "",
+                "password_hash": hash_password(payload.password),
                 "is_active": "true",
                 "created_at": now_iso(),
             }
@@ -49,24 +51,7 @@ class UserService:
         if env_admin:
             return env_admin
 
-        users = self.users.all()
-        matches = users[users["email"].str.lower() == email.lower()]
-        if matches.empty:
-            return None
-        user = matches.iloc[0].to_dict()
-        if password != user["password"]:
-            return None
-        roles_df = self.user_roles.all()
-        roles = roles_df[roles_df["user_id"] == user["user_id"]]["role_code"].tolist()
-        if "SUPER_ADMIN" not in roles:
-            return None
-        return {
-            "user_id": user["user_id"],
-            "client_id": user["client_id"],
-            "roles": ",".join(roles),
-            "name": user["name"],
-            "email": user["email"],
-        }
+        return None
 
     def list_users(self, client_id: str):
         users = self.users.all()
@@ -85,7 +70,10 @@ class UserService:
         i = idx[0]
         users.loc[i, "name"] = name
         users.loc[i, "email"] = email.lower()
-        users.loc[i, "password"] = password
+        users.loc[i, "password"] = ""
+        if "password_hash" not in users.columns:
+            users["password_hash"] = ""
+        users.loc[i, "password_hash"] = hash_password(password)
         users.loc[i, "is_active"] = "true" if is_active else "false"
         self.users.save(users)
 
