@@ -46,6 +46,18 @@ cp .env.example .env
 python easy_ecom/scripts/init_data.py
 ```
 
+## Production backend deploy
+
+After a PR is merged to `main`, deploy backend updates to production with:
+
+```bash
+bash scripts/deploy_prod.sh
+```
+
+- Frontend-only changes: Amplify deploys automatically from `main`.
+- Backend changes: run the deploy script.
+- Database schema changes: run the deploy script (it includes `alembic upgrade head`).
+
 Optional backend CORS configuration for frontend environments:
 
 ### Storage backend configuration (CSV default, PostgreSQL foundation)
