@@ -35,6 +35,14 @@ npm run dev
 
 ## Deployment
 
+### Production backend deploy shortcut
+
+Use the production deploy helper for backend and/or database schema changes:
+
+```bash
+./scripts/deploy_prod.sh
+```
+
 ### Frontend (canonical)
 - AWS Amplify using root `amplify.yml` (appRoot: `frontend`).
 
