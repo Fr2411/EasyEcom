@@ -70,3 +70,26 @@ Key frontend vars (`frontend/.env.example`):
 - CSV files in `easy_ecom/data_files/` are no longer a production persistence path.
 - Keep migration scripts for one-time import and reconciliation.
 - Streamlit UI is deprecated and excluded from production startup.
+
+## Local RDS Access (DBeaver / psql)
+
+Step 1:
+Run:
+```bash
+bash scripts/db_tunnel.sh
+```
+
+Step 2:
+In DBeaver use:
+- Host: 127.0.0.1
+- Port: 5433
+- Database: easyecom
+- Username: easyecom_admin
+
+Optional:
+```bash
+bash scripts/db_psql.sh
+```
+
+- This works because RDS is private and accessed via EC2 SSH tunnel.
+- If SSH fails, check EC2 security group inbound rule for current public IP.
