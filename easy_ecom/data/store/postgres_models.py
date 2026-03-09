@@ -34,8 +34,16 @@ class UserModel(Base):
     name: Mapped[str] = mapped_column(String(255), default="")
     email: Mapped[str] = mapped_column(String(255), default="")
     password: Mapped[str] = mapped_column(Text, default="")
+    password_hash: Mapped[str] = mapped_column(Text, default="")
     is_active: Mapped[str] = mapped_column(String(8), default="true")
     created_at: Mapped[str] = mapped_column(String(64), default="")
+
+
+class UserRoleModel(Base):
+    __tablename__ = "user_roles"
+
+    user_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    role_code: Mapped[str] = mapped_column(String(64), primary_key=True)
 
 
 class CategoryModel(Base):

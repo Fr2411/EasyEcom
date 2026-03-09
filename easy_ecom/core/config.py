@@ -74,6 +74,18 @@ class Settings:
             ("http://localhost:3000", "http://127.0.0.1:3000"),
         )
     )
+    session_secret: str = field(default_factory=lambda: os.getenv("SESSION_SECRET", "dev-session-secret"))
+    session_cookie_name: str = field(default_factory=lambda: os.getenv("SESSION_COOKIE_NAME", "easy_ecom_session"))
+    session_cookie_secure: bool = field(
+        default_factory=lambda: _to_bool(os.getenv("SESSION_COOKIE_SECURE"), False)
+    )
+    session_cookie_domain: str | None = field(
+        default_factory=lambda: (os.getenv("SESSION_COOKIE_DOMAIN", "").strip() or None)
+    )
+    session_cookie_samesite: str = field(
+        default_factory=lambda: os.getenv("SESSION_COOKIE_SAMESITE", "lax").strip().lower()
+    )
+    bcrypt_rounds: int = field(default_factory=lambda: _to_int(os.getenv("BCRYPT_ROUNDS"), 12))
 
     @property
     def postgres_dsn(self) -> str:
