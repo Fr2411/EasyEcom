@@ -3,6 +3,7 @@ from __future__ import annotations
 from easy_ecom.core.config import settings
 from easy_ecom.core.ids import new_uuid
 from easy_ecom.core.time_utils import now_iso
+from easy_ecom.core.security import hash_password
 from easy_ecom.data.store.csv_store import CsvStore
 from easy_ecom.data.store.schema import ROLES_SEED, TABLE_SCHEMAS
 
@@ -29,7 +30,8 @@ def main() -> None:
                 "client_id": "GLOBAL",
                 "name": "Super Admin",
                 "email": admin_email,
-                "password": admin_password,
+                "password": "",
+                "password_hash": hash_password(admin_password),
                 "is_active": "true",
                 "created_at": now_iso(),
             },

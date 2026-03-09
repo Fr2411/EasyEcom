@@ -308,3 +308,43 @@ The initial API layer includes:
 - Central router registration (`easy_ecom/api/routers/__init__.py`) with dedicated routers (`health`, `session`) so follow-up routes can be added in-place without touching app startup flow.
 
 This keeps the current CSV-backed service/repository architecture intact while establishing a stable API entrypoint for incremental route delivery.
+
+## Authentication flow (Next.js + FastAPI)
+
+- Login page route: `frontend/app/login/page.tsx` (`/login`).
+- Backend auth endpoints:
+  - `POST /auth/login`
+  - `POST /auth/logout`
+  - `GET /auth/me`
+- Session is cookie-based (`httpOnly`) and signed with `SESSION_SECRET`.
+- All protected API routes use cookie session validation and return `401` when anonymous/invalid.
+- `is_active=true` is required for login.
+
+### Legacy plaintext password migration
+
+- `users` now includes `password_hash`.
+- On successful login for a legacy user (`password` only), backend:
+  1. verifies plaintext once,
+  2. stores bcrypt hash in `password_hash`,
+  3. clears `password`.
+
+### Required backend env vars
+
+- `SESSION_SECRET`
+- `SESSION_COOKIE_NAME` (default: `easy_ecom_session`)
+- `SESSION_COOKIE_SECURE` (`true` in production HTTPS)
+- `SESSION_COOKIE_DOMAIN` (e.g. `easy-ecom.online`)
+- `SESSION_COOKIE_SAMESITE` (recommended: `lax`)
+- `BCRYPT_ROUNDS`
+
+### Frontend auth behavior
+
+- Next.js middleware redirects anonymous users to `/login`.
+- Authenticated users hitting `/login` are redirected to `/dashboard`.
+- API calls include credentials (`credentials: 'include'`).
+
+### Admin password reset recommendation
+
+- Do not store plaintext passwords.
+- Set/reset passwords by writing only bcrypt hash into `password_hash` and clearing `password`.
+- Validate with `/auth/login` and `/auth/me` after reset.
