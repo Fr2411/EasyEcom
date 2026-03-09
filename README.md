@@ -65,6 +65,15 @@ Key frontend vars (`frontend/.env.example`):
 - `NEXT_PUBLIC_API_BASE_URL`
 - `NEXT_PUBLIC_SESSION_COOKIE_NAME`
 
+
+## Auth session flow (cookie-based)
+
+- `POST /auth/login` validates credentials against PostgreSQL, then issues signed cookie `easy_ecom_session` (`HttpOnly`, same-site/secure flags from backend config).
+- Session payload stores `user_id`, `client_id`, `email`, `name`, `roles`, and expiry (`exp`) signed by `SESSION_SECRET`.
+- `GET /auth/me` now uses strict session payload validation: missing cookie, bad signature, malformed payload, expired payload, or missing roles return `401 Unauthorized` (never `500`).
+- Frontend bootstrap (`AuthProvider`) keeps `credentials: include` and treats `401` as logged-out state while logging unexpected API failures for visibility.
+- Login page only redirects to `/dashboard` after a successful `/auth/me` verification.
+
 ## Migration and legacy
 
 - CSV files in `easy_ecom/data_files/` are no longer a production persistence path.

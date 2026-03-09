@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from fastapi import Cookie, Depends, HTTPException
 
@@ -43,6 +44,15 @@ class RequestUser:
     user_id: str
     client_id: str
     roles: list[str]
+
+
+@dataclass(frozen=True)
+class SessionUserPayload:
+    user_id: str
+    client_id: str
+    roles: list[str]
+    email: str
+    name: str
 
 
 class ServiceContainer:
@@ -117,32 +127,66 @@ def build_session_token(user: AuthenticatedUser) -> str:
     )
 
 
+def _unauthorized() -> HTTPException:
+    return HTTPException(status_code=401, detail="Unauthorized")
+
+
+def _parse_roles(raw_roles: Any) -> list[str] | None:
+    if isinstance(raw_roles, str):
+        roles = [role.strip() for role in raw_roles.split(",") if role.strip()]
+        return roles or None
+    if isinstance(raw_roles, list):
+        roles = [str(role).strip() for role in raw_roles if str(role).strip()]
+        return roles or None
+    return None
+
+
+def _parse_session_user(token: str | None) -> SessionUserPayload:
+    if not token:
+        raise _unauthorized()
+    payload = _signer().loads(token)
+    if not isinstance(payload, dict):
+        raise _unauthorized()
+
+    user_id = str(payload.get("user_id", "")).strip()
+    client_id = str(payload.get("client_id", "")).strip()
+    email = str(payload.get("email", "")).strip()
+    name = str(payload.get("name", "")).strip()
+    roles = _parse_roles(payload.get("roles"))
+
+    if not user_id or not client_id or not email or not roles:
+        raise _unauthorized()
+
+    return SessionUserPayload(
+        user_id=user_id,
+        client_id=client_id,
+        roles=roles,
+        email=email,
+        name=name,
+    )
+
+
 def get_current_user(
     session_token: str | None = Cookie(default=None, alias=settings.session_cookie_name),
 ) -> RequestUser:
-    if not session_token:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    payload = _signer().loads(session_token)
-    if payload is None:
-        raise HTTPException(status_code=401, detail="Unauthorized")
+    session_user = _parse_session_user(session_token)
     return RequestUser(
-        user_id=str(payload.get("user_id", "")),
-        client_id=str(payload.get("client_id", "")),
-        roles=[str(r) for r in payload.get("roles", [])],
+        user_id=session_user.user_id,
+        client_id=session_user.client_id,
+        roles=session_user.roles,
     )
 
 
 def get_authenticated_user(
-    user: RequestUser = Depends(get_current_user),
     session_token: str | None = Cookie(default=None, alias=settings.session_cookie_name),
 ) -> AuthenticatedUser:
-    payload = _signer().loads(session_token or "") or {}
+    session_user = _parse_session_user(session_token)
     return AuthenticatedUser(
-        user_id=user.user_id,
-        client_id=user.client_id,
-        roles=user.roles,
-        email=str(payload.get("email", "")),
-        name=str(payload.get("name", "")),
+        user_id=session_user.user_id,
+        client_id=session_user.client_id,
+        roles=session_user.roles,
+        email=session_user.email,
+        name=session_user.name,
     )
 
 
