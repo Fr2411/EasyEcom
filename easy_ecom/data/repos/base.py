@@ -4,7 +4,7 @@ from typing import Protocol
 
 import pandas as pd
 
-from easy_ecom.data.store.csv_store import CsvStore
+from easy_ecom.data.store.tabular_store import TabularStore
 
 
 class TabularRepo(Protocol):
@@ -18,7 +18,7 @@ class TabularRepo(Protocol):
 class BaseRepo:
     table_name: str
 
-    def __init__(self, store: CsvStore):
+    def __init__(self, store: TabularStore):
         self.store = store
 
     def all(self) -> pd.DataFrame:
