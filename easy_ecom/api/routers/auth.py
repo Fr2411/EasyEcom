@@ -6,7 +6,7 @@ from easy_ecom.api.dependencies import (
     get_authenticated_user,
     get_container,
 )
-from easy_ecom.api.schemas.auth import LoginRequest, LoginResponse
+from easy_ecom.api.schemas.auth import CurrentUserResponse, LoginRequest, LoginResponse
 from easy_ecom.core.config import settings
 from easy_ecom.domain.models.auth import AuthenticatedUser
 
@@ -48,14 +48,14 @@ def logout(response: Response) -> dict[str, bool]:
     return {"success": True}
 
 
-@router.get("/me")
-def me(user: AuthenticatedUser = Depends(get_authenticated_user)) -> dict[str, str | bool | None]:
-    return {
-        "user_id": user.user_id,
-        "email": user.email,
-        "name": user.name,
-        "role": user.roles[0] if user.roles else "",
-        "client_id": user.client_id,
-        "roles": user.roles,
-        "is_authenticated": True,
-    }
+@router.get("/me", response_model=CurrentUserResponse)
+def me(user: AuthenticatedUser = Depends(get_authenticated_user)) -> CurrentUserResponse:
+    return CurrentUserResponse(
+        user_id=user.user_id,
+        email=user.email,
+        name=user.name,
+        role=user.roles[0],
+        client_id=user.client_id,
+        roles=user.roles,
+        is_authenticated=True,
+    )

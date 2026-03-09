@@ -1,7 +1,7 @@
 'use client';
 import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { login } from '@/lib/api/auth';
+import { getCurrentUser, login } from '@/lib/api/auth';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -14,6 +14,7 @@ export default function LoginPage() {
     setError('');
     try {
       await login(email, password);
+      await getCurrentUser();
       router.replace('/dashboard');
     } catch {
       setError('Invalid email/password or inactive account.');
