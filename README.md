@@ -57,6 +57,7 @@ bash scripts/deploy_prod.sh
 - Frontend-only changes: Amplify deploys automatically from `main`.
 - Backend changes: run the deploy script.
 - Database schema changes: run the deploy script (it includes `alembic upgrade head`).
+- Script connection defaults are centralized at the top of `scripts/deploy_prod.sh` (`EC2_HOST`, `EC2_USER`, `SSH_KEY`) so credentials/host updates are made in one place.
 
 Optional backend CORS configuration for frontend environments:
 
