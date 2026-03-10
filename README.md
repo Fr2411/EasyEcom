@@ -109,6 +109,12 @@ Phase 2 backend outcomes:
 - Dashboard tenant access is locked to authenticated session `client_id` (query-string tenant override is ignored).
 - Runtime storage selection now honors `STORAGE_BACKEND=csv` for local/test runs without forcing Postgres initialization.
 
+
+## Sales module delivery (Phase 5)
+
+- `docs/phase5_sales_module.md` — Sales MVP implementation details (tenant-scoped API endpoints, PostgreSQL schema additions, transactional stock impact, and deferred scope).
+- Sales frontend route (`/sales`) is now an operational module with recent list/search, multi-line create workflow, and detail inspection backed by real backend APIs (`GET/POST /sales`, `GET /sales/{sale_id}`, `GET /sales/form-options`).
+
 ## Migration and legacy
 
 - CSV files in `easy_ecom/data_files/` are no longer a production persistence path.
