@@ -32,6 +32,7 @@ from easy_ecom.data.store.runtime import build_runtime_store
 from easy_ecom.data.store.schema import TABLE_SCHEMAS
 from easy_ecom.domain.models.auth import AuthenticatedUser
 from easy_ecom.domain.services.auth_service import AuthService
+from easy_ecom.domain.services.admin_api_service import AdminApiService
 from easy_ecom.domain.services.catalog_stock_service import CatalogStockService
 from easy_ecom.domain.services.dashboard_service import DashboardService
 from easy_ecom.domain.services.finance_service import FinanceService
@@ -104,6 +105,7 @@ class ServiceContainer:
         self.sales_mvp = None
         self.finance_mvp = None
         self.returns_mvp = None
+        self.admin = None
         if settings.storage_backend == "postgres":
             engine = build_postgres_engine(settings)
             session_factory = build_session_factory(engine)
@@ -111,6 +113,7 @@ class ServiceContainer:
             self.sales_mvp = SalesApiService(session_factory)
             self.finance_mvp = FinanceApiService(session_factory)
             self.returns_mvp = ReturnsApiService(session_factory)
+            self.admin = AdminApiService(session_factory)
         else:
             self.customers = CustomerService(CustomersRepo(self.store))
 

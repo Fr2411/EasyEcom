@@ -135,6 +135,11 @@ Phase 6 adds a production inventory operations module:
 - `docs/phase8_returns_module.md` — Returns MVP implementation details (tenant-scoped API endpoints, PostgreSQL schema additions, stock restoration and sale-finance adjustment integrity rules, and deferred scope).
 - Returns frontend route (`/returns`) is now an operational module with recent list/search, sale lookup, line-based return creation with eligibility validation, and return detail inspection backed by real backend APIs (`GET/POST /returns`, `GET /returns/{return_id}`, `GET /returns/sales-lookup`, `GET /returns/sales/{sale_id}`).
 
+## Admin & roles hardening delivery (Phase 9)
+
+- `docs/phase9_admin_roles.md` — Admin & Roles hardening implementation details (tenant-scoped admin APIs, backend role enforcement, and deferred audit/password reset boundaries).
+- Admin frontend route (`/admin`) is now an operational module with tenant users list, role assignment controls, active/inactive toggles, add-user workflow, and admin access-denied/empty/loading states backed by backend APIs (`GET/POST/PATCH /admin/users`, `PATCH /admin/users/{user_id}/roles`, `GET /admin/roles`, `GET /admin/audit`).
+
 ## Migration and legacy
 
 - CSV files in `easy_ecom/data_files/` are no longer a production persistence path.
