@@ -7,7 +7,7 @@ from easy_ecom.api.dependencies import (
     get_current_user,
     require_page_access,
 )
-from easy_ecom.api.schemas.dashboard import DashboardSummaryResponse
+from easy_ecom.api.schemas.dashboard import DashboardOverviewResponse, DashboardSummaryResponse
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -28,3 +28,13 @@ def summary(
         Outstanding_Receivables=snapshot["Outstanding Receivables"],
         Data_Health_Score=snapshot["Data Health Score"],
     )
+
+
+@router.get("/overview", response_model=DashboardOverviewResponse)
+def overview(
+    user: RequestUser = Depends(get_current_user),
+    container: ServiceContainer = Depends(get_container),
+) -> DashboardOverviewResponse:
+    require_page_access(user, "Dashboard")
+    snapshot = container.dashboard.overview_snapshot(user.client_id)
+    return DashboardOverviewResponse(**snapshot)

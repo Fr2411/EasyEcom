@@ -279,3 +279,39 @@ def test_dashboard_business_sections_data(tmp_path: Path):
     fin = svc.financial_health("c1", "D", pd.Timestamp.utcnow() - pd.Timedelta(days=2), pd.Timestamp.utcnow())
     assert fin["outstanding_invoices"] == 100.0
     assert fin["unpaid_confirmed_sales"] == 100.0
+
+
+def test_dashboard_overview_snapshot_with_data(tmp_path: Path):
+    store = setup_store(tmp_path)
+    clients = ClientsRepo(store)
+    products = ProductsRepo(store)
+    variants = ProductVariantsRepo(store)
+    inv = InventoryTxnRepo(store)
+    orders = SalesOrdersRepo(store)
+
+    now = pd.Timestamp.utcnow().strftime("%Y-%m-%dT10:00:00")
+    clients.append({"client_id": "c1", "business_name": "Alpha", "owner_name": "O", "phone": "", "email": "", "address": "", "website_url": "", "facebook_url": "", "instagram_url": "", "whatsapp_number": "", "created_at": now, "status": "active", "notes": ""})
+    products.append({"product_id": "p1", "client_id": "c1", "supplier": "sup", "product_name": "Product 1", "category": "cat", "prd_description": "", "prd_features_json": "{}", "created_at": now, "is_active": "True"})
+    variants.append({"variant_id": "v1", "client_id": "c1", "parent_product_id": "p1", "variant_name": "Default", "size": "", "color": "", "other": "", "sku_code": "SKU-1", "default_selling_price": "10", "max_discount_pct": "10", "is_active": "True", "created_at": now})
+    inv.append({"txn_id": "t1", "client_id": "c1", "timestamp": now, "txn_type": "IN", "product_id": "p1", "qty": "10", "unit_cost": "5", "total_cost": "50", "supplier_snapshot": "", "note": "Initial stock", "source_type": "purchase", "source_id": "", "lot_id": "L1"})
+    orders.append({"order_id": "o1", "client_id": "c1", "timestamp": now, "customer_id": "cu1", "status": "confirmed", "subtotal": "100", "discount": "0", "tax": "0", "grand_total": "100", "note": ""})
+
+    overview = build_service(store).overview_snapshot("c1")
+
+    assert overview["kpis"]["total_products"] == 1
+    assert overview["kpis"]["total_variants"] == 1
+    assert overview["business_health"]["inventory_value"] == 50.0
+    assert overview["business_health"]["sales_count_last_30_days"] == 1
+    assert len(overview["top_products"]) == 1
+
+
+def test_dashboard_overview_snapshot_empty_tenant(tmp_path: Path):
+    store = setup_store(tmp_path)
+    overview = build_service(store).overview_snapshot("missing")
+
+    assert overview["kpis"]["total_products"] == 0
+    assert overview["kpis"]["total_variants"] == 0
+    assert overview["kpis"]["current_stock_units"] == 0.0
+    assert overview["business_health"]["inventory_value"] == 0.0
+    assert overview["recent_activity"] == []
+    assert overview["top_products"] == []
