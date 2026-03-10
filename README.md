@@ -110,6 +110,14 @@ Phase 2 backend outcomes:
 - Runtime storage selection now honors `STORAGE_BACKEND=csv` for local/test runs without forcing Postgres initialization.
 
 
+
+## Inventory module delivery (Phase 6)
+
+Phase 6 adds a production inventory operations module:
+- Backend inventory APIs now include stock overview, movement ledger, item detail, and tenant-safe manual adjustment workflows.
+- Frontend now includes `/inventory` with stock table, movement ledger, filters, detail panel, and stock adjustment action flow.
+- Existing sales-created stock reductions remain visible through the same ledger source (`inventory_txn`), with no duplicate subtraction logic.
+
 ## Sales module delivery (Phase 5)
 
 - `docs/phase5_sales_module.md` — Sales MVP implementation details (tenant-scoped API endpoints, PostgreSQL schema additions, transactional stock impact, and deferred scope).
