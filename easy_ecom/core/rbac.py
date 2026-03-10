@@ -10,9 +10,15 @@ PAGE_PERMISSIONS: dict[str, set[str]] = {
     "Customers": {"SUPER_ADMIN", "CLIENT_OWNER", "CLIENT_MANAGER", "CLIENT_EMPLOYEE"},
     "Finance": {"SUPER_ADMIN", "CLIENT_OWNER", "FINANCE_ONLY"},
     "Returns": {"SUPER_ADMIN", "CLIENT_OWNER", "CLIENT_MANAGER", "CLIENT_EMPLOYEE", "FINANCE_ONLY"},
-    "Admin": {"SUPER_ADMIN"},
+    "Admin": {"SUPER_ADMIN", "CLIENT_OWNER", "CLIENT_MANAGER"},
     "Settings": {"SUPER_ADMIN", "CLIENT_OWNER", "CLIENT_MANAGER", "FINANCE_ONLY", "CLIENT_EMPLOYEE"},
 }
+
+ADMIN_MANAGE_USERS_ROLES = {"SUPER_ADMIN", "CLIENT_OWNER", "CLIENT_MANAGER"}
+
+
+def has_any_role(user_roles: Iterable[str], allowed_roles: set[str]) -> bool:
+    return bool(set(user_roles).intersection(allowed_roles))
 
 
 def can_access_page(user_roles: Iterable[str], page_name: str) -> bool:

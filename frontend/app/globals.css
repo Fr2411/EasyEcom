@@ -541,3 +541,100 @@ body {
 .finance-cards { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
 .finance-module .ps-card p { margin: 0; color: var(--muted); font-size: 0.8rem; }
 .finance-module .ps-card strong { margin-top: 0.4rem; display: block; font-size: 1rem; }
+
+.admin-layout {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 0.8rem;
+}
+
+.admin-card {
+  border: 1px solid var(--line);
+  border-radius: 0.7rem;
+  padding: 0.9rem;
+  background: #fff;
+}
+
+.admin-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.7rem;
+  margin-bottom: 0.8rem;
+}
+
+.admin-header-row input,
+.admin-form input,
+.admin-form select {
+  border: 1px solid var(--line);
+  border-radius: 0.45rem;
+  padding: 0.45rem 0.55rem;
+  font: inherit;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+}
+
+.admin-table th,
+.admin-table td {
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+  padding: 0.45rem;
+}
+
+.admin-role-list {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.admin-role-list label {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.admin-form {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.admin-form label {
+  display: grid;
+  gap: 0.25rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.admin-form button,
+.admin-table button {
+  border: 1px solid var(--line);
+  border-radius: 0.45rem;
+  background: #fff;
+  padding: 0.4rem 0.55rem;
+  cursor: pointer;
+}
+
+.admin-error {
+  color: #b91c1c;
+}
+
+.admin-muted {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.admin-checkbox {
+  display: flex !important;
+  gap: 0.45rem !important;
+  align-items: center;
+}
+
+@media (max-width: 980px) {
+  .admin-layout {
+    grid-template-columns: 1fr;
+  }
+}
