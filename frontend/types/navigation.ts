@@ -11,6 +11,7 @@ export const NAV_ITEMS: NavigationItem[] = [
   { href: '/sales', label: 'Sales' },
   { href: '/customers', label: 'Customers' },
   { href: '/finance', label: 'Finance' },
+  { href: '/returns', label: 'Returns' },
   { href: '/purchases', label: 'Purchases' },
   { href: '/settings', label: 'Settings' }
 ];
