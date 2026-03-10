@@ -26,6 +26,21 @@ class ClientModel(Base):
     notes: Mapped[str] = mapped_column(Text, default="")
 
 
+class TenantSettingsModel(Base):
+    __tablename__ = "tenant_settings"
+
+    client_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    timezone: Mapped[str] = mapped_column(String(64), default="UTC")
+    tax_registration_no: Mapped[str] = mapped_column(String(120), default="")
+    low_stock_threshold: Mapped[str] = mapped_column(String(16), default="5")
+    default_payment_terms_days: Mapped[str] = mapped_column(String(16), default="0")
+    default_sales_note: Mapped[str] = mapped_column(Text, default="")
+    default_inventory_adjustment_reasons: Mapped[str] = mapped_column(Text, default="")
+    sales_prefix: Mapped[str] = mapped_column(String(12), default="SAL")
+    returns_prefix: Mapped[str] = mapped_column(String(12), default="RET")
+    updated_at: Mapped[str] = mapped_column(String(64), default="")
+
+
 class UserModel(Base):
     __tablename__ = "users"
 
