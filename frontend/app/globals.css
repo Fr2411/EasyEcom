@@ -537,3 +537,7 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+.finance-cards { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+.finance-module .ps-card p { margin: 0; color: var(--muted); font-size: 0.8rem; }
+.finance-module .ps-card strong { margin-top: 0.4rem; display: block; font-size: 1rem; }
