@@ -17,12 +17,18 @@ export function getSessionCookieName(rawCookieName = process.env.NEXT_PUBLIC_SES
   return normalized || DEFAULT_SESSION_COOKIE_NAME;
 }
 
+const STALE_COOKIE_VALUES = new Set(['deleted', 'null', 'undefined']);
+
 export function hasUsableSessionCookie(cookieValue: string | undefined): boolean {
   if (!cookieValue) {
     return false;
   }
 
-  const normalized = stripWrappingQuotes(cookieValue);
-  return normalized.length > 0;
+  const normalized = stripWrappingQuotes(cookieValue).toLowerCase();
+  if (normalized.length === 0) {
+    return false;
+  }
+
+  return !STALE_COOKIE_VALUES.has(normalized);
 }
 
