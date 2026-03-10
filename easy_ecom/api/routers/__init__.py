@@ -12,6 +12,7 @@ from easy_ecom.api.routers.products_stock import router as products_stock_router
 from easy_ecom.api.routers.sales import router as sales_router
 from easy_ecom.api.routers.returns import router as returns_router
 from easy_ecom.api.routers.session import router as session_router
+from easy_ecom.api.routers.settings import router as settings_router
 
 api_router = APIRouter()
 api_router.include_router(health_router)
@@ -28,3 +29,5 @@ api_router.include_router(sales_router)
 api_router.include_router(customers_router)
 api_router.include_router(finance_router)
 api_router.include_router(returns_router)
+
+api_router.include_router(settings_router)

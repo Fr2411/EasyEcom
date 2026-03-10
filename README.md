@@ -140,6 +140,12 @@ Phase 6 adds a production inventory operations module:
 - `docs/phase9_admin_roles.md` — Admin & Roles hardening implementation details (tenant-scoped admin APIs, backend role enforcement, and deferred audit/password reset boundaries).
 - Admin frontend route (`/admin`) is now an operational module with tenant users list, role assignment controls, active/inactive toggles, add-user workflow, and admin access-denied/empty/loading states backed by backend APIs (`GET/POST/PATCH /admin/users`, `PATCH /admin/users/{user_id}/roles`, `GET /admin/roles`, `GET /admin/audit`).
 
+
+## Settings module delivery (Phase 10)
+
+- `docs/phase10_settings_module.md` — Settings MVP implementation details (tenant-scoped business profile APIs, operational preferences persistence, sequence preference storage, access-control boundaries, and deferred activation items).
+- Settings frontend route (`/settings`) is now an operational module with business profile, preferences, sequence settings, and tenant context sections backed by backend APIs (`GET/PATCH /settings/business-profile`, `GET/PATCH /settings/preferences`, `GET/PATCH /settings/sequences`, `GET /settings/tenant-context`).
+
 ## Migration and legacy
 
 - CSV files in `easy_ecom/data_files/` are no longer a production persistence path.
