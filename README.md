@@ -74,6 +74,8 @@ Key frontend vars (`frontend/.env.example`):
 - Frontend middleware and env parsing normalize `NEXT_PUBLIC_SESSION_COOKIE_NAME` so quoted values (for example, `"easy_ecom_session"`) still resolve correctly, and middleware only enforces missing-session redirects for protected paths (it does not force-redirect `/login` based on cookie presence alone).
 - Frontend bootstrap (`AuthProvider`) keeps `credentials: include`, exposes a `refreshAuth()` retry path, and distinguishes bootstrap failures: `401` (`unauthorized`), `5xx` (`server`), network failures (`network`), and fallback unknown errors.
 - Protected app routes are wrapped in `AuthRouteGuard`; instead of returning `null`, they now render visible loading states during bootstrap/redirect and a visible retryable error state when `/auth/me` fails for non-`401` reasons.
+- Protected app layout (`frontend/app/(app)/layout.tsx`) renders through `AppShell` inside `AuthRouteGuard`, so authenticated routes always mount sidebar/header/page chrome.
+- Auth provider (`frontend/components/auth/auth-provider.tsx`) always mounts `AuthContext.Provider` with `user`, `loading`, `bootstrapError`, and `refreshAuth`, preventing context consumers from losing runtime state.
 - Login (`public-only`) routes also render a visible loading fallback while redirecting authenticated users to `/dashboard`, preventing blank-screen transitions.
 - Session-cookie parsing treats stale sentinel values (`deleted`, `null`, `undefined`) as invalid so middleware redirects stale-cookie dashboard requests to `/login` earlier.
 - Login page uses shared auth bootstrap refresh immediately after successful sign-in so dashboard transition and auth context stay in sync.
