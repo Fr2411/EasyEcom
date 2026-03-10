@@ -55,6 +55,7 @@ def test_protected_business_endpoints_reject_anonymous() -> None:
     assert client.get("/products/p-1").status_code == 401
     assert client.get("/stock/explorer").status_code == 401
     assert client.get("/products-stock/snapshot").status_code == 401
+    assert client.get("/customers").status_code == 401
     assert (
         client.post(
             "/inventory/add",

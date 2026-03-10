@@ -5,7 +5,6 @@ from easy_ecom.core.config import settings
 from easy_ecom.core.rbac import can_access_page
 from easy_ecom.data.store.csv_store import CsvStore
 from easy_ecom.data.repos.csv.customers_repo import CustomersRepo
-from easy_ecom.domain.models.customer import CustomerCreate
 from easy_ecom.domain.services.customer_service import CustomerService
 
 require_login()
@@ -27,7 +26,7 @@ with st.form("add_customer"):
     city = st.text_input("City")
     submit = st.form_submit_button("Add")
 if submit:
-    svc.create(CustomerCreate(client_id=client_id, full_name=full_name, phone=phone, email=email, city=city, country=""))
+    svc.create(client_id=client_id, full_name=full_name, phone=phone, email=email, address_line1="", city=city, notes="")
     st.success("Customer created")
 
 q = st.text_input("Search")
