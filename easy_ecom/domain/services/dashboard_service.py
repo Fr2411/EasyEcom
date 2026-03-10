@@ -81,6 +81,90 @@ class DashboardService:
             "Data Health Score": float(self._data_health_score(client_id)),
         }
 
+    def overview_snapshot(self, client_id: str | None) -> dict[str, object]:
+        products = self.metrics.scoped(self.metrics.products.all(), client_id)
+        variants = self.metrics.scoped(self.metrics.variants.all(), client_id)
+
+        stock_qty = self.metrics.current_stock_qty_by_product(client_id)
+        stock_value = self.metrics.current_stock_value_by_product(client_id)
+
+        total_stock_units = (
+            float(stock_qty["current_qty"].clip(lower=0).sum()) if not stock_qty.empty else 0.0
+        )
+        low_stock_items = (
+            int(len(stock_qty[(stock_qty["current_qty"] > 0) & (stock_qty["current_qty"] <= 5)]))
+            if not stock_qty.empty
+            else 0
+        )
+
+        recent_range = self.metrics.last_n_days_range(7)
+        recent_inventory = self.metrics.apply_date_range(
+            self.metrics.scoped(self.metrics.inv.all(), client_id), recent_range
+        )
+
+        sales_range = self.metrics.last_n_days_range(30)
+        sales_orders = self.metrics.apply_date_range(
+            self.metrics.scoped(self.metrics.orders.all(), client_id), sales_range
+        )
+        if not sales_orders.empty:
+            confirmed = sales_orders[sales_orders["status"].fillna("") == "confirmed"].copy()
+            sales_count = int(len(confirmed))
+            if "grand_total" in confirmed.columns:
+                confirmed["grand_total"] = self.metrics.to_float(confirmed["grand_total"])
+                revenue = float(confirmed["grand_total"].sum())
+            else:
+                revenue = None
+        else:
+            sales_count = 0
+            revenue = 0.0
+
+        inventory_with_names = stock_qty.merge(
+            stock_value[["product_id", "stock_value"]], on="product_id", how="left"
+        )
+        inventory_with_names["stock_value"] = pd.to_numeric(inventory_with_names["stock_value"], errors="coerce").fillna(0.0)
+        if "product_name" not in inventory_with_names.columns:
+            inventory_with_names["product_name"] = inventory_with_names["product_id"]
+        top_products_df = inventory_with_names.nlargest(5, "stock_value")
+
+        recent_activity_df = self.metrics.parse_timestamp(recent_inventory)
+        if not recent_activity_df.empty:
+            recent_activity_df = recent_activity_df.sort_values("timestamp", ascending=False).head(8)
+
+        return {
+            "generated_at": pd.Timestamp.utcnow().isoformat(),
+            "kpis": {
+                "total_products": int(len(products)),
+                "total_variants": int(len(variants)),
+                "current_stock_units": total_stock_units,
+                "low_stock_items": low_stock_items,
+            },
+            "business_health": {
+                "inventory_value": float(stock_value["stock_value"].sum()) if not stock_value.empty else 0.0,
+                "recent_stock_movements_count": int(len(recent_inventory)),
+                "sales_count_last_30_days": sales_count,
+                "revenue_last_30_days": revenue,
+            },
+            "recent_activity": [
+                {
+                    "timestamp": row["timestamp"].isoformat(),
+                    "txn_type": str(row.get("txn_type", "")),
+                    "product_name": str(row.get("product_name", "")),
+                    "qty": float(row.get("qty", 0.0) or 0.0),
+                    "note": str(row.get("note", "")).strip() or None,
+                }
+                for _, row in recent_activity_df.iterrows()
+            ],
+            "top_products": [
+                {
+                    "product_id": str(row.get("product_id", "")),
+                    "product_name": str(row.get("product_name", "")),
+                    "current_qty": float(row.get("current_qty", 0.0) or 0.0),
+                    "stock_value": float(row.get("stock_value", 0.0) or 0.0),
+                }
+                for _, row in top_products_df.iterrows()
+            ],
+        }
+
     def kpis(self, client_id: str | None) -> dict[str, float]:
         """Backward-compatible KPI facade used by tests and older UI flows."""
         snapshot = self.business_health_snapshot(client_id)

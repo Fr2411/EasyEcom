@@ -1,12 +1,13 @@
 import { PageShell } from '@/components/ui/page-shell';
+import { DashboardOverviewPanel } from '@/components/dashboard/dashboard-overview';
 
 export default function DashboardPage() {
   return (
     <PageShell
       title="Dashboard"
-      description="Welcome to EasyEcom. Your authenticated workspace is now active."
+      description="Operational snapshot of catalog and inventory performance for your workspace."
     >
-      <p>Use the navigation to manage stock, sales, customers, and settings.</p>
+      <DashboardOverviewPanel />
     </PageShell>
   );
 }
