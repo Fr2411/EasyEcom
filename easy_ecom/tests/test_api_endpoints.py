@@ -31,6 +31,32 @@ class DummyDashboard:
             "Data Health Score": 95.0,
         }
 
+    def overview_snapshot(self, client_id: str):
+        return {
+            "generated_at": "2026-01-01T00:00:00Z",
+            "kpis": {
+                "total_products": 1,
+                "total_variants": 1,
+                "current_stock_units": 1.0,
+                "low_stock_items": 1,
+            },
+            "business_health": {
+                "inventory_value": 2.0,
+                "recent_stock_movements_count": 1,
+                "sales_count_last_30_days": 1,
+                "revenue_last_30_days": 10.0,
+            },
+            "recent_activity": [],
+            "top_products": [
+                {
+                    "product_id": "p1",
+                    "product_name": "Widget",
+                    "current_qty": 1.0,
+                    "stock_value": 2.0,
+                }
+            ],
+        }
+
 
 class DummyCatalogStock:
     def suggest_products(self, client_id: str, q: str):
@@ -116,6 +142,7 @@ def test_core_api_endpoints() -> None:
     assert client.post("/auth/login", json={"email": "admin@example.com", "password": "secret"}).status_code == 200
     assert client.get("/session/me").status_code == 200
     assert client.get("/dashboard/summary").status_code == 200
+    assert client.get("/dashboard/overview").status_code == 200
     assert client.get("/products/search", params={"q": "wid"}).status_code == 200
     assert client.get("/products/p1").status_code == 200
     assert client.post(
