@@ -1,24 +1,12 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { getSessionCookieName, hasUsableSessionCookie } from '@/lib/auth/session-cookie';
 
-const SESSION_COOKIE = getSessionCookieName();
-
-export function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
-  if (pathname.startsWith('/_next') || pathname.startsWith('/favicon') || pathname.startsWith('/api')) {
-    return NextResponse.next();
-  }
-
-  const hasSession = hasUsableSessionCookie(request.cookies.get(SESSION_COOKIE)?.value);
-
-  if (!hasSession && pathname !== '/login') {
-    return NextResponse.redirect(new URL('/login', request.url));
-  }
-
+export function middleware(_request: NextRequest) {
+  // Auth redirects are handled by AuthProvider/AuthRouteGuard via backend /auth/me
+  // to avoid cross-origin cookie desync loops.
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ['/((?!.*\\..*).*)']
+  matcher: ['/((?!.*\\..*).*)'],
 };
