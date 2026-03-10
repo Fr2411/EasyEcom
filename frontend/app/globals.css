@@ -460,3 +460,80 @@ body {
 .sales-empty { border: 1px dashed var(--line); border-radius: 0.65rem; padding: 1rem; }
 .sales-error { color: #b91c1c; }
 @media (max-width: 980px) { .sales-grid, .sale-line-row { grid-template-columns: 1fr; } .sales-toolbar { flex-wrap: wrap; } }
+
+.inventory-module {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.inventory-toolbar {
+  display: grid;
+  grid-template-columns: 2fr repeat(6, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.inventory-toolbar input,
+.inventory-toolbar select,
+.inventory-panel input,
+.inventory-panel select,
+.inventory-panel textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 0.45rem;
+  padding: 0.45rem 0.55rem;
+  font: inherit;
+}
+
+.inventory-panel button,
+.inventory-toolbar button {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 0.45rem;
+  padding: 0.45rem 0.6rem;
+  cursor: pointer;
+}
+
+.inventory-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 0.8rem;
+}
+
+.inventory-panel {
+  border: 1px solid var(--line);
+  border-radius: 0.65rem;
+  padding: 0.9rem;
+  background: #fff;
+}
+
+.inventory-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.inventory-table th,
+.inventory-table td {
+  text-align: left;
+  padding: 0.45rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.inv-badge-low {
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  color: #9a3412;
+  border-radius: 999px;
+  padding: 0.15rem 0.45rem;
+  font-size: 0.75rem;
+}
+
+.delta-positive { color: #166534; font-weight: 600; }
+.delta-negative { color: #b91c1c; font-weight: 600; }
+
+@media (max-width: 980px) {
+  .inventory-grid,
+  .inventory-toolbar {
+    grid-template-columns: 1fr;
+  }
+}
