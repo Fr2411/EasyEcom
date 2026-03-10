@@ -204,3 +204,23 @@ def test_me_rejects_missing_roles(monkeypatch, tmp_path: Path):
         get_authenticated_user(session_token=token)
 
     assert exc.value.status_code == 401
+
+
+def test_me_rejects_missing_client_id(monkeypatch, tmp_path: Path):
+    from easy_ecom.api.dependencies import get_authenticated_user
+
+    monkeypatch.setattr(deps, "settings", Settings(data_dir=tmp_path, storage_backend="csv"))
+    signer = deps.SessionSigner(deps.settings.session_secret)
+    token = signer.dumps(
+        {
+            "user_id": "u1",
+            "roles": ["SUPER_ADMIN"],
+            "email": "user@example.com",
+            "name": "No Client",
+        }
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        get_authenticated_user(session_token=token)
+
+    assert exc.value.status_code == 401

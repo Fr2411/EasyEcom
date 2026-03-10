@@ -8,6 +8,9 @@ from easy_ecom.data.store.tabular_store import TabularStore
 
 
 def build_runtime_store(settings: Settings) -> TabularStore:
+    if settings.storage_backend == "csv":
+        return CsvStore(settings.data_dir)
+
     engine = build_postgres_engine(settings)
     init_postgres_schema(engine)
     return PostgresTableStore(engine)

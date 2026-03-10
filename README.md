@@ -89,6 +89,16 @@ Key frontend vars (`frontend/.env.example`):
 - `docs/phase1_execution_plan.md` — module-by-module implementation roadmap.
 - `docs/phase1_database_gap_analysis.md` — PostgreSQL/RDS table coverage and migration gap analysis.
 
+
+## Rebuild hardening artifacts (Phase 2)
+
+- `docs/phase2_api_hardening.md` — backend API surface hardening summary (canonical router registration, tenant isolation fixes, auth/tenant test additions, and deferred items).
+
+Phase 2 backend outcomes:
+- Canonical FastAPI router now intentionally mounts all implemented business routers (`dashboard`, `products`, `products-stock`, `inventory`, `sales`) in addition to health/auth/session.
+- Dashboard tenant access is locked to authenticated session `client_id` (query-string tenant override is ignored).
+- Runtime storage selection now honors `STORAGE_BACKEND=csv` for local/test runs without forcing Postgres initialization.
+
 ## Migration and legacy
 
 - CSV files in `easy_ecom/data_files/` are no longer a production persistence path.
