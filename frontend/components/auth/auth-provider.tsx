@@ -1,5 +1,13 @@
 'use client';
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 import { getCurrentUser, type SessionUser } from '@/lib/api/auth';
 import { ApiError, ApiNetworkError } from '@/lib/api/client';
 
@@ -16,7 +24,7 @@ const AuthContext = createContext<AuthContextValue>({
   user: null,
   loading: true,
   bootstrapError: 'none',
-  refreshAuth: async () => undefined
+  refreshAuth: async () => undefined,
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -26,7 +34,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshAuth = useCallback(async () => {
     setLoading(true);
-
     try {
       const currentUser = await getCurrentUser();
       setUser(currentUser);
@@ -35,26 +42,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (error instanceof ApiError && error.status === 401) {
         setUser(null);
         setBootstrapError('unauthorized');
-        return;
-      }
-
-      if (error instanceof ApiError && error.status >= 500) {
+      } else if (error instanceof ApiError && error.status >= 500) {
         setUser(null);
         setBootstrapError('server');
         console.error('Auth bootstrap failed with server error', error);
-        return;
-      }
-
-      if (error instanceof ApiNetworkError) {
+      } else if (error instanceof ApiNetworkError) {
         setUser(null);
         setBootstrapError('network');
         console.error('Auth bootstrap failed due to network error', error);
-        return;
+      } else {
+        setUser(null);
+        setBootstrapError('unknown');
+        console.error('Failed to bootstrap auth session', error);
       }
-
-      setUser(null);
-      setBootstrapError('unknown');
-      console.error('Failed to bootstrap auth session', error);
     } finally {
       setLoading(false);
     }
@@ -64,7 +64,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     void refreshAuth();
   }, [refreshAuth]);
 
-  return <AuthContext.Provider value={{ user, loading, bootstrapError, refreshAuth }}>{children}</AuthContext.Provider>;
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      user,
+      loading,
+      bootstrapError,
+      refreshAuth,
+    }),
+    [user, loading, bootstrapError, refreshAuth]
+  );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {
