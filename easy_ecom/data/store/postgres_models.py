@@ -201,6 +201,39 @@ class FinanceExpenseModel(Base):
     updated_at: Mapped[str] = mapped_column(String(64), default="")
 
 
+class SalesReturnModel(Base):
+    __tablename__ = "sales_returns"
+
+    return_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    client_id: Mapped[str] = mapped_column(String(64), index=True)
+    return_no: Mapped[str] = mapped_column(String(64), index=True, default="")
+    sale_id: Mapped[str] = mapped_column(String(64), index=True)
+    sale_no: Mapped[str] = mapped_column(String(64), index=True, default="")
+    customer_id: Mapped[str] = mapped_column(String(64), index=True)
+    reason: Mapped[str] = mapped_column(String(255), default="")
+    note: Mapped[str] = mapped_column(Text, default="")
+    return_total: Mapped[str] = mapped_column(String(64), default="0")
+    created_at: Mapped[str] = mapped_column(String(64), default="")
+    created_by_user_id: Mapped[str] = mapped_column(String(64), default="")
+
+
+class SalesReturnItemModel(Base):
+    __tablename__ = "sales_return_items"
+
+    return_item_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    return_id: Mapped[str] = mapped_column(String(64), index=True)
+    client_id: Mapped[str] = mapped_column(String(64), index=True)
+    sale_item_id: Mapped[str] = mapped_column(String(64), index=True)
+    product_id: Mapped[str] = mapped_column(String(64), index=True)
+    product_name_snapshot: Mapped[str] = mapped_column(String(255), default="")
+    sold_qty: Mapped[str] = mapped_column(String(64), default="0")
+    return_qty: Mapped[str] = mapped_column(String(64), default="0")
+    unit_price: Mapped[str] = mapped_column(String(64), default="0")
+    line_total: Mapped[str] = mapped_column(String(64), default="0")
+    reason: Mapped[str] = mapped_column(String(255), default="")
+    condition_status: Mapped[str] = mapped_column(String(64), default="")
+
+
 class ImportRunModel(Base):
     __tablename__ = "import_runs"
 
