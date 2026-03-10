@@ -70,6 +70,31 @@ class SupplierModel(Base):
     is_active: Mapped[str] = mapped_column(String(8), default="true")
 
 
+class CustomerModel(Base):
+    __tablename__ = "customers"
+
+    customer_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    client_id: Mapped[str] = mapped_column(String(64), index=True)
+    created_at: Mapped[str] = mapped_column(String(64), default="")
+    updated_at: Mapped[str] = mapped_column(String(64), default="")
+    full_name: Mapped[str] = mapped_column(String(255), index=True)
+    phone: Mapped[str] = mapped_column(String(64), default="")
+    email: Mapped[str] = mapped_column(String(255), default="")
+    whatsapp: Mapped[str] = mapped_column(String(64), default="")
+    address_line1: Mapped[str] = mapped_column(String(255), default="")
+    address_line2: Mapped[str] = mapped_column(String(255), default="")
+    area: Mapped[str] = mapped_column(String(255), default="")
+    city: Mapped[str] = mapped_column(String(128), default="")
+    state: Mapped[str] = mapped_column(String(128), default="")
+    postal_code: Mapped[str] = mapped_column(String(32), default="")
+    country: Mapped[str] = mapped_column(String(128), default="")
+    preferred_contact_channel: Mapped[str] = mapped_column(String(32), default="phone")
+    marketing_opt_in: Mapped[str] = mapped_column(String(8), default="false")
+    tags: Mapped[str] = mapped_column(Text, default="")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    is_active: Mapped[str] = mapped_column(String(8), default="true")
+
+
 class ProductModel(Base):
     __tablename__ = "products"
 

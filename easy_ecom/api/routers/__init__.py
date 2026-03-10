@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from easy_ecom.api.routers.auth import router as auth_router
+from easy_ecom.api.routers.customers import router as customers_router
 from easy_ecom.api.routers.dashboard import router as dashboard_router
 from easy_ecom.api.routers.health import router as health_router
 from easy_ecom.api.routers.inventory import router as inventory_router
@@ -20,3 +21,4 @@ api_router.include_router(products_router)
 api_router.include_router(products_stock_router)
 api_router.include_router(inventory_router)
 api_router.include_router(sales_router)
+api_router.include_router(customers_router)
