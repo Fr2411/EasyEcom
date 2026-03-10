@@ -1,21 +1,22 @@
 from fastapi.testclient import TestClient
+import pandas as pd
 
 from easy_ecom.api.app import app
-from easy_ecom.api.dependencies import get_container, get_current_user
-from easy_ecom.api.dependencies import RequestUser
+from easy_ecom.api.dependencies import RequestUser, get_container, get_current_user
+from easy_ecom.domain.models.auth import AuthenticatedUser
 
 
-class DummyUsers:
-    def login(self, email: str, password: str):
-        if email == "admin@example.com" and password == "secret":
-            return {
-                "user_id": "u1",
-                "client_id": "c1",
-                "roles": "SUPER_ADMIN",
-                "name": "Admin",
-                "email": email,
-            }
-        return None
+class DummyAuth:
+    def authenticate(self, email: str, password: str) -> AuthenticatedUser | None:
+        if email != "admin@example.com" or password != "secret":
+            return None
+        return AuthenticatedUser(
+            user_id="u1",
+            client_id="c1",
+            roles=["SUPER_ADMIN"],
+            name="Admin",
+            email=email,
+        )
 
 
 class DummyDashboard:
@@ -39,9 +40,13 @@ class DummyCatalogStock:
         return "p1", ["lot1"], 1
 
     def stock_explorer(self, client_id: str):
-        import pandas as pd
-
         return pd.DataFrame([{"product_id": "p1", "product_name": "Widget", "total_available_qty": 1, "variant_count": 1, "default_selling_price": 10, "avg_unit_cost": 2, "stock_value": 2}]), {"p1": pd.DataFrame([{"variant_id": "v1", "variant_name": "Default", "qty": 1, "unit_cost": 2, "stock_value": 2, "lot_id": "lot1"}])}
+
+    def list_supplier_options(self, client_id: str):
+        return ["Demo Supplier"]
+
+    def list_category_options(self, client_id: str):
+        return ["General"]
 
 
 class DummyProducts:
@@ -51,10 +56,39 @@ class DummyProducts:
     def list_variants(self, client_id: str, product_id: str):
         return [{"variant_id": "v1", "variant_name": "Default"}]
 
+    def list_by_client(self, client_id: str):
+        return pd.DataFrame([
+            {
+                "product_id": "p1",
+                "product_name": "Widget",
+                "supplier": "Demo Supplier",
+                "category": "General",
+                "prd_description": "",
+                "prd_features_json": '{"features": []}',
+            }
+        ])
+
+    def list_variants_by_client(self, client_id: str):
+        return pd.DataFrame([
+            {
+                "variant_id": "v1",
+                "parent_product_id": "p1",
+                "variant_name": "Default",
+                "size": "",
+                "color": "",
+                "other": "",
+                "default_selling_price": "10",
+                "max_discount_pct": "10",
+            }
+        ])
+
 
 class DummyInventory:
     def add_stock(self, **kwargs):
         return "lot1"
+
+    def stock_by_lot_with_issues(self, client_id: str):
+        return pd.DataFrame([{"variant_id": "v1", "qty": 1, "unit_cost": 2}])
 
 
 class DummySales:
@@ -63,7 +97,7 @@ class DummySales:
 
 
 class DummyContainer:
-    users = DummyUsers()
+    auth = DummyAuth()
     dashboard = DummyDashboard()
     catalog_stock = DummyCatalogStock()
     products = DummyProducts()
@@ -108,18 +142,25 @@ def test_core_api_endpoints() -> None:
     assert client.post(
         "/products-stock/save",
         json={
-            "typed_product_name": "Widget",
-            "variant_entries": [
+            "mode": "new",
+            "identity": {
+                "productName": "Widget",
+                "supplier": "Demo Supplier",
+                "category": "General",
+                "description": "",
+                "features": [],
+            },
+            "variants": [
                 {
-                    "variant_id": "",
-                    "variant_label": "Default",
+                    "id": "",
+                    "label": "Default",
                     "size": "",
                     "color": "",
                     "other": "",
                     "qty": 1,
-                    "unit_cost": 2,
-                    "default_selling_price": 10,
-                    "max_discount_pct": 10,
+                    "cost": 2,
+                    "defaultSellingPrice": 10,
+                    "maxDiscountPct": 10,
                 }
             ],
         },

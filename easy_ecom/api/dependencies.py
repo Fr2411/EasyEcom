@@ -9,6 +9,7 @@ from easy_ecom.core.config import settings
 from easy_ecom.core.rbac import can_access_page
 from easy_ecom.core.session import SessionSigner
 from easy_ecom.data.repos.csv.audit_repo import AuditRepo
+from easy_ecom.data.repos.csv.auth_repo import CsvAuthRepo
 from easy_ecom.data.repos.csv.clients_repo import ClientsRepo
 from easy_ecom.data.repos.csv.customers_repo import CustomersRepo
 from easy_ecom.data.repos.csv.finance_repo import LedgerRepo
@@ -61,13 +62,17 @@ class ServiceContainer:
         for table, columns in TABLE_SCHEMAS.items():
             self.store.ensure_table(table, columns)
 
-        self.users = UserService(
-            UsersRepo(self.store), RolesRepo(self.store), UserRolesRepo(self.store)
-        )
+        users_repo = UsersRepo(self.store)
+        user_roles_repo = UserRolesRepo(self.store)
+
+        self.users = UserService(users_repo, RolesRepo(self.store), user_roles_repo)
         self.sequence = SequenceService(SequencesRepo(self.store))
 
-        engine = build_postgres_engine(settings)
-        self.auth = AuthService(PostgresAuthRepo(build_session_factory(engine)))
+        if settings.storage_backend == "csv":
+            self.auth = AuthService(CsvAuthRepo(users_repo, user_roles_repo))
+        else:
+            engine = build_postgres_engine(settings)
+            self.auth = AuthService(PostgresAuthRepo(build_session_factory(engine)))
 
         products_repo = ProductsRepo(self.store)
         variants_repo = ProductVariantsRepo(self.store)
