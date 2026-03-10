@@ -153,6 +153,36 @@ class InventoryTxnModel(Base):
     lot_id: Mapped[str] = mapped_column(String(64), default="")
 
 
+class SalesOrderModel(Base):
+    __tablename__ = "sales_orders"
+
+    order_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    client_id: Mapped[str] = mapped_column(String(64), index=True)
+    sale_no: Mapped[str] = mapped_column(String(64), index=True, default="")
+    timestamp: Mapped[str] = mapped_column(String(64), default="")
+    customer_id: Mapped[str] = mapped_column(String(64), index=True)
+    status: Mapped[str] = mapped_column(String(32), default="confirmed")
+    subtotal: Mapped[str] = mapped_column(String(64), default="0")
+    discount: Mapped[str] = mapped_column(String(64), default="0")
+    tax: Mapped[str] = mapped_column(String(64), default="0")
+    grand_total: Mapped[str] = mapped_column(String(64), default="0")
+    note: Mapped[str] = mapped_column(Text, default="")
+    created_by_user_id: Mapped[str] = mapped_column(String(64), default="")
+
+
+class SalesOrderItemModel(Base):
+    __tablename__ = "sales_order_items"
+
+    order_item_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    order_id: Mapped[str] = mapped_column(String(64), index=True)
+    client_id: Mapped[str] = mapped_column(String(64), index=True)
+    product_id: Mapped[str] = mapped_column(String(64), index=True)
+    product_name_snapshot: Mapped[str] = mapped_column(String(255), default="")
+    qty: Mapped[str] = mapped_column(String(64), default="0")
+    unit_selling_price: Mapped[str] = mapped_column(String(64), default="0")
+    total_selling_price: Mapped[str] = mapped_column(String(64), default="0")
+
+
 class ImportRunModel(Base):
     __tablename__ = "import_runs"
 
