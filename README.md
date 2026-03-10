@@ -123,6 +123,12 @@ Phase 6 adds a production inventory operations module:
 - `docs/phase5_sales_module.md` — Sales MVP implementation details (tenant-scoped API endpoints, PostgreSQL schema additions, transactional stock impact, and deferred scope).
 - Sales frontend route (`/sales`) is now an operational module with recent list/search, multi-line create workflow, and detail inspection backed by real backend APIs (`GET/POST /sales`, `GET /sales/{sale_id}`, `GET /sales/form-options`).
 
+
+## Finance module delivery (Phase 7)
+
+- `docs/phase7_finance_module.md` — Finance MVP implementation details (tenant-scoped APIs, PostgreSQL schema updates, expense tracking, and truthful metric rules).
+- Finance frontend route (`/finance`) is now an operational module with summary cards, expense create/list flow, receivables/payables tables, and transaction history backed by backend APIs (`GET /finance/*`, `POST/PATCH /finance/expenses`).
+
 ## Migration and legacy
 
 - CSV files in `easy_ecom/data_files/` are no longer a production persistence path.
