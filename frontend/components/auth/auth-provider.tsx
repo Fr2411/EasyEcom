@@ -30,7 +30,8 @@ const AuthContext = createContext<AuthContextValue>({
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const [bootstrapError, setBootstrapError] = useState<AuthBootstrapError>('none');
+  const [bootstrapError, setBootstrapError] =
+    useState<AuthBootstrapError>('none');
 
   const refreshAuth = useCallback(async () => {
     setLoading(true);
@@ -45,15 +46,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else if (error instanceof ApiError && error.status >= 500) {
         setUser(null);
         setBootstrapError('server');
-        console.error('Auth bootstrap failed with server error', error);
       } else if (error instanceof ApiNetworkError) {
         setUser(null);
         setBootstrapError('network');
-        console.error('Auth bootstrap failed due to network error', error);
       } else {
         setUser(null);
         setBootstrapError('unknown');
-        console.error('Failed to bootstrap auth session', error);
       }
     } finally {
       setLoading(false);
@@ -64,13 +62,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     void refreshAuth();
   }, [refreshAuth]);
 
-  const value = useMemo<AuthContextValue>(
-    () => ({
-      user,
-      loading,
-      bootstrapError,
-      refreshAuth,
-    }),
+  const value = useMemo(
+    () => ({ user, loading, bootstrapError, refreshAuth }),
     [user, loading, bootstrapError, refreshAuth]
   );
 
