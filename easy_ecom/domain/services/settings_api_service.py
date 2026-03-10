@@ -33,6 +33,7 @@ class OperationalPreferencesPatch:
 class SequencePreferencesPatch:
     sales_prefix: str | None = None
     returns_prefix: str | None = None
+    purchases_prefix: str | None = None
 
 
 class SettingsApiService:
@@ -197,9 +198,11 @@ class SettingsApiService:
         return {
             "sales_prefix": cfg.sales_prefix or "SAL",
             "returns_prefix": cfg.returns_prefix or "RET",
+            "purchases_prefix": cfg.purchases_prefix or "PUR",
             "active_usage": {
                 "sales_prefix": False,
                 "returns_prefix": False,
+                "purchases_prefix": False,
             },
         }
 
@@ -216,6 +219,8 @@ class SettingsApiService:
                 cfg.sales_prefix = self._clean_prefix(payload.sales_prefix)
             if payload.returns_prefix is not None:
                 cfg.returns_prefix = self._clean_prefix(payload.returns_prefix)
+            if payload.purchases_prefix is not None:
+                cfg.purchases_prefix = self._clean_prefix(payload.purchases_prefix)
 
             cfg.updated_at = now_iso()
             session.commit()

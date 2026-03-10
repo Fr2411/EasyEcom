@@ -28,9 +28,11 @@ export type Preferences = {
 export type Sequences = {
   sales_prefix: string;
   returns_prefix: string;
+  purchases_prefix: string;
   active_usage: {
     sales_prefix: boolean;
     returns_prefix: boolean;
+    purchases_prefix: boolean;
   };
 };
 
