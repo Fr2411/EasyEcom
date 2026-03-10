@@ -63,7 +63,6 @@ Key backend vars (see `.env.example`):
 
 Key frontend vars (`frontend/.env.example`):
 - `NEXT_PUBLIC_API_BASE_URL`
-- `NEXT_PUBLIC_SESSION_COOKIE_NAME`
 
 
 ## Auth session flow (cookie-based)
@@ -71,7 +70,7 @@ Key frontend vars (`frontend/.env.example`):
 - `POST /auth/login` validates credentials against PostgreSQL, then issues signed cookie `easy_ecom_session` (`HttpOnly`, same-site/secure flags from backend config).
 - Session payload stores `user_id`, `client_id`, `email`, `name`, `roles`, and expiry (`exp`) signed by `SESSION_SECRET`.
 - `GET /auth/me` now uses strict session payload validation: missing cookie, bad signature, malformed payload, expired payload, or missing roles return `401 Unauthorized` (never `500`).
-- Frontend middleware and env parsing normalize `NEXT_PUBLIC_SESSION_COOKIE_NAME` so quoted values (for example, `"easy_ecom_session"`) still resolve correctly, and middleware only enforces missing-session redirects for protected paths (it does not force-redirect `/login` based on cookie presence alone).
+- Frontend route authorization now relies on backend session truth from `GET /auth/me` in `AuthProvider` + `AuthRouteGuard`; Next middleware cookie inspection was removed to prevent cross-origin cookie desync redirect loops.
 - Frontend bootstrap (`AuthProvider`) keeps `credentials: include`, exposes a `refreshAuth()` retry path, and distinguishes bootstrap failures: `401` (`unauthorized`), `5xx` (`server`), network failures (`network`), and fallback unknown errors.
 - Shared frontend API client (`frontend/lib/api/client.ts`) always sends cookies via `credentials: include`, maps transport failures to `ApiNetworkError`, and maps non-2xx responses to `ApiError` with HTTP status plus parsed JSON/text body for consistent auth/error handling.
 - Protected app routes are wrapped in `AuthRouteGuard`; instead of returning `null`, they now render visible loading states during bootstrap/redirect and a visible retryable error state when `/auth/me` fails for non-`401` reasons.
@@ -79,7 +78,6 @@ Key frontend vars (`frontend/.env.example`):
 - Auth provider (`frontend/components/auth/auth-provider.tsx`) always mounts `AuthContext.Provider` with `user`, `loading`, `bootstrapError`, and `refreshAuth`, preventing context consumers from losing runtime state.
 - Root layout (`frontend/app/layout.tsx`) wraps the entire frontend tree in `AuthProvider`, ensuring auth state is available across both public and protected routes.
 - Login (`public-only`) routes also render a visible loading fallback while redirecting authenticated users to `/dashboard`, preventing blank-screen transitions.
-- Session-cookie parsing treats stale sentinel values (`deleted`, `null`, `undefined`) as invalid so middleware redirects stale-cookie dashboard requests to `/login` earlier.
 - Login page uses shared auth bootstrap refresh immediately after successful sign-in so dashboard transition and auth context stay in sync.
 - Dashboard route now always renders visible placeholder content inside `PageShell`, so post-login redirects never land on a blank screen even while KPI modules are still in development.
 
