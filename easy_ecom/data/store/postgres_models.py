@@ -166,6 +166,9 @@ class SalesOrderModel(Base):
     discount: Mapped[str] = mapped_column(String(64), default="0")
     tax: Mapped[str] = mapped_column(String(64), default="0")
     grand_total: Mapped[str] = mapped_column(String(64), default="0")
+    amount_paid: Mapped[str] = mapped_column(String(64), default="0")
+    outstanding_balance: Mapped[str] = mapped_column(String(64), default="0")
+    payment_status: Mapped[str] = mapped_column(String(32), default="unpaid")
     note: Mapped[str] = mapped_column(Text, default="")
     created_by_user_id: Mapped[str] = mapped_column(String(64), default="")
 
@@ -181,6 +184,21 @@ class SalesOrderItemModel(Base):
     qty: Mapped[str] = mapped_column(String(64), default="0")
     unit_selling_price: Mapped[str] = mapped_column(String(64), default="0")
     total_selling_price: Mapped[str] = mapped_column(String(64), default="0")
+
+
+class FinanceExpenseModel(Base):
+    __tablename__ = "finance_expenses"
+
+    expense_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    client_id: Mapped[str] = mapped_column(String(64), index=True)
+    expense_date: Mapped[str] = mapped_column(String(32), index=True, default="")
+    category: Mapped[str] = mapped_column(String(120), index=True, default="")
+    amount: Mapped[str] = mapped_column(String(64), default="0")
+    payment_status: Mapped[str] = mapped_column(String(32), default="paid")
+    note: Mapped[str] = mapped_column(Text, default="")
+    created_by_user_id: Mapped[str] = mapped_column(String(64), default="")
+    created_at: Mapped[str] = mapped_column(String(64), default="")
+    updated_at: Mapped[str] = mapped_column(String(64), default="")
 
 
 class ImportRunModel(Base):
