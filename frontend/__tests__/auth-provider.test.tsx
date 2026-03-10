@@ -20,6 +20,25 @@ function AuthConsumer() {
 }
 
 describe('AuthProvider bootstrap states', () => {
+  test('renders children through the auth context provider', async () => {
+    vi.mocked(getCurrentUser).mockResolvedValueOnce({
+      id: 'user-1',
+      email: 'user@example.com',
+      name: 'User',
+      clientId: 'client-1',
+      roles: ['admin']
+    });
+
+    render(
+      <AuthProvider>
+        <div data-testid="provider-child">Child content</div>
+      </AuthProvider>
+    );
+
+    expect(screen.getByTestId('provider-child').textContent).toBe('Child content');
+    await waitFor(() => expect(screen.getByTestId('provider-child')).toBeTruthy());
+  });
+
   test('marks 401 as unauthorized', async () => {
     vi.mocked(getCurrentUser).mockRejectedValueOnce(new ApiError('unauthorized', 401));
     render(
