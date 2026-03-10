@@ -14,10 +14,9 @@ export default function LoginPage() {
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setError('');
+
     try {
       await login(email, password);
-      await getCurrentUser();
-      router.replace('/dashboard');
     } catch (error: unknown) {
       if (error instanceof ApiError && error.status === 401) {
         setError('Invalid email/password or inactive account.');
@@ -35,6 +34,24 @@ export default function LoginPage() {
       }
 
       setError('Unable to sign in right now. Please try again.');
+      return;
+    }
+
+    try {
+      await getCurrentUser();
+      router.replace('/dashboard');
+    } catch (error: unknown) {
+      if (error instanceof ApiNetworkError) {
+        setError('Signed in, but we could not confirm your session due to a network error. Please retry.');
+        return;
+      }
+
+      if (error instanceof ApiError && error.status >= 500) {
+        setError('Signed in, but we could not confirm your session due to a server error. Please retry.');
+        return;
+      }
+
+      setError('Signed in, but your session could not be confirmed yet. Please retry.');
     }
   };
 

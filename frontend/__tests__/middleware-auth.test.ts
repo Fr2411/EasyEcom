@@ -26,7 +26,7 @@ describe('auth middleware', () => {
     expect(response.headers.get('location')).toBe('https://example.com/login');
   });
 
-  test('authenticated user visiting login is redirected away', async () => {
+  test('authenticated user can still access login path (client guard handles redirect)', async () => {
     vi.resetModules();
     vi.stubEnv('NEXT_PUBLIC_SESSION_COOKIE_NAME', 'easy_ecom_session');
     const { middleware } = await import('@/middleware');
@@ -36,7 +36,7 @@ describe('auth middleware', () => {
     });
 
     const response = middleware(request);
-    expect(response.headers.get('location')).toBe('https://example.com/dashboard');
+    expect(response.headers.get('location')).toBeNull();
   });
 
   test('quoted cookie values still count as a valid session cookie', async () => {
