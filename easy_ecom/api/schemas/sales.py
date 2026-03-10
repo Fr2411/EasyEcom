@@ -1,21 +1,92 @@
 from pydantic import BaseModel, Field
 
 
-class SaleItemRequest(BaseModel):
+class SaleLineRequest(BaseModel):
+    product_id: str = Field(min_length=1)
+    qty: float = Field(gt=0)
+    unit_price: float = Field(ge=0)
+
+
+class SaleCreateRequest(BaseModel):
+    customer_id: str = Field(min_length=1)
+    lines: list[SaleLineRequest] = Field(min_length=1)
+    discount: float = Field(default=0, ge=0)
+    tax: float = Field(default=0, ge=0)
+    note: str = ""
+
+
+class SaleLineResponse(BaseModel):
+    line_id: str
+    product_id: str
+    product_name: str
+    qty: float
+    unit_price: float
+    line_total: float
+
+
+class SaleSummary(BaseModel):
+    sale_id: str
+    sale_no: str
+    customer_id: str
+    customer_name: str
+    timestamp: str
+    subtotal: float
+    discount: float
+    tax: float
+    total: float
+    status: str
+
+
+class SalesListResponse(BaseModel):
+    items: list[SaleSummary]
+
+
+class SaleDetailResponse(SaleSummary):
+    note: str = ""
+    lines: list[SaleLineResponse]
+
+
+class SaleCreateResponse(BaseModel):
+    sale_id: str
+    sale_no: str
+    total: float
+    status: str
+
+
+class SaleLookupProduct(BaseModel):
+    product_id: str
+    label: str
+    default_unit_price: float
+    available_qty: float
+
+
+class SaleLookupCustomer(BaseModel):
+    customer_id: str
+    full_name: str
+    phone: str
+    email: str
+
+
+class SaleFormOptionsResponse(BaseModel):
+    customers: list[SaleLookupCustomer]
+    products: list[SaleLookupProduct]
+
+
+class LegacySaleItemRequest(BaseModel):
     product_id: str
     qty: float = Field(gt=0)
     unit_selling_price: float = Field(gt=0)
 
 
-class SalesCreateRequest(BaseModel):
+class LegacySalesCreateRequest(BaseModel):
     customer_id: str
-    items: list[SaleItemRequest]
+    items: list[LegacySaleItemRequest]
     discount: float = 0
     tax: float = 0
     note: str = ""
 
 
-class SalesCreateResponse(BaseModel):
+class LegacySalesCreateResponse(BaseModel):
     order_id: str
     invoice_id: str
     status: str
