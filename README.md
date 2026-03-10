@@ -81,6 +81,14 @@ Key frontend vars (`frontend/.env.example`):
 - Login page uses shared auth bootstrap refresh immediately after successful sign-in so dashboard transition and auth context stay in sync.
 - Dashboard route now always renders visible placeholder content inside `PageShell`, so post-login redirects never land on a blank screen even while KPI modules are still in development.
 
+
+## Rebuild planning artifacts (Phase 1)
+
+- `docs/phase1_feature_parity.md` — legacy-vs-web module parity map.
+- `docs/phase1_architecture_assessment.md` — current frontend/backend/RDS architecture assessment.
+- `docs/phase1_execution_plan.md` — module-by-module implementation roadmap.
+- `docs/phase1_database_gap_analysis.md` — PostgreSQL/RDS table coverage and migration gap analysis.
+
 ## Migration and legacy
 
 - CSV files in `easy_ecom/data_files/` are no longer a production persistence path.
