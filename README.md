@@ -72,9 +72,11 @@ Key frontend vars (`frontend/.env.example`):
 - Session payload stores `user_id`, `client_id`, `email`, `name`, `roles`, and expiry (`exp`) signed by `SESSION_SECRET`.
 - `GET /auth/me` now uses strict session payload validation: missing cookie, bad signature, malformed payload, expired payload, or missing roles return `401 Unauthorized` (never `500`).
 - Frontend middleware and env parsing normalize `NEXT_PUBLIC_SESSION_COOKIE_NAME` so quoted values (for example, `"easy_ecom_session"`) still resolve correctly, and middleware only enforces missing-session redirects for protected paths (it does not force-redirect `/login` based on cookie presence alone).
-- Frontend bootstrap (`AuthProvider`) keeps `credentials: include` and distinguishes auth bootstrap failures: `401` (`unauthorized`), `5xx` (`server`), and network failures (`network`) for safer client routing behavior.
-- Protected app routes are wrapped in `AuthRouteGuard` and only redirect to `/login` on confirmed `401` from `/auth/me`; login routes redirect authenticated users to `/dashboard`.
-- Login page only redirects to `/dashboard` after a successful `/auth/me` verification.
+- Frontend bootstrap (`AuthProvider`) keeps `credentials: include`, exposes a `refreshAuth()` retry path, and distinguishes bootstrap failures: `401` (`unauthorized`), `5xx` (`server`), network failures (`network`), and fallback unknown errors.
+- Protected app routes are wrapped in `AuthRouteGuard`; instead of returning `null`, they now render visible loading states during bootstrap/redirect and a visible retryable error state when `/auth/me` fails for non-`401` reasons.
+- Login (`public-only`) routes also render a visible loading fallback while redirecting authenticated users to `/dashboard`, preventing blank-screen transitions.
+- Session-cookie parsing treats stale sentinel values (`deleted`, `null`, `undefined`) as invalid so middleware redirects stale-cookie dashboard requests to `/login` earlier.
+- Login page uses shared auth bootstrap refresh immediately after successful sign-in so dashboard transition and auth context stay in sync.
 
 ## Migration and legacy
 

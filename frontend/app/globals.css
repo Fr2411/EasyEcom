@@ -329,3 +329,9 @@ body {
 .login-card label{display:grid;gap:.2rem;font-size:.85rem;color:var(--muted);}
 .login-card input{border:1px solid var(--line);border-radius:.4rem;padding:.45rem;}
 .login-error{color:#b91c1c;margin:0;}
+.auth-feedback{min-height:100vh;display:grid;place-items:center;padding:1rem;}
+.auth-feedback-card{background:#fff;border:1px solid var(--line);border-radius:.75rem;padding:1rem;max-width:460px;display:grid;gap:.6rem;}
+.auth-feedback-card h1{margin:0;font-size:1.1rem;}
+.auth-feedback-card p{margin:0;color:var(--muted);}
+.auth-feedback-card button{justify-self:start;border:1px solid var(--line);background:#fff;color:var(--text);border-radius:.45rem;padding:.45rem .65rem;cursor:pointer;}
+.auth-feedback-card-error{border-color:#fecaca;background:#fef2f2;}

@@ -1,19 +1,23 @@
 'use client';
 import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { getCurrentUser, login } from '@/lib/api/auth';
+import { login } from '@/lib/api/auth';
 import { AuthRouteGuard } from '@/components/auth/auth-route-guard';
+import { useAuth } from '@/components/auth/auth-provider';
 import { ApiError, ApiNetworkError } from '@/lib/api/client';
 
 export default function LoginPage() {
   const router = useRouter();
+  const { refreshAuth } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setError('');
+    setSubmitting(true);
 
     try {
       await login(email, password);
@@ -35,29 +39,37 @@ export default function LoginPage() {
 
       setError('Unable to sign in right now. Please try again.');
       return;
+    } finally {
+      setSubmitting(false);
     }
 
-    try {
-      await getCurrentUser();
-      router.replace('/dashboard');
-    } catch (error: unknown) {
-      if (error instanceof ApiNetworkError) {
-        setError('Signed in, but we could not confirm your session due to a network error. Please retry.');
-        return;
-      }
-
-      if (error instanceof ApiError && error.status >= 500) {
-        setError('Signed in, but we could not confirm your session due to a server error. Please retry.');
-        return;
-      }
-
-      setError('Signed in, but your session could not be confirmed yet. Please retry.');
-    }
+    await refreshAuth();
+    router.replace('/dashboard');
   };
 
   return (
     <AuthRouteGuard mode="public-only">
-      <main className="login-page"><form className="login-card" onSubmit={onSubmit}><h1>EasyEcom Login</h1><label>Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label><label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>{error ? <p className="login-error">{error}</p> : null}<button type="submit">Sign in</button></form></main>
+      <main className="login-page">
+        <form className="login-card" onSubmit={onSubmit}>
+          <h1>EasyEcom Login</h1>
+          <label>
+            Email
+            <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required disabled={submitting} />
+          </label>
+          <label>
+            Password
+            <input
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              required
+              disabled={submitting}
+            />
+          </label>
+          {error ? <p className="login-error">{error}</p> : null}
+          <button type="submit" disabled={submitting}>{submitting ? 'Signing in…' : 'Sign in'}</button>
+        </form>
+      </main>
     </AuthRouteGuard>
   );
 }
