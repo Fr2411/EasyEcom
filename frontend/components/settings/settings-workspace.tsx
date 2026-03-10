@@ -67,6 +67,7 @@ export function SettingsWorkspace() {
     <section className="settings-card"><h3>Document / sequence preferences</h3><div className="settings-grid">
       <label>Sales prefix<input value={sequences.sales_prefix} onChange={(e) => setSequences({ ...sequences, sales_prefix: e.target.value })} /></label>
       <label>Returns prefix<input value={sequences.returns_prefix} onChange={(e) => setSequences({ ...sequences, returns_prefix: e.target.value })} /></label>
+      <label>Purchases prefix<input value={sequences.purchases_prefix} onChange={(e) => setSequences({ ...sequences, purchases_prefix: e.target.value })} /></label>
     </div>
     <button disabled={!canWrite} onClick={async () => { const saved = await patchSequences(sequences); setSequences(saved); setNotice('Sequence preferences saved.'); }}>Save sequence preferences</button>
     </section>

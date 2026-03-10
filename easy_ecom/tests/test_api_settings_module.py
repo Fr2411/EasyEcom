@@ -62,7 +62,8 @@ class DummySettingsService:
             "tenant-a": {
                 "sales_prefix": "SAL",
                 "returns_prefix": "RET",
-                "active_usage": {"sales_prefix": False, "returns_prefix": False},
+                "purchases_prefix": "PUR",
+                "active_usage": {"sales_prefix": False, "returns_prefix": False, "purchases_prefix": False},
             }
         }
 

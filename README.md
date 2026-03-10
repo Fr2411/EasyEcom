@@ -146,6 +146,12 @@ Phase 6 adds a production inventory operations module:
 - `docs/phase10_settings_module.md` — Settings MVP implementation details (tenant-scoped business profile APIs, operational preferences persistence, sequence preference storage, access-control boundaries, and deferred activation items).
 - Settings frontend route (`/settings`) is now an operational module with business profile, preferences, sequence settings, and tenant context sections backed by backend APIs (`GET/PATCH /settings/business-profile`, `GET/PATCH /settings/preferences`, `GET/PATCH /settings/sequences`, `GET /settings/tenant-context`).
 
+
+## Purchases module delivery (Phase 11)
+
+- `docs/phase11_purchases_module.md` — Purchases MVP implementation details (tenant-scoped purchase APIs, PostgreSQL schema additions, stock-in inventory impact, finance expense/payables integration, and deferred procurement complexity).
+- Purchases frontend route (`/purchases`) is now an operational module with recent list/search, purchase create workflow, line-item stock-in editor, and purchase detail inspection backed by real backend APIs (`GET/POST /purchases`, `GET /purchases/{purchase_id}`, `GET /purchases/form-options`).
+
 ## Migration and legacy
 
 - CSV files in `easy_ecom/data_files/` are no longer a production persistence path.

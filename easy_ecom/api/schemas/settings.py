@@ -51,17 +51,20 @@ class PreferencesPatchRequest(BaseModel):
 class SequenceActiveUsage(BaseModel):
     sales_prefix: bool
     returns_prefix: bool
+    purchases_prefix: bool
 
 
 class SequenceResponse(BaseModel):
     sales_prefix: str
     returns_prefix: str
+    purchases_prefix: str
     active_usage: SequenceActiveUsage
 
 
 class SequencePatchRequest(BaseModel):
     sales_prefix: str | None = Field(default=None, min_length=1, max_length=20)
     returns_prefix: str | None = Field(default=None, min_length=1, max_length=20)
+    purchases_prefix: str | None = Field(default=None, min_length=1, max_length=20)
 
 
 class TenantContextResponse(BaseModel):
