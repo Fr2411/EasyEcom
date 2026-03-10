@@ -41,11 +41,11 @@ afterEach(() => {
 function prime() {
   getBusinessProfileMock.mockResolvedValue({ client_id: 'tenant-a', business_name: 'Tenant A', display_name: '', phone: '', email: '', address: '', currency_code: 'USD', timezone: 'UTC', tax_registration_no: '', logo_upload_supported: false, logo_upload_deferred_reason: 'Deferred' });
   getPreferencesMock.mockResolvedValue({ low_stock_threshold: 5, default_sales_note: '', default_inventory_adjustment_reasons: [], default_payment_terms_days: 0, active_usage: { low_stock_threshold: true, default_sales_note: false, default_inventory_adjustment_reasons: false, default_payment_terms_days: false } });
-  getSequencesMock.mockResolvedValue({ sales_prefix: 'SAL', returns_prefix: 'RET', active_usage: { sales_prefix: false, returns_prefix: false } });
+  getSequencesMock.mockResolvedValue({ sales_prefix: 'SAL', returns_prefix: 'RET', purchases_prefix: 'PUR', active_usage: { sales_prefix: false, returns_prefix: false, purchases_prefix: false } });
   getTenantContextMock.mockResolvedValue({ client_id: 'tenant-a', business_name: 'Tenant A', status: 'active', currency_code: 'USD' });
   patchBusinessProfileMock.mockResolvedValue({ client_id: 'tenant-a', business_name: 'Tenant AX', display_name: '', phone: '', email: '', address: '', currency_code: 'USD', timezone: 'UTC', tax_registration_no: '', logo_upload_supported: false, logo_upload_deferred_reason: 'Deferred' });
   patchPreferencesMock.mockResolvedValue({ low_stock_threshold: 6, default_sales_note: '', default_inventory_adjustment_reasons: [], default_payment_terms_days: 0, active_usage: { low_stock_threshold: true, default_sales_note: false, default_inventory_adjustment_reasons: false, default_payment_terms_days: false } });
-  patchSequencesMock.mockResolvedValue({ sales_prefix: 'SO', returns_prefix: 'RT', active_usage: { sales_prefix: false, returns_prefix: false } });
+  patchSequencesMock.mockResolvedValue({ sales_prefix: 'SO', returns_prefix: 'RT', purchases_prefix: 'PO', active_usage: { sales_prefix: false, returns_prefix: false, purchases_prefix: false } });
 }
 
 describe('SettingsPage', () => {
