@@ -26,6 +26,7 @@ from easy_ecom.data.repos.csv.sales_repo import (
 from easy_ecom.data.repos.csv.sequences_repo import SequencesRepo
 from easy_ecom.data.repos.csv.users_repo import RolesRepo, UserRolesRepo, UsersRepo
 from easy_ecom.data.repos.postgres.auth_repo import PostgresAuthRepo
+from easy_ecom.data.repos.postgres.customers_repo import CustomersPostgresRepo
 from easy_ecom.data.store.postgres_db import build_postgres_engine, build_session_factory
 from easy_ecom.data.store.runtime import build_runtime_store
 from easy_ecom.data.store.schema import TABLE_SCHEMAS
@@ -37,6 +38,7 @@ from easy_ecom.domain.services.finance_service import FinanceService
 from easy_ecom.domain.services.inventory_service import InventoryService, SequenceService
 from easy_ecom.domain.services.product_service import ProductService
 from easy_ecom.domain.services.sales_service import SalesService
+from easy_ecom.domain.services.customer_service import CustomerService
 from easy_ecom.domain.services.user_service import UserService
 
 
@@ -96,6 +98,12 @@ class ServiceContainer:
             ClientsRepo(self.store),
             PaymentsRepo(self.store),
         )
+        if settings.storage_backend == "postgres":
+            engine = build_postgres_engine(settings)
+            self.customers = CustomerService(CustomersPostgresRepo(build_session_factory(engine)))
+        else:
+            self.customers = CustomerService(CustomersRepo(self.store))
+
         self.sales = SalesService(
             SalesOrdersRepo(self.store),
             SalesOrderItemsRepo(self.store),
