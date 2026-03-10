@@ -99,6 +99,11 @@ Key frontend vars (`frontend/.env.example`):
 - `docs/phase3_dashboard_v2.md` — Dashboard v2 implementation details (real metrics, tenant-scoped API contract, deferred metrics, and UI building blocks).
 - Dashboard frontend route (`/dashboard`) is now an operational read-first module backed by real API data (`GET /dashboard/overview`) with loading/error/empty states.
 
+## Customers module delivery (Phase 4)
+
+- `docs/phase4_customers_module.md` — Customers MVP implementation details (tenant-scoped CRUD API, PostgreSQL model/migration updates, and deferred CRM work).
+- Customers frontend route (`/customers`) is now an operational module with tenant-scoped list/search/create/edit flows backed by backend APIs (`GET/POST/PATCH /customers`).
+
 Phase 2 backend outcomes:
 - Canonical FastAPI router now intentionally mounts all implemented business routers (`dashboard`, `products`, `products-stock`, `inventory`, `sales`) in addition to health/auth/session.
 - Dashboard tenant access is locked to authenticated session `client_id` (query-string tenant override is ignored).
