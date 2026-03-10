@@ -46,7 +46,8 @@ describe('SalesPage', () => {
 
     await waitFor(() => expect(screen.getByText('Create Sale')).toBeTruthy());
     fireEvent.change(screen.getByLabelText('Customer'), { target: { value: 'cust-a' } });
-    fireEvent.change(screen.getByDisplayValue('Select product/variant'), { target: { value: 'prd-1' } });
+    const selects = screen.getAllByRole('combobox');
+    fireEvent.change(selects[1], { target: { value: 'prd-1' } });
     fireEvent.change(screen.getByLabelText('Quantity 1'), { target: { value: '2' } });
 
     await waitFor(() => expect(screen.getByText('Subtotal: 200.00')).toBeTruthy());

@@ -38,6 +38,7 @@ class TenantSettingsModel(Base):
     default_inventory_adjustment_reasons: Mapped[str] = mapped_column(Text, default="")
     sales_prefix: Mapped[str] = mapped_column(String(12), default="SAL")
     returns_prefix: Mapped[str] = mapped_column(String(12), default="RET")
+    purchases_prefix: Mapped[str] = mapped_column(String(12), default="PUR")
     updated_at: Mapped[str] = mapped_column(String(64), default="")
 
 
@@ -247,6 +248,36 @@ class SalesReturnItemModel(Base):
     line_total: Mapped[str] = mapped_column(String(64), default="0")
     reason: Mapped[str] = mapped_column(String(255), default="")
     condition_status: Mapped[str] = mapped_column(String(64), default="")
+
+
+class PurchaseModel(Base):
+    __tablename__ = "purchases"
+
+    purchase_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    client_id: Mapped[str] = mapped_column(String(64), index=True)
+    purchase_no: Mapped[str] = mapped_column(String(64), index=True, default="")
+    purchase_date: Mapped[str] = mapped_column(String(32), index=True, default="")
+    supplier_id: Mapped[str] = mapped_column(String(64), index=True, default="")
+    supplier_name_snapshot: Mapped[str] = mapped_column(String(255), default="")
+    reference_no: Mapped[str] = mapped_column(String(120), default="")
+    status: Mapped[str] = mapped_column(String(32), default="received")
+    subtotal: Mapped[str] = mapped_column(String(64), default="0")
+    note: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[str] = mapped_column(String(64), default="")
+    created_by_user_id: Mapped[str] = mapped_column(String(64), default="")
+
+
+class PurchaseItemModel(Base):
+    __tablename__ = "purchase_items"
+
+    purchase_item_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    purchase_id: Mapped[str] = mapped_column(String(64), index=True)
+    client_id: Mapped[str] = mapped_column(String(64), index=True)
+    product_id: Mapped[str] = mapped_column(String(64), index=True)
+    product_name_snapshot: Mapped[str] = mapped_column(String(255), default="")
+    qty: Mapped[str] = mapped_column(String(64), default="0")
+    unit_cost: Mapped[str] = mapped_column(String(64), default="0")
+    line_total: Mapped[str] = mapped_column(String(64), default="0")
 
 
 class ImportRunModel(Base):
