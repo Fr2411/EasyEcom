@@ -256,6 +256,9 @@ class SalesApiService:
                 discount=str(max(0.0, discount)),
                 tax=str(max(0.0, tax)),
                 grand_total=str(grand_total),
+                amount_paid="0",
+                outstanding_balance=str(grand_total),
+                payment_status="unpaid",
                 note=note.strip(),
                 created_by_user_id=user_id,
             )
