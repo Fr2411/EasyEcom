@@ -159,6 +159,12 @@ Phase 6 adds a production inventory operations module:
 - `docs/phase12_reporting_analytics.md` — Reporting & Analytics MVP implementation details (tenant-safe APIs, truthful metric derivation, and deferred metric boundaries).
 - Reports frontend route (`/reports`) is now an operational analytics module with date range filters, overview KPIs, and sectioned sales/inventory/products/finance/returns/purchases reporting backed by backend APIs (`GET /reports/*`).
 
+
+## AI readiness foundation (Phase 13)
+
+- `docs/phase13_ai_readiness.md` — AI-readiness implementation details (tenant-scoped read-only context contracts, automation-safe inbound inquiry hook, and deferred external-channel scope).
+- Backend now exposes typed AI-safe context APIs (`/ai/context/*`) and internal automation hook entrypoint (`POST /ai/hooks/inbound-inquiry`) grounded on canonical PostgreSQL business data with strict session tenant isolation.
+
 ## Migration and legacy
 
 - CSV files in `easy_ecom/data_files/` are no longer a production persistence path.
