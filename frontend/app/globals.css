@@ -676,3 +676,68 @@ body {
 .int-inactive { background: #f8fafc; color: #475569; }
 .int-disabled { background: #fef2f2; border-color: #fca5a5; color: #991b1b; }
 @media (max-width: 980px) { .integrations-layout { grid-template-columns: 1fr; } }
+
+.ai-review-layout {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 0.9rem;
+}
+
+.ai-review-queue {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.ai-review-queue button {
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 0.45rem;
+  padding: 0.55rem;
+  background: #fff;
+}
+
+.ai-review-queue button.active {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.ai-review-messages {
+  display: grid;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.ai-msg {
+  border: 1px solid var(--line);
+  border-radius: 0.45rem;
+  padding: 0.5rem;
+}
+
+.ai-msg p {
+  margin: 0.3rem 0 0;
+}
+
+.ai-review-draft-block textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 0.45rem;
+  padding: 0.55rem;
+  font: inherit;
+}
+
+.ai-review-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 980px) {
+  .ai-review-layout {
+    grid-template-columns: 1fr;
+  }
+}
