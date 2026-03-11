@@ -1,22 +1,39 @@
 export type NavigationItem = {
   href: string;
   label: string;
+  group: 'Overview' | 'Commerce' | 'Operations' | 'System';
+  icon:
+    | 'home'
+    | 'dashboard'
+    | 'reports'
+    | 'package'
+    | 'inventory'
+    | 'sales'
+    | 'customers'
+    | 'finance'
+    | 'returns'
+    | 'admin'
+    | 'integrations'
+    | 'ai'
+    | 'automation'
+    | 'purchases'
+    | 'settings';
 };
 
 export const NAV_ITEMS: NavigationItem[] = [
-  { href: '/', label: 'Home' },
-  { href: '/dashboard', label: 'Dashboard' },
-  { href: '/reports', label: 'Reports' },
-  { href: '/products-stock', label: 'Products & Stock' },
-  { href: '/inventory', label: 'Inventory' },
-  { href: '/sales', label: 'Sales' },
-  { href: '/customers', label: 'Customers' },
-  { href: '/finance', label: 'Finance' },
-  { href: '/returns', label: 'Returns' },
-  { href: '/admin', label: 'Admin' },
-  { href: '/integrations', label: 'Integrations' },
-  { href: '/ai-review', label: 'AI Review' },
-  { href: '/automation', label: 'Automation' },
-  { href: '/purchases', label: 'Purchases' },
-  { href: '/settings', label: 'Settings' }
+  { href: '/', label: 'Home', group: 'Overview', icon: 'home' },
+  { href: '/dashboard', label: 'Dashboard', group: 'Overview', icon: 'dashboard' },
+  { href: '/reports', label: 'Reports', group: 'Overview', icon: 'reports' },
+  { href: '/products-stock', label: 'Products & Stock', group: 'Commerce', icon: 'package' },
+  { href: '/inventory', label: 'Inventory', group: 'Commerce', icon: 'inventory' },
+  { href: '/sales', label: 'Sales', group: 'Commerce', icon: 'sales' },
+  { href: '/customers', label: 'Customers', group: 'Commerce', icon: 'customers' },
+  { href: '/finance', label: 'Finance', group: 'Operations', icon: 'finance' },
+  { href: '/returns', label: 'Returns', group: 'Operations', icon: 'returns' },
+  { href: '/purchases', label: 'Purchases', group: 'Operations', icon: 'purchases' },
+  { href: '/admin', label: 'Admin', group: 'System', icon: 'admin' },
+  { href: '/integrations', label: 'Integrations', group: 'System', icon: 'integrations' },
+  { href: '/ai-review', label: 'AI Review', group: 'System', icon: 'ai' },
+  { href: '/automation', label: 'Automation', group: 'System', icon: 'automation' },
+  { href: '/settings', label: 'Settings', group: 'System', icon: 'settings' }
 ];
