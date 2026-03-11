@@ -232,7 +232,6 @@ The production Next.js frontend (`frontend/`) now uses a shared visual design sy
 
 - **Tokenized foundation:** centralized color palette, typography rhythm, border radii, elevation shadows, and surface/background states in `frontend/app/globals.css`.
 - **Global app shell:** grouped icon sidebar navigation, contextual top header, stronger active states, and improved utility/action areas through reusable layout components.
-- **Sidebar brand identity:** replaced plain sidebar brand text with the Easy-Ecom logo asset in the left navigation panel while preserving existing navigation/layout behavior.
 - **Session actions in navigation:** left sidebar now includes a persistent bottom-positioned **Log out** control that posts to `/auth/logout` and redirects users to `/login`, so sign-out is always accessible from protected workspace routes.
 - **Reusable primitives:** harmonized card, table, form field, badge, and status patterns reused across all operational modules (dashboard, inventory, sales, customers, finance, settings, integrations, AI review, etc.) to reduce style drift.
 - **Dashboard/UI polish:** executive KPI card presentation, clearer hierarchy for list/table sections, refined spacing, and cleaner empty/loading/error visual states.
