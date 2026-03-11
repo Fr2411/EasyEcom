@@ -19,6 +19,7 @@ class PurchaseCreateRequest(BaseModel):
 class PurchaseLineResponse(BaseModel):
     line_id: str
     product_id: str
+    variant_id: str = ""
     product_name: str
     qty: float
     unit_cost: float
