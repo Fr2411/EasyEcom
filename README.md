@@ -165,6 +165,13 @@ Phase 6 adds a production inventory operations module:
 - `docs/phase13_ai_readiness.md` — AI-readiness implementation details (tenant-scoped read-only context contracts, automation-safe inbound inquiry hook, and deferred external-channel scope).
 - Backend now exposes typed AI-safe context APIs (`/ai/context/*`) and internal automation hook entrypoint (`POST /ai/hooks/inbound-inquiry`) grounded on canonical PostgreSQL business data with strict session tenant isolation.
 
+
+## External channel integration foundation (Phase 14)
+
+- `docs/phase14_channel_integration_foundation.md` — channel integration foundation details (tenant-scoped channel registry, verified inbound webhook ingestion, conversation/message persistence, outbound dispatch intent preparation, and AI-safe hook compatibility).
+- Backend now exposes protected channel management + communication log APIs under `/integrations/*` and a signature-verified external ingestion route (`POST /integrations/inbound/{provider}`) that resolves tenant/channel safely.
+- Frontend route `/integrations` is now an operational admin module for channel setup, status visibility, and recent communication event previews.
+
 ## Migration and legacy
 
 - CSV files in `easy_ecom/data_files/` are no longer a production persistence path.
