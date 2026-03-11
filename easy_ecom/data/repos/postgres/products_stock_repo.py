@@ -106,6 +106,7 @@ class InventoryTxnPostgresRepo(PostgresRepo):
         "user_id",
         "txn_type",
         "product_id",
+        "variant_id",
         "product_name",
         "qty",
         "unit_cost",

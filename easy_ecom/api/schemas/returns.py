@@ -34,6 +34,7 @@ class ReturnSalesLookupResponse(BaseModel):
 class ReturnableSaleLine(BaseModel):
     sale_item_id: str
     product_id: str
+    variant_id: str = ""
     product_name: str
     sold_qty: float
     already_returned_qty: float
@@ -76,6 +77,7 @@ class ReturnDetailLineResponse(BaseModel):
     return_item_id: str
     sale_item_id: str
     product_id: str
+    variant_id: str = ""
     product_name: str
     sold_qty: float
     return_qty: float
