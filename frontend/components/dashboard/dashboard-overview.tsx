@@ -21,31 +21,31 @@ export function DashboardOverviewPanel() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let mounted = true;
-    const run = async () => {
+    let cancelled = false;
+
+    async function load() {
       try {
-        setLoading(true);
-        setError(null);
-        const snapshot = await getDashboardOverview();
-        if (mounted) {
-          setData(snapshot);
-        }
-      } catch (err) {
-        if (!mounted) return;
+        const next = await getDashboardOverview();
+        if (!cancelled) setData(next);
+      } catch (err: unknown) {
+        if (cancelled) return;
         if (err instanceof ApiNetworkError) {
-          setError('Unable to connect to the dashboard service.');
-        } else if (err instanceof ApiError && err.status === 401) {
-          setError('Your session has expired. Please sign in again.');
-        } else {
-          setError('Dashboard data is currently unavailable.');
+          setError('Network error: unable to reach API. Verify NEXT_PUBLIC_API_URL and backend availability.');
+          return;
         }
+        if (err instanceof ApiError) {
+          setError(`Dashboard API error (${err.status}): ${err.message}`);
+          return;
+        }
+        setError('Unexpected dashboard error.');
       } finally {
-        if (mounted) setLoading(false);
+        if (!cancelled) setLoading(false);
       }
-    };
-    run();
+    }
+
+    load();
     return () => {
-      mounted = false;
+      cancelled = true;
     };
   }, []);
 
@@ -75,10 +75,26 @@ export function DashboardOverviewPanel() {
   return (
     <section className="dashboard-v2">
       <div className="kpi-grid">
-        <article className="kpi-card"><p>Total Products</p><h3>{fmtNumber(data.kpis.total_products)}</h3></article>
-        <article className="kpi-card"><p>Total Variants / SKUs</p><h3>{fmtNumber(data.kpis.total_variants)}</h3></article>
-        <article className="kpi-card"><p>Current Stock Units</p><h3>{fmtNumber(data.kpis.current_stock_units)}</h3></article>
-        <article className="kpi-card"><p>Low Stock Items</p><h3>{fmtNumber(data.kpis.low_stock_items)}</h3></article>
+        <article className="kpi-card">
+          <p>Total Products</p>
+          <h3>{fmtNumber(data.kpis.total_products)}</h3>
+          <span className="kpi-meta">Catalog coverage</span>
+        </article>
+        <article className="kpi-card">
+          <p>Total Variants / SKUs</p>
+          <h3>{fmtNumber(data.kpis.total_variants)}</h3>
+          <span className="kpi-meta">Sellable units</span>
+        </article>
+        <article className="kpi-card">
+          <p>Current Stock Units</p>
+          <h3>{fmtNumber(data.kpis.current_stock_units)}</h3>
+          <span className="kpi-meta">Warehouse quantity</span>
+        </article>
+        <article className="kpi-card">
+          <p>Low Stock Items</p>
+          <h3>{fmtNumber(data.kpis.low_stock_items)}</h3>
+          <span className="kpi-meta">Needs replenishment</span>
+        </article>
       </div>
 
       {isEmpty ? <div className="dashboard-empty">No products or inventory activity yet. Add products and stock to populate this dashboard.</div> : null}

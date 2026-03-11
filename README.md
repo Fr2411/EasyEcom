@@ -223,3 +223,16 @@ Phase 16 introduces controlled partial automation on top of channel integrations
 - Auditable automation decision history and queue endpoints.
 
 See `docs/phase16_controlled_partial_automation.md` for full implementation and safety details.
+
+
+## Frontend design system refresh (Next.js app shell)
+
+The production Next.js frontend (`frontend/`) now uses a shared visual design system intended for a premium SaaS admin experience while preserving all existing routes, API contracts, and auth behavior:
+
+- **Tokenized foundation:** centralized color palette, typography rhythm, border radii, elevation shadows, and surface/background states in `frontend/app/globals.css`.
+- **Global app shell:** grouped icon sidebar navigation, contextual top header, stronger active states, and improved utility/action areas through reusable layout components.
+- **Reusable primitives:** harmonized card, table, form field, badge, and status patterns reused across all operational modules (dashboard, inventory, sales, customers, finance, settings, integrations, AI review, etc.) to reduce style drift.
+- **Dashboard/UI polish:** executive KPI card presentation, clearer hierarchy for list/table sections, refined spacing, and cleaner empty/loading/error visual states.
+- **Auth experience:** redesigned login screen with a branded premium split layout while keeping existing sign-in logic, API usage, and redirect behavior unchanged.
+
+This update intentionally focuses on design language and maintainability (shared style tokens + reusable class patterns) rather than changing business logic.
