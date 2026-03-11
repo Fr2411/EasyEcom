@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from easy_ecom.core.ids import new_uuid
 from easy_ecom.core.time_utils import now_iso
+from easy_ecom.domain.services.stock_policy import stock_deltas
 from easy_ecom.data.store.postgres_models import (
     CustomerModel,
     InventoryTxnModel,
@@ -43,13 +44,12 @@ class SalesApiService:
             )
         ).all()
         total = 0.0
-        inbound = {"IN", "ADJUST+", "ADJUST"}
         for txn_type, qty in rows:
             try:
                 value = float(qty or 0)
             except (TypeError, ValueError):
                 value = 0.0
-            total += value if txn_type in inbound else -value
+            total += stock_deltas(str(txn_type), value).on_hand
         return total
 
     def lookup_customers(self, client_id: str, query: str = "") -> list[dict[str, str]]:

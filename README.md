@@ -159,6 +159,7 @@ Phase 6 adds a production inventory operations module:
 
 - `docs/phase12_reporting_analytics.md` — Reporting & Analytics MVP implementation details (tenant-safe APIs, truthful metric derivation, and deferred metric boundaries).
 - Reports frontend route (`/reports`) is now an operational analytics module with date range filters, overview KPIs, and sectioned sales/inventory/products/finance/returns/purchases reporting backed by backend APIs (`GET /reports/*`).
+- Reports frontend now uses partial-load behavior (`Promise.allSettled`) so individual section failures show targeted warnings instead of blanking the full page when overview is available.
 
 
 ## AI readiness foundation (Phase 13)
@@ -249,6 +250,8 @@ Inventory is modeled per-tenant as a **single location** with separated quantiti
 - `reserved_qty`: currently defaults to `0` (reservation-ready field for future).
 - `sellable_qty`: `max(0, on_hand_qty - reserved_qty - safety_stock_qty)` with `safety_stock_qty=0` for now.
 - `stock_value`: computed from on-hand lots only (`on_hand_qty * unit_cost` at lot level).
+- Shared stock semantics are centralized in `easy_ecom/domain/services/stock_policy.py` and reused by Inventory, Sales, Dashboard/metrics, Reports, and Purchases services to keep cross-tab stock totals consistent.
+- Inventory UI now supports explicit list modes: **Catalog view** (all active items) and **Stocked only** (rows with `on_hand_qty > 0` or `incoming_qty > 0`).
 
 ### Inbound workflow
 
