@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createInboundStock, createInventoryAdjustment, getInventoryDetail, getInventoryItems, getInventoryMovements, receiveInboundStock } from '@/lib/api/inventory';
 import type { InventoryItem, InventoryMovement } from '@/types/inventory';
 
@@ -23,6 +23,8 @@ export function InventoryWorkspace() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [query, setQuery] = useState('');
+
+  const [inventoryView, setInventoryView] = useState<'catalog' | 'stocked'>('catalog');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -112,6 +114,13 @@ export function InventoryWorkspace() {
     }
   };
 
+
+  const visibleItems = useMemo(() => (
+    inventoryView === 'stocked'
+      ? items.filter((item) => toFiniteNumber(item.on_hand_qty) > 0 || toFiniteNumber(item.incoming_qty) > 0)
+      : items
+  ), [inventoryView, items]);
+
   const submitAdjustment = async () => {
     if (!adjustItemId) return;
     try {
@@ -142,6 +151,10 @@ export function InventoryWorkspace() {
       <div className="inventory-toolbar">
         <input aria-label="Search inventory" placeholder="Search SKU, variant, product" value={query} onChange={(e) => setQuery(e.target.value)} />
         <button type="button" onClick={() => load(query)}>Search</button>
+        <select aria-label="Inventory view mode" value={inventoryView} onChange={(e) => setInventoryView(e.target.value as 'catalog' | 'stocked')}>
+          <option value="catalog">Catalog view (all active items)</option>
+          <option value="stocked">Stocked only (on hand/incoming &gt; 0)</option>
+        </select>
         <select aria-label="Filter item" value={selectedItemId} onChange={(e) => setSelectedItemId(e.target.value)}>
           <option value="">All items</option>
           {items.map((item) => <option key={item.item_id} value={item.item_id}>{item.item_name}</option>)}
@@ -168,8 +181,8 @@ export function InventoryWorkspace() {
       <div className="inventory-grid">
         <div className="inventory-panel">
           <h3>Current Stock</h3>
-          {!loading && items.length > 0 ? <table className="inventory-table"><thead><tr><th>Item</th><th>Parent Product</th><th>On Hand</th><th>Incoming</th><th>Sellable</th><th>Avg Cost</th><th>Value</th><th>Low stock</th></tr></thead><tbody>
-            {items.map((item) => (
+          {!loading && visibleItems.length > 0 ? <table className="inventory-table"><thead><tr><th>Item</th><th>Parent Product</th><th>On Hand</th><th>Incoming</th><th>Sellable</th><th>Avg Cost</th><th>Value</th><th>Low stock</th></tr></thead><tbody>
+            {visibleItems.map((item) => (
               <tr key={item.item_id} onClick={() => openDetail(item.item_id)}>
                 <td><strong>{item.item_name}</strong><br /><span>{item.item_id}</span></td>
                 <td>{item.parent_product_name || '—'}</td>
