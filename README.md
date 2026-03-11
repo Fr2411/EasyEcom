@@ -212,3 +212,14 @@ bash scripts/db_psql.sh
 
 - This works because RDS is private and accessed via EC2 SSH tunnel.
 - If SSH fails, check EC2 security group inbound rule for current public IP.
+
+
+## Controlled partial automation (Phase 16)
+
+Phase 16 introduces controlled partial automation on top of channel integrations + AI review:
+- Tenant-scoped automation policy controls (enable/disable, emergency stop, per-category toggles).
+- Explicit automation evaluate/run APIs with low-risk category gating.
+- Auto-send only for policy-approved, grounded low-risk responses; otherwise fallback to human review drafts.
+- Auditable automation decision history and queue endpoints.
+
+See `docs/phase16_controlled_partial_automation.md` for full implementation and safety details.
