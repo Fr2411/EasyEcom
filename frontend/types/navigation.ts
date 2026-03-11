@@ -16,6 +16,7 @@ export const NAV_ITEMS: NavigationItem[] = [
   { href: '/admin', label: 'Admin' },
   { href: '/integrations', label: 'Integrations' },
   { href: '/ai-review', label: 'AI Review' },
+  { href: '/automation', label: 'Automation' },
   { href: '/purchases', label: 'Purchases' },
   { href: '/settings', label: 'Settings' }
 ];
