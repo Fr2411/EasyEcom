@@ -48,6 +48,7 @@ from easy_ecom.domain.services.purchases_api_service import PurchasesApiService
 from easy_ecom.domain.services.reports_api_service import ReportsApiService
 from easy_ecom.domain.services.ai_context_service import AiContextService
 from easy_ecom.domain.services.integrations_service import IntegrationsService
+from easy_ecom.domain.services.ai_review_service import AiReviewService
 from easy_ecom.domain.services.user_service import UserService
 
 
@@ -116,6 +117,7 @@ class ServiceContainer:
         self.reports_mvp = None
         self.ai_context = None
         self.integrations = None
+        self.ai_review = None
         if settings.storage_backend == "postgres":
             engine = build_postgres_engine(settings)
             session_factory = build_session_factory(engine)
@@ -129,6 +131,7 @@ class ServiceContainer:
             self.reports_mvp = ReportsApiService(session_factory)
             self.ai_context = AiContextService(session_factory)
             self.integrations = IntegrationsService(session_factory, ai_context_service=self.ai_context)
+            self.ai_review = AiReviewService(session_factory, ai_context_service=self.ai_context, integrations_service=self.integrations)
         else:
             self.customers = CustomerService(CustomersRepo(self.store))
 

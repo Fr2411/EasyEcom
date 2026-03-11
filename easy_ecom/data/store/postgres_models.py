@@ -358,3 +358,28 @@ class ChannelMessageModel(Base):
     created_at: Mapped[str] = mapped_column(String(64), default="")
     outbound_status: Mapped[str] = mapped_column(String(32), default="prepared")
     created_by_user_id: Mapped[str] = mapped_column(String(64), default="")
+
+
+class AiReviewDraftModel(Base):
+    __tablename__ = "ai_review_drafts"
+
+    draft_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    client_id: Mapped[str] = mapped_column(String(64), index=True)
+    conversation_id: Mapped[str] = mapped_column(String(64), index=True)
+    inbound_message_id: Mapped[str] = mapped_column(String(64), index=True)
+    ai_draft_text: Mapped[str] = mapped_column(Text, default="")
+    edited_text: Mapped[str] = mapped_column(Text, default="")
+    final_text: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(32), index=True, default="draft_created")
+    intent: Mapped[str] = mapped_column(String(64), default="")
+    confidence: Mapped[str] = mapped_column(String(32), default="")
+    grounding_json: Mapped[str] = mapped_column(Text, default="{}")
+    requested_by_user_id: Mapped[str] = mapped_column(String(64), default="")
+    approved_by_user_id: Mapped[str] = mapped_column(String(64), default="")
+    sent_by_user_id: Mapped[str] = mapped_column(String(64), default="")
+    created_at: Mapped[str] = mapped_column(String(64), default="")
+    updated_at: Mapped[str] = mapped_column(String(64), default="")
+    approved_at: Mapped[str] = mapped_column(String(64), default="")
+    sent_at: Mapped[str] = mapped_column(String(64), default="")
+    failed_reason: Mapped[str] = mapped_column(Text, default="")
+    send_result_json: Mapped[str] = mapped_column(Text, default="{}")
