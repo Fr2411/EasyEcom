@@ -1,0 +1,22 @@
+<svg width="620" height="170" viewBox="0 0 620 170" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Easy-Ecom logo</title>
+  <desc id="desc">Shopping cart icon with growth arrow and Easy-Ecom wordmark in blue gradient.</desc>
+  <defs>
+    <linearGradient id="logoBlue" x1="48" y1="26" x2="575" y2="140" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1FA2FF"/>
+      <stop offset="1" stop-color="#0A57C5"/>
+    </linearGradient>
+  </defs>
+  <g fill="url(#logoBlue)">
+    <path d="M64 43c0-4.4 3.6-8 8-8h69a8 8 0 0 1 7.5 5.2l8.7 23.5h154.1c5.2 0 9 4.9 7.6 9.9l-24.4 88.3a8 8 0 0 1-7.7 5.9H130.7a8 8 0 0 1-7.5-5.2L84.1 56H72c-4.4 0-8-3.6-8-8Z" opacity="0.2"/>
+    <path d="M84 49h47.4l29.3 79.4h126.6l19.8-71.7H149.5a8 8 0 0 1-7.5-5.2L131 23.5H84a7.5 7.5 0 0 0 0 15h37.5l4 10.5H84a7.5 7.5 0 0 0 0 15Z"/>
+    <rect x="156" y="82" width="20" height="36" rx="4"/>
+    <rect x="185" y="74" width="20" height="44" rx="4"/>
+    <rect x="214" y="66" width="20" height="52" rx="4"/>
+    <rect x="243" y="56" width="20" height="62" rx="4"/>
+    <path d="M147.4 71.2c43-3.2 83.7-16.3 121.9-39.2l12.1-7.3-7 21.1 29.7-3.1-3.7-35.6-30.3 1.4 8.4 17.2-11.4 6.7c-35.8 21.1-74.2 33.2-114.9 36.2l-4.8 0.3Z"/>
+    <circle cx="168" cy="149" r="14"/>
+    <circle cx="248" cy="149" r="14"/>
+    <path d="M346.8 126V53.2h46.9v11.5h-32.9v17.4h29v11.1h-29v21.3h34.1V126h-48.1Zm79.7 1.2c-5.6 0-10.4-1.2-14.4-3.5-4-2.3-7.1-5.5-9.3-9.6-2.2-4.1-3.3-8.8-3.3-14.2s1.1-10.2 3.3-14.3c2.2-4.2 5.3-7.4 9.3-9.7 4-2.3 8.8-3.4 14.4-3.4 5.5 0 10.3 1.1 14.3 3.4 4.1 2.3 7.2 5.5 9.5 9.7 2.2 4.1 3.3 8.9 3.3 14.3s-1.1 10.1-3.3 14.2c-2.3 4.1-5.4 7.3-9.5 9.6-4 2.3-8.8 3.5-14.3 3.5Zm0-10.9c3.8 0 6.8-1.3 9-4 2.2-2.8 3.4-6.9 3.4-12.4 0-5.5-1.2-9.7-3.4-12.5-2.2-2.8-5.2-4.1-9-4.1-3.9 0-7 1.3-9.2 4.1-2.2 2.8-3.3 7-3.3 12.5 0 5.5 1.1 9.6 3.3 12.4 2.2 2.7 5.3 4 9.2 4Zm36-20v-11h45.4v11h-45.4Zm54.9 29.7V53.2h14v60.7h31.8V126h-45.8Zm62.8 0V53.2h14V126h-14Z"/>
+  </g>
+</svg>
