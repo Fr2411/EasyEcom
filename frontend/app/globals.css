@@ -136,6 +136,11 @@ button:disabled {
 
 .sidebar-footer strong { font-size: 0.88rem; }
 
+.sidebar-logout-btn {
+  width: 100%;
+  margin-top: 0.65rem;
+}
+
 .content-pane { display: flex; flex-direction: column; }
 
 .top-header {

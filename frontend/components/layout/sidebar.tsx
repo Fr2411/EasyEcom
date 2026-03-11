@@ -1,5 +1,6 @@
 import { NAV_ITEMS } from '@/types/navigation';
 import { NavItem } from '@/components/ui/nav-item';
+import { SidebarLogoutButton } from '@/components/layout/sidebar-logout-button';
 
 const groupedNavigation = NAV_ITEMS.reduce<Record<string, typeof NAV_ITEMS>>((acc, item) => {
   if (!acc[item.group]) {
@@ -34,6 +35,7 @@ export function Sidebar() {
       <footer className="sidebar-footer">
         <p className="eyebrow">Workspace</p>
         <strong>Production Mode</strong>
+        <SidebarLogoutButton />
       </footer>
     </aside>
   );
