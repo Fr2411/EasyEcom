@@ -50,8 +50,15 @@ export default function LoginPage() {
   return (
     <AuthRouteGuard mode="public-only">
       <main className="login-page">
+        <section className="login-hero">
+          <p className="eyebrow">EasyEcom</p>
+          <h1>Welcome to your operations command center.</h1>
+          <p>Monitor inventory, sales, finance, and automation workflows in one premium workspace.</p>
+        </section>
         <form className="login-card" onSubmit={onSubmit}>
-          <h1>EasyEcom Login</h1>
+          <h1 className="login-title">EasyEcom Login</h1>
+          <h2>Sign in</h2>
+          <p className="muted">Use your EasyEcom account to continue.</p>
           <label>
             Email
             <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required disabled={submitting} />
