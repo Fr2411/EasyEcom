@@ -1,3 +1,5 @@
+import Image from 'next/image';
+
 import { NAV_ITEMS } from '@/types/navigation';
 import { NavItem } from '@/components/ui/nav-item';
 import { SidebarLogoutButton } from '@/components/layout/sidebar-logout-button';
@@ -14,7 +16,14 @@ export function Sidebar() {
   return (
     <aside className="sidebar" aria-label="Primary">
       <div className="brand-block">
-        <p className="eyebrow">EasyEcom</p>
+        <Image
+          src="/brand/easy-ecom-logo.svg"
+          alt="Easy-Ecom"
+          width={310}
+          height={85}
+          className="brand-logo"
+          priority
+        />
         <h1 className="brand-title">Operations Hub</h1>
         <p className="brand-subtitle">Business Command Center</p>
       </div>
