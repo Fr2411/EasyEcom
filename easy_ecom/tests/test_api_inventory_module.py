@@ -164,9 +164,11 @@ def test_inventory_list_movements_and_adjustments(tmp_path: Path) -> None:
     assert inv_res.status_code == 200
     by_id = {item['item_id']: item for item in inv_res.json()['items']}
     assert {'v-tenant-a', 'v-tenant-a-l', 'p-tenant-a-simple'} == set(by_id.keys())
-    assert by_id['v-tenant-a']['available_qty'] == 8.0
-    assert by_id['v-tenant-a-l']['available_qty'] == 0.0
-    assert by_id['p-tenant-a-simple']['available_qty'] == 0.0
+    assert by_id['v-tenant-a']['on_hand_qty'] == 8.0
+    assert by_id['v-tenant-a-l']['on_hand_qty'] == 0.0
+    assert by_id['v-tenant-a-l']['incoming_qty'] == 0.0
+    assert by_id['v-tenant-a-l']['sellable_qty'] == 0.0
+    assert by_id['p-tenant-a-simple']['on_hand_qty'] == 0.0
     assert by_id['v-tenant-a-l']['parent_product_id'] == 'p-tenant-a'
 
     movements_res = client.get('/inventory/movements', params={"item_id": "v-tenant-a"})
@@ -197,12 +199,36 @@ def test_inventory_list_movements_and_adjustments(tmp_path: Path) -> None:
 
     detail_res = client.get('/inventory/v-tenant-a')
     assert detail_res.status_code == 200
-    assert detail_res.json()['item']['available_qty'] == 9.0
+    assert detail_res.json()['item']['on_hand_qty'] == 9.0
+    assert detail_res.json()['item']['sellable_qty'] == 9.0
 
     zero_detail = client.get('/inventory/v-tenant-a-l')
     assert zero_detail.status_code == 200
-    assert zero_detail.json()['item']['available_qty'] == 0.0
+    assert zero_detail.json()['item']['on_hand_qty'] == 0.0
     assert zero_detail.json()['recent_movements'] == []
+
+    inbound_res = client.post('/inventory/inbound', json={
+        'item_id': 'v-tenant-a-l',
+        'quantity': 5,
+        'expected_unit_cost': 3,
+        'reference': 'po-1',
+    })
+    assert inbound_res.status_code == 201
+    inbound_id = inbound_res.json()['inbound_id']
+
+    after_inbound = client.get('/inventory/v-tenant-a-l')
+    assert after_inbound.status_code == 200
+    assert after_inbound.json()['item']['on_hand_qty'] == 0.0
+    assert after_inbound.json()['item']['incoming_qty'] == 5.0
+    assert after_inbound.json()['item']['sellable_qty'] == 0.0
+
+    receive_res = client.post(f'/inventory/inbound/{inbound_id}/receive', json={})
+    assert receive_res.status_code == 200
+
+    after_receive = client.get('/inventory/v-tenant-a-l')
+    assert after_receive.status_code == 200
+    assert after_receive.json()['item']['incoming_qty'] == 0.0
+    assert after_receive.json()['item']['on_hand_qty'] == 5.0
 
     bad_payload = client.post('/inventory/adjustments', json={"item_id": "v-tenant-a", "adjustment_type": "correction", "quantity_delta": 0})
     assert bad_payload.status_code == 422

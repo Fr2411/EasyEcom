@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { createInventoryAdjustment, getInventoryDetail, getInventoryItems, getInventoryMovements } from '@/lib/api/inventory';
+import { createInboundStock, createInventoryAdjustment, getInventoryDetail, getInventoryItems, getInventoryMovements, receiveInboundStock } from '@/lib/api/inventory';
 import type { InventoryItem, InventoryMovement } from '@/types/inventory';
 
 type AdjustmentType = 'stock_in' | 'stock_out' | 'correction';
@@ -26,6 +26,13 @@ export function InventoryWorkspace() {
   const [reason, setReason] = useState('');
   const [note, setNote] = useState('');
   const [reference, setReference] = useState('');
+  const [inboundItemId, setInboundItemId] = useState('');
+  const [inboundQty, setInboundQty] = useState(1);
+  const [inboundCost, setInboundCost] = useState(0);
+  const [inboundRef, setInboundRef] = useState('');
+  const [inboundIdToReceive, setInboundIdToReceive] = useState('');
+  const [receiveQty, setReceiveQty] = useState(0);
+  const [receiveCost, setReceiveCost] = useState(0);
 
   const [detailItem, setDetailItem] = useState<InventoryItem | null>(null);
   const [detailMovements, setDetailMovements] = useState<InventoryMovement[]>([]);
@@ -43,6 +50,9 @@ export function InventoryWorkspace() {
       if (!adjustItemId && itemsRes.items.length > 0) {
         setAdjustItemId(itemsRes.items[0].item_id);
       }
+      if (!inboundItemId && itemsRes.items.length > 0) {
+        setInboundItemId(itemsRes.items[0].item_id);
+      }
     } catch {
       setError('Unable to load inventory module right now.');
     } finally {
@@ -59,6 +69,37 @@ export function InventoryWorkspace() {
       setDetailMovements(detail.recent_movements);
     } catch {
       setError('Unable to load inventory detail.');
+    }
+  };
+
+  const createInbound = async () => {
+    if (!inboundItemId) return;
+    try {
+      setSaving(true);
+      setError(null);
+      await createInboundStock({ item_id: inboundItemId, quantity: inboundQty, expected_unit_cost: inboundCost, reference: inboundRef });
+      setInboundRef('');
+      await load(query);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Inbound creation failed.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const markInboundReceived = async () => {
+    if (!inboundIdToReceive) return;
+    try {
+      setSaving(true);
+      setError(null);
+      await receiveInboundStock(inboundIdToReceive, { quantity: receiveQty || undefined, unit_cost: receiveCost || undefined });
+      setInboundIdToReceive('');
+      setReceiveQty(0);
+      await load(query);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Inbound receipt failed.');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -102,6 +143,8 @@ export function InventoryWorkspace() {
           <option value="OUT">OUT</option>
           <option value="ADJUST">ADJUST</option>
           <option value="ADJUST+">ADJUST+</option>
+          <option value="INBOUND_PENDING">INBOUND_PENDING</option>
+          <option value="INBOUND_RECEIVED">INBOUND_RECEIVED</option>
         </select>
         <input aria-label="Start date" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
         <input aria-label="End date" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
@@ -116,12 +159,14 @@ export function InventoryWorkspace() {
       <div className="inventory-grid">
         <div className="inventory-panel">
           <h3>Current Stock</h3>
-          {!loading && items.length > 0 ? <table className="inventory-table"><thead><tr><th>Item</th><th>Parent Product</th><th>Available Qty</th><th>Avg Cost</th><th>Value</th><th>Low stock</th></tr></thead><tbody>
+          {!loading && items.length > 0 ? <table className="inventory-table"><thead><tr><th>Item</th><th>Parent Product</th><th>On Hand</th><th>Incoming</th><th>Sellable</th><th>Avg Cost</th><th>Value</th><th>Low stock</th></tr></thead><tbody>
             {items.map((item) => (
               <tr key={item.item_id} onClick={() => openDetail(item.item_id)}>
                 <td><strong>{item.item_name}</strong><br /><span>{item.item_id}</span></td>
                 <td>{item.parent_product_name || '—'}</td>
-                <td>{item.available_qty.toFixed(2)}</td>
+                <td>{item.on_hand_qty.toFixed(2)}</td>
+                <td>{item.incoming_qty.toFixed(2)}</td>
+                <td>{item.sellable_qty.toFixed(2)}</td>
                 <td>{item.avg_unit_cost.toFixed(2)}</td>
                 <td>{item.stock_value.toFixed(2)}</td>
                 <td>{item.low_stock ? <span className="inv-badge-low">Low</span> : '—'}</td>
@@ -149,6 +194,23 @@ export function InventoryWorkspace() {
           <label>Note<textarea value={note} onChange={(e) => setNote(e.target.value)} /></label>
           <button type="button" onClick={submitAdjustment} disabled={saving}>{saving ? 'Applying...' : 'Apply Adjustment'}</button>
         </aside>
+        <aside className="inventory-panel">
+          <h3>Inbound Workflow</h3>
+          <label>Item<select value={inboundItemId} onChange={(e) => setInboundItemId(e.target.value)}>
+            <option value="">Select item</option>
+            {items.map((item) => <option key={item.item_id} value={item.item_id}>{item.item_name}</option>)}
+          </select></label>
+          <label>Incoming Qty<input type="number" min={0.01} step="0.01" value={inboundQty} onChange={(e) => setInboundQty(Number(e.target.value || 0))} /></label>
+          <label>Expected Unit Cost<input type="number" min={0.01} step="0.01" value={inboundCost} onChange={(e) => setInboundCost(Number(e.target.value || 0))} /></label>
+          <label>Reference<input value={inboundRef} onChange={(e) => setInboundRef(e.target.value)} /></label>
+          <button type="button" onClick={createInbound} disabled={saving}>{saving ? 'Saving...' : 'Create Incoming'}</button>
+          <hr />
+          <label>Inbound ID<input value={inboundIdToReceive} onChange={(e) => setInboundIdToReceive(e.target.value)} placeholder="INB-YYYY-00001" /></label>
+          <label>Receive Qty (optional full by default)<input type="number" min={0} step="0.01" value={receiveQty} onChange={(e) => setReceiveQty(Number(e.target.value || 0))} /></label>
+          <label>Receive Unit Cost (optional)<input type="number" min={0} step="0.01" value={receiveCost} onChange={(e) => setReceiveCost(Number(e.target.value || 0))} /></label>
+          <button type="button" onClick={markInboundReceived} disabled={saving}>{saving ? 'Saving...' : 'Mark Received'}</button>
+        </aside>
+
       </div>
 
       <div className="inventory-panel">
@@ -168,7 +230,7 @@ export function InventoryWorkspace() {
         </tbody></table> : null}
       </div>
 
-      {detailItem ? <div className="inventory-panel"><h3>Inventory Detail · {detailItem.item_name}</h3><p>On-hand: <strong>{detailItem.available_qty.toFixed(2)}</strong> · Value: <strong>{detailItem.stock_value.toFixed(2)}</strong></p><ul>{detailMovements.map((movement) => <li key={movement.txn_id}>{movement.timestamp} · {movement.movement_type} · {movement.qty_delta >= 0 ? '+' : ''}{movement.qty_delta.toFixed(2)} · {movement.note || movement.source_type}</li>)}</ul></div> : null}
+      {detailItem ? <div className="inventory-panel"><h3>Inventory Detail · {detailItem.item_name}</h3><p>On-hand: <strong>{detailItem.on_hand_qty.toFixed(2)}</strong> · Incoming: <strong>{detailItem.incoming_qty.toFixed(2)}</strong> · Sellable: <strong>{detailItem.sellable_qty.toFixed(2)}</strong> · Value: <strong>{detailItem.stock_value.toFixed(2)}</strong></p><ul>{detailMovements.map((movement) => <li key={movement.txn_id}>{movement.timestamp} · {movement.movement_type} · {movement.qty_delta >= 0 ? '+' : ''}{movement.qty_delta.toFixed(2)} · {movement.note || movement.source_type}</li>)}</ul></div> : null}
     </section>
   );
 }

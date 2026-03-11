@@ -4,7 +4,10 @@ export type InventoryItem = {
   parent_product_id: string;
   parent_product_name: string;
   item_type: 'product' | 'variant' | 'unmapped';
-  available_qty: number;
+  on_hand_qty: number;
+  incoming_qty: number;
+  reserved_qty: number;
+  sellable_qty: number;
   avg_unit_cost: number;
   stock_value: number;
   lot_count: number;

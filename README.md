@@ -237,3 +237,23 @@ The production Next.js frontend (`frontend/`) now uses a shared visual design sy
 - **Auth experience:** redesigned login screen with a branded premium split layout while keeping existing sign-in logic, API usage, and redirect behavior unchanged.
 
 This update intentionally focuses on design language and maintainability (shared style tokens + reusable class patterns) rather than changing business logic.
+
+
+## Inventory quantity model (single-location)
+
+Inventory is modeled per-tenant as a **single location** with separated quantities:
+
+- `on_hand_qty`: physically received stock in possession.
+- `incoming_qty`: pending inbound stock not yet received into on-hand.
+- `reserved_qty`: currently defaults to `0` (reservation-ready field for future).
+- `sellable_qty`: `max(0, on_hand_qty - reserved_qty - safety_stock_qty)` with `safety_stock_qty=0` for now.
+- `stock_value`: computed from on-hand lots only (`on_hand_qty * unit_cost` at lot level).
+
+### Inbound workflow
+
+- `POST /inventory/inbound`: creates pending incoming stock (`INBOUND_PENDING`) and increases `incoming_qty` only.
+- `POST /inventory/inbound/{inbound_id}/receive`: receives pending inbound into on-hand by:
+  1) posting an `INBOUND_RECEIVED` release to decrease incoming, and
+  2) posting regular `IN` lot entry to increase on-hand.
+
+Manual adjustments stay separate via `POST /inventory/adjustments` (`stock_in`, `stock_out`, `correction`).
