@@ -232,6 +232,7 @@ The production Next.js frontend (`frontend/`) now uses a shared visual design sy
 
 - **Tokenized foundation:** centralized color palette, typography rhythm, border radii, elevation shadows, and surface/background states in `frontend/app/globals.css`.
 - **Global app shell:** grouped icon sidebar navigation, contextual top header, stronger active states, and improved utility/action areas through reusable layout components.
+- **Session actions in navigation:** left sidebar now includes a **Log out** control placed directly after **Settings** in the System navigation group; it posts to `/auth/logout` and redirects users to `/login` so sign-out remains easy to find on protected workspace routes.
 - **Reusable primitives:** harmonized card, table, form field, badge, and status patterns reused across all operational modules (dashboard, inventory, sales, customers, finance, settings, integrations, AI review, etc.) to reduce style drift.
 - **Dashboard/UI polish:** executive KPI card presentation, clearer hierarchy for list/table sections, refined spacing, and cleaner empty/loading/error visual states.
 - **Auth experience:** redesigned login screen with a branded premium split layout while keeping existing sign-in logic, API usage, and redirect behavior unchanged.

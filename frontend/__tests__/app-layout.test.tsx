@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { describe, expect, test, vi } from 'vitest';
 import type { ReactNode } from 'react';
 import AppLayout from '@/app/(app)/layout';
@@ -10,7 +10,7 @@ vi.mock('@/components/auth/auth-route-guard', () => ({
 }));
 
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ replace: vi.fn() }),
+  useRouter: () => ({ replace: vi.fn(), refresh: vi.fn() }),
   usePathname: () => '/dashboard'
 }));
 
@@ -29,6 +29,18 @@ describe('AppLayout', () => {
     expect(screen.getByTestId('auth-route-guard')).toBeTruthy();
     expect(screen.getByLabelText('Primary')).toBeTruthy();
     expect(screen.getByText('Operations Workspace')).toBeTruthy();
+
+    const systemSection = screen.getByLabelText('System');
+    const settingsLink = within(systemSection).getByRole('link', { name: 'Settings' });
+    const logoutButton = within(systemSection).getByRole('button', { name: 'Log out' });
+
+    const settingsListItem = settingsLink.closest('li');
+    const logoutListItem = logoutButton.closest('li');
+
+    expect(settingsListItem).toBeTruthy();
+    expect(logoutListItem).toBeTruthy();
+    expect(settingsListItem?.nextElementSibling).toBe(logoutListItem);
+
     expect(screen.getByText('Dashboard body content')).toBeTruthy();
   });
 });

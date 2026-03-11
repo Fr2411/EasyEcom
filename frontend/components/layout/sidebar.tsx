@@ -1,5 +1,6 @@
 import { NAV_ITEMS } from '@/types/navigation';
 import { NavItem } from '@/components/ui/nav-item';
+import { SidebarLogoutButton } from '@/components/layout/sidebar-logout-button';
 
 const groupedNavigation = NAV_ITEMS.reduce<Record<string, typeof NAV_ITEMS>>((acc, item) => {
   if (!acc[item.group]) {
@@ -27,6 +28,11 @@ export function Sidebar() {
                   <NavItem item={item} />
                 </li>
               ))}
+              {group === 'System' ? (
+                <li>
+                  <SidebarLogoutButton />
+                </li>
+              ) : null}
             </ul>
           </section>
         ))}

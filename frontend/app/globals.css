@@ -136,6 +136,12 @@ button:disabled {
 
 .sidebar-footer strong { font-size: 0.88rem; }
 
+.nav-link-button {
+  width: 100%;
+  background: transparent;
+  justify-content: flex-start;
+}
+
 .content-pane { display: flex; flex-direction: column; }
 
 .top-header {
