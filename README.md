@@ -345,3 +345,10 @@ WHERE so.order_id IS NULL;
 - `products.sizes_csv`, `products.colors_csv`, `products.others_csv`: deprecated legacy option-storage.
 
 Do not build new features on deprecated structures.
+
+## Inventory frontend contract note
+
+- Inventory UI now expects the backend stock shape fields: `on_hand_qty`, `incoming_qty`, `reserved_qty`, and `sellable_qty` (instead of legacy `available_qty`).
+- The inventory workspace formats stock and currency values through defensive numeric formatters so malformed/null API values render as `0.00` instead of crashing the page.
+- This keeps stock adjustment, inbound receiving, and movement ledger flows intact while matching the current inventory API response model.
+
