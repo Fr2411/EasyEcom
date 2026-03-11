@@ -152,6 +152,13 @@ Phase 6 adds a production inventory operations module:
 - `docs/phase11_purchases_module.md` — Purchases MVP implementation details (tenant-scoped purchase APIs, PostgreSQL schema additions, stock-in inventory impact, finance expense/payables integration, and deferred procurement complexity).
 - Purchases frontend route (`/purchases`) is now an operational module with recent list/search, purchase create workflow, line-item stock-in editor, and purchase detail inspection backed by real backend APIs (`GET/POST /purchases`, `GET /purchases/{purchase_id}`, `GET /purchases/form-options`).
 
+
+
+## Reporting & Analytics delivery (Phase 12)
+
+- `docs/phase12_reporting_analytics.md` — Reporting & Analytics MVP implementation details (tenant-safe APIs, truthful metric derivation, and deferred metric boundaries).
+- Reports frontend route (`/reports`) is now an operational analytics module with date range filters, overview KPIs, and sectioned sales/inventory/products/finance/returns/purchases reporting backed by backend APIs (`GET /reports/*`).
+
 ## Migration and legacy
 
 - CSV files in `easy_ecom/data_files/` are no longer a production persistence path.
