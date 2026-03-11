@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 from collections import defaultdict
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from easy_ecom.core.ids import new_uuid
@@ -32,11 +32,14 @@ class SalesApiService:
         self.session_factory = session_factory
 
     @staticmethod
-    def _stock_for_product(session: Session, client_id: str, product_id: str) -> float:
+    def _stock_for_product(session: Session, client_id: str, item_id: str) -> float:
         rows = session.execute(
             select(InventoryTxnModel.txn_type, InventoryTxnModel.qty).where(
                 InventoryTxnModel.client_id == client_id,
-                InventoryTxnModel.product_id == product_id,
+                or_(
+                    InventoryTxnModel.variant_id == item_id,
+                    and_(InventoryTxnModel.variant_id == "", InventoryTxnModel.product_id == item_id),
+                ),
             )
         ).all()
         total = 0.0
@@ -174,6 +177,7 @@ class SalesApiService:
                 {
                     "line_id": item.order_item_id,
                     "product_id": item.product_id,
+                    "variant_id": item.variant_id,
                     "product_name": item.product_name_snapshot,
                     "qty": float(item.qty or "0"),
                     "unit_price": float(item.unit_selling_price or "0"),
@@ -228,6 +232,8 @@ class SalesApiService:
                 if product is None and variant is None:
                     raise ValueError(f"Invalid product reference: {line.product_id}")
 
+                canonical_product_id = product.product_id if product is not None else variant.parent_product_id
+                canonical_variant_id = "" if product is not None else variant.variant_id
                 product_name = product.product_name if product is not None else variant.variant_name
                 total = float(line.qty) * float(line.unit_price)
                 subtotal += total
@@ -236,7 +242,8 @@ class SalesApiService:
                         order_item_id=new_uuid(),
                         order_id=sale_id,
                         client_id=client_id,
-                        product_id=line.product_id,
+                        product_id=canonical_product_id,
+                        variant_id=canonical_variant_id,
                         product_name_snapshot=product_name,
                         qty=str(line.qty),
                         unit_selling_price=str(line.unit_price),
@@ -265,7 +272,7 @@ class SalesApiService:
             session.add(order)
             session.add_all(line_entities)
 
-            for line in lines:
+            for line in line_entities:
                 session.add(
                     InventoryTxnModel(
                         txn_id=new_uuid(),
@@ -274,8 +281,9 @@ class SalesApiService:
                         user_id=user_id,
                         txn_type="OUT",
                         product_id=line.product_id,
-                        product_name=line.product_id,
-                        qty=str(line.qty),
+                        variant_id=line.variant_id,
+                        product_name=line.product_name_snapshot,
+                        qty=line.qty,
                         unit_cost="0",
                         total_cost="0",
                         supplier_snapshot="",

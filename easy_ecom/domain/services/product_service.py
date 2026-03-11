@@ -61,20 +61,12 @@ class ProductService:
                 "created_at": now_iso(),
                 "is_active": "true",
                 "is_parent": "true",
-                "sizes_csv": payload.sizes_csv,
-                "colors_csv": payload.colors_csv,
-                "others_csv": payload.others_csv,
+                "sizes_csv": "",
+                "colors_csv": "",
+                "others_csv": "",
                 "parent_product_id": "",
             }
         )
-        if self.variants_repo is not None:
-            self.generate_variants(
-                payload.client_id,
-                product_id,
-                payload.sizes_csv,
-                payload.colors_csv,
-                payload.others_csv,
-            )
         return product_id
 
     def list_by_client(self, client_id: str):

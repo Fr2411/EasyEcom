@@ -66,11 +66,14 @@ class PurchasesApiService:
             raise ValueError("payment_status must be one of: paid, unpaid, partial")
         return status
 
-    def _stock_for_product(self, session: Session, client_id: str, product_id: str) -> float:
+    def _stock_for_product(self, session: Session, client_id: str, item_id: str) -> float:
         rows = session.execute(
             select(InventoryTxnModel.txn_type, InventoryTxnModel.qty).where(
                 InventoryTxnModel.client_id == client_id,
-                InventoryTxnModel.product_id == product_id,
+                or_(
+                    InventoryTxnModel.variant_id == item_id,
+                    and_(InventoryTxnModel.variant_id == "", InventoryTxnModel.product_id == item_id),
+                ),
             )
         ).all()
         total = 0.0
@@ -253,6 +256,7 @@ class PurchasesApiService:
                 {
                     "line_id": line.purchase_item_id,
                     "product_id": line.product_id,
+                    "variant_id": line.variant_id,
                     "product_name": line.product_name_snapshot,
                     "qty": self._to_float(line.qty),
                     "unit_cost": self._to_float(line.unit_cost),
@@ -311,6 +315,8 @@ class PurchasesApiService:
                 if product is None and variant is None:
                     raise ValueError(f"Invalid product reference: {line.product_id}")
 
+                canonical_product_id = product.product_id if product is not None else variant.parent_product_id
+                canonical_variant_id = "" if product is not None else variant.variant_id
                 product_name = product.product_name if product is not None else variant.variant_name
                 line_total = float(line.qty) * float(line.unit_cost)
                 subtotal += line_total
@@ -319,7 +325,8 @@ class PurchasesApiService:
                         purchase_item_id=new_uuid(),
                         purchase_id=purchase_id,
                         client_id=client_id,
-                        product_id=line.product_id,
+                        product_id=canonical_product_id,
+                        variant_id=canonical_variant_id,
                         product_name_snapshot=product_name,
                         qty=str(line.qty),
                         unit_cost=str(line.unit_cost),
@@ -353,6 +360,7 @@ class PurchasesApiService:
                         user_id=user_id,
                         txn_type="IN",
                         product_id=line.product_id,
+                        variant_id=line.variant_id,
                         product_name=line.product_name_snapshot,
                         qty=line.qty,
                         unit_cost=line.unit_cost,

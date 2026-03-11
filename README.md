@@ -257,3 +257,91 @@ Inventory is modeled per-tenant as a **single location** with separated quantiti
   2) posting regular `IN` lot entry to increase on-hand.
 
 Manual adjustments stay separate via `POST /inventory/adjustments` (`stock_in`, `stock_out`, `correction`).
+
+## Phase 17: Multi-tenant stock/returns schema hardening (audit + refactor)
+
+This repository now adopts a stricter domain contract for inventory and document integrity in shared-table PostgreSQL deployments.
+
+### Canonical business model
+
+- `products`: catalog parent/base records only (non-stock-holding).
+- `product_variants`: stock-holding SKU records.
+- `purchases` + `purchase_items`: procurement documents.
+- `inventory_txn`: single source of truth stock ledger.
+- `sales_orders` + `sales_order_items`: sales documents.
+- `sales_returns` + `sales_return_items`: return documents.
+- `shipments`: fulfillment documents.
+
+### Root cause summary from audit
+
+- Legacy schema drift from CSV-era design kept many business fields as `VARCHAR/TEXT` and avoided foreign keys.
+- Variant identity was overloaded into `product_id` in transaction tables, causing ambiguous joins and weak validation.
+- Duplicate return domains (`returns/return_items` and `sales_returns/sales_return_items`) were both present, increasing long-term divergence risk.
+- Product variant options were duplicated both as CSV columns on `products` and as rows in `product_variants`.
+
+### Key decisions
+
+- Variant-aware stock movements now persist both:
+  - `product_id` (catalog parent)
+  - `variant_id` (actual SKU when applicable)
+- Service-level stock calculations now resolve by SKU-first identity through `inventory_txn` (with backward-compatible fallback for legacy rows).
+- `sales_returns/sales_return_items` remains the active returns domain. `returns/return_items` are treated as legacy/deprecated compatibility tables.
+- Product CSV variant columns (`sizes_csv/colors_csv/others_csv`) are treated as deprecated and no longer used for automatic variant generation in `ProductService.create`.
+
+### Migration plan and sequencing
+
+Use migration file:
+- `easy_ecom/migrations/20260319_phase17_multi_tenant_stock_hardening.sql`
+
+Recommended rollout order in production:
+1. Deploy app code that can read/write both old and new representations (done in this refactor).
+2. Apply schema migration to add variant columns, backfill, and tenant-safe FK/index/uniqueness constraints.
+3. Run cleanup SQL checks (below) and remediate violating rows.
+4. Enforce stricter typing migrations in a follow-up release:
+   - convert timestamps to `TIMESTAMPTZ`
+   - convert quantity/amount/cost fields to `NUMERIC(18,4)`
+   - convert booleans to `BOOLEAN`
+5. Archive and drop deprecated `returns/return_items` only after no reads/writes and historical migration sign-off.
+
+### Manual cleanup queries (required before strict FK/type enforcement)
+
+1. Orphan variants (tenant mismatch):
+```sql
+SELECT pv.client_id, pv.variant_id, pv.parent_product_id
+FROM product_variants pv
+LEFT JOIN products p
+  ON p.client_id = pv.client_id
+ AND p.product_id = pv.parent_product_id
+WHERE p.product_id IS NULL;
+```
+
+2. Legacy return tables usage check:
+```sql
+SELECT COUNT(*) FROM returns;
+SELECT COUNT(*) FROM return_items;
+```
+
+3. Post-backfill unresolved stock identity rows:
+```sql
+SELECT client_id, txn_id, product_id, variant_id
+FROM inventory_txn
+WHERE COALESCE(variant_id, '') = ''
+  AND product_id IN (SELECT variant_id FROM product_variants);
+```
+
+4. Cross-tenant reference validation sample:
+```sql
+SELECT soi.order_item_id, soi.client_id, soi.order_id
+FROM sales_order_items soi
+LEFT JOIN sales_orders so
+  ON so.client_id = soi.client_id
+ AND so.order_id = soi.order_id
+WHERE so.order_id IS NULL;
+```
+
+### Deprecated structures (phase-out)
+
+- `returns`, `return_items`: deprecated in favor of `sales_returns`, `sales_return_items`.
+- `products.sizes_csv`, `products.colors_csv`, `products.others_csv`: deprecated legacy option-storage.
+
+Do not build new features on deprecated structures.
