@@ -287,7 +287,7 @@ This repository now adopts a stricter domain contract for inventory and document
   - `variant_id` (actual SKU when applicable)
 - Service-level stock calculations now resolve by SKU-first identity through `inventory_txn` (with backward-compatible fallback for legacy rows).
 - `sales_returns/sales_return_items` remains the active returns domain. `returns/return_items` are treated as legacy/deprecated compatibility tables.
-- Product CSV variant columns (`sizes_csv/colors_csv/others_csv`) are treated as deprecated and no longer used for automatic variant generation in `ProductService.create`.
+- Product CSV variant columns (`sizes_csv/colors_csv/others_csv`) are deprecated as storage fields on `products`, but `ProductService.create` still consumes provided values to bootstrap `product_variants` rows for backward-compatible flows.
 
 ### Migration plan and sequencing
 
