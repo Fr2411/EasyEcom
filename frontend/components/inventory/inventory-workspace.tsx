@@ -6,6 +6,15 @@ import type { InventoryItem, InventoryMovement } from '@/types/inventory';
 
 type AdjustmentType = 'stock_in' | 'stock_out' | 'correction';
 
+const toFiniteNumber = (value: unknown): number => {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const fmtQty = (value: unknown): string => toFiniteNumber(value).toFixed(2);
+
+const fmtMoney = (value: unknown): string => toFiniteNumber(value).toFixed(2);
+
 export function InventoryWorkspace() {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [movements, setMovements] = useState<InventoryMovement[]>([]);
@@ -164,11 +173,11 @@ export function InventoryWorkspace() {
               <tr key={item.item_id} onClick={() => openDetail(item.item_id)}>
                 <td><strong>{item.item_name}</strong><br /><span>{item.item_id}</span></td>
                 <td>{item.parent_product_name || '—'}</td>
-                <td>{item.on_hand_qty.toFixed(2)}</td>
-                <td>{item.incoming_qty.toFixed(2)}</td>
-                <td>{item.sellable_qty.toFixed(2)}</td>
-                <td>{item.avg_unit_cost.toFixed(2)}</td>
-                <td>{item.stock_value.toFixed(2)}</td>
+                <td>{fmtQty(item.on_hand_qty)}</td>
+                <td>{fmtQty(item.incoming_qty)}</td>
+                <td>{fmtQty(item.sellable_qty)}</td>
+                <td>{fmtMoney(item.avg_unit_cost)}</td>
+                <td>{fmtMoney(item.stock_value)}</td>
                 <td>{item.low_stock ? <span className="inv-badge-low">Low</span> : '—'}</td>
               </tr>
             ))}
@@ -222,15 +231,15 @@ export function InventoryWorkspace() {
               <td>{movement.timestamp}</td>
               <td>{movement.item_name}</td>
               <td>{movement.movement_type}</td>
-              <td className={movement.qty_delta >= 0 ? 'delta-positive' : 'delta-negative'}>{movement.qty_delta >= 0 ? '+' : ''}{movement.qty_delta.toFixed(2)}</td>
+              <td className={toFiniteNumber(movement.qty_delta) >= 0 ? 'delta-positive' : 'delta-negative'}>{toFiniteNumber(movement.qty_delta) >= 0 ? '+' : ''}{fmtQty(movement.qty_delta)}</td>
               <td>{movement.source_type || 'manual'} {movement.source_id ? `· ${movement.source_id}` : ''}</td>
-              <td>{movement.resulting_balance == null ? '—' : movement.resulting_balance.toFixed(2)}</td>
+              <td>{movement.resulting_balance == null ? '—' : fmtQty(movement.resulting_balance)}</td>
             </tr>
           ))}
         </tbody></table> : null}
       </div>
 
-      {detailItem ? <div className="inventory-panel"><h3>Inventory Detail · {detailItem.item_name}</h3><p>On-hand: <strong>{detailItem.on_hand_qty.toFixed(2)}</strong> · Incoming: <strong>{detailItem.incoming_qty.toFixed(2)}</strong> · Sellable: <strong>{detailItem.sellable_qty.toFixed(2)}</strong> · Value: <strong>{detailItem.stock_value.toFixed(2)}</strong></p><ul>{detailMovements.map((movement) => <li key={movement.txn_id}>{movement.timestamp} · {movement.movement_type} · {movement.qty_delta >= 0 ? '+' : ''}{movement.qty_delta.toFixed(2)} · {movement.note || movement.source_type}</li>)}</ul></div> : null}
+      {detailItem ? <div className="inventory-panel"><h3>Inventory Detail · {detailItem.item_name}</h3><p>On-hand: <strong>{fmtQty(detailItem.on_hand_qty)}</strong> · Incoming: <strong>{fmtQty(detailItem.incoming_qty)}</strong> · Sellable: <strong>{fmtQty(detailItem.sellable_qty)}</strong> · Value: <strong>{fmtMoney(detailItem.stock_value)}</strong></p><ul>{detailMovements.map((movement) => <li key={movement.txn_id}>{movement.timestamp} · {movement.movement_type} · {toFiniteNumber(movement.qty_delta) >= 0 ? '+' : ''}{fmtQty(movement.qty_delta)} · {movement.note || movement.source_type}</li>)}</ul></div> : null}
     </section>
   );
 }
