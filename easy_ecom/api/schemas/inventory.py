@@ -26,7 +26,10 @@ class InventoryItemSummary(BaseModel):
     parent_product_id: str = ""
     parent_product_name: str = ""
     item_type: Literal["product", "variant", "unmapped"]
-    available_qty: float
+    on_hand_qty: float
+    incoming_qty: float
+    reserved_qty: float
+    sellable_qty: float
     avg_unit_cost: float
     stock_value: float
     lot_count: int
@@ -86,6 +89,36 @@ class InventoryAdjustmentResponse(BaseModel):
     applied_qty_delta: float
     lot_ids: list[str] = []
     movement_ids: list[str] = []
+
+
+class InventoryInboundCreateRequest(BaseModel):
+    item_id: str = Field(min_length=1)
+    quantity: float = Field(gt=0)
+    expected_unit_cost: float = Field(gt=0)
+    supplier_snapshot: str = Field(default="", max_length=255)
+    note: str = Field(default="", max_length=500)
+    reference: str = Field(default="", max_length=120)
+
+
+class InventoryInboundCreateResponse(BaseModel):
+    success: bool
+    inbound_id: str
+    item_id: str
+    pending_incoming_qty: float
+
+
+class InventoryInboundReceiveRequest(BaseModel):
+    quantity: float | None = Field(default=None, gt=0)
+    unit_cost: float | None = Field(default=None, gt=0)
+    note: str = Field(default="", max_length=500)
+
+
+class InventoryInboundReceiveResponse(BaseModel):
+    success: bool
+    inbound_id: str
+    item_id: str
+    received_qty: float
+    lot_id: str
 
 
 class InventoryDetailResponse(BaseModel):

@@ -271,8 +271,10 @@ class DataReconciliationService:
                 ]
             )
         inbound = {"IN", "ADJUST+", "ADJUST"}
+        outbound = {"OUT"}
         d["signed_qty"] = d.apply(
-            lambda r: r["qty"] if r["txn_type"] in inbound else -r["qty"], axis=1
+            lambda r: r["qty"] if r["txn_type"] in inbound else (-r["qty"] if r["txn_type"] in outbound else 0.0),
+            axis=1,
         )
         g = (
             d.groupby(

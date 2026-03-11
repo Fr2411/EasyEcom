@@ -16,6 +16,10 @@ from easy_ecom.api.schemas.inventory import (
     InventoryAdjustmentRequest,
     InventoryAdjustmentResponse,
     InventoryDetailResponse,
+    InventoryInboundCreateRequest,
+    InventoryInboundCreateResponse,
+    InventoryInboundReceiveRequest,
+    InventoryInboundReceiveResponse,
     InventoryItemSummary,
     InventoryListResponse,
     InventoryMovement,
@@ -25,7 +29,10 @@ from easy_ecom.api.schemas.inventory import (
 router = APIRouter(prefix="/inventory", tags=["inventory"])
 
 
-INBOUND_TYPES = {"IN", "ADJUST+", "ADJUST"}
+ON_HAND_INBOUND_TYPES = {"IN", "ADJUST+", "ADJUST"}
+ON_HAND_OUTBOUND_TYPES = {"OUT"}
+PENDING_INBOUND_TYPES = {"INBOUND_PENDING"}
+PENDING_INBOUND_RELEASE_TYPES = {"INBOUND_RECEIVED"}
 
 
 def _safe_float(value: object, default: float = 0.0) -> float:
@@ -42,11 +49,17 @@ def _build_movement_rows(container: ServiceContainer, client_id: str) -> pd.Data
 
     d = movements.copy()
     d["timestamp"] = d.get("timestamp", "").astype(str)
-    d["txn_type"] = d.get("txn_type", "").astype(str)
+    d["txn_type"] = d.get("txn_type", "").astype(str).str.upper()
     d["qty"] = pd.to_numeric(d.get("qty", 0), errors="coerce").fillna(0.0)
-    d["signed_qty"] = d.apply(
-        lambda row: row["qty"] if row["txn_type"] in INBOUND_TYPES else -row["qty"], axis=1
-    )
+
+    def _signed_qty(txn_type: str, qty: float) -> float:
+        if txn_type in ON_HAND_INBOUND_TYPES:
+            return qty
+        if txn_type in ON_HAND_OUTBOUND_TYPES:
+            return -qty
+        return 0.0
+
+    d["signed_qty"] = d.apply(lambda row: _signed_qty(str(row["txn_type"]), float(row["qty"])), axis=1)
     d["item_id"] = d.get("inventory_product_id", "").astype(str)
     d["item_name"] = d.get("inventory_product_name", "").astype(str)
     d["parent_product_id"] = d.get("parent_product_id", "").astype(str)
@@ -170,46 +183,10 @@ def _item_type(row: pd.Series) -> str:
 
 def _build_inventory_items(container: ServiceContainer, client_id: str) -> list[InventoryItemSummary]:
     catalog_base = _catalog_inventory_base(container, client_id)
-    stock_rows = container.inventory.stock_by_lot_with_issues(client_id)
     movements = _build_movement_rows(container, client_id)
 
-    if catalog_base.empty and stock_rows.empty:
+    if catalog_base.empty and movements.empty:
         return []
-
-    grouped = pd.DataFrame(
-        columns=[
-            "item_id",
-            "available_qty",
-            "stock_value",
-            "lot_count",
-            "item_name",
-            "parent_product_id",
-            "parent_product_name",
-            "variant_id",
-            "is_unmapped",
-        ]
-    )
-    if not stock_rows.empty:
-        d = stock_rows.copy()
-        d["qty"] = pd.to_numeric(d.get("qty", 0), errors="coerce").fillna(0.0)
-        d["unit_cost"] = pd.to_numeric(d.get("unit_cost", 0), errors="coerce").fillna(0.0)
-        d["stock_value"] = d["qty"] * d["unit_cost"]
-        grouped = d.groupby(
-            [
-                "product_id",
-                "product_name",
-                "parent_product_id",
-                "parent_product_name",
-                "variant_id",
-                "is_unmapped",
-            ],
-            as_index=False,
-        ).agg(
-            available_qty=("qty", "sum"),
-            stock_value=("stock_value", "sum"),
-            lot_count=("lot_id", "nunique"),
-        )
-        grouped = grouped.rename(columns={"product_id": "item_id", "product_name": "item_name"})
 
     base = catalog_base.copy()
     if not movements.empty:
@@ -220,7 +197,6 @@ def _build_inventory_items(container: ServiceContainer, client_id: str) -> list[
         if not unresolved.empty:
             unresolved["item_type"] = "unmapped"
             unresolved["is_unmapped"] = True
-            unresolved = unresolved.rename(columns={"item_id": "item_id", "item_name": "item_name"})
             base = pd.concat(
                 [
                     base,
@@ -239,20 +215,26 @@ def _build_inventory_items(container: ServiceContainer, client_id: str) -> list[
                 ignore_index=True,
             ).drop_duplicates(subset=["item_id"], keep="first")
 
-    merged = base.merge(grouped, on="item_id", how="left", suffixes=("", "_stock"))
-    merged["available_qty"] = pd.to_numeric(merged.get("available_qty", 0), errors="coerce").fillna(0.0)
-    merged["stock_value"] = pd.to_numeric(merged.get("stock_value", 0), errors="coerce").fillna(0.0)
-    merged["lot_count"] = (
-        pd.to_numeric(merged.get("lot_count", 0), errors="coerce").fillna(0).astype(int)
-    )
-
+    qty_summary = pd.DataFrame(columns=["item_id", "on_hand_qty", "incoming_qty", "reserved_qty"])
     fallback_costs: dict[str, float] = {}
     if not movements.empty:
-        movement_qty = movements.groupby("item_id", as_index=False).agg(movement_qty=("signed_qty", "sum"))
-        merged = merged.merge(movement_qty, on="item_id", how="left")
-        merged["movement_qty"] = pd.to_numeric(merged.get("movement_qty", 0), errors="coerce").fillna(0.0)
+        d = movements.copy()
+        d["txn_type"] = d["txn_type"].astype(str).str.upper()
 
-        inbound = movements[movements["txn_type"].astype(str).str.upper().isin(INBOUND_TYPES)].copy()
+        d["incoming_signed_qty"] = d.apply(
+            lambda row: float(row["qty"]) if str(row["txn_type"]) in PENDING_INBOUND_TYPES else (
+                -float(row["qty"]) if str(row["txn_type"]) in PENDING_INBOUND_RELEASE_TYPES else 0.0
+            ),
+            axis=1,
+        )
+
+        qty_summary = d.groupby("item_id", as_index=False).agg(
+            on_hand_qty=("signed_qty", "sum"),
+            incoming_qty=("incoming_signed_qty", "sum"),
+        )
+        qty_summary["reserved_qty"] = 0.0
+
+        inbound = d[d["txn_type"].isin(ON_HAND_INBOUND_TYPES)].copy()
         if not inbound.empty:
             inbound = inbound.sort_values(["item_id", "timestamp", "txn_id"])
             inbound["unit_cost"] = pd.to_numeric(inbound.get("unit_cost", 0), errors="coerce").fillna(0.0)
@@ -263,15 +245,35 @@ def _build_inventory_items(container: ServiceContainer, client_id: str) -> list[
                 if float(row.get("unit_cost", 0)) > 0
             }
 
+    stock_rows = container.inventory.stock_by_lot_with_issues(client_id)
+    on_hand_value = pd.DataFrame(columns=["item_id", "stock_value", "lot_count"])
+    if not stock_rows.empty:
+        lots = stock_rows.copy()
+        lots["qty"] = pd.to_numeric(lots.get("qty", 0), errors="coerce").fillna(0.0)
+        lots["unit_cost"] = pd.to_numeric(lots.get("unit_cost", 0), errors="coerce").fillna(0.0)
+        lots["stock_value"] = lots["qty"] * lots["unit_cost"]
+        on_hand_value = lots.groupby("product_id", as_index=False).agg(
+            stock_value=("stock_value", "sum"),
+            lot_count=("lot_id", "nunique"),
+        ).rename(columns={"product_id": "item_id"})
+
+    merged = base.merge(qty_summary, on="item_id", how="left").merge(on_hand_value, on="item_id", how="left")
+    merged["on_hand_qty"] = pd.to_numeric(merged.get("on_hand_qty", 0), errors="coerce").fillna(0.0)
+    merged["incoming_qty"] = pd.to_numeric(merged.get("incoming_qty", 0), errors="coerce").fillna(0.0)
+    merged["reserved_qty"] = pd.to_numeric(merged.get("reserved_qty", 0), errors="coerce").fillna(0.0)
+    merged["stock_value"] = pd.to_numeric(merged.get("stock_value", 0), errors="coerce").fillna(0.0)
+    merged["lot_count"] = pd.to_numeric(merged.get("lot_count", 0), errors="coerce").fillna(0).astype(int)
+
     items: list[InventoryItemSummary] = []
     for _, row in merged.iterrows():
-        lot_qty = float(row.get("available_qty", 0.0))
-        qty = float(row.get("movement_qty", lot_qty)) if "movement_qty" in merged.columns else lot_qty
+        on_hand_qty = float(row.get("on_hand_qty", 0.0))
+        incoming_qty = float(row.get("incoming_qty", 0.0))
+        reserved_qty = float(row.get("reserved_qty", 0.0))
+        safety_stock_qty = 0.0
+        sellable_qty = max(0.0, on_hand_qty - reserved_qty - safety_stock_qty)
         value = float(row.get("stock_value", 0.0))
-        if qty != lot_qty and lot_qty > 0:
-            value = max(0.0, value * (qty / lot_qty))
-        avg_cost = value / qty if qty > 0 else fallback_costs.get(str(row["item_id"]), 0.0)
-        item_name = str(row.get("item_name", "") or row.get("item_name_stock", "") or row["item_id"])
+        avg_cost = value / on_hand_qty if on_hand_qty > 0 else fallback_costs.get(str(row["item_id"]), 0.0)
+        item_name = str(row.get("item_name", "") or row["item_id"])
         items.append(
             InventoryItemSummary(
                 item_id=str(row["item_id"]),
@@ -279,11 +281,14 @@ def _build_inventory_items(container: ServiceContainer, client_id: str) -> list[
                 parent_product_id=str(row.get("parent_product_id", "") or ""),
                 parent_product_name=str(row.get("parent_product_name", "") or ""),
                 item_type=str(row.get("item_type") or _item_type(row)),
-                available_qty=qty,
+                on_hand_qty=on_hand_qty,
+                incoming_qty=incoming_qty,
+                reserved_qty=reserved_qty,
+                sellable_qty=sellable_qty,
                 avg_unit_cost=avg_cost,
                 stock_value=value,
                 lot_count=int(row.get("lot_count", 0)),
-                low_stock=qty <= 5,
+                low_stock=sellable_qty <= 5,
             )
         )
     return sorted(items, key=lambda item: (item.low_stock is False, item.item_name.lower()))
@@ -518,6 +523,67 @@ def create_adjustment(
         applied_qty_delta=applied_delta,
         lot_ids=lot_ids,
         movement_ids=movement_ids,
+    )
+
+
+@router.post("/inbound", response_model=InventoryInboundCreateResponse, status_code=201)
+def create_inbound(
+    payload: InventoryInboundCreateRequest,
+    user: RequestUser = Depends(get_current_user),
+    container: ServiceContainer = Depends(get_container),
+) -> InventoryInboundCreateResponse:
+    require_page_access(user, "Catalog & Stock")
+    item_id, item_name = _validate_inventory_item(container, user.client_id, payload.item_id)
+
+    source_id = payload.reference.strip() or f"manual-{user.user_id}"
+    inbound_id = container.inventory.create_incoming_stock(
+        client_id=user.client_id,
+        product_id=item_id,
+        product_name=item_name,
+        qty=payload.quantity,
+        unit_cost=payload.expected_unit_cost,
+        supplier_snapshot=payload.supplier_snapshot,
+        note=payload.note,
+        source_id=source_id,
+        user_id=user.user_id,
+    )
+
+    item = next((entry for entry in _build_inventory_items(container, user.client_id) if entry.item_id == item_id), None)
+    pending_qty = item.incoming_qty if item else payload.quantity
+    return InventoryInboundCreateResponse(
+        success=True,
+        inbound_id=inbound_id,
+        item_id=item_id,
+        pending_incoming_qty=pending_qty,
+    )
+
+
+@router.post("/inbound/{inbound_id}/receive", response_model=InventoryInboundReceiveResponse)
+def receive_inbound(
+    inbound_id: str,
+    payload: InventoryInboundReceiveRequest,
+    user: RequestUser = Depends(get_current_user),
+    container: ServiceContainer = Depends(get_container),
+) -> InventoryInboundReceiveResponse:
+    require_page_access(user, "Catalog & Stock")
+    try:
+        item_id, lot_id, received_qty = container.inventory.receive_incoming_stock(
+            client_id=user.client_id,
+            inbound_id=inbound_id,
+            qty=payload.quantity,
+            unit_cost=payload.unit_cost,
+            note=payload.note,
+            user_id=user.user_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return InventoryInboundReceiveResponse(
+        success=True,
+        inbound_id=inbound_id,
+        item_id=item_id,
+        received_qty=received_qty,
+        lot_id=lot_id,
     )
 
 

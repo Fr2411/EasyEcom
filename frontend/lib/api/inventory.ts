@@ -33,3 +33,29 @@ export async function createInventoryAdjustment(payload: InventoryAdjustmentPayl
     body: JSON.stringify(payload),
   });
 }
+
+
+export async function createInboundStock(payload: {
+  item_id: string;
+  quantity: number;
+  expected_unit_cost: number;
+  supplier_snapshot?: string;
+  note?: string;
+  reference?: string;
+}): Promise<{ success: boolean; inbound_id: string; item_id: string; pending_incoming_qty: number }> {
+  return apiClient('/inventory/inbound', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function receiveInboundStock(inboundId: string, payload: {
+  quantity?: number;
+  unit_cost?: number;
+  note?: string;
+}): Promise<{ success: boolean; inbound_id: string; item_id: string; received_qty: number; lot_id: string }> {
+  return apiClient(`/inventory/inbound/${inboundId}/receive`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
