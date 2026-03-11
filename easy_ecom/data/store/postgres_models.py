@@ -306,3 +306,55 @@ class ImportErrorModel(Base):
     raw_data: Mapped[str] = mapped_column(Text, default="")
     error_message: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[str] = mapped_column(String(64), default="")
+
+
+class ChannelIntegrationModel(Base):
+    __tablename__ = "channel_integrations"
+
+    channel_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    client_id: Mapped[str] = mapped_column(String(64), index=True)
+    provider: Mapped[str] = mapped_column(String(32), index=True, default="webhook")
+    display_name: Mapped[str] = mapped_column(String(255), default="")
+    status: Mapped[str] = mapped_column(String(32), index=True, default="inactive")
+    external_account_id: Mapped[str] = mapped_column(String(255), default="")
+    verify_token: Mapped[str] = mapped_column(String(255), default="")
+    inbound_secret: Mapped[str] = mapped_column(String(255), default="")
+    config_json: Mapped[str] = mapped_column(Text, default="{}")
+    created_at: Mapped[str] = mapped_column(String(64), default="")
+    updated_at: Mapped[str] = mapped_column(String(64), default="")
+    created_by_user_id: Mapped[str] = mapped_column(String(64), default="")
+    last_inbound_at: Mapped[str] = mapped_column(String(64), default="")
+
+
+class ChannelConversationModel(Base):
+    __tablename__ = "channel_conversations"
+
+    conversation_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    client_id: Mapped[str] = mapped_column(String(64), index=True)
+    channel_id: Mapped[str] = mapped_column(String(64), index=True)
+    external_sender_id: Mapped[str] = mapped_column(String(255), index=True, default="")
+    status: Mapped[str] = mapped_column(String(32), index=True, default="open")
+    customer_id: Mapped[str] = mapped_column(String(64), index=True, default="")
+    linked_sale_id: Mapped[str] = mapped_column(String(64), index=True, default="")
+    created_at: Mapped[str] = mapped_column(String(64), default="")
+    updated_at: Mapped[str] = mapped_column(String(64), default="")
+    last_message_at: Mapped[str] = mapped_column(String(64), default="")
+
+
+class ChannelMessageModel(Base):
+    __tablename__ = "channel_messages"
+
+    message_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    client_id: Mapped[str] = mapped_column(String(64), index=True)
+    channel_id: Mapped[str] = mapped_column(String(64), index=True)
+    conversation_id: Mapped[str] = mapped_column(String(64), index=True)
+    direction: Mapped[str] = mapped_column(String(16), index=True, default="inbound")
+    provider_event_id: Mapped[str] = mapped_column(String(255), index=True, default="")
+    external_sender_id: Mapped[str] = mapped_column(String(255), index=True, default="")
+    message_text: Mapped[str] = mapped_column(Text, default="")
+    content_summary: Mapped[str] = mapped_column(String(280), default="")
+    payload_json: Mapped[str] = mapped_column(Text, default="{}")
+    occurred_at: Mapped[str] = mapped_column(String(64), index=True, default="")
+    created_at: Mapped[str] = mapped_column(String(64), default="")
+    outbound_status: Mapped[str] = mapped_column(String(32), default="prepared")
+    created_by_user_id: Mapped[str] = mapped_column(String(64), default="")
