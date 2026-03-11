@@ -353,3 +353,43 @@ Do not build new features on deprecated structures.
 - The inventory workspace formats stock and currency values through defensive numeric formatters so malformed/null API values render as `0.00` instead of crashing the page.
 - This keeps stock adjustment, inbound receiving, and movement ledger flows intact while matching the current inventory API response model.
 
+
+
+## Frontend ↔ API ↔ RDS production readiness (diagnostic checklist)
+
+If UI widgets show placeholders/empty values despite data in RDS, verify this exact chain end-to-end:
+
+1. **Backend storage mode must be Postgres in production**
+   - Set `STORAGE_BACKEND=postgres` and provide a valid `DATABASE_URL` (or full `POSTGRES_*` values).
+   - If backend runs with CSV mode, several API modules intentionally return `501` because MVP endpoints are Postgres-only.
+
+2. **Frontend API base URL must point to the FastAPI origin**
+   - Set `NEXT_PUBLIC_API_BASE_URL` to your deployed API URL (for example `https://api.yourdomain.com`).
+   - Keep this value aligned per environment (dev/staging/prod) so the browser does not call the wrong host.
+
+3. **Cross-origin cookie auth must be configured for browser sessions**
+   - Keep `credentials: include` in frontend calls and allow credentials in API CORS.
+   - Configure backend cookie/security settings for HTTPS deployments:
+     - `SESSION_COOKIE_SECURE=true`
+     - `SESSION_COOKIE_SAMESITE=none` (cross-site SPA/API deployments)
+     - `SESSION_COOKIE_DOMAIN` matching your top-level domain when needed.
+   - Ensure `CORS_ALLOW_ORIGINS` contains your frontend domain(s).
+
+4. **Run DB schema migrations before validating UI**
+   - Apply all SQL files under `easy_ecom/migrations/` in order.
+   - Missing tables/columns will surface as empty grids or API 5xx errors in modules like sales, finance, returns, purchases, and reports.
+
+5. **Validate with a quick API smoke sequence after deploy**
+   - Login: `POST /auth/login`
+   - Session: `GET /auth/me`
+   - Dashboard: `GET /dashboard/overview`
+   - Module checks: `GET /sales`, `GET /finance/overview`, `GET /inventory`, `GET /products-stock/snapshot`
+   - If any return `501`, re-check backend storage mode and migration status.
+
+6. **Recommended hardening for client-facing production**
+   - Add request/response logging and correlation IDs at API gateway and app level.
+   - Add health checks for DB connectivity, migration version, and session signing config.
+   - Add frontend error telemetry (Sentry/Datadog) and alert on sustained API/network failures.
+   - Add synthetic checks for core user flows: login → dashboard → sales list → inventory list.
+
+This checklist keeps your existing architecture intact while removing the common integration gaps that make UI screens appear as placeholders.
