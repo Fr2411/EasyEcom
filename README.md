@@ -172,6 +172,18 @@ Phase 6 adds a production inventory operations module:
 - Backend now exposes protected channel management + communication log APIs under `/integrations/*` and a signature-verified external ingestion route (`POST /integrations/inbound/{provider}`) that resolves tenant/channel safely.
 - Frontend route `/integrations` is now an operational admin module for channel setup, status visibility, and recent communication event previews.
 
+## Human-reviewed AI response workflow (Phase 15)
+
+Phase 15 adds a controlled AI-assisted response workflow for external channel conversations:
+
+- Tenant-scoped AI review inbox (`/ai/review`) for inbound conversations
+- Grounded AI candidate generation from Phase 13 context services
+- Human edit/approve/reject flow with explicit approval gate before send
+- Send path routed through Phase 14 outbound preparation
+- Persisted audit trail of AI draft, final text, approver/sender, and send result
+
+See `docs/phase15_human_reviewed_ai_workflow.md` for endpoint and state-model details.
+
 ## Migration and legacy
 
 - CSV files in `easy_ecom/data_files/` are no longer a production persistence path.
