@@ -29,6 +29,7 @@ describe('AppLayout', () => {
     expect(screen.getByTestId('auth-route-guard')).toBeTruthy();
     expect(screen.getByLabelText('Primary')).toBeTruthy();
     expect(screen.getByText('Operations Workspace')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Log out' })).toBeTruthy();
     expect(screen.getByText('Dashboard body content')).toBeTruthy();
   });
 });
