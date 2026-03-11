@@ -383,3 +383,38 @@ class AiReviewDraftModel(Base):
     sent_at: Mapped[str] = mapped_column(String(64), default="")
     failed_reason: Mapped[str] = mapped_column(Text, default="")
     send_result_json: Mapped[str] = mapped_column(Text, default="{}")
+
+
+class TenantAutomationPolicyModel(Base):
+    __tablename__ = "tenant_automation_policies"
+
+    policy_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    client_id: Mapped[str] = mapped_column(String(64), index=True, unique=True)
+    automation_enabled: Mapped[str] = mapped_column(String(8), default="false")
+    auto_send_enabled: Mapped[str] = mapped_column(String(8), default="false")
+    emergency_disabled: Mapped[str] = mapped_column(String(8), default="false")
+    categories_json: Mapped[str] = mapped_column(Text, default="{}")
+    updated_by_user_id: Mapped[str] = mapped_column(String(64), default="")
+    created_at: Mapped[str] = mapped_column(String(64), default="")
+    updated_at: Mapped[str] = mapped_column(String(64), default="")
+
+
+class AutomationDecisionModel(Base):
+    __tablename__ = "automation_decisions"
+
+    decision_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    client_id: Mapped[str] = mapped_column(String(64), index=True)
+    conversation_id: Mapped[str] = mapped_column(String(64), index=True)
+    inbound_message_id: Mapped[str] = mapped_column(String(64), index=True)
+    policy_id: Mapped[str] = mapped_column(String(64), index=True)
+    category: Mapped[str] = mapped_column(String(64), index=True, default="")
+    classification_rule: Mapped[str] = mapped_column(String(120), default="")
+    recommended_action: Mapped[str] = mapped_column(String(64), default="human_review")
+    outcome: Mapped[str] = mapped_column(String(64), index=True, default="escalated")
+    reason: Mapped[str] = mapped_column(Text, default="")
+    confidence: Mapped[str] = mapped_column(String(32), default="")
+    candidate_reply: Mapped[str] = mapped_column(Text, default="")
+    audit_context_json: Mapped[str] = mapped_column(Text, default="{}")
+    run_by_user_id: Mapped[str] = mapped_column(String(64), default="")
+    created_at: Mapped[str] = mapped_column(String(64), default="")
+    updated_at: Mapped[str] = mapped_column(String(64), default="")
