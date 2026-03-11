@@ -106,6 +106,134 @@ class InventoryService:
         )
         return lot_id
 
+    def create_incoming_stock(
+        self,
+        client_id: str,
+        product_id: str,
+        product_name: str,
+        qty: float,
+        unit_cost: float,
+        supplier_snapshot: str,
+        note: str,
+        source_id: str,
+        user_id: str = "",
+    ) -> str:
+        if qty <= 0 or unit_cost <= 0:
+            raise ValueError("qty and unit_cost must be > 0")
+        inbound_id = self.seq_service.next(client_id, "INB", pd.Timestamp.utcnow().year, "INB")
+        self.repo.append(
+            {
+                "txn_id": new_uuid(),
+                "client_id": client_id,
+                "timestamp": now_iso(),
+                "user_id": user_id,
+                "txn_type": "INBOUND_PENDING",
+                "product_id": product_id,
+                "product_name": product_name,
+                "qty": str(qty),
+                "unit_cost": str(unit_cost),
+                "total_cost": str(qty * unit_cost),
+                "supplier_snapshot": supplier_snapshot,
+                "note": note,
+                "source_type": "inbound_pending",
+                "source_id": source_id or inbound_id,
+                "lot_id": inbound_id,
+            }
+        )
+        return inbound_id
+
+    def receive_incoming_stock(
+        self,
+        client_id: str,
+        inbound_id: str,
+        qty: float | None,
+        unit_cost: float | None,
+        note: str,
+        user_id: str = "",
+    ) -> tuple[str, str, float]:
+        txns = self.repo.all()
+        if txns.empty:
+            raise ValueError("Inbound record not found")
+        scoped = txns[
+            (txns.get("client_id", "").astype(str) == client_id)
+            & (txns.get("txn_type", "").astype(str) == "INBOUND_PENDING")
+            & (txns.get("lot_id", "").astype(str) == inbound_id)
+        ].copy()
+        if scoped.empty:
+            raise ValueError("Inbound record not found")
+
+        product_id = str(scoped.iloc[0].get("product_id", "")).strip()
+        product_name = str(scoped.iloc[0].get("product_name", product_id)).strip() or product_id
+        expected_cost = float(pd.to_numeric(scoped.get("unit_cost", 0), errors="coerce").fillna(0.0).iloc[0])
+        pending_qty = float(pd.to_numeric(scoped.get("qty", 0), errors="coerce").fillna(0.0).sum())
+
+        received_qty = float(qty) if qty is not None else pending_qty
+        if received_qty <= 0:
+            raise ValueError("Received quantity must be > 0")
+        if received_qty > pending_qty:
+            raise ValueError("Received quantity cannot exceed pending incoming quantity")
+
+        receiving_cost = float(unit_cost) if unit_cost is not None else expected_cost
+        if receiving_cost <= 0:
+            raise ValueError("unit_cost is required")
+
+        remaining_qty = pending_qty - received_qty
+        receive_source = f"receive:{inbound_id}"
+        if remaining_qty > 0:
+            self.repo.append(
+                {
+                    "txn_id": new_uuid(),
+                    "client_id": client_id,
+                    "timestamp": now_iso(),
+                    "user_id": user_id,
+                    "txn_type": "INBOUND_RECEIVED",
+                    "product_id": product_id,
+                    "product_name": product_name,
+                    "qty": str(received_qty),
+                    "unit_cost": str(expected_cost or receiving_cost),
+                    "total_cost": str(received_qty * (expected_cost or receiving_cost)),
+                    "supplier_snapshot": "",
+                    "note": f"Inbound received: {note}".strip(),
+                    "source_type": "inbound_pending_release",
+                    "source_id": receive_source,
+                    "lot_id": inbound_id,
+                }
+            )
+        else:
+            # Full receipt: remove pending quantity from incoming balance
+            self.repo.append(
+                {
+                    "txn_id": new_uuid(),
+                    "client_id": client_id,
+                    "timestamp": now_iso(),
+                    "user_id": user_id,
+                    "txn_type": "INBOUND_RECEIVED",
+                    "product_id": product_id,
+                    "product_name": product_name,
+                    "qty": str(pending_qty),
+                    "unit_cost": str(expected_cost or receiving_cost),
+                    "total_cost": str(pending_qty * (expected_cost or receiving_cost)),
+                    "supplier_snapshot": "",
+                    "note": f"Inbound received: {note}".strip(),
+                    "source_type": "inbound_pending_release",
+                    "source_id": receive_source,
+                    "lot_id": inbound_id,
+                }
+            )
+        lot_id = self.add_stock(
+            client_id=client_id,
+            product_id=product_id,
+            product_name=product_name,
+            qty=received_qty,
+            unit_cost=receiving_cost,
+            supplier_snapshot="",
+            note=f"Inbound received: {note}".strip(),
+            source_type="inbound_receive",
+            source_id=receive_source,
+            user_id=user_id,
+        )
+        return product_id, lot_id, received_qty
+
     def stock_by_lot(self, client_id: str) -> pd.DataFrame:
         d = self.reconciliation.inventory_stock_by_lot(client_id)
         if d.empty:
