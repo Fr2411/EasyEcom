@@ -67,6 +67,14 @@ class ProductService:
                 "parent_product_id": "",
             }
         )
+        if self.variants_repo is not None:
+            self.generate_variants(
+                payload.client_id,
+                product_id,
+                payload.sizes_csv,
+                payload.colors_csv,
+                payload.others_csv,
+            )
         return product_id
 
     def list_by_client(self, client_id: str):

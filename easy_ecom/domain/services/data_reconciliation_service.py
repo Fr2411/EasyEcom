@@ -433,6 +433,17 @@ class DataReconciliationService:
         if d.empty:
             return pd.DataFrame(columns=columns)
 
+        if "client_id" not in d.columns:
+            d["client_id"] = ""
+        if "client_id_x" in d.columns:
+            d["client_id"] = d["client_id"].where(
+                d["client_id"].astype(str).str.strip() != "", d["client_id_x"]
+            )
+        if "client_id_y" in d.columns:
+            d["client_id"] = d["client_id"].where(
+                d["client_id"].astype(str).str.strip() != "", d["client_id_y"]
+            )
+
         d["raw_product_id"] = d.get("product_id", "").astype(str).str.strip()
         d["prd_description_snapshot"] = d.get(
             "prd_description_snapshot", pd.Series("", index=d.index)

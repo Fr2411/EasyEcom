@@ -27,6 +27,16 @@ def migrate(data_dir: Path) -> int:
 
     order_client = orders[["order_id", "client_id"]].drop_duplicates()
     work = items.merge(order_client, on="order_id", how="left")
+    if "client_id" not in work.columns:
+        work["client_id"] = ""
+    if "client_id_x" in work.columns:
+        work["client_id"] = work["client_id"].where(
+            work["client_id"].astype(str).str.strip() != "", work["client_id_x"]
+        )
+    if "client_id_y" in work.columns:
+        work["client_id"] = work["client_id"].where(
+            work["client_id"].astype(str).str.strip() != "", work["client_id_y"]
+        )
     updates = 0
 
     for i, row in work.iterrows():
