@@ -115,6 +115,7 @@ Phase 2 backend outcomes:
 
 Phase 6 adds a production inventory operations module:
 - Backend inventory APIs now include stock overview, movement ledger, item detail, and tenant-safe manual adjustment workflows.
+- Inventory list projection is catalog-backed: all active tenant products/variants are visible even with zero stock, while quantities/values are merged from stock ledger and movement history using a canonical item_id (variant when present, otherwise product).
 - Frontend now includes `/inventory` with stock table, movement ledger, filters, detail panel, and stock adjustment action flow.
 - Existing sales-created stock reductions remain visible through the same ledger source (`inventory_txn`), with no duplicate subtraction logic.
 
