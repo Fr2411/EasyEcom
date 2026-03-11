@@ -51,6 +51,26 @@ class InventoryContainer:
                 "parent_product_id": "",
             }
         )
+        products_repo.append(
+            {
+                "product_id": "p-tenant-a-simple",
+                "client_id": "tenant-a",
+                "supplier": "sup",
+                "product_name": "Cap",
+                "category": "Apparel",
+                "prd_description": "",
+                "prd_features_json": "{}",
+                "default_selling_price": "8",
+                "max_discount_pct": "5",
+                "created_at": "",
+                "is_active": "true",
+                "is_parent": "true",
+                "sizes_csv": "",
+                "colors_csv": "",
+                "others_csv": "",
+                "parent_product_id": "",
+            }
+        )
         variants_repo.append(
             {
                 "variant_id": "v-tenant-a",
@@ -61,6 +81,22 @@ class InventoryContainer:
                 "color": "",
                 "other": "",
                 "sku_code": "SKU-M",
+                "default_selling_price": "12",
+                "max_discount_pct": "5",
+                "is_active": "true",
+                "created_at": "",
+            }
+        )
+        variants_repo.append(
+            {
+                "variant_id": "v-tenant-a-l",
+                "client_id": "tenant-a",
+                "parent_product_id": "p-tenant-a",
+                "variant_name": "Size:L",
+                "size": "L",
+                "color": "",
+                "other": "",
+                "sku_code": "SKU-L",
                 "default_selling_price": "12",
                 "max_discount_pct": "5",
                 "is_active": "true",
@@ -126,8 +162,12 @@ def test_inventory_list_movements_and_adjustments(tmp_path: Path) -> None:
 
     inv_res = client.get('/inventory')
     assert inv_res.status_code == 200
-    assert len(inv_res.json()['items']) == 1
-    assert inv_res.json()['items'][0]['item_id'] == 'v-tenant-a'
+    by_id = {item['item_id']: item for item in inv_res.json()['items']}
+    assert {'v-tenant-a', 'v-tenant-a-l', 'p-tenant-a-simple'} == set(by_id.keys())
+    assert by_id['v-tenant-a']['available_qty'] == 8.0
+    assert by_id['v-tenant-a-l']['available_qty'] == 0.0
+    assert by_id['p-tenant-a-simple']['available_qty'] == 0.0
+    assert by_id['v-tenant-a-l']['parent_product_id'] == 'p-tenant-a'
 
     movements_res = client.get('/inventory/movements', params={"item_id": "v-tenant-a"})
     assert movements_res.status_code == 200
@@ -157,12 +197,20 @@ def test_inventory_list_movements_and_adjustments(tmp_path: Path) -> None:
 
     detail_res = client.get('/inventory/v-tenant-a')
     assert detail_res.status_code == 200
-    assert detail_res.json()['item']['available_qty'] == 11.0
+    assert detail_res.json()['item']['available_qty'] == 9.0
+
+    zero_detail = client.get('/inventory/v-tenant-a-l')
+    assert zero_detail.status_code == 200
+    assert zero_detail.json()['item']['available_qty'] == 0.0
+    assert zero_detail.json()['recent_movements'] == []
 
     bad_payload = client.post('/inventory/adjustments', json={"item_id": "v-tenant-a", "adjustment_type": "correction", "quantity_delta": 0})
     assert bad_payload.status_code == 422
 
     cross_tenant = client.post('/inventory/adjustments', json={"item_id": "p-tenant-b", "adjustment_type": "stock_in", "quantity": 1, "unit_cost": 1})
     assert cross_tenant.status_code == 404
+
+    parent_adjust = client.post('/inventory/adjustments', json={"item_id": "p-tenant-a", "adjustment_type": "stock_in", "quantity": 1, "unit_cost": 1})
+    assert parent_adjust.status_code == 400
 
     app.dependency_overrides.clear()
