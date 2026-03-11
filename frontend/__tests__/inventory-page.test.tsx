@@ -56,4 +56,21 @@ describe('InventoryPage', () => {
 
     await waitFor(() => expect(createInventoryAdjustmentMock).toHaveBeenCalled());
   });
+
+  test('renders safely when stock numbers are nullish', async () => {
+    getInventoryItemsMock.mockResolvedValue({
+      items: [{ item_id: 'v2', item_name: 'Blue Tee / Size:L', parent_product_id: 'p2', parent_product_name: 'Blue Tee', item_type: 'variant', on_hand_qty: null, incoming_qty: undefined, reserved_qty: 0, sellable_qty: 'bad-data', avg_unit_cost: null, stock_value: undefined, lot_count: 0, low_stock: false }],
+    });
+    getInventoryMovementsMock.mockResolvedValue({ items: [{ txn_id: 't1', timestamp: '2025-01-01', item_id: 'v2', item_name: 'Blue Tee / Size:L', parent_product_id: 'p2', parent_product_name: 'Blue Tee', movement_type: 'ADJUST', qty_delta: null, source_type: 'manual', source_id: '', note: '', lot_id: '', resulting_balance: null }] });
+    getInventoryDetailMock.mockResolvedValue({ item: { item_id: 'v2', item_name: 'Blue Tee / Size:L', parent_product_id: 'p2', parent_product_name: 'Blue Tee', item_type: 'variant', on_hand_qty: null, incoming_qty: undefined, reserved_qty: 0, sellable_qty: 'bad-data', avg_unit_cost: null, stock_value: undefined, lot_count: 0, low_stock: false }, recent_movements: [{ txn_id: 't2', timestamp: '2025-01-02', item_id: 'v2', item_name: 'Blue Tee / Size:L', parent_product_id: 'p2', parent_product_name: 'Blue Tee', movement_type: 'ADJUST', qty_delta: undefined, source_type: 'manual', source_id: '', note: '', lot_id: '', resulting_balance: undefined }] });
+
+    render(<InventoryPage />);
+
+    await waitFor(() => expect(screen.getByText('Current Stock')).toBeTruthy());
+    fireEvent.click(screen.getByText('v2'));
+    await waitFor(() => expect(screen.getByText(/Inventory Detail/)).toBeTruthy());
+
+    expect(screen.getAllByText('0.00').length).toBeGreaterThan(0);
+  });
+
 });
