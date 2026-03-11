@@ -26,13 +26,9 @@ from easy_ecom.api.schemas.inventory import (
     InventoryMovementsResponse,
 )
 
+from easy_ecom.domain.services.stock_policy import ON_HAND_INBOUND_TYPES, stock_deltas
+
 router = APIRouter(prefix="/inventory", tags=["inventory"])
-
-
-ON_HAND_INBOUND_TYPES = {"IN", "ADJUST+", "ADJUST"}
-ON_HAND_OUTBOUND_TYPES = {"OUT"}
-PENDING_INBOUND_TYPES = {"INBOUND_PENDING"}
-PENDING_INBOUND_RELEASE_TYPES = {"INBOUND_RECEIVED"}
 
 
 def _safe_float(value: object, default: float = 0.0) -> float:
@@ -52,14 +48,10 @@ def _build_movement_rows(container: ServiceContainer, client_id: str) -> pd.Data
     d["txn_type"] = d.get("txn_type", "").astype(str).str.upper()
     d["qty"] = pd.to_numeric(d.get("qty", 0), errors="coerce").fillna(0.0)
 
-    def _signed_qty(txn_type: str, qty: float) -> float:
-        if txn_type in ON_HAND_INBOUND_TYPES:
-            return qty
-        if txn_type in ON_HAND_OUTBOUND_TYPES:
-            return -qty
-        return 0.0
-
-    d["signed_qty"] = d.apply(lambda row: _signed_qty(str(row["txn_type"]), float(row["qty"])), axis=1)
+    d["signed_qty"] = d.apply(
+        lambda row: stock_deltas(str(row["txn_type"]), float(row["qty"])).on_hand,
+        axis=1,
+    )
     d["item_id"] = d.get("inventory_product_id", "").astype(str)
     d["item_name"] = d.get("inventory_product_name", "").astype(str)
     d["parent_product_id"] = d.get("parent_product_id", "").astype(str)
@@ -222,9 +214,7 @@ def _build_inventory_items(container: ServiceContainer, client_id: str) -> list[
         d["txn_type"] = d["txn_type"].astype(str).str.upper()
 
         d["incoming_signed_qty"] = d.apply(
-            lambda row: float(row["qty"]) if str(row["txn_type"]) in PENDING_INBOUND_TYPES else (
-                -float(row["qty"]) if str(row["txn_type"]) in PENDING_INBOUND_RELEASE_TYPES else 0.0
-            ),
+            lambda row: stock_deltas(str(row["txn_type"]), float(row["qty"])).incoming,
             axis=1,
         )
 

@@ -16,6 +16,7 @@ from easy_ecom.data.repos.csv.sales_repo import (
     SalesOrdersRepo,
 )
 from easy_ecom.domain.services.data_reconciliation_service import DataReconciliationService
+from easy_ecom.domain.services.stock_policy import stock_deltas
 
 Granularity = Literal["D", "W", "M"]
 
@@ -191,7 +192,7 @@ class MetricsService:
         if inv.empty:
             return pd.DataFrame(columns=["product_id", "product_name", "current_qty"])
         inv["signed_qty"] = inv.apply(
-            lambda r: r["qty"] if r["txn_type"] in {"IN", "ADJUST+", "ADJUST"} else -r["qty"],
+            lambda r: stock_deltas(str(r["txn_type"]), float(r["qty"])).on_hand,
             axis=1,
         )
         stock = (
@@ -206,7 +207,7 @@ class MetricsService:
         if inv.empty:
             return pd.DataFrame(columns=["product_id", "product_name", "stock_value"])
         inv["signed_qty"] = inv.apply(
-            lambda r: r["qty"] if r["txn_type"] in {"IN", "ADJUST+", "ADJUST"} else -r["qty"],
+            lambda r: stock_deltas(str(r["txn_type"]), float(r["qty"])).on_hand,
             axis=1,
         )
         lots = inv.groupby(["canonical_product_id", "lot_id"], as_index=False).agg(
