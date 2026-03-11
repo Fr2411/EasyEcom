@@ -30,7 +30,7 @@ export function DashboardOverviewPanel() {
       } catch (err: unknown) {
         if (cancelled) return;
         if (err instanceof ApiNetworkError) {
-          setError('Network error: unable to reach API. Verify NEXT_PUBLIC_API_URL and backend availability.');
+          setError('Network error: unable to reach API. Verify NEXT_PUBLIC_API_BASE_URL and backend availability.');
           return;
         }
         if (err instanceof ApiError) {
