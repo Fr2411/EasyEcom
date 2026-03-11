@@ -18,6 +18,7 @@ class SaleCreateRequest(BaseModel):
 class SaleLineResponse(BaseModel):
     line_id: str
     product_id: str
+    variant_id: str = ""
     product_name: str
     qty: float
     unit_price: float
