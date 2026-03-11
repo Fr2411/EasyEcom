@@ -57,6 +57,110 @@ def _build_movement_rows(container: ServiceContainer, client_id: str) -> pd.Data
     return d
 
 
+def _catalog_inventory_base(container: ServiceContainer, client_id: str) -> pd.DataFrame:
+    products = container.products.list_by_client(client_id)
+    variants = container.products.list_variants_by_client(client_id)
+
+    if products.empty and variants.empty:
+        return pd.DataFrame(
+            columns=[
+                "item_id",
+                "item_name",
+                "parent_product_id",
+                "parent_product_name",
+                "variant_id",
+                "is_unmapped",
+                "item_type",
+            ]
+        )
+
+    products = products.copy() if not products.empty else pd.DataFrame()
+    variants = variants.copy() if not variants.empty else pd.DataFrame()
+    if not products.empty:
+        products["is_active"] = products.get("is_active", "true").astype(str).str.lower()
+        products = products[products["is_active"] != "false"].copy()
+
+    if variants.empty:
+        simple = products.copy()
+        if simple.empty:
+            return pd.DataFrame()
+        simple["item_id"] = simple["product_id"].astype(str)
+        simple["item_name"] = simple["product_name"].astype(str)
+        simple["parent_product_id"] = simple["product_id"].astype(str)
+        simple["parent_product_name"] = simple["product_name"].astype(str)
+        simple["variant_id"] = ""
+        simple["is_unmapped"] = False
+        simple["item_type"] = "product"
+        return simple[
+            [
+                "item_id",
+                "item_name",
+                "parent_product_id",
+                "parent_product_name",
+                "variant_id",
+                "is_unmapped",
+                "item_type",
+            ]
+        ]
+
+    variants["is_active"] = variants.get("is_active", "true").astype(str).str.lower()
+    active_variants = variants[variants["is_active"] != "false"].copy()
+
+    variant_items = active_variants.merge(
+        products[["product_id", "product_name"]].rename(
+            columns={"product_id": "parent_product_id", "product_name": "parent_product_name"}
+        ),
+        on="parent_product_id",
+        how="left",
+    )
+    variant_items["item_id"] = variant_items["variant_id"].astype(str)
+    variant_items["item_name"] = variant_items["variant_name"].astype(str)
+    variant_items["item_type"] = "variant"
+    variant_items["is_unmapped"] = False
+
+    variant_parent_ids = set(active_variants.get("parent_product_id", pd.Series(dtype=str)).astype(str))
+    simple_items = products[~products["product_id"].astype(str).isin(variant_parent_ids)].copy()
+    if not simple_items.empty:
+        simple_items["item_id"] = simple_items["product_id"].astype(str)
+        simple_items["item_name"] = simple_items["product_name"].astype(str)
+        simple_items["parent_product_id"] = simple_items["product_id"].astype(str)
+        simple_items["parent_product_name"] = simple_items["product_name"].astype(str)
+        simple_items["variant_id"] = ""
+        simple_items["item_type"] = "product"
+        simple_items["is_unmapped"] = False
+
+    base = pd.concat(
+        [
+            variant_items[
+                [
+                    "item_id",
+                    "item_name",
+                    "parent_product_id",
+                    "parent_product_name",
+                    "variant_id",
+                    "is_unmapped",
+                    "item_type",
+                ]
+            ],
+            simple_items[
+                [
+                    "item_id",
+                    "item_name",
+                    "parent_product_id",
+                    "parent_product_name",
+                    "variant_id",
+                    "is_unmapped",
+                    "item_type",
+                ]
+            ]
+            if not simple_items.empty
+            else pd.DataFrame(),
+        ],
+        ignore_index=True,
+    )
+    return base.drop_duplicates(subset=["item_id"], keep="first")
+
+
 def _item_type(row: pd.Series) -> str:
     variant_id = str(row.get("variant_id", "")).strip()
     if str(row.get("is_unmapped", "")).lower() == "true":
@@ -65,47 +169,120 @@ def _item_type(row: pd.Series) -> str:
 
 
 def _build_inventory_items(container: ServiceContainer, client_id: str) -> list[InventoryItemSummary]:
+    catalog_base = _catalog_inventory_base(container, client_id)
     stock_rows = container.inventory.stock_by_lot_with_issues(client_id)
-    if stock_rows.empty:
+    movements = _build_movement_rows(container, client_id)
+
+    if catalog_base.empty and stock_rows.empty:
         return []
 
-    d = stock_rows.copy()
-    d["qty"] = pd.to_numeric(d.get("qty", 0), errors="coerce").fillna(0.0)
-    d["unit_cost"] = pd.to_numeric(d.get("unit_cost", 0), errors="coerce").fillna(0.0)
-    d["stock_value"] = d["qty"] * d["unit_cost"]
-
-    grouped = d.groupby(
-        [
-            "product_id",
-            "product_name",
+    grouped = pd.DataFrame(
+        columns=[
+            "item_id",
+            "available_qty",
+            "stock_value",
+            "lot_count",
+            "item_name",
             "parent_product_id",
             "parent_product_name",
             "variant_id",
             "is_unmapped",
-        ],
-        as_index=False,
-    ).agg(
-        available_qty=("qty", "sum"),
-        stock_value=("stock_value", "sum"),
-        lot_count=("lot_id", "nunique"),
+        ]
+    )
+    if not stock_rows.empty:
+        d = stock_rows.copy()
+        d["qty"] = pd.to_numeric(d.get("qty", 0), errors="coerce").fillna(0.0)
+        d["unit_cost"] = pd.to_numeric(d.get("unit_cost", 0), errors="coerce").fillna(0.0)
+        d["stock_value"] = d["qty"] * d["unit_cost"]
+        grouped = d.groupby(
+            [
+                "product_id",
+                "product_name",
+                "parent_product_id",
+                "parent_product_name",
+                "variant_id",
+                "is_unmapped",
+            ],
+            as_index=False,
+        ).agg(
+            available_qty=("qty", "sum"),
+            stock_value=("stock_value", "sum"),
+            lot_count=("lot_id", "nunique"),
+        )
+        grouped = grouped.rename(columns={"product_id": "item_id", "product_name": "item_name"})
+
+    base = catalog_base.copy()
+    if not movements.empty:
+        unresolved = movements[
+            ~movements["item_id"].astype(str).isin(base["item_id"].astype(str))
+            & movements["item_id"].astype(str).str.strip().ne("")
+        ].copy()
+        if not unresolved.empty:
+            unresolved["item_type"] = "unmapped"
+            unresolved["is_unmapped"] = True
+            unresolved = unresolved.rename(columns={"item_id": "item_id", "item_name": "item_name"})
+            base = pd.concat(
+                [
+                    base,
+                    unresolved[
+                        [
+                            "item_id",
+                            "item_name",
+                            "parent_product_id",
+                            "parent_product_name",
+                            "variant_id",
+                            "is_unmapped",
+                            "item_type",
+                        ]
+                    ],
+                ],
+                ignore_index=True,
+            ).drop_duplicates(subset=["item_id"], keep="first")
+
+    merged = base.merge(grouped, on="item_id", how="left", suffixes=("", "_stock"))
+    merged["available_qty"] = pd.to_numeric(merged.get("available_qty", 0), errors="coerce").fillna(0.0)
+    merged["stock_value"] = pd.to_numeric(merged.get("stock_value", 0), errors="coerce").fillna(0.0)
+    merged["lot_count"] = (
+        pd.to_numeric(merged.get("lot_count", 0), errors="coerce").fillna(0).astype(int)
     )
 
+    fallback_costs: dict[str, float] = {}
+    if not movements.empty:
+        movement_qty = movements.groupby("item_id", as_index=False).agg(movement_qty=("signed_qty", "sum"))
+        merged = merged.merge(movement_qty, on="item_id", how="left")
+        merged["movement_qty"] = pd.to_numeric(merged.get("movement_qty", 0), errors="coerce").fillna(0.0)
+
+        inbound = movements[movements["txn_type"].astype(str).str.upper().isin(INBOUND_TYPES)].copy()
+        if not inbound.empty:
+            inbound = inbound.sort_values(["item_id", "timestamp", "txn_id"])
+            inbound["unit_cost"] = pd.to_numeric(inbound.get("unit_cost", 0), errors="coerce").fillna(0.0)
+            latest = inbound.groupby("item_id", as_index=False).tail(1)
+            fallback_costs = {
+                str(row["item_id"]): float(row["unit_cost"])
+                for _, row in latest.iterrows()
+                if float(row.get("unit_cost", 0)) > 0
+            }
+
     items: list[InventoryItemSummary] = []
-    for _, row in grouped.iterrows():
-        qty = float(row["available_qty"])
-        value = float(row["stock_value"])
-        avg_cost = value / qty if qty > 0 else 0.0
+    for _, row in merged.iterrows():
+        lot_qty = float(row.get("available_qty", 0.0))
+        qty = float(row.get("movement_qty", lot_qty)) if "movement_qty" in merged.columns else lot_qty
+        value = float(row.get("stock_value", 0.0))
+        if qty != lot_qty and lot_qty > 0:
+            value = max(0.0, value * (qty / lot_qty))
+        avg_cost = value / qty if qty > 0 else fallback_costs.get(str(row["item_id"]), 0.0)
+        item_name = str(row.get("item_name", "") or row.get("item_name_stock", "") or row["item_id"])
         items.append(
             InventoryItemSummary(
-                item_id=str(row["product_id"]),
-                item_name=str(row["product_name"]),
+                item_id=str(row["item_id"]),
+                item_name=item_name,
                 parent_product_id=str(row.get("parent_product_id", "") or ""),
                 parent_product_name=str(row.get("parent_product_name", "") or ""),
-                item_type=_item_type(row),
+                item_type=str(row.get("item_type") or _item_type(row)),
                 available_qty=qty,
                 avg_unit_cost=avg_cost,
                 stock_value=value,
-                lot_count=int(row["lot_count"]),
+                lot_count=int(row.get("lot_count", 0)),
                 low_stock=qty <= 5,
             )
         )
@@ -128,6 +305,16 @@ def _validate_inventory_item(container: ServiceContainer, client_id: str, item_i
     if not products.empty:
         scoped = products[products["product_id"].astype(str) == item_id]
         if not scoped.empty:
+            sibling_variants = container.products.list_variants_by_client(client_id)
+            if not sibling_variants.empty:
+                has_variants = sibling_variants[
+                    sibling_variants["parent_product_id"].astype(str) == item_id
+                ]
+                if not has_variants.empty:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="This product has variants. Use a variant item_id for inventory adjustments.",
+                    )
             row = scoped.iloc[0]
             return str(row["product_id"]), str(row.get("product_name", row["product_id"]))
 
