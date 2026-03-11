@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from easy_ecom.core.ids import new_uuid
 from easy_ecom.core.time_utils import now_iso
+from easy_ecom.domain.services.stock_policy import stock_deltas
 from easy_ecom.data.store.postgres_models import (
     FinanceExpenseModel,
     InventoryTxnModel,
@@ -77,10 +78,9 @@ class PurchasesApiService:
             )
         ).all()
         total = 0.0
-        inbound = {"IN", "ADJUST+", "ADJUST"}
         for txn_type, qty in rows:
             value = self._to_float(qty)
-            total += value if txn_type in inbound else -value
+            total += stock_deltas(str(txn_type), value).on_hand
         return total
 
     def _purchase_prefix(self, session: Session, client_id: str) -> str:

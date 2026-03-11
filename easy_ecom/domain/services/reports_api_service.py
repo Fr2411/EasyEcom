@@ -7,6 +7,8 @@ from datetime import UTC, date, datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
+from easy_ecom.domain.services.stock_policy import stock_deltas
+
 from easy_ecom.data.store.postgres_models import (
     CustomerModel,
     FinanceExpenseModel,
@@ -187,7 +189,7 @@ class ReportsApiService:
             if txn.product_id not in product_ids:
                 continue
             qty = self._to_float(txn.qty)
-            qty_by_product[txn.product_id] += qty if txn.txn_type in {"IN", "ADJUST+", "ADJUST"} else -qty
+            qty_by_product[txn.product_id] += stock_deltas(str(txn.txn_type), qty).on_hand
 
         low = []
         total_units = 0.0
@@ -211,10 +213,11 @@ class ReportsApiService:
             if not day:
                 continue
             key = day.isoformat()
-            if txn.txn_type in {"IN", "ADJUST+", "ADJUST"}:
-                movement[key]["qty_in"] += self._to_float(txn.qty)
-            else:
-                movement[key]["qty_out"] += self._to_float(txn.qty)
+            signed = stock_deltas(str(txn.txn_type), self._to_float(txn.qty)).on_hand
+            if signed > 0:
+                movement[key]["qty_in"] += signed
+            elif signed < 0:
+                movement[key]["qty_out"] += abs(signed)
 
         return {
             "from_date": filters.from_date.isoformat(),
