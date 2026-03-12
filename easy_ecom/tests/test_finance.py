@@ -19,8 +19,8 @@ def setup_store(tmp_path: Path) -> CsvStore:
 def test_profit_mtd(tmp_path: Path):
     store = setup_store(tmp_path)
     inv_svc = InventoryService(InventoryTxnRepo(store), SequenceService(SequencesRepo(store)))
-    inv_svc.add_stock("c1", "p1", "Product 1", 10, 5, "s", "")
-    inv_svc.deduct_stock("c1", "p1", 2, "sale", "o1")
+    inv_svc.add_stock("c1", "p1", "p1", "Product 1", 10, 5, "s", "")
+    inv_svc.deduct_stock("c1", "p1", "p1", 2, "sale", "o1")
     fin = FinanceService(LedgerRepo(store), InventoryTxnRepo(store))
     fin.add_entry("c1", "earning", "Sales", 100, "sale", "i1", user_id="u1")
     fin.add_entry("c1", "expense", "Ops", 20, "manual", "e1", user_id="u1")

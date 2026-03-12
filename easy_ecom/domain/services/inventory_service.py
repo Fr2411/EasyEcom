@@ -73,6 +73,7 @@ class InventoryService:
         self,
         client_id: str,
         product_id: str,
+        variant_id: str,
         product_name: str,
         qty: float,
         unit_cost: float,
@@ -81,10 +82,13 @@ class InventoryService:
         source_type: str = "purchase",
         source_id: str = "",
         user_id: str = "",
-        variant_id: str = "",
     ) -> str:
         if qty <= 0 or unit_cost <= 0:
             raise ValueError("qty and unit_cost must be > 0")
+        if not str(variant_id).strip():
+            raise ValueError("variant_id is required for stock-affecting inventory writes")
+        if not str(product_id).strip():
+            raise ValueError("product_id (parent context) is required for stock-affecting inventory writes")
         lot_id = self.seq_service.next(client_id, "LOT", pd.Timestamp.utcnow().year, "LOT")
         self.repo.append(
             {
@@ -112,6 +116,7 @@ class InventoryService:
         self,
         client_id: str,
         product_id: str,
+        variant_id: str,
         product_name: str,
         qty: float,
         unit_cost: float,
@@ -119,10 +124,13 @@ class InventoryService:
         note: str,
         source_id: str,
         user_id: str = "",
-        variant_id: str = "",
     ) -> str:
         if qty <= 0 or unit_cost <= 0:
             raise ValueError("qty and unit_cost must be > 0")
+        if not str(variant_id).strip():
+            raise ValueError("variant_id is required for stock-affecting inventory writes")
+        if not str(product_id).strip():
+            raise ValueError("product_id (parent context) is required for stock-affecting inventory writes")
         inbound_id = self.seq_service.next(client_id, "INB", pd.Timestamp.utcnow().year, "INB")
         self.repo.append(
             {
@@ -232,8 +240,8 @@ class InventoryService:
         lot_id = self.add_stock(
             client_id=client_id,
             product_id=product_id,
-            product_name=product_name,
             variant_id=variant_id,
+            product_name=product_name,
             qty=received_qty,
             unit_cost=receiving_cost,
             supplier_snapshot="",
@@ -255,19 +263,25 @@ class InventoryService:
     def stock_by_lot_with_issues(self, client_id: str) -> pd.DataFrame:
         return self.reconciliation.inventory_stock_by_lot(client_id)
 
-    def available_qty(self, client_id: str, product_id: str) -> float:
-        lots = self.stock_by_lot(client_id)
+    def available_qty(self, client_id: str, variant_id: str) -> float:
+        lots = self.stock_by_lot_with_issues(client_id)
         if lots.empty:
             return 0.0
-        return float(lots[lots["product_id"] == product_id]["qty"].sum())
+        scoped = lots[lots.get("variant_id", "").astype(str) == variant_id]
+        return float(pd.to_numeric(scoped.get("qty", 0), errors="coerce").fillna(0.0).sum())
 
     def allocate_fifo(
-        self, client_id: str, product_id: str, qty: float
+        self, client_id: str, variant_id: str, qty: float
     ) -> list[dict[str, float | str]]:
         if qty <= 0:
             raise ValueError("qty must be positive")
-        lots = self.stock_by_lot(client_id)
-        product_lots = lots[lots["product_id"] == product_id].sort_values("lot_id")
+        if not str(variant_id).strip():
+            raise ValueError("variant_id is required for stock-affecting inventory writes")
+        lots = self.stock_by_lot_with_issues(client_id)
+        if lots.empty:
+            product_lots = lots
+        else:
+            product_lots = lots[lots.get("variant_id", "").astype(str) == variant_id].sort_values("lot_id")
         remaining = qty
         allocations: list[dict[str, float | str]] = []
         for _, row in product_lots.iterrows():
@@ -278,7 +292,8 @@ class InventoryService:
                 allocations.append(
                     {
                         "lot_id": row["lot_id"],
-                        "product_id": row["product_id"],
+                        "product_id": row.get("parent_product_id", row.get("product_id", "")),
+                        "variant_id": str(row.get("variant_id", variant_id)),
                         "product_name": row["product_name"],
                         "qty": take,
                         "unit_cost": float(row["unit_cost"]),
@@ -293,13 +308,16 @@ class InventoryService:
         self,
         client_id: str,
         product_id: str,
+        variant_id: str,
         qty: float,
         source_type: str,
         source_id: str,
         note: str = "",
         user_id: str = "",
     ) -> list[dict[str, float | str]]:
-        allocations = self.allocate_fifo(client_id, product_id, qty)
+        if not str(variant_id).strip():
+            raise ValueError("variant_id is required for stock-affecting inventory writes")
+        allocations = self.allocate_fifo(client_id, variant_id, qty)
         for alloc in allocations:
             q = float(alloc["qty"])
             uc = float(alloc["unit_cost"])
@@ -310,7 +328,8 @@ class InventoryService:
                     "timestamp": now_iso(),
                     "user_id": user_id,
                     "txn_type": "OUT",
-                    "product_id": str(alloc["product_id"]),
+                    "product_id": product_id,
+                    "variant_id": str(alloc["variant_id"]),
                     "product_name": str(alloc["product_name"]),
                     "qty": str(q),
                     "unit_cost": str(uc),

@@ -131,10 +131,14 @@ class ReturnsService:
             for _, item in scoped.iterrows():
                 if str(item.get("restock", "false")).lower() != "true":
                     continue
+                variant_id = str(item.get("variant_id", "")).strip()
+                if not variant_id:
+                    raise ValueError("variant_id is required for restock inventory writes")
                 self.inventory_service.add_stock(
                     client_id=returns_df.loc[i, "client_id"],
                     product_id=str(item["product_id"]),
-                    product_name=str(item["product_id"]),
+                    variant_id=variant_id,
+                    product_name=str(item.get("product_id", "")),
                     qty=float(item.get("qty_received", item.get("qty", 0)) or 0),
                     unit_cost=float(item.get("unit_selling_price", 0) or 0),
                     supplier_snapshot="Return restock",

@@ -169,7 +169,7 @@ def test_confirm_uses_grand_total_for_invoice_and_ledger(tmp_path: Path):
     store, svc = setup_store(tmp_path)
     seed_common_data(store)
     inv = InventoryService(InventoryTxnRepo(store), SequenceService(SequencesRepo(store)))
-    inv.add_stock("c1", "p1", "Phone Case", 10, 5, "sup", "")
+    inv.add_stock("c1", "p1", "p1", "Phone Case", 10, 5, "sup", "")
     order_id = svc.create_draft_order("c1", "cu1", discount=5, tax=2, delivery_cost=3)
     svc.add_item_to_draft(order_id, "c1", SaleItem(product_id="p1", qty=2, unit_selling_price=20))
     svc.confirm_order(order_id, {"client_id": "c1", "user_id": "u1"})

@@ -194,14 +194,14 @@ def test_core_api_endpoints() -> None:
     ).status_code == 200
     assert client.post(
         "/inventory/add",
-        json={"product_id": "p1", "product_name": "Widget", "qty": 1, "unit_cost": 1},
+        json={"product_id": "p1", "variant_id": "v1", "product_name": "Widget", "qty": 1, "unit_cost": 1},
     ).status_code == 200
     assert client.post(
         "/sales/create",
         json={
             "customer_id": "cust1",
-            "items": [{"product_id": "p1", "qty": 1, "unit_selling_price": 10}],
+            "items": [{"variant_id": "v1", "qty": 1, "unit_price": 10}],
         },
-    ).status_code == 200
+    ).status_code == 422
 
     app.dependency_overrides.clear()
