@@ -429,3 +429,27 @@ The backend canonical source for saleable availability is `SaleableItemsService.
 
 - Sales and purchases item pickers operate on variant IDs.
 - Empty lookup query does not return a full product dump by default.
+
+## Variant-first inventory write invariants (catalog + inventory + sales)
+
+Recent hardening enforces variant identity for all future stock-affecting writes:
+
+- **Catalog product upsert (`/products/upsert`) now guarantees at least one variant for new products.**
+  - If a new product is submitted with blank variant attributes, EasyEcom auto-creates exactly one `Default` variant.
+  - If opening stock (`qty` + `unit_cost`) is provided on blank variant rows during create, opening stock is written once against that default variant.
+  - This prevents the previous failure mode where parent `products` saved successfully but no `inventory_txn` opening row was created.
+
+- **Inventory writes are now variant-required.**
+  - `variant_id` is required for `add_stock`, `create_incoming_stock`, `deduct_stock`, manual adjustments, inbound creation, and `/inventory/add` payloads.
+  - `product_id` remains required as parent/reporting snapshot context.
+  - Stock-affecting write calls that only rely on parent `product_id` are blocked by validation.
+
+- **Sales stock path remains canonical and variant-ledger based.**
+  - Saleable stock discovery and availability checks continue to read from variant-level ledger totals.
+  - Sales OUT inventory transactions continue to persist with `variant_id`.
+
+- **Data quality guardrails:**
+  - Database migration `20260321_phase19_variant_strict_stock_writes.sql` enforces non-empty `variant_id` on `inventory_txn` rows.
+  - Runtime validation now aligns with this invariant so malformed writes fail fast.
+
+This means newly-created products cannot enter saleable inventory state with stock but without a variant, and future inventory movements are always variant-addressable.

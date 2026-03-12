@@ -26,7 +26,7 @@ def test_confirm_sale(tmp_path: Path):
     store = setup_store(tmp_path)
     seq = SequenceService(SequencesRepo(store))
     inv = InventoryService(InventoryTxnRepo(store), seq)
-    inv.add_stock("c1", "p1", "Phone Case", 10, 5, "sup", "")
+    inv.add_stock("c1", "p1", "p1", "Phone Case", 10, 5, "sup", "")
     ProductsRepo(store).append({"product_id": "p1", "client_id": "c1", "supplier": "sup", "product_name": "Phone Case", "category": "General", "prd_description": "", "prd_features_json": "{}", "default_selling_price": "20", "max_discount_pct": "10", "created_at": "", "is_active": "true"})
     fin = FinanceService(LedgerRepo(store), InventoryTxnRepo(store))
     svc = SalesService(SalesOrdersRepo(store), SalesOrderItemsRepo(store), InvoicesRepo(store), ShipmentsRepo(store), PaymentsRepo(store), inv, seq, fin, ProductsRepo(store))

@@ -59,7 +59,7 @@ def test_protected_business_endpoints_reject_anonymous() -> None:
     assert (
         client.post(
             "/inventory/add",
-            json={"product_id": "p-1", "product_name": "Demo", "qty": 1, "unit_cost": 1},
+            json={"product_id": "p-1", "variant_id": "v-1", "product_name": "Demo", "qty": 1, "unit_cost": 1},
         ).status_code
         == 401
     )

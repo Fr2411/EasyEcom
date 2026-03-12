@@ -284,7 +284,7 @@ def _build_inventory_items(container: ServiceContainer, client_id: str) -> list[
     return sorted(items, key=lambda item: (item.low_stock is False, item.item_name.lower()))
 
 
-def _validate_inventory_item(container: ServiceContainer, client_id: str, item_id: str) -> tuple[str, str]:
+def _validate_inventory_item(container: ServiceContainer, client_id: str, item_id: str) -> tuple[str, str, str]:
     item_id = item_id.strip()
     if not item_id:
         raise HTTPException(status_code=400, detail="item_id is required")
@@ -294,7 +294,7 @@ def _validate_inventory_item(container: ServiceContainer, client_id: str, item_i
         scoped = variants[variants["variant_id"].astype(str) == item_id]
         if not scoped.empty:
             row = scoped.iloc[0]
-            return str(row["variant_id"]), str(row.get("variant_name", row["variant_id"]))
+            return str(row["variant_id"]), str(row.get("variant_name", row["variant_id"])), str(row.get("parent_product_id", ""))
 
     products = container.products.list_by_client(client_id)
     if not products.empty:
@@ -310,8 +310,10 @@ def _validate_inventory_item(container: ServiceContainer, client_id: str, item_i
                         status_code=400,
                         detail="This product has variants. Use a variant item_id for inventory adjustments.",
                     )
-            row = scoped.iloc[0]
-            return str(row["product_id"]), str(row.get("product_name", row["product_id"]))
+            raise HTTPException(
+                status_code=400,
+                detail="Variant item_id is required for stock-affecting writes. Parent product ids are not accepted.",
+            )
 
     raise HTTPException(status_code=404, detail="Inventory item not found for tenant")
 
@@ -413,10 +415,10 @@ def create_adjustment(
     container: ServiceContainer = Depends(get_container),
 ) -> InventoryAdjustmentResponse:
     require_page_access(user, "Catalog & Stock")
-    item_id, item_name = _validate_inventory_item(container, user.client_id, payload.item_id)
+    item_id, item_name, parent_product_id = _validate_inventory_item(container, user.client_id, payload.item_id)
 
     stock_rows = container.inventory.stock_by_lot_with_issues(user.client_id)
-    scoped = stock_rows[stock_rows["product_id"].astype(str) == item_id] if not stock_rows.empty else pd.DataFrame()
+    scoped = stock_rows[stock_rows.get("variant_id", "").astype(str) == item_id] if not stock_rows.empty else pd.DataFrame()
     avg_unit_cost = (
         float((pd.to_numeric(scoped["qty"], errors="coerce").fillna(0.0) * pd.to_numeric(scoped["unit_cost"], errors="coerce").fillna(0.0)).sum() / pd.to_numeric(scoped["qty"], errors="coerce").fillna(0.0).sum())
         if not scoped.empty and float(pd.to_numeric(scoped["qty"], errors="coerce").fillna(0.0).sum()) > 0
@@ -441,7 +443,8 @@ def create_adjustment(
             lot_ids.append(
                 container.inventory.add_stock(
                     client_id=user.client_id,
-                    product_id=item_id,
+                    product_id=parent_product_id,
+                    variant_id=item_id,
                     product_name=item_name,
                     qty=qty,
                     unit_cost=unit_cost,
@@ -457,7 +460,8 @@ def create_adjustment(
             qty = float(payload.quantity or 0)
             container.inventory.deduct_stock(
                 client_id=user.client_id,
-                product_id=item_id,
+                product_id=parent_product_id,
+                variant_id=item_id,
                 qty=qty,
                 source_type="manual_stock_out",
                 source_id=source_id,
@@ -474,7 +478,8 @@ def create_adjustment(
                 lot_ids.append(
                     container.inventory.add_stock(
                         client_id=user.client_id,
-                        product_id=item_id,
+                        product_id=parent_product_id,
+                        variant_id=item_id,
                         product_name=item_name,
                         qty=delta,
                         unit_cost=unit_cost,
@@ -488,7 +493,8 @@ def create_adjustment(
             else:
                 container.inventory.deduct_stock(
                     client_id=user.client_id,
-                    product_id=item_id,
+                    product_id=parent_product_id,
+                    variant_id=item_id,
                     qty=abs(delta),
                     source_type="manual_correction",
                     source_id=source_id,
@@ -523,12 +529,13 @@ def create_inbound(
     container: ServiceContainer = Depends(get_container),
 ) -> InventoryInboundCreateResponse:
     require_page_access(user, "Catalog & Stock")
-    item_id, item_name = _validate_inventory_item(container, user.client_id, payload.item_id)
+    item_id, item_name, parent_product_id = _validate_inventory_item(container, user.client_id, payload.item_id)
 
     source_id = payload.reference.strip() or f"manual-{user.user_id}"
     inbound_id = container.inventory.create_incoming_stock(
         client_id=user.client_id,
-        product_id=item_id,
+        product_id=parent_product_id,
+        variant_id=item_id,
         product_name=item_name,
         qty=payload.quantity,
         unit_cost=payload.expected_unit_cost,
@@ -587,6 +594,7 @@ def add_inventory(
     lot_id = container.inventory.add_stock(
         client_id=user.client_id,
         product_id=payload.product_id,
+        variant_id=payload.variant_id,
         product_name=payload.product_name,
         qty=payload.qty,
         unit_cost=payload.unit_cost,

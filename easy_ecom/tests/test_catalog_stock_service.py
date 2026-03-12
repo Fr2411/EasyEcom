@@ -124,12 +124,12 @@ def test_duplicate_variant_prevention_and_stock_posting_only_for_positive_qty(tm
 
     variants = product_svc.list_variants("c1", product_id)
     red_variants = [v for v in variants if v.get("size") == "M" and v.get("color") == "Red"]
-    stock = inv_svc.stock_by_lot("c1")
+    stock = inv_svc.stock_by_lot_with_issues("c1")
 
     assert upserts == 2
     assert len(red_variants) == 1
     assert len(lots) == 1
-    assert float(stock[stock["product_id"] == red_variants[0]["variant_id"]].iloc[0]["qty"]) == 2.0
+    assert float(stock[stock["variant_id"] == red_variants[0]["variant_id"]].iloc[0]["qty"]) == 2.0
 
 
 def test_same_cost_helper_applies_only_to_empty_cost_rows(tmp_path: Path):
@@ -194,3 +194,54 @@ def test_save_and_workspace_flow_remains_tenant_scoped(tmp_path: Path):
     other_tenant = product_svc.get_by_name_ci("cB", "Shared Name")
     assert updated["supplier"] == "supplier-a"
     assert other_tenant["supplier"] == "s"
+
+
+def test_new_product_with_blank_variant_rows_auto_creates_default_variant(tmp_path: Path):
+    svc, product_svc, _ = _service(tmp_path)
+
+    product_id, lots, upserts = svc.save_workspace(
+        client_id="c1",
+        user_id="u1",
+        typed_product_name="Bottle",
+        supplier="s1",
+        category="General",
+        description="",
+        features_text="",
+        default_selling_price=35.0,
+        max_discount_pct=5.0,
+        variant_entries=[VariantWorkspaceEntry()],
+    )
+
+    variants = product_svc.list_variants("c1", product_id)
+    assert upserts == 1
+    assert len(variants) == 1
+    assert variants[0]["variant_name"] == "Default"
+    assert lots == []
+
+
+def test_new_product_with_opening_stock_and_blank_variant_fields_posts_stock_for_default_variant(tmp_path: Path):
+    svc, product_svc, inv_svc = _service(tmp_path)
+
+    product_id, lots, upserts = svc.save_workspace(
+        client_id="c1",
+        user_id="u1",
+        typed_product_name="Jar",
+        supplier="s1",
+        category="General",
+        description="",
+        features_text="",
+        default_selling_price=20.0,
+        max_discount_pct=5.0,
+        variant_entries=[VariantWorkspaceEntry(qty=4, unit_cost=3)],
+    )
+
+    variants = product_svc.list_variants("c1", product_id)
+    assert upserts == 1
+    assert len(variants) == 1
+
+    txns = inv_svc.repo.all()
+    assert len(lots) == 1
+    assert len(txns) == 1
+    assert txns.iloc[0]["txn_type"] == "IN"
+    assert txns.iloc[0]["variant_id"] == variants[0]["variant_id"]
+    assert txns.iloc[0]["product_id"] == product_id
