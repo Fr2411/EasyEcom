@@ -102,8 +102,8 @@ describe('ProductsStockWorkspace', () => {
     fireEvent.click(screen.getByText('Generate combinations'));
 
     await waitFor(() => {
-      expect(screen.getByDisplayValue('S / Black')).toBeTruthy();
-      expect(screen.getByDisplayValue('M / White')).toBeTruthy();
+      expect(screen.getByDisplayValue('Fresh Tee / S / Black')).toBeTruthy();
+      expect(screen.getByDisplayValue('Fresh Tee / M / White')).toBeTruthy();
       expect(screen.getByText('Variants: 4')).toBeTruthy();
     });
   });
