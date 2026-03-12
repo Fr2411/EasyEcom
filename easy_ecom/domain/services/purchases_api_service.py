@@ -8,11 +8,10 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from easy_ecom.core.ids import new_uuid
 from easy_ecom.core.time_utils import now_iso
-from easy_ecom.domain.services.stock_policy import stock_deltas
+from easy_ecom.domain.services.saleable_items_service import SaleableItemsService
 from easy_ecom.data.store.postgres_models import (
     FinanceExpenseModel,
     InventoryTxnModel,
-    ProductModel,
     ProductVariantModel,
     PurchaseItemModel,
     PurchaseModel,
@@ -23,7 +22,7 @@ from easy_ecom.data.store.postgres_models import (
 
 @dataclass
 class PurchaseLineInput:
-    product_id: str
+    variant_id: str
     qty: float
     unit_cost: float
 
@@ -41,6 +40,7 @@ class PurchaseCreateInput:
 class PurchasesApiService:
     def __init__(self, session_factory: sessionmaker[Session]):
         self.session_factory = session_factory
+        self.saleable_items = SaleableItemsService()
 
     @staticmethod
     def _to_float(value: object, default: float = 0.0) -> float:
@@ -67,22 +67,6 @@ class PurchasesApiService:
             raise ValueError("payment_status must be one of: paid, unpaid, partial")
         return status
 
-    def _stock_for_product(self, session: Session, client_id: str, item_id: str) -> float:
-        rows = session.execute(
-            select(InventoryTxnModel.txn_type, InventoryTxnModel.qty).where(
-                InventoryTxnModel.client_id == client_id,
-                or_(
-                    InventoryTxnModel.variant_id == item_id,
-                    and_(InventoryTxnModel.variant_id == "", InventoryTxnModel.product_id == item_id),
-                ),
-            )
-        ).all()
-        total = 0.0
-        for txn_type, qty in rows:
-            value = self._to_float(qty)
-            total += stock_deltas(str(txn_type), value).on_hand
-        return total
-
     def _purchase_prefix(self, session: Session, client_id: str) -> str:
         cfg = session.execute(
             select(TenantSettingsModel).where(TenantSettingsModel.client_id == client_id)
@@ -93,56 +77,33 @@ class PurchasesApiService:
         return "".join(ch for ch in prefix if ch.isalnum())[:12] or "PUR"
 
     def lookup_options(self, *, client_id: str, query: str = "") -> dict[str, object]:
+        q = query.strip()
         with self.session_factory() as session:
-            variants_stmt = select(ProductVariantModel, ProductModel).join(
-                ProductModel,
-                ProductModel.product_id == ProductVariantModel.parent_product_id,
-            ).where(
-                ProductVariantModel.client_id == client_id,
-                ProductModel.client_id == client_id,
-                ProductVariantModel.is_active == "true",
-            )
-            if query.strip():
-                needle = f"%{query.strip()}%"
-                variants_stmt = variants_stmt.where(
-                    ProductVariantModel.variant_name.ilike(needle) | ProductModel.product_name.ilike(needle)
-                )
-            variant_rows = session.execute(variants_stmt.limit(120)).all()
-
-            products: list[dict[str, object]] = []
-            if variant_rows:
-                for variant, parent in variant_rows:
-                    products.append(
-                        {
-                            "product_id": variant.variant_id,
-                            "label": f"{parent.product_name} / {variant.variant_name}",
-                            "current_stock": self._stock_for_product(session, client_id, variant.variant_id),
-                        }
-                    )
-            else:
-                product_stmt = select(ProductModel).where(
-                    ProductModel.client_id == client_id,
-                    ProductModel.is_active == "true",
-                )
-                if query.strip():
-                    needle = f"%{query.strip()}%"
-                    product_stmt = product_stmt.where(ProductModel.product_name.ilike(needle))
-                product_rows = session.execute(product_stmt.limit(120)).scalars().all()
-                products = [
-                    {
-                        "product_id": row.product_id,
-                        "label": row.product_name,
-                        "current_stock": self._stock_for_product(session, client_id, row.product_id),
-                    }
-                    for row in product_rows
-                ]
+            items = self.saleable_items.list_saleable_variants(
+                session=session,
+                client_id=client_id,
+                query=q,
+                include_out_of_stock=True,
+                limit=120,
+            ) if q else []
+            products = [
+                {
+                    "variant_id": str(item["variant_id"]),
+                    "product_id": str(item["product_id"]),
+                    "label": f"{item['product_name']} / {item['variant_name']} / {item['sku']}",
+                    "current_stock": float(item["available_qty"]),
+                    "sku": str(item["sku"]),
+                    "barcode": str(item["barcode"]),
+                }
+                for item in items
+            ]
 
             supplier_stmt = select(SupplierModel).where(
                 SupplierModel.client_id == client_id,
                 SupplierModel.is_active == "true",
             )
-            if query.strip():
-                supplier_stmt = supplier_stmt.where(SupplierModel.name.ilike(f"%{query.strip()}%"))
+            if q:
+                supplier_stmt = supplier_stmt.where(SupplierModel.name.ilike(f"%{q}%"))
             suppliers = session.execute(supplier_stmt.order_by(SupplierModel.name.asc()).limit(100)).scalars().all()
 
         return {
@@ -299,25 +260,17 @@ class PurchasesApiService:
                     raise ValueError("Purchase quantity must be > 0")
                 if line.unit_cost < 0:
                     raise ValueError("Purchase unit_cost must be >= 0")
-
-                product = session.execute(
-                    select(ProductModel).where(
-                        ProductModel.client_id == client_id,
-                        ProductModel.product_id == line.product_id,
-                    )
-                ).scalar_one_or_none()
                 variant = session.execute(
                     select(ProductVariantModel).where(
                         ProductVariantModel.client_id == client_id,
-                        ProductVariantModel.variant_id == line.product_id,
+                        ProductVariantModel.variant_id == line.variant_id,
                     )
                 ).scalar_one_or_none()
-                if product is None and variant is None:
-                    raise ValueError(f"Invalid product reference: {line.product_id}")
-
-                canonical_product_id = product.product_id if product is not None else variant.parent_product_id
-                canonical_variant_id = "" if product is not None else variant.variant_id
-                product_name = product.product_name if product is not None else variant.variant_name
+                if variant is None:
+                    raise ValueError(f"Invalid variant reference: {line.variant_id}")
+                canonical_product_id = variant.parent_product_id
+                canonical_variant_id = variant.variant_id
+                product_name = variant.variant_name
                 line_total = float(line.qty) * float(line.unit_cost)
                 subtotal += line_total
                 item_entities.append(
@@ -351,7 +304,28 @@ class PurchasesApiService:
             session.add(purchase)
             session.add_all(item_entities)
 
+            inventory_rollup: dict[tuple[str, str], dict[str, str]] = {}
             for line in item_entities:
+                key = (line.variant_id, line.unit_cost)
+                current = inventory_rollup.get(key)
+                qty = self._to_float(line.qty)
+                line_total = self._to_float(line.line_total)
+                if current is None:
+                    inventory_rollup[key] = {
+                        "product_id": line.product_id,
+                        "variant_id": line.variant_id,
+                        "product_name": line.product_name_snapshot,
+                        "qty": str(qty),
+                        "unit_cost": line.unit_cost,
+                        "total_cost": str(line_total),
+                    }
+                else:
+                    merged_qty = self._to_float(current["qty"]) + qty
+                    merged_total = self._to_float(current["total_cost"]) + line_total
+                    current["qty"] = str(merged_qty)
+                    current["total_cost"] = str(merged_total)
+
+            for row in inventory_rollup.values():
                 session.add(
                     InventoryTxnModel(
                         txn_id=new_uuid(),
@@ -359,12 +333,12 @@ class PurchasesApiService:
                         timestamp=now_iso(),
                         user_id=user_id,
                         txn_type="IN",
-                        product_id=line.product_id,
-                        variant_id=line.variant_id,
-                        product_name=line.product_name_snapshot,
-                        qty=line.qty,
-                        unit_cost=line.unit_cost,
-                        total_cost=line.line_total,
+                        product_id=row["product_id"],
+                        variant_id=row["variant_id"],
+                        product_name=row["product_name"],
+                        qty=row["qty"],
+                        unit_cost=row["unit_cost"],
+                        total_cost=row["total_cost"],
                         supplier_snapshot=supplier_name,
                         note=f"purchase:{purchase_no}",
                         source_type="purchase",

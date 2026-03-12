@@ -98,7 +98,7 @@ def create_purchase(
                 supplier_id=payload.supplier_id,
                 reference_no=payload.reference_no,
                 note=payload.note,
-                lines=[PurchaseLineInput(product_id=line.product_id, qty=line.qty, unit_cost=line.unit_cost) for line in payload.lines],
+                lines=[PurchaseLineInput(variant_id=line.variant_id, qty=line.qty, unit_cost=line.unit_cost) for line in payload.lines],
                 payment_status=payload.payment_status,
             ),
         )

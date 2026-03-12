@@ -81,6 +81,7 @@ class InventoryService:
         source_type: str = "purchase",
         source_id: str = "",
         user_id: str = "",
+        variant_id: str = "",
     ) -> str:
         if qty <= 0 or unit_cost <= 0:
             raise ValueError("qty and unit_cost must be > 0")
@@ -93,6 +94,7 @@ class InventoryService:
                 "user_id": user_id,
                 "txn_type": "IN",
                 "product_id": product_id,
+                "variant_id": variant_id,
                 "product_name": product_name,
                 "qty": str(qty),
                 "unit_cost": str(unit_cost),
@@ -117,6 +119,7 @@ class InventoryService:
         note: str,
         source_id: str,
         user_id: str = "",
+        variant_id: str = "",
     ) -> str:
         if qty <= 0 or unit_cost <= 0:
             raise ValueError("qty and unit_cost must be > 0")
@@ -129,6 +132,7 @@ class InventoryService:
                 "user_id": user_id,
                 "txn_type": "INBOUND_PENDING",
                 "product_id": product_id,
+                "variant_id": variant_id,
                 "product_name": product_name,
                 "qty": str(qty),
                 "unit_cost": str(unit_cost),
@@ -163,6 +167,9 @@ class InventoryService:
             raise ValueError("Inbound record not found")
 
         product_id = str(scoped.iloc[0].get("product_id", "")).strip()
+        variant_id = str(scoped.iloc[0].get("variant_id", "")).strip()
+        if not variant_id:
+            raise ValueError("Inbound record missing variant_id")
         product_name = str(scoped.iloc[0].get("product_name", product_id)).strip() or product_id
         expected_cost = float(pd.to_numeric(scoped.get("unit_cost", 0), errors="coerce").fillna(0.0).iloc[0])
         pending_qty = float(pd.to_numeric(scoped.get("qty", 0), errors="coerce").fillna(0.0).sum())
@@ -188,6 +195,7 @@ class InventoryService:
                     "user_id": user_id,
                     "txn_type": "INBOUND_RECEIVED",
                     "product_id": product_id,
+                    "variant_id": variant_id,
                     "product_name": product_name,
                     "qty": str(received_qty),
                     "unit_cost": str(expected_cost or receiving_cost),
@@ -209,6 +217,7 @@ class InventoryService:
                     "user_id": user_id,
                     "txn_type": "INBOUND_RECEIVED",
                     "product_id": product_id,
+                    "variant_id": variant_id,
                     "product_name": product_name,
                     "qty": str(pending_qty),
                     "unit_cost": str(expected_cost or receiving_cost),
@@ -224,6 +233,7 @@ class InventoryService:
             client_id=client_id,
             product_id=product_id,
             product_name=product_name,
+            variant_id=variant_id,
             qty=received_qty,
             unit_cost=receiving_cost,
             supplier_snapshot="",

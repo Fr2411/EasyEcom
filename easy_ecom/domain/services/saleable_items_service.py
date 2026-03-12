@@ -23,10 +23,12 @@ class SaleableItemsService:
         session: Session,
         client_id: str,
         query: str = "",
+        variant_ids: list[str] | None = None,
         include_out_of_stock: bool = False,
         limit: int = 120,
     ) -> list[dict[str, object]]:
         q = query.strip()
+        scoped_variant_ids = [str(v).strip() for v in (variant_ids or []) if str(v).strip()]
 
         stmt = (
             select(ProductVariantModel, ProductModel)
@@ -44,6 +46,9 @@ class SaleableItemsService:
             )
         )
 
+        if scoped_variant_ids:
+            stmt = stmt.where(ProductVariantModel.variant_id.in_(scoped_variant_ids))
+
         if q:
             needle = f"%{q}%"
             stmt = stmt.where(
@@ -54,7 +59,7 @@ class SaleableItemsService:
                     ProductModel.product_name.ilike(needle),
                 )
             )
-        elif not include_out_of_stock:
+        elif not include_out_of_stock and not scoped_variant_ids:
             return []
 
         rows = session.execute(stmt.limit(limit)).all()
@@ -83,10 +88,11 @@ class SaleableItemsService:
                     "barcode": (variant.barcode or "").strip(),
                     "product_name": product.product_name,
                     "variant_name": variant.variant_name,
+                    "variant_display_name": variant.variant_name,
                     "available_qty": float(available),
+                    "selling_price": self._to_float(variant.default_selling_price),
                     "default_selling_price": self._to_float(variant.default_selling_price),
                     "is_active": str(variant.is_active).lower() == "true",
                 }
             )
         return items
-
