@@ -468,7 +468,7 @@ class SalesService:
             raise ValueError("Only placed orders can be confirmed")
         items = self.get_order_items(order_id)
         for row in items.itertuples(index=False):
-            self.inv_service.deduct_stock(order["client_id"], str(row.product_id), float(row.qty), "sale", order_id, user_id=user_ctx.get("user_id", ""))
+            self.inv_service.deduct_stock(order["client_id"], str(row.product_id), str(row.product_id), float(row.qty), "sale", order_id, user_id=user_ctx.get("user_id", ""))
         totals = self.compute_order_totals(order_id)
         orders.loc[idx, "order_status"] = "confirmed"
         orders.loc[idx, "status"] = "confirmed"

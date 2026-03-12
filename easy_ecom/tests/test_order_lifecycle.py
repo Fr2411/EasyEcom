@@ -30,7 +30,7 @@ def setup_store(tmp_path: Path):
 
 def seed_product(store: CsvStore, inv: InventoryService):
     ProductsRepo(store).append({"product_id": "p1", "client_id": "c1", "supplier": "sup", "product_name": "Phone", "category": "General", "prd_description": "", "prd_features_json": "{}", "default_selling_price": "100", "max_discount_pct": "10", "created_at": "", "is_active": "true", "is_parent": "true", "sizes_csv": "", "colors_csv": "", "others_csv": "", "parent_product_id": ""})
-    inv.add_stock("c1", "p1", "Phone", 10, 50, "sup", "")
+    inv.add_stock("c1", "p1", "p1", "Phone", 10, 50, "sup", "")
 
 
 def make_draft(svc: SalesService):
@@ -121,7 +121,7 @@ def test_restock_on_refund_updates_inventory_when_enabled(tmp_path: Path):
     svc.confirm_order(oid, {"client_id": "c1", "user_id": "u1"})
     before = inv.available_qty("c1", "p1")
     invoice = InvoicesRepo(store).all().iloc[0]
-    rid = ret.request_return(oid, [{"product_id": "p1", "qty_requested": 1, "qty_received": 1, "unit_selling_price": 100, "restock": True}], "damaged", {"client_id": "c1", "invoice_id": invoice["invoice_id"], "customer_id": "cu1", "user_id": "u2"})
+    rid = ret.request_return(oid, [{"product_id": "p1", "variant_id": "p1", "qty_requested": 1, "qty_received": 1, "unit_selling_price": 100, "restock": True}], "damaged", {"client_id": "c1", "invoice_id": invoice["invoice_id"], "customer_id": "cu1", "user_id": "u2"})
     ret.approve_return(rid, {"client_id": "c1", "user_id": "mgr"})
     ret.issue_refund(rid, 20, "cash", restock_lines=True, user_ctx={"client_id": "c1", "user_id": "mgr"})
     assert inv.available_qty("c1", "p1") >= before

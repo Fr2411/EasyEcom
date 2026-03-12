@@ -33,7 +33,7 @@ def test_min_price_enforcement(tmp_path: Path):
     fin = FinanceService(LedgerRepo(store), InventoryTxnRepo(store))
     products_repo = ProductsRepo(store)
     products_repo.append({"product_id": "p1", "client_id": "c1", "supplier": "sup", "product_name": "Phone Case", "category": "General", "prd_description": "", "prd_features_json": "{}", "default_selling_price": "100", "max_discount_pct": "10", "created_at": "", "is_active": "true"})
-    inv.add_stock("c1", "p1", "Phone Case", 10, 25, "sup", "")
+    inv.add_stock("c1", "p1", "p1", "Phone Case", 10, 25, "sup", "")
     svc = SalesService(SalesOrdersRepo(store), SalesOrderItemsRepo(store), InvoicesRepo(store), ShipmentsRepo(store), PaymentsRepo(store), inv, seq, fin, products_repo)
 
     with pytest.raises(ValueError):
