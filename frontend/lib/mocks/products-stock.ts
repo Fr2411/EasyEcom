@@ -13,9 +13,9 @@ const MOCK_PRODUCTS: ProductRecord[] = [
     variants: [
       {
         id: 'v-1001',
-        label: 'S / Black',
         size: 'S',
         color: 'Black',
+        other: '',
         qty: 42,
         cost: 8.75,
         defaultSellingPrice: 16.5,
@@ -23,9 +23,9 @@ const MOCK_PRODUCTS: ProductRecord[] = [
       },
       {
         id: 'v-1002',
-        label: 'M / White',
         size: 'M',
         color: 'White',
+        other: '',
         qty: 33,
         cost: 8.75,
         defaultSellingPrice: 16.5,
@@ -45,7 +45,7 @@ const MOCK_PRODUCTS: ProductRecord[] = [
     variants: [
       {
         id: 'v-2001',
-        label: 'Navy / Matte',
+        size: '',
         color: 'Navy',
         other: 'Matte',
         qty: 18,
