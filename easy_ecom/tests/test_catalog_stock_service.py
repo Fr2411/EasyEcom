@@ -104,33 +104,26 @@ def test_new_product_mode_generates_variants_from_option_axes(tmp_path: Path):
     assert ("M", "Blue", "Cotton") in keys
 
 
-def test_duplicate_variant_prevention_and_stock_posting_only_for_positive_qty(tmp_path: Path):
-    svc, product_svc, inv_svc = _service(tmp_path)
+def test_duplicate_variant_identity_is_rejected(tmp_path: Path):
+    svc, _, _ = _service(tmp_path)
 
-    product_id, lots, upserts = svc.save_workspace(
-        client_id="c1",
-        user_id="u1",
-        typed_product_name="TEE",
-        supplier="s1",
-        category="General",
-        description="desc",
-        features_text="feature 1",
-        default_selling_price=100.0,
-        max_discount_pct=10.0,
-        variant_entries=[
-            VariantWorkspaceEntry(size="M", color="Red", qty=0, unit_cost=20),
-            VariantWorkspaceEntry(size="M", color="Red", qty=2, unit_cost=22),
-        ],
-    )
-
-    variants = product_svc.list_variants("c1", product_id)
-    red_variants = [v for v in variants if v.get("size") == "M" and v.get("color") == "Red"]
-    stock = inv_svc.stock_by_lot_with_issues("c1")
-
-    assert upserts == 2
-    assert len(red_variants) == 1
-    assert len(lots) == 1
-    assert float(stock[stock["variant_id"] == red_variants[0]["variant_id"]].iloc[0]["qty"]) == 2.0
+    try:
+        svc.save_workspace(
+            client_id="c1",
+            user_id="u1",
+            typed_product_name="TEE",
+            supplier="s1",
+            category="General",
+            description="desc",
+            features_text="feature 1",
+            variant_entries=[
+                VariantWorkspaceEntry(size="M", color="Red", qty=0, unit_cost=20),
+                VariantWorkspaceEntry(size="M", color="Red", qty=2, unit_cost=22),
+            ],
+        )
+        raise AssertionError("expected ValueError")
+    except ValueError as exc:
+        assert "Duplicate variant identity" in str(exc)
 
 
 def test_same_cost_helper_applies_only_to_empty_cost_rows(tmp_path: Path):
@@ -197,55 +190,26 @@ def test_save_and_workspace_flow_remains_tenant_scoped(tmp_path: Path):
     assert other_tenant["supplier"] == "s"
 
 
-def test_new_product_with_blank_variant_rows_auto_creates_default_variant(tmp_path: Path):
-    svc, product_svc, _ = _service(tmp_path)
-
-    product_id, lots, upserts = svc.save_workspace(
-        client_id="c1",
-        user_id="u1",
-        typed_product_name="Bottle",
-        supplier="s1",
-        category="General",
-        description="",
-        features_text="",
-        default_selling_price=35.0,
-        max_discount_pct=5.0,
-        variant_entries=[VariantWorkspaceEntry()],
-    )
-
-    variants = product_svc.list_variants("c1", product_id)
-    assert upserts == 1
-    assert len(variants) == 1
-    assert variants[0]["variant_name"] == "Bottle | Default"
-    assert lots == []
-
-
-def test_new_product_with_opening_stock_and_blank_variant_fields_posts_stock_for_default_variant(tmp_path: Path):
+def test_new_product_with_blank_variant_rows_is_rejected(tmp_path: Path):
     svc, product_svc, inv_svc = _service(tmp_path)
 
-    product_id, lots, upserts = svc.save_workspace(
-        client_id="c1",
-        user_id="u1",
-        typed_product_name="Jar",
-        supplier="s1",
-        category="General",
-        description="",
-        features_text="",
-        default_selling_price=20.0,
-        max_discount_pct=5.0,
-        variant_entries=[VariantWorkspaceEntry(qty=4, unit_cost=3)],
-    )
+    try:
+        svc.save_workspace(
+            client_id="c1",
+            user_id="u1",
+            typed_product_name="Bottle",
+            supplier="s1",
+            category="General",
+            description="",
+            features_text="",
+            variant_entries=[VariantWorkspaceEntry()],
+        )
+        raise AssertionError("expected ValueError")
+    except ValueError as exc:
+        assert "must include at least one identity field" in str(exc)
 
-    variants = product_svc.list_variants("c1", product_id)
-    assert upserts == 1
-    assert len(variants) == 1
-
-    txns = inv_svc.repo.all()
-    assert len(lots) == 1
-    assert len(txns) == 1
-    assert txns.iloc[0]["txn_type"] == "IN"
-    assert txns.iloc[0]["variant_id"] == variants[0]["variant_id"]
-    assert txns.iloc[0]["product_id"] == product_id
+    assert product_svc.list_by_client("c1").empty
+    assert inv_svc.repo.all().empty
 
 
 def test_new_product_with_multiple_variant_opening_stock_posts_each_variant(tmp_path: Path):
@@ -334,128 +298,58 @@ def test_save_workspace_persists_distinct_variant_attributes(tmp_path: Path):
 
 
 
-def test_save_workspace_persists_multiple_label_only_variants(tmp_path: Path):
+def test_save_workspace_rejects_duplicate_variant_identity(tmp_path: Path):
+    svc, product_svc, _ = _service(tmp_path)
+
+    try:
+        svc.save_workspace(
+            client_id="c1",
+            user_id="u1",
+            typed_product_name="Label Tee",
+            supplier="s1",
+            category="General",
+            description="",
+            features_text="",
+            variant_entries=[
+                VariantWorkspaceEntry(size="M", color="Red", qty=0, unit_cost=0),
+                VariantWorkspaceEntry(size="M", color="Red", qty=0, unit_cost=0),
+            ],
+        )
+        raise AssertionError("expected ValueError")
+    except ValueError as exc:
+        assert "Duplicate variant identity" in str(exc)
+
+
+def test_save_workspace_allows_parent_price_zero_and_keeps_pricing_on_variants_only(tmp_path: Path):
     svc, product_svc, _ = _service(tmp_path)
 
     product_id, _, upserts = svc.save_workspace(
         client_id="c1",
         user_id="u1",
-        typed_product_name="Label Tee",
+        typed_product_name="Zero Parent Price Tee",
         supplier="s1",
         category="General",
         description="",
         features_text="",
-        default_selling_price=50.0,
-        max_discount_pct=10.0,
+        default_selling_price=0,
+        max_discount_pct=0,
         variant_entries=[
-            VariantWorkspaceEntry(variant_label="Default", qty=0, unit_cost=0),
-            VariantWorkspaceEntry(variant_label="Pack", qty=0, unit_cost=0),
+            VariantWorkspaceEntry(size="M", color="Red", default_selling_price=199, max_discount_pct=15),
+            VariantWorkspaceEntry(size="L", color="Blue", default_selling_price=249, max_discount_pct=20),
         ],
     )
-
-    variants = product_svc.list_variants("c1", product_id)
 
     assert upserts == 2
-    assert len(variants) == 2
-    assert {v["variant_name"] for v in variants} == {"Label Tee | Default", "Label Tee | Pack"}
-
-
-def test_save_workspace_updates_label_only_variants_by_variant_id(tmp_path: Path):
-    svc, product_svc, _ = _service(tmp_path)
-
-    product_id, _, _ = svc.save_workspace(
-        client_id="c1",
-        user_id="u1",
-        typed_product_name="Editable Tee",
-        supplier="s1",
-        category="General",
-        description="",
-        features_text="",
-        default_selling_price=50.0,
-        max_discount_pct=10.0,
-        variant_entries=[
-            VariantWorkspaceEntry(variant_label="Default", qty=0, unit_cost=0),
-            VariantWorkspaceEntry(variant_label="Pack", qty=0, unit_cost=0),
-        ],
-    )
-
-    existing = product_svc.list_variants("c1", product_id)
-
-    _, _, upserts = svc.save_workspace(
-        client_id="c1",
-        user_id="u1",
-        typed_product_name="Editable Tee",
-        supplier="s1",
-        category="General",
-        description="",
-        features_text="",
-        default_selling_price=50.0,
-        max_discount_pct=10.0,
-        selected_product_id=product_id,
-        variant_entries=[
-            VariantWorkspaceEntry(
-                variant_id=existing[0]["variant_id"],
-                variant_label="Single",
-                qty=0,
-                unit_cost=0,
-            ),
-            VariantWorkspaceEntry(
-                variant_id=existing[1]["variant_id"],
-                variant_label="Bundle",
-                qty=0,
-                unit_cost=0,
-            ),
-        ],
-    )
+    product = product_svc.get_by_id("c1", product_id)
+    assert "default_selling_price" not in product
+    assert "max_discount_pct" not in product
 
     variants = product_svc.list_variants("c1", product_id)
-
-    assert upserts == 2
     assert len(variants) == 2
-    assert {v["variant_name"] for v in variants} == {"Editable Tee | Single", "Editable Tee | Bundle"}
-
-
-def test_upsert_variant_treats_blank_and_whitespace_attributes_as_same_identity(tmp_path: Path):
-    _, product_svc, _ = _service(tmp_path)
-    product_id = product_svc.create(
-        ProductCreate(
-            client_id="c1",
-            supplier="s",
-            product_name="Identity Tee",
-            default_selling_price=100,
-            max_discount_pct=10,
-            sizes_csv="",
-            colors_csv="",
-            others_csv="",
-        )
-    )
-
-    first, created_first = product_svc.upsert_variant(
-        client_id="c1",
-        parent_product_id=product_id,
-        size="",
-        color="",
-        other="",
-        variant_label="Default",
-        default_selling_price=100,
-        max_discount_pct=10,
-    )
-    second, created_second = product_svc.upsert_variant(
-        client_id="c1",
-        parent_product_id=product_id,
-        size="   ",
-        color="",
-        other="",
-        variant_label="Default",
-        default_selling_price=120,
-        max_discount_pct=5,
-    )
-
-    assert created_first is False
-    assert created_second is False
-    assert first["variant_id"] == second["variant_id"]
-    variants = product_svc.list_variants("c1", product_id)
-    assert len(variants) == 1
+    assert {(v["size"], v["default_selling_price"], v["max_discount_pct"]) for v in variants} == {
+        ("M", "199.0", "15.0"),
+        ("L", "249.0", "20.0"),
+    }
 
 
 def test_save_workspace_logs_and_persists_two_distinct_variants_end_to_end(tmp_path: Path, caplog):
@@ -489,9 +383,7 @@ def test_save_workspace_logs_and_persists_two_distinct_variants_end_to_end(tmp_p
     }
 
     logs = "\n".join(rec.getMessage() for rec in caplog.records)
-    assert "catalog_stock.save_workspace incoming entries" in logs
     assert "product_service.upsert_variant input" in logs
-    assert "catalog_stock.save_workspace stored variants" in logs
     assert "size=S" in logs
     assert "color=Black" in logs
     assert "size=M" in logs

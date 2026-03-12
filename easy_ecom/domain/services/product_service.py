@@ -6,7 +6,7 @@ import logging
 from easy_ecom.core.ids import new_uuid
 from easy_ecom.core.time_utils import now_iso
 from easy_ecom.data.repos.base import TabularRepo
-from easy_ecom.domain.models.product import ProductCreate, ProductPricingUpdate
+from easy_ecom.domain.models.product import ProductCreate
 
 
 logger = logging.getLogger(__name__)
@@ -83,8 +83,6 @@ class ProductService:
                 "category": payload.category,
                 "prd_description": payload.prd_description,
                 "prd_features_json": payload.prd_features_json,
-                "default_selling_price": str(payload.default_selling_price),
-                "max_discount_pct": str(payload.max_discount_pct),
                 "created_at": now_iso(),
                 "is_active": "true",
                 "is_parent": "true",
@@ -182,8 +180,8 @@ class ProductService:
                 "color": color,
                 "other": other,
                 "sku_code": sku_code,
-                "default_selling_price": str(row.get("default_selling_price", "0")),
-                "max_discount_pct": str(row.get("max_discount_pct", "0")),
+                "default_selling_price": "0",
+                "max_discount_pct": "0",
                 "is_active": "true",
                 "created_at": now_iso(),
             }
@@ -232,8 +230,6 @@ class ProductService:
         category: str,
         prd_description: str,
         prd_features_json: str,
-        default_selling_price: float,
-        max_discount_pct: float,
     ) -> None:
         products = self.repo.all()
         idx = products[
@@ -257,8 +253,6 @@ class ProductService:
         products.loc[i, "category"] = category
         products.loc[i, "prd_description"] = prd_description
         products.loc[i, "prd_features_json"] = prd_features_json
-        products.loc[i, "default_selling_price"] = str(default_selling_price)
-        products.loc[i, "max_discount_pct"] = str(max_discount_pct)
         self.repo.save(products)
 
     def upsert_variant(
@@ -372,33 +366,11 @@ class ProductService:
             "color": color,
             "other": other,
             "sku_code": sku_code,
-            "default_selling_price": str(
-                default_selling_price
-                if default_selling_price is not None
-                else product.get("default_selling_price", "0")
-            ),
-            "max_discount_pct": str(
-                max_discount_pct
-                if max_discount_pct is not None
-                else product.get("max_discount_pct", "0")
-            ),
+            "default_selling_price": str(default_selling_price if default_selling_price is not None else 0),
+            "max_discount_pct": str(max_discount_pct if max_discount_pct is not None else 0),
             "is_active": "true",
             "created_at": now_iso(),
         }
         self.variants_repo.append(record)
         logger.info("product_service.upsert_variant created variant: variant_id=%s size=%s color=%s other=%s", record["variant_id"], record["size"], record["color"], record["other"])
         return record, True
-
-    def update_pricing(
-        self, client_id: str, product_id: str, payload: ProductPricingUpdate
-    ) -> None:
-        products = self.repo.all()
-        idx = products[
-            (products["client_id"] == client_id) & (products["product_id"] == product_id)
-        ].index
-        if len(idx) == 0:
-            raise ValueError("Product not found for this client")
-        i = idx[0]
-        products.loc[i, "default_selling_price"] = str(payload.default_selling_price)
-        products.loc[i, "max_discount_pct"] = str(payload.max_discount_pct)
-        self.repo.save(products)

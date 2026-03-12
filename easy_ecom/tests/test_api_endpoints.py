@@ -153,8 +153,8 @@ def test_core_api_endpoints() -> None:
                 {
                     "variant_id": "",
                     "variant_label": "Default",
-                    "size": "",
-                    "color": "",
+                    "size": "M",
+                    "color": "Red",
                     "other": "",
                     "qty": 1,
                     "unit_cost": 2,
@@ -181,8 +181,8 @@ def test_core_api_endpoints() -> None:
                 {
                     "id": "",
                     "label": "Default",
-                    "size": "",
-                    "color": "",
+                    "size": "M",
+                    "color": "Red",
                     "other": "",
                     "qty": 1,
                     "cost": 2,
