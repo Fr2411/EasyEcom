@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field
 
 
 class SaleLineRequest(BaseModel):
-    product_id: str = Field(min_length=1)
+    variant_id: str = Field(min_length=1)
     qty: float = Field(gt=0)
     unit_price: float = Field(ge=0)
 
@@ -55,7 +55,12 @@ class SaleCreateResponse(BaseModel):
 
 
 class SaleLookupProduct(BaseModel):
+    variant_id: str
     product_id: str
+    sku: str = ""
+    barcode: str = ""
+    product_name: str
+    variant_name: str
     label: str
     default_unit_price: float
     available_qty: float
@@ -74,7 +79,7 @@ class SaleFormOptionsResponse(BaseModel):
 
 
 class LegacySaleItemRequest(BaseModel):
-    product_id: str
+    variant_id: str
     qty: float = Field(gt=0)
     unit_selling_price: float = Field(gt=0)
 

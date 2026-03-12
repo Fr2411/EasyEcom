@@ -28,6 +28,25 @@ class ProductService:
             values.append(value.title())
         return values
 
+    @staticmethod
+    def _slug_code(value: str, fallback: str = "SKU") -> str:
+        cleaned = "".join(ch for ch in value.upper() if ch.isalnum())
+        return cleaned[:6] or fallback
+
+    def _next_sku(self, *, client_id: str, product_name: str) -> str:
+        base = self._slug_code(product_name)
+        variants = self.variants_repo.all() if self.variants_repo is not None else None
+        used: set[str] = set()
+        if variants is not None and not variants.empty:
+            scoped = variants[variants["client_id"] == client_id]
+            used = set(scoped["sku_code"].fillna("").astype(str).tolist())
+        seq = 1
+        while True:
+            candidate = f"{base}-{seq:03d}"
+            if candidate not in used:
+                return candidate
+            seq += 1
+
     def _variant_name(self, size: str, color: str, other: str) -> str:
         parts = []
         if size:
@@ -145,7 +164,7 @@ class ProductService:
                 continue
             variant_id = new_uuid()
             variant_name = self._variant_name(size, color, other)
-            sku_code = f"{parent_product_id[:8]}-{variant_name.replace(' ', '').replace('|', '-').replace(':', '-')[:30]}"
+            sku_code = self._next_sku(client_id=client_id, product_name=str(row.get('product_name', 'SKU')))
             record = {
                 "variant_id": variant_id,
                 "client_id": client_id,
@@ -279,7 +298,7 @@ class ProductService:
         product = parent.iloc[0]
         variant_name = self._variant_name(size, color, other)
         variant_id = new_uuid()
-        sku_code = f"{parent_product_id[:8]}-{variant_name.replace(' ', '').replace('|', '-').replace(':', '-')[:30]}"
+        sku_code = self._next_sku(client_id=client_id, product_name=str(product.get('product_name', 'SKU')))
         record = {
             "variant_id": variant_id,
             "client_id": client_id,
