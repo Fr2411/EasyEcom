@@ -1,6 +1,6 @@
 import React from 'react';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 vi.mock('@/lib/api/products-stock', () => ({
   getProductsStockSnapshot: vi.fn(async () => ({
@@ -47,8 +47,15 @@ vi.mock('@/lib/api/products-stock', () => ({
 import { ProductsStockWorkspace } from '@/components/products-stock/products-stock-workspace';
 import { getProductsStockSnapshot, saveProductStock } from '@/lib/api/products-stock';
 
+let consoleDebugSpy: ReturnType<typeof vi.spyOn>;
+
+beforeEach(() => {
+  consoleDebugSpy = vi.spyOn(console, 'debug').mockImplementation(() => undefined);
+});
+
 afterEach(() => {
   cleanup();
+  consoleDebugSpy.mockRestore();
 });
 
 describe('ProductsStockWorkspace', () => {
@@ -281,5 +288,39 @@ describe('ProductsStockWorkspace', () => {
       expect(screen.getByText('Variants: 2')).toBeTruthy();
     });
   });
+
+  test('surfaces backend detail on initial snapshot load failure instead of generic load error', async () => {
+    vi.mocked(getProductsStockSnapshot).mockRejectedValueOnce(new Error('{"detail":"Snapshot parser failed at products[0].variants"}'));
+
+    render(<ProductsStockWorkspace />);
+
+    expect(await screen.findByText('Snapshot parser failed at products[0].variants')).toBeTruthy();
+  });
+
+  test('logs exact UI variant identity values before save', async () => {
+    render(<ProductsStockWorkspace />);
+
+    fireEvent.change(screen.getByLabelText('Product chooser input'), { target: { value: 'Fresh Tee' } });
+    fireEvent.click(screen.getByText('Add new product: "Fresh Tee"'));
+    fireEvent.change(screen.getByPlaceholderText('S, M, L'), { target: { value: 'S, M' } });
+    fireEvent.change(screen.getByPlaceholderText('Black, White'), { target: { value: 'Black' } });
+    fireEvent.click(screen.getByText('Generate combinations'));
+
+    fireEvent.click(screen.getByText('Save'));
+
+    await waitFor(() => {
+      expect(consoleDebugSpy).toHaveBeenCalledWith(
+        '[ProductsStockWorkspace] UI state before save',
+        expect.objectContaining({
+          productName: 'Fresh Tee',
+          variants: expect.arrayContaining([
+            expect.objectContaining({ size: 'S', color: 'Black', other: '' }),
+            expect.objectContaining({ size: 'M', color: 'Black', other: '' })
+          ])
+        })
+      );
+    });
+  });
+
 
 });
