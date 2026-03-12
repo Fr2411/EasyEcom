@@ -127,6 +127,25 @@ describe('ProductsStockWorkspace', () => {
     });
   });
 
+
+  test('features input keeps trailing comma so users can enter multiple features naturally', async () => {
+    render(<ProductsStockWorkspace />);
+
+    fireEvent.change(screen.getByLabelText('Product chooser input'), { target: { value: 'Fresh Tee' } });
+    fireEvent.click(screen.getByText('Add new product: "Fresh Tee"'));
+
+    const featuresInput = screen.getByPlaceholderText('Breathable, Durable, Quick-dry') as HTMLInputElement;
+
+    fireEvent.change(featuresInput, { target: { value: 'Breathable,' } });
+    await waitFor(() => {
+      expect(featuresInput.value).toBe('Breathable,');
+    });
+
+    fireEvent.change(featuresInput, { target: { value: 'Breathable, Durable' } });
+    await waitFor(() => {
+      expect(featuresInput.value).toBe('Breathable, Durable');
+    });
+  });
   test('summary values update based on variant edits', async () => {
     render(<ProductsStockWorkspace />);
 
