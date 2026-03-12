@@ -101,7 +101,7 @@ def _sync_variant_labels(df: pd.DataFrame, product_svc: ProductService) -> pd.Da
         color = str(row.get("color", "")).strip().title()
         other = str(row.get("other", "")).strip().title()
         if not label:
-            label = product_svc._variant_name(size, color, other)
+            label = product_svc._variant_name("", size, color, other)
         synced.at[idx, "size"] = size
         synced.at[idx, "color"] = color
         synced.at[idx, "other"] = other

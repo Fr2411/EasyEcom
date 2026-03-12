@@ -47,7 +47,7 @@ class ProductService:
                 return candidate
             seq += 1
 
-    def _variant_name(self, size: str, color: str, other: str) -> str:
+    def _variant_name(self, product_name: str, size: str, color: str, other: str, variant_label: str = "") -> str:
         parts = []
         if size:
             parts.append(f"Size:{size}")
@@ -55,9 +55,13 @@ class ProductService:
             parts.append(f"Color:{color}")
         if other:
             parts.append(f"Other:{other}")
-        return " | ".join(parts) if parts else "Default"
+        suffix = " | ".join(parts) if parts else str(variant_label or "").strip() or "Default"
+        base = str(product_name or "").strip()
+        if base and suffix.lower().startswith(f"{base.lower()} | "):
+            suffix = suffix[len(base) + 3 :]
+        return f"{base} | {suffix}" if base else suffix
 
-    def create(self, payload: ProductCreate) -> str:
+    def create(self, payload: ProductCreate, *, generate_variants_on_create: bool = True) -> str:
         df = self.repo.all()
         dup = df[
             (df["client_id"] == payload.client_id)
@@ -86,7 +90,7 @@ class ProductService:
                 "parent_product_id": "",
             }
         )
-        if self.variants_repo is not None:
+        if self.variants_repo is not None and generate_variants_on_create:
             self.generate_variants(
                 payload.client_id,
                 product_id,
@@ -163,7 +167,7 @@ class ProductService:
             if key in existing_keys:
                 continue
             variant_id = new_uuid()
-            variant_name = self._variant_name(size, color, other)
+            variant_name = self._variant_name(str(row.get("product_name", "")), size, color, other)
             sku_code = self._next_sku(client_id=client_id, product_name=str(row.get('product_name', 'SKU')))
             record = {
                 "variant_id": variant_id,
@@ -263,6 +267,7 @@ class ProductService:
         other: str,
         default_selling_price: float | None = None,
         max_discount_pct: float | None = None,
+        variant_label: str = "",
     ) -> tuple[dict[str, str], bool]:
         if self.variants_repo is None:
             raise ValueError("Variant repository not configured")
@@ -278,17 +283,27 @@ class ProductService:
                 & (variants["color"].fillna("").astype(str).str.lower() == color.lower())
                 & (variants["other"].fillna("").astype(str).str.lower() == other.lower())
             ]
-            if not scoped.empty:
+            parent_product = self.get_by_id(client_id, parent_product_id)
+            variant_name = self._variant_name(
+                str(parent_product.get("product_name", "") if parent_product else ""),
+                size,
+                color,
+                other,
+                variant_label=variant_label,
+            )
+            if not scoped.empty and not (not size and not color and not other and variant_label.strip()):
                 row = scoped.iloc[0].to_dict()
+                i = scoped.index[0]
+                variants.loc[i, "variant_name"] = variant_name
+                row["variant_name"] = variant_name
                 if default_selling_price is not None or max_discount_pct is not None:
-                    i = scoped.index[0]
                     if default_selling_price is not None:
                         variants.loc[i, "default_selling_price"] = str(default_selling_price)
                         row["default_selling_price"] = str(default_selling_price)
                     if max_discount_pct is not None:
                         variants.loc[i, "max_discount_pct"] = str(max_discount_pct)
                         row["max_discount_pct"] = str(max_discount_pct)
-                    self.variants_repo.save(variants)
+                self.variants_repo.save(variants)
                 return row, False
 
         products = self.list_by_client(client_id)
@@ -296,7 +311,7 @@ class ProductService:
         if parent.empty:
             raise ValueError("Parent product not found")
         product = parent.iloc[0]
-        variant_name = self._variant_name(size, color, other)
+        variant_name = self._variant_name(str(product.get("product_name", "")), size, color, other, variant_label=variant_label)
         variant_id = new_uuid()
         sku_code = self._next_sku(client_id=client_id, product_name=str(product.get('product_name', 'SKU')))
         record = {

@@ -9,7 +9,7 @@ function parseCsvValues(value: string): string[] {
     .filter(Boolean);
 }
 
-export function generateVariantsFromInputs(sizeInput: string, colorInput: string, otherInput: string): Variant[] {
+export function generateVariantsFromInputs(productNameInput: string, sizeInput: string, colorInput: string, otherInput: string): Variant[] {
   const sizes = parseCsvValues(sizeInput);
   const colors = parseCsvValues(colorInput);
   const others = parseCsvValues(otherInput);
@@ -23,7 +23,9 @@ export function generateVariantsFromInputs(sizeInput: string, colorInput: string
   sizeSource.forEach((size) => {
     colorSource.forEach((color) => {
       otherSource.forEach((other) => {
-        const label = [size, color, other].filter(Boolean).join(' / ') || 'Standard';
+        const base = productNameInput.trim();
+        const detail = [size, color, other].filter(Boolean).join(' / ') || 'Standard';
+        const label = base ? `${base} / ${detail}` : detail;
         variants.push({
           id: `new-${label}-${Math.random().toString(36).slice(2, 9)}`,
           label,
