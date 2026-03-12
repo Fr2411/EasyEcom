@@ -35,6 +35,7 @@ class InventoryItemSummary(BaseModel):
     stock_value: float
     lot_count: int
     low_stock: bool
+    actionable: bool
 
 
 class InventoryListResponse(BaseModel):

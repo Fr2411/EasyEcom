@@ -70,6 +70,10 @@ export function InventoryWorkspace() {
     [items],
   );
   const summary = useMemo(() => summarizeVariants(variants), [variants]);
+  const actionableItems = useMemo(
+    () => items.filter((item) => item.item_type === 'variant' && item.actionable),
+    [items],
+  );
 
   const loadInventory = async (q = query) => {
     try {
@@ -87,8 +91,12 @@ export function InventoryWorkspace() {
       ]);
       setItems(itemsRes.items);
       setMovements(movementRes.items);
-      if (!adjustItemId && itemsRes.items.length > 0) {
-        setAdjustItemId(itemsRes.items[0].item_id);
+      const actionableIds = new Set(
+        itemsRes.items.filter((item) => item.item_type === 'variant' && item.actionable).map((item) => item.item_id),
+      );
+      if (!adjustItemId || !actionableIds.has(adjustItemId)) {
+        const firstActionable = itemsRes.items.find((item) => item.item_type === 'variant' && item.actionable);
+        setAdjustItemId(firstActionable?.item_id ?? '');
       }
     } catch {
       setError('Unable to load inventory module right now.');
@@ -296,11 +304,12 @@ export function InventoryWorkspace() {
         </div>
 
         <aside className="inventory-panel">
-          <h3>Adjust Stock</h3>
+          <h3>Adjust Stock (Variant Only)</h3>
           <label>Item<select value={adjustItemId} onChange={(e) => setAdjustItemId(e.target.value)}>
-            <option value="">Select item</option>
-            {items.map((item) => <option key={item.item_id} value={item.item_id}>{item.item_name}</option>)}
+            <option value="">Select variant</option>
+            {actionableItems.map((item) => <option key={item.item_id} value={item.item_id}>{item.item_name}</option>)}
           </select></label>
+          {actionableItems.length === 0 ? <p className="inventory-hint">Only variants are actionable for stock adjustments.</p> : null}
           <label>Adjustment type<select value={adjustType} onChange={(e) => setAdjustType(e.target.value as AdjustmentType)}>
             <option value="stock_in">Stock In</option>
             <option value="stock_out">Stock Out</option>
