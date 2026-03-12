@@ -1,4 +1,4 @@
-import type { Variant } from '@/types/products-stock';
+import type { Variant, VariantGenerationInput } from '@/types/products-stock';
 
 const DEFAULT_DISCOUNT = 10;
 
@@ -16,7 +16,7 @@ export function hasIdentity(variant: Variant): boolean {
   return [variant.size, variant.color, variant.other].some((v) => v.trim().length > 0);
 }
 
-export function generateVariantsFromInputs({ size, color, other }: { size: string; color: string; other: string }): Variant[] {
+export function generateVariantsFromInputs({ size, color, other }: VariantGenerationInput): Variant[] {
   const sizes = parseCsvValues(size);
   const colors = parseCsvValues(color);
   const others = parseCsvValues(other);
