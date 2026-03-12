@@ -2,13 +2,30 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { ApiError } from '@/lib/api/client';
-import { createAdminUser, getAdminAudit, getAdminRoles, getAdminUsers, setAdminUserRoles, updateAdminUser } from '@/lib/api/admin';
+import { createAdminTenant, createAdminUser, getAdminAudit, getAdminRoles, getAdminUsers, setAdminUserRoles, updateAdminUser } from '@/lib/api/admin';
 import type { AdminUser } from '@/types/admin';
 import { useAuth } from '@/components/auth/auth-provider';
 
 const ADMIN_ROLES = new Set(['SUPER_ADMIN', 'CLIENT_OWNER', 'CLIENT_MANAGER']);
 
+type TenantFormState = {
+  business_name: string;
+  owner_name: string;
+  owner_email: string;
+  owner_password: string;
+  currency_code: string;
+};
+
+const defaultTenantForm: TenantFormState = {
+  business_name: '',
+  owner_name: '',
+  owner_email: '',
+  owner_password: '',
+  currency_code: 'USD',
+};
+
 type FormState = {
+  client_id?: string;
   name: string;
   email: string;
   password: string;
@@ -17,6 +34,7 @@ type FormState = {
 };
 
 const defaultForm: FormState = {
+  client_id: '',
   name: '',
   email: '',
   password: '',
@@ -33,8 +51,10 @@ export function AdminWorkspace() {
   const [auditMessage, setAuditMessage] = useState('');
   const [search, setSearch] = useState('');
   const [form, setForm] = useState<FormState>(defaultForm);
+  const [tenantForm, setTenantForm] = useState<TenantFormState>(defaultTenantForm);
 
   const canAccess = useMemo(() => Boolean(user?.roles?.some((role) => ADMIN_ROLES.has(role))), [user?.roles]);
+  const isSuperAdmin = useMemo(() => Boolean(user?.roles?.includes('SUPER_ADMIN')), [user?.roles]);
 
   async function loadData() {
     setLoading(true);
@@ -69,7 +89,10 @@ export function AdminWorkspace() {
     event.preventDefault();
     setError('');
     try {
-      await createAdminUser(form);
+      const payload = isSuperAdmin
+        ? form
+        : { ...form, client_id: undefined };
+      await createAdminUser(payload);
       setForm(defaultForm);
       await loadData();
     } catch (err) {
@@ -77,6 +100,25 @@ export function AdminWorkspace() {
         setError(`Create user failed: ${err.message}`);
       } else {
         setError('Create user failed.');
+      }
+    }
+  }
+
+
+
+  async function onCreateTenant(event: React.FormEvent) {
+    event.preventDefault();
+    setError('');
+    try {
+      const created = await createAdminTenant(tenantForm);
+      setTenantForm(defaultTenantForm);
+      setForm((prev) => ({ ...prev, client_id: created.client_id }));
+      await loadData();
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(`Create tenant failed: ${err.message}`);
+      } else {
+        setError('Create tenant failed.');
       }
     }
   }
@@ -172,8 +214,43 @@ export function AdminWorkspace() {
       </section>
 
       <section className="admin-card">
+        {isSuperAdmin ? (
+          <>
+            <h3>Create business tenant</h3>
+            <form className="admin-form" onSubmit={onCreateTenant}>
+              <label>
+                Business name
+                <input required value={tenantForm.business_name} onChange={(event) => setTenantForm((prev) => ({ ...prev, business_name: event.target.value }))} />
+              </label>
+              <label>
+                Owner name
+                <input required value={tenantForm.owner_name} onChange={(event) => setTenantForm((prev) => ({ ...prev, owner_name: event.target.value }))} />
+              </label>
+              <label>
+                Owner email
+                <input required type="email" value={tenantForm.owner_email} onChange={(event) => setTenantForm((prev) => ({ ...prev, owner_email: event.target.value }))} />
+              </label>
+              <label>
+                Owner password
+                <input required minLength={8} type="password" value={tenantForm.owner_password} onChange={(event) => setTenantForm((prev) => ({ ...prev, owner_password: event.target.value }))} />
+              </label>
+              <label>
+                Currency code
+                <input required minLength={3} maxLength={3} value={tenantForm.currency_code} onChange={(event) => setTenantForm((prev) => ({ ...prev, currency_code: event.target.value.toUpperCase() }))} />
+              </label>
+              <button type="submit">Create Business</button>
+            </form>
+            <hr />
+          </>
+        ) : null}
         <h3>Add user</h3>
         <form className="admin-form" onSubmit={onCreateUser}>
+          {isSuperAdmin ? (
+            <label>
+              Client ID
+              <input required value={form.client_id || ''} onChange={(event) => setForm((prev) => ({ ...prev, client_id: event.target.value }))} />
+            </label>
+          ) : null}
           <label>
             Full name
             <input required value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} />

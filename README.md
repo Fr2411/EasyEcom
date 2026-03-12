@@ -78,6 +78,21 @@ Key frontend vars (`frontend/.env.example`):
 - `NEXT_PUBLIC_API_BASE_URL`
 
 
+
+## Tenant provisioning hardening (critical isolation fix)
+
+- Super Admin can now create a **new tenant/business** through `POST /admin/tenants`, which atomically creates:
+  - a new `clients` row with a generated unique `client_id`
+  - the owner user row bound to that same `client_id`
+  - default owner role assignment (`CLIENT_OWNER`)
+- `POST /admin/users` now supports optional `client_id` input for Super Admin only.
+  - Non-super-admin tenant admins are blocked from cross-tenant assignment.
+  - Super Admin can target an existing tenant explicitly without inheriting the Super Admin session tenant.
+- Backend now validates that target `client_id` exists before creating users, preventing orphan/bad tenant writes.
+- Added DB migration `easy_ecom/migrations/20260323_phase21_drop_client_id_defaults.sql` to drop any `client_id` defaults on `users` and `clients`, preventing implicit/fallback tenant assignment at DB layer.
+
+These changes preserve the existing tenant/user model while eliminating accidental reuse of a fixed tenant id during Super Admin onboarding workflows.
+
 ## Auth session flow (cookie-based)
 
 - `POST /auth/login` validates credentials against PostgreSQL, then issues signed cookie `easy_ecom_session` (`HttpOnly`, same-site/secure flags from backend config).

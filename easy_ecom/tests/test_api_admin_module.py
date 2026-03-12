@@ -19,6 +19,13 @@ class DummyAdminUser:
     roles: list[str]
 
 
+@dataclass
+class DummyTenantRecord:
+    client_id: str
+    business_name: str
+    owner_user: DummyAdminUser
+
+
 class DummyAdminService:
     def __init__(self) -> None:
         self.users = [
@@ -74,6 +81,28 @@ class DummyAdminService:
         )
         self.users.append(user)
         return user
+
+
+    def create_tenant_with_owner(
+        self,
+        *,
+        business_name: str,
+        owner_name: str,
+        owner_email: str,
+        owner_password: str,
+        currency_code: str,
+        owner_role_codes: list[str],
+    ) -> DummyTenantRecord:
+        client_id = f"tenant-{len({item.client_id for item in self.users}) + 1}"
+        owner = self.create_user(
+            client_id=client_id,
+            name=owner_name,
+            email=owner_email,
+            password=owner_password,
+            role_codes=owner_role_codes,
+            is_active=True,
+        )
+        return DummyTenantRecord(client_id=client_id, business_name=business_name, owner_user=owner)
 
     def update_user_profile(
         self,
@@ -193,5 +222,79 @@ def test_only_super_admin_can_assign_super_admin() -> None:
 
     forbidden = client.patch("/admin/users/u-a/roles", json={"role_codes": ["SUPER_ADMIN"]})
     assert forbidden.status_code == 403
+
+    app.dependency_overrides.clear()
+
+
+def test_super_admin_can_create_tenant_and_target_tenant_user() -> None:
+    container = DummyContainer()
+    app.dependency_overrides[get_container] = lambda: container
+    app.dependency_overrides[get_current_user] = lambda: RequestUser(
+        user_id="u-super", client_id="tenant-a", roles=["SUPER_ADMIN"]
+    )
+    client = TestClient(app)
+
+    tenant_res = client.post(
+        "/admin/tenants",
+        json={
+            "business_name": "New Biz",
+            "owner_name": "Owner",
+            "owner_email": "owner@newbiz.com",
+            "owner_password": "Password!1",
+            "currency_code": "USD",
+        },
+    )
+    assert tenant_res.status_code == 201
+    created_client_id = tenant_res.json()["client_id"]
+
+    user_res = client.post(
+        "/admin/users",
+        json={
+            "client_id": created_client_id,
+            "name": "Emp",
+            "email": "emp@newbiz.com",
+            "password": "Password!1",
+            "role_codes": ["CLIENT_EMPLOYEE"],
+            "is_active": True,
+        },
+    )
+    assert user_res.status_code == 201
+    assert user_res.json()["user"]["client_id"] == created_client_id
+
+    app.dependency_overrides.clear()
+
+
+def test_non_super_admin_cannot_create_tenant_or_cross_tenant_user() -> None:
+    container = DummyContainer()
+    app.dependency_overrides[get_container] = lambda: container
+    app.dependency_overrides[get_current_user] = lambda: RequestUser(
+        user_id="u-a", client_id="tenant-a", roles=["CLIENT_OWNER"]
+    )
+    client = TestClient(app)
+
+    tenant_res = client.post(
+        "/admin/tenants",
+        json={
+            "business_name": "Nope",
+            "owner_name": "Owner",
+            "owner_email": "owner@nope.com",
+            "owner_password": "Password!1",
+            "currency_code": "USD",
+        },
+    )
+    assert tenant_res.status_code == 403
+
+    user_res = client.post(
+        "/admin/users",
+        json={
+            "client_id": "tenant-b",
+            "name": "Emp",
+            "email": "emp@tenant-a.com",
+            "password": "Password!1",
+            "role_codes": ["CLIENT_EMPLOYEE"],
+            "is_active": True,
+        },
+    )
+    assert user_res.status_code == 403
 
     app.dependency_overrides.clear()
