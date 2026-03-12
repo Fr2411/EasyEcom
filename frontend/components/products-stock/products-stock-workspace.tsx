@@ -34,8 +34,21 @@ function toVariantIdentityKey(variant: Variant): string {
 }
 
 function toErrorMessage(error: unknown, fallback: string): string {
-  if (error instanceof Error && error.message.trim()) {
-    return error.message;
+  if (error instanceof Error) {
+    const message = error.message.trim();
+    if (!message) {
+      return fallback;
+    }
+    try {
+      const parsed = JSON.parse(message) as { detail?: unknown; message?: unknown };
+      const detail = [parsed.detail, parsed.message].find((value) => typeof value === 'string' && value.trim());
+      if (typeof detail === 'string' && detail.trim()) {
+        return detail;
+      }
+    } catch {
+      // Non-JSON message, use plain error text below.
+    }
+    return message;
   }
 
   return fallback;
@@ -147,6 +160,18 @@ export function ProductsStockWorkspace() {
 
     setIsSaving(true);
     try {
+      console.debug('[ProductsStockWorkspace] UI state before save', {
+        mode,
+        selectedProductId,
+        productName: identity.productName,
+        variants: variants.map((variant) => ({
+          id: variant.id,
+          label: variant.label,
+          size: variant.size ?? '',
+          color: variant.color ?? '',
+          other: variant.other ?? ''
+        }))
+      });
       await saveProductStock({
         mode,
         identity,
