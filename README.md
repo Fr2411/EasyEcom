@@ -253,6 +253,7 @@ Inventory is modeled per-tenant as a **single location** with separated quantiti
 - Shared stock semantics are centralized in `easy_ecom/domain/services/stock_policy.py` and reused by Inventory, Sales, Dashboard/metrics, Reports, and Purchases services to keep cross-tab stock totals consistent.
 - Inventory UI now shows available/sellable rows by default and pairs this with the integrated "Find or create product" flow to add new or existing product stock from one tab.
 - Product search autocomplete in the Inventory "Find or create product" workflow now enforces a minimum of 1 character before showing results, preventing empty-query result lists and clearing suggestions when the input is reset.
+- Product identity "Features (comma-separated)" input now preserves in-progress commas while typing so users can enter multiple features without delimiter loss.
 - Manual adjustments stay available via `POST /inventory/adjustments` (`stock_in`, `stock_out`, `correction`) and continue to write movement ledger entries used by Sales visibility.
 
 ## Phase 17: Multi-tenant stock/returns schema hardening (audit + refactor)
