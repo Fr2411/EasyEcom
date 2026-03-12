@@ -27,6 +27,14 @@ function toLookup(products: ProductRecord[]) {
   return products.map((product) => ({ id: product.id, name: product.identity.productName }));
 }
 
+function toErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+
+  return fallback;
+}
+
 export function ProductsStockWorkspace() {
   const [products, setProducts] = useState<ProductRecord[]>([]);
   const [suppliers, setSuppliers] = useState<string[]>([]);
@@ -41,11 +49,16 @@ export function ProductsStockWorkspace() {
   const [isSaving, setIsSaving] = useState(false);
   const [validationMessage, setValidationMessage] = useState<string>();
 
+  const loadSnapshot = async () => {
+    const snapshot = await getProductsStockSnapshot();
+    setProducts(snapshot.products);
+    setSuppliers(snapshot.suppliers);
+    setCategories(snapshot.categories);
+  };
+
   useEffect(() => {
-    getProductsStockSnapshot().then((snapshot) => {
-      setProducts(snapshot.products);
-      setSuppliers(snapshot.suppliers);
-      setCategories(snapshot.categories);
+    loadSnapshot().catch((error) => {
+      setValidationMessage(toErrorMessage(error, 'Unable to load Products & Stock workspace.'));
     });
   }, []);
 
@@ -118,13 +131,25 @@ export function ProductsStockWorkspace() {
     }
 
     setIsSaving(true);
-    await saveProductStock({
-      mode,
-      identity,
-      variants
-    });
-    setIsSaving(false);
-    setValidationMessage('Saved successfully.');
+    try {
+      await saveProductStock({
+        mode,
+        identity,
+        variants
+      });
+      try {
+        await loadSnapshot();
+        setValidationMessage('Saved successfully.');
+      } catch (reloadError) {
+        setValidationMessage(
+          `Saved successfully, but refresh failed: ${toErrorMessage(reloadError, 'Unable to reload latest data.')}`
+        );
+      }
+    } catch (saveError) {
+      setValidationMessage(toErrorMessage(saveError, 'Unable to save product details.'));
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -146,7 +171,16 @@ export function ProductsStockWorkspace() {
 
         {mode === 'new' ? (
           <VariantGenerator
-            onGenerate={({ size, color, other }) => setVariants(generateVariantsFromInputs(identity.productName, size, color, other))}
+            onGenerate={({ size, color, other }) =>
+              setVariants(
+                generateVariantsFromInputs({
+                  productName: identity.productName,
+                  size,
+                  color,
+                  other
+                })
+              )
+            }
           />
         ) : null}
 
