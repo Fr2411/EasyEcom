@@ -2,14 +2,13 @@ export type VariantMode = 'existing' | 'new';
 
 export type Variant = {
   id: string;
-  label: string;
   qty: number;
   cost: number;
   defaultSellingPrice: number;
   maxDiscountPct: number;
-  size?: string;
-  color?: string;
-  other?: string;
+  size: string;
+  color: string;
+  other: string;
 };
 
 export type ProductIdentity = {

@@ -31,6 +31,14 @@ class VariantWorkspaceEntry:
     supplier: str = ""
     received_date: str = ""
 
+    def identity_key(self) -> str:
+        return "|".join(
+            str(value or "").strip().lower() for value in (self.size, self.color, self.other)
+        )
+
+    def has_identity(self) -> bool:
+        return any(str(value or "").strip() for value in (self.size, self.color, self.other))
+
 
 class CatalogStockService:
     """Application service for the unified Catalog & Stock workspace."""
@@ -161,6 +169,33 @@ class CatalogStockService:
         product_name = typed_product_name.strip()
         if not product_name:
             raise ValueError("Product name is required")
+        if not variant_entries:
+            raise ValueError("At least one variant is required")
+
+        normalized_entries: list[VariantWorkspaceEntry] = []
+        seen: set[str] = set()
+        for index, entry in enumerate(variant_entries, start=1):
+            row = VariantWorkspaceEntry(
+                variant_id=str(entry.variant_id or "").strip(),
+                variant_label=str(entry.variant_label or "").strip(),
+                size=str(entry.size or "").strip().title(),
+                color=str(entry.color or "").strip().title(),
+                other=str(entry.other or "").strip().title(),
+                qty=float(entry.qty or 0),
+                unit_cost=float(entry.unit_cost or 0),
+                default_selling_price=float(entry.default_selling_price or 0),
+                max_discount_pct=float(entry.max_discount_pct or 0),
+                lot_reference=str(entry.lot_reference or "").strip(),
+                supplier=str(entry.supplier or "").strip(),
+                received_date=str(entry.received_date or "").strip(),
+            )
+            if not row.has_identity():
+                raise ValueError(f"Variant row {index} must include at least one identity field (size/color/other)")
+            key = row.identity_key()
+            if key in seen:
+                raise ValueError("Duplicate variant identity in request: each size/color/other combination must be unique")
+            seen.add(key)
+            normalized_entries.append(row)
 
         product = (
             self.product_service.get_by_id(client_id, selected_product_id)
@@ -170,7 +205,6 @@ class CatalogStockService:
         if product is None:
             product = self.product_service.get_by_name_ci(client_id, product_name)
 
-        is_new_product = product is None
         if product is None:
             product_id = self.product_service.create(
                 ProductCreate(
@@ -180,8 +214,8 @@ class CatalogStockService:
                     category=category,
                     prd_description=description,
                     prd_features_json=parse_features_text(features_text),
-                    default_selling_price=default_selling_price,
-                    max_discount_pct=max_discount_pct,
+                    default_selling_price=0,
+                    max_discount_pct=0,
                     sizes_csv="",
                     colors_csv="",
                     others_csv="",
@@ -198,143 +232,75 @@ class CatalogStockService:
                 category=category,
                 prd_description=description,
                 prd_features_json=parse_features_text(features_text),
-                default_selling_price=default_selling_price,
-                max_discount_pct=max_discount_pct,
+                default_selling_price=0,
+                max_discount_pct=0,
             )
+
+        variants_df = self.product_service.variants_repo.all() if self.product_service.variants_repo is not None else pd.DataFrame()
+        scoped = variants_df[
+            (variants_df["client_id"] == client_id)
+            & (variants_df["parent_product_id"] == product_id)
+        ].copy() if not variants_df.empty else pd.DataFrame()
+
+        existing_by_identity = {
+            "|".join([
+                str(r.get("size", "")).strip().lower(),
+                str(r.get("color", "")).strip().lower(),
+                str(r.get("other", "")).strip().lower(),
+            ]): r
+            for _, r in scoped.iterrows()
+        }
 
         lot_ids: list[str] = []
-        updated_variants = 0
-        valid_entries = [
-            row
-            for row in variant_entries
-            if (
-                row.size.strip()
-                or row.color.strip()
-                or row.other.strip()
-                or row.variant_label.strip()
-            )
-        ]
-        stock_entries_without_variant = [
-            row
-            for row in variant_entries
-            if not (
-                row.size.strip()
-                or row.color.strip()
-                or row.other.strip()
-                or row.variant_label.strip()
-            )
-            and float(row.qty or 0) > 0
-            and float(row.unit_cost or 0) > 0
-        ]
-
-        if is_new_product and not valid_entries:
-            valid_entries = [
-                VariantWorkspaceEntry(
-                    variant_label="Default",
-                    default_selling_price=float(default_selling_price),
-                    max_discount_pct=float(max_discount_pct),
+        upserts = 0
+        for row in normalized_entries:
+            existing = existing_by_identity.get(row.identity_key())
+            if existing is not None:
+                variant_id = str(existing.get("variant_id", ""))
+                mask = variants_df["variant_id"].astype(str) == variant_id
+                variants_df.loc[mask, "variant_name"] = self.product_service._variant_name(product_name, row.size, row.color, row.other)
+                variants_df.loc[mask, "size"] = row.size
+                variants_df.loc[mask, "color"] = row.color
+                variants_df.loc[mask, "other"] = row.other
+                variants_df.loc[mask, "default_selling_price"] = str(row.default_selling_price)
+                variants_df.loc[mask, "max_discount_pct"] = str(row.max_discount_pct)
+            else:
+                created, _ = self.product_service.upsert_variant(
+                    client_id=client_id,
+                    parent_product_id=product_id,
+                    variant_id="",
+                    size=row.size,
+                    color=row.color,
+                    other=row.other,
+                    default_selling_price=row.default_selling_price,
+                    max_discount_pct=row.max_discount_pct,
                 )
-            ]
-
-        opening_written = False
-        logger.info(
-            "catalog_stock.save_workspace incoming entries: product=%s selected_product_id=%s entries=%s",
-            product_name,
-            selected_product_id.strip(),
-            [
-                {
-                    "variant_id": row.variant_id,
-                    "size": row.size,
-                    "color": row.color,
-                    "other": row.other,
-                    "variant_label": row.variant_label,
-                }
-                for row in valid_entries
-            ],
-        )
-        for row in valid_entries:
-            logger.info(
-                "catalog_stock.save_workspace upserting variant: variant_id=%s size=%s color=%s other=%s label=%s",
-                row.variant_id,
-                row.size,
-                row.color,
-                row.other,
-                row.variant_label,
-            )
-            if not (
-                row.size.strip()
-                or row.color.strip()
-                or row.other.strip()
-                or row.variant_label.strip()
-            ):
-                continue
-            variant, _ = self.product_service.upsert_variant(
-                client_id=client_id,
-                parent_product_id=product_id,
-                variant_id=row.variant_id,
-                size=row.size,
-                color=row.color,
-                other=row.other,
-                default_selling_price=float(row.default_selling_price or default_selling_price),
-                max_discount_pct=float(row.max_discount_pct or max_discount_pct),
-                variant_label=row.variant_label,
-            )
-            updated_variants += 1
-            if float(row.qty) > 0 and float(row.unit_cost) > 0:
+                variant_id = str(created.get("variant_id", "")).strip()
+                if not variant_id:
+                    raise ValueError("Failed to persist variant identity")
+            if row.qty > 0:
+                if row.unit_cost <= 0:
+                    raise ValueError("Stock rows with quantity must include a positive unit cost")
                 lot_ids.append(
                     self.inventory_service.add_stock(
                         client_id=client_id,
                         product_id=product_id,
-                        variant_id=str(variant["variant_id"]),
-                        product_name=str(variant["variant_name"]),
-                        qty=float(row.qty),
-                        unit_cost=float(row.unit_cost),
-                        supplier_snapshot=row.supplier.strip(),
+                        variant_id=variant_id,
+                        product_name=self.product_service._variant_name(product_name, row.size, row.color, row.other),
+                        qty=row.qty,
+                        unit_cost=row.unit_cost,
+                        supplier_snapshot=row.supplier,
                         note=self._build_stock_note(row.lot_reference, row.received_date),
                         source_type="catalog_stock",
-                        source_id=row.lot_reference.strip(),
+                        source_id=row.lot_reference,
                         user_id=user_id,
                     )
                 )
+            upserts += 1
 
-            if (
-                not opening_written
-                and stock_entries_without_variant
-                and str(variant.get("variant_id", "")).strip()
-            ):
-                opening_row = stock_entries_without_variant[0]
-                lot_ids.append(
-                    self.inventory_service.add_stock(
-                        client_id=client_id,
-                        product_id=product_id,
-                        variant_id=str(variant["variant_id"]),
-                        product_name=str(variant["variant_name"]),
-                        qty=float(opening_row.qty),
-                        unit_cost=float(opening_row.unit_cost),
-                        supplier_snapshot=opening_row.supplier.strip(),
-                        note=self._build_stock_note(opening_row.lot_reference, opening_row.received_date),
-                        source_type="catalog_stock",
-                        source_id=opening_row.lot_reference.strip(),
-                        user_id=user_id,
-                    )
-                )
-                opening_written = True
-
-        persisted_variants = self.product_service.list_variants(client_id, product_id)
-        logger.info(
-            "catalog_stock.save_workspace stored variants: product_id=%s rows=%s",
-            product_id,
-            [
-                {
-                    "variant_id": str(v.get("variant_id", "")),
-                    "size": str(v.get("size", "")),
-                    "color": str(v.get("color", "")),
-                    "other": str(v.get("other", "")),
-                }
-                for v in persisted_variants
-            ],
-        )
-        return product_id, lot_ids, updated_variants
+        if self.product_service.variants_repo is not None and not variants_df.empty:
+            self.product_service.variants_repo.save(variants_df)
+        return product_id, lot_ids, upserts
 
     @staticmethod
     def _build_stock_note(lot_reference: str, received_date: str) -> str:

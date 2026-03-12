@@ -2,24 +2,21 @@ import type { Variant } from '@/types/products-stock';
 
 const DEFAULT_DISCOUNT = 10;
 
-function parseCsvValues(value: string): string[] {
-  return value
+const parseCsvValues = (value: string): string[] =>
+  value
     .split(',')
     .map((part) => part.trim())
     .filter(Boolean);
+
+export function variantIdentityKey(variant: Variant): string {
+  return [variant.size, variant.color, variant.other].map((v) => v.trim().toLowerCase()).join('|');
 }
 
-export function generateVariantsFromInputs({
-  productName,
-  size,
-  color,
-  other
-}: {
-  productName: string;
-  size: string;
-  color: string;
-  other: string;
-}): Variant[] {
+export function hasIdentity(variant: Variant): boolean {
+  return [variant.size, variant.color, variant.other].some((v) => v.trim().length > 0);
+}
+
+export function generateVariantsFromInputs({ size, color, other }: { size: string; color: string; other: string }): Variant[] {
   const sizes = parseCsvValues(size);
   const colors = parseCsvValues(color);
   const others = parseCsvValues(other);
@@ -28,20 +25,15 @@ export function generateVariantsFromInputs({
   const colorSource = colors.length ? colors : [''];
   const otherSource = others.length ? others : [''];
 
-  const variants: Variant[] = [];
-
-  sizeSource.forEach((size) => {
-    colorSource.forEach((color) => {
-      otherSource.forEach((other) => {
-        const base = productName.trim();
-        const detail = [size, color, other].filter(Boolean).join(' / ') || 'Standard';
-        const label = base ? `${base} / ${detail}` : detail;
-        variants.push({
-          id: `new-${label}-${Math.random().toString(36).slice(2, 9)}`,
-          label,
-          size: size || undefined,
-          color: color || undefined,
-          other: other || undefined,
+  const rows: Variant[] = [];
+  sizeSource.forEach((s) => {
+    colorSource.forEach((c) => {
+      otherSource.forEach((o) => {
+        rows.push({
+          id: crypto.randomUUID(),
+          size: s,
+          color: c,
+          other: o,
           qty: 0,
           cost: 0,
           defaultSellingPrice: 0,
@@ -50,25 +42,23 @@ export function generateVariantsFromInputs({
       });
     });
   });
-
-  return variants;
+  return rows;
 }
 
-export function toFeatureList(input: string): string[] {
-  return input
+export const toFeatureList = (input: string): string[] =>
+  input
     .split(',')
     .map((feature) => feature.trim())
     .filter(Boolean);
-}
 
-export function featureListToInput(features: string[]): string {
-  return features.join(', ');
-}
+export const featureListToInput = (features: string[]): string => features.join(', ');
 
 export function createEmptyVariant(): Variant {
   return {
-    id: `manual-${Math.random().toString(36).slice(2, 9)}`,
-    label: '',
+    id: crypto.randomUUID(),
+    size: '',
+    color: '',
+    other: '',
     qty: 0,
     cost: 0,
     defaultSellingPrice: 0,
@@ -76,20 +66,8 @@ export function createEmptyVariant(): Variant {
   };
 }
 
-export function summarizeVariants(variants: Variant[]): {
-  variantCount: number;
-  totalQty: number;
-  estimatedStockCost: number;
-} {
-  const totalQty = variants.reduce((sum, variant) => sum + (Number(variant.qty) || 0), 0);
-  const estimatedStockCost = variants.reduce(
-    (sum, variant) => sum + (Number(variant.qty) || 0) * (Number(variant.cost) || 0),
-    0
-  );
-
-  return {
-    variantCount: variants.length,
-    totalQty,
-    estimatedStockCost
-  };
+export function summarizeVariants(variants: Variant[]) {
+  const totalQty = variants.reduce((sum, v) => sum + (Number(v.qty) || 0), 0);
+  const estimatedStockCost = variants.reduce((sum, v) => sum + (Number(v.qty) || 0) * (Number(v.cost) || 0), 0);
+  return { variantCount: variants.length, totalQty, estimatedStockCost };
 }

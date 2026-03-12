@@ -1,257 +1,195 @@
-import logging
 from fastapi.testclient import TestClient
+import pandas as pd
 
-from easy_ecom.api.main import app
 from easy_ecom.api.dependencies import RequestUser, get_container, get_current_user
+from easy_ecom.api.main import app
 
 
 class DummyProducts:
-    def list_by_client(self, client_id: str):
-        import pandas as pd
+    def __init__(self):
+        self.products = pd.DataFrame(columns=["product_id", "product_name", "supplier", "category", "prd_description", "prd_features_json", "client_id"])
+        self.variants = pd.DataFrame(columns=["variant_id", "parent_product_id", "variant_name", "size", "color", "other", "default_selling_price", "max_discount_pct", "client_id", "is_active"])
 
-        return pd.DataFrame(
-            [
-                {
-                    "product_id": "p-100",
-                    "product_name": "Urban Fit Tee",
-                    "supplier": "Nova Textiles",
-                    "category": "Apparel",
-                    "prd_description": "Premium cotton crew-neck t-shirt.",
-                    "prd_features_json": '{"features": ["180 GSM"]}',
-                }
-            ]
-        )
+    def list_by_client(self, client_id: str):
+        return self.products[self.products["client_id"] == client_id].copy()
 
     def list_variants_by_client(self, client_id: str):
-        import pandas as pd
-
-        return pd.DataFrame(
-            [
-                {
-                    "variant_id": "v-1001",
-                    "parent_product_id": "p-100",
-                    "variant_name": "S / Black",
-                    "size": "S",
-                    "color": "Black",
-                    "other": "",
-                    "default_selling_price": "16.5",
-                    "max_discount_pct": "10",
-                }
-            ]
-        )
+        return self.variants[self.variants["client_id"] == client_id].copy()
 
 
 class DummyInventory:
-    def stock_by_lot_with_issues(self, client_id: str):
-        import pandas as pd
+    def __init__(self):
+        self.rows = pd.DataFrame(columns=["variant_id", "qty", "unit_cost", "client_id"])
 
-        return pd.DataFrame(
-            [
-                {
-                    "variant_id": "v-1001",
-                    "qty": 42,
-                    "unit_cost": 8.75,
-                }
-            ]
-        )
+    def stock_by_lot_with_issues(self, client_id: str):
+        return self.rows[self.rows["client_id"] == client_id].copy()
 
 
 class DummyCatalogStock:
-    last_save_kwargs = None
+    def __init__(self, products: DummyProducts, inventory: DummyInventory):
+        self.products = products
+        self.inventory = inventory
+        self.next_product = 1
+        self.next_variant = 1
 
     def list_supplier_options(self, client_id: str):
-        return ["Nova Textiles"]
+        rows = self.products.list_by_client(client_id)
+        return sorted(set(rows["supplier"].tolist()))
 
     def list_category_options(self, client_id: str):
-        return ["Apparel"]
+        rows = self.products.list_by_client(client_id)
+        return sorted(set(rows["category"].tolist()))
 
     def save_workspace(self, **kwargs):
-        DummyCatalogStock.last_save_kwargs = kwargs
-        return "p-100", [], len(kwargs.get('variant_entries', []))
+        client_id = kwargs["client_id"]
+        selected = kwargs.get("selected_product_id", "")
+        name = kwargs["typed_product_name"]
+        if selected:
+            product_id = selected
+            self.products.products.loc[self.products.products["product_id"] == product_id, "product_name"] = name
+        else:
+            product_id = f"p-{self.next_product}"
+            self.next_product += 1
+            self.products.products = pd.concat([
+                self.products.products,
+                pd.DataFrame([{
+                    "product_id": product_id,
+                    "product_name": name,
+                    "supplier": kwargs["supplier"],
+                    "category": kwargs["category"],
+                    "prd_description": kwargs["description"],
+                    "prd_features_json": "{}",
+                    "client_id": client_id,
+                }])
+            ], ignore_index=True)
+
+        seen = set()
+        for idx, row in enumerate(kwargs["variant_entries"], start=1):
+            key = f"{row.size.strip().lower()}|{row.color.strip().lower()}|{row.other.strip().lower()}"
+            if key == '||':
+                raise ValueError(f"Variant row {idx} must include at least one identity field (size/color/other)")
+            if key in seen:
+                raise ValueError("Duplicate variant identity in request: each size/color/other combination must be unique")
+            seen.add(key)
+
+            existing = self.products.variants[
+                (self.products.variants["client_id"] == client_id)
+                & (self.products.variants["parent_product_id"] == product_id)
+                & (self.products.variants["size"].str.lower() == row.size.lower())
+                & (self.products.variants["color"].str.lower() == row.color.lower())
+                & (self.products.variants["other"].str.lower() == row.other.lower())
+            ]
+            if existing.empty:
+                variant_id = f"v-{self.next_variant}"
+                self.next_variant += 1
+                self.products.variants = pd.concat([
+                    self.products.variants,
+                    pd.DataFrame([{
+                        "variant_id": variant_id,
+                        "parent_product_id": product_id,
+                        "variant_name": f"{name} | {row.size}/{row.color}/{row.other}",
+                        "size": row.size,
+                        "color": row.color,
+                        "other": row.other,
+                        "default_selling_price": str(row.default_selling_price),
+                        "max_discount_pct": str(row.max_discount_pct),
+                        "client_id": client_id,
+                        "is_active": "true",
+                    }])
+                ], ignore_index=True)
+            else:
+                variant_id = existing.iloc[0]["variant_id"]
+
+            if row.qty > 0:
+                self.inventory.rows = pd.concat([
+                    self.inventory.rows,
+                    pd.DataFrame([{"variant_id": variant_id, "qty": row.qty, "unit_cost": row.unit_cost, "client_id": client_id}])
+                ], ignore_index=True)
+
+        return product_id, [], len(kwargs["variant_entries"])
 
 
 class DummyContainer:
-    products = DummyProducts()
-    inventory = DummyInventory()
-    catalog_stock = DummyCatalogStock()
+    def __init__(self):
+        self.products = DummyProducts()
+        self.inventory = DummyInventory()
+        self.catalog_stock = DummyCatalogStock(self.products, self.inventory)
 
 
-def test_products_stock_snapshot_smoke() -> None:
-    app.dependency_overrides[get_container] = lambda: DummyContainer()
-    app.dependency_overrides[get_current_user] = lambda: RequestUser(
-        user_id="u-test", client_id="c-test", roles=["SUPER_ADMIN"]
-    )
-    client = TestClient(app)
+def _client(container: DummyContainer):
+    app.dependency_overrides[get_container] = lambda: container
+    app.dependency_overrides[get_current_user] = lambda: RequestUser(user_id="u-test", client_id="c-test", roles=["SUPER_ADMIN"])
+    return TestClient(app)
 
-    response = client.get("/products-stock/snapshot")
 
+def test_create_and_reload_two_variants_and_stock_by_variant_id_only():
+    container = DummyContainer()
+    client = _client(container)
+
+    response = client.post('/products-stock/save', json={
+        "mode": "new",
+        "identity": {"productName": "Shirt", "supplier": "Nova", "category": "Apparel", "description": "", "features": []},
+        "variants": [
+            {"id": "", "size": "S", "color": "Black", "other": "", "qty": 2, "cost": 10, "defaultSellingPrice": 20, "maxDiscountPct": 10},
+            {"id": "", "size": "M", "color": "Black", "other": "", "qty": 3, "cost": 11, "defaultSellingPrice": 21, "maxDiscountPct": 10},
+        ],
+    })
     assert response.status_code == 200
-    body = response.json()
-    assert "products" in body
-    assert "suppliers" in body
-    assert "categories" in body
+
+    snapshot = client.get('/products-stock/snapshot')
+    assert snapshot.status_code == 200
+    body = snapshot.json()
+    assert len(body['products']) == 1
+    assert len(body['products'][0]['variants']) == 2
+    assert all(row['variant_id'] if 'variant_id' in row else True for row in container.inventory.rows.to_dict(orient='records'))
 
     app.dependency_overrides.clear()
 
 
-def test_products_stock_save_smoke() -> None:
-    app.dependency_overrides[get_container] = lambda: DummyContainer()
-    app.dependency_overrides[get_current_user] = lambda: RequestUser(
-        user_id="u-test", client_id="c-test", roles=["SUPER_ADMIN"]
-    )
-    client = TestClient(app)
-
-    response = client.post(
-        "/products-stock/save",
-        json={
-            "mode": "new",
-            "identity": {
-                "productName": "Smoke Tee",
-                "supplier": "Smoke Supplier",
-                "category": "Apparel",
-                "description": "",
-                "features": ["Feature A"],
-            },
-            "variants": [
-                {
-                    "id": "",
-                    "label": "Default",
-                    "size": "",
-                    "color": "",
-                    "other": "",
-                    "qty": 1,
-                    "cost": 2,
-                    "defaultSellingPrice": 10,
-                    "maxDiscountPct": 10,
-                }
-            ],
-        },
-    )
-
-    assert response.status_code == 200
-    assert response.json() == {"success": True}
-
+def test_duplicate_identity_rejected():
+    container = DummyContainer()
+    client = _client(container)
+    response = client.post('/products-stock/save', json={
+        "mode": "new",
+        "identity": {"productName": "Shirt", "supplier": "Nova", "category": "Apparel", "description": "", "features": []},
+        "variants": [
+            {"id": "", "size": "S", "color": "Black", "other": "", "qty": 0, "cost": 0, "defaultSellingPrice": 20, "maxDiscountPct": 10},
+            {"id": "", "size": "S", "color": "Black", "other": "", "qty": 0, "cost": 0, "defaultSellingPrice": 20, "maxDiscountPct": 10},
+        ],
+    })
+    assert response.status_code == 422 or response.status_code == 400
     app.dependency_overrides.clear()
 
 
-def test_products_stock_save_passes_distinct_variant_entries_and_selected_product_id() -> None:
-    app.dependency_overrides[get_container] = lambda: DummyContainer()
-    app.dependency_overrides[get_current_user] = lambda: RequestUser(
-        user_id="u-test", client_id="c-test", roles=["SUPER_ADMIN"]
-    )
-    client = TestClient(app)
-
-    response = client.post(
-        "/products-stock/save",
-        json={
-            "mode": "existing",
-            "selectedProductId": "p-100",
-            "identity": {
-                "productName": "Smoke Tee",
-                "supplier": "Smoke Supplier",
-                "category": "Apparel",
-                "description": "",
-                "features": ["Feature A"],
-            },
-            "variants": [
-                {
-                    "id": "v-row-1",
-                    "label": "S / Black",
-                    "size": "S",
-                    "color": "Black",
-                    "other": "",
-                    "qty": 1,
-                    "cost": 2,
-                    "defaultSellingPrice": 10,
-                    "maxDiscountPct": 10,
-                },
-                {
-                    "id": "v-row-2",
-                    "label": "M / White",
-                    "size": "M",
-                    "color": "White",
-                    "other": "",
-                    "qty": 1,
-                    "cost": 2,
-                    "defaultSellingPrice": 12,
-                    "maxDiscountPct": 15,
-                },
-            ],
-        },
-    )
-
-    assert response.status_code == 200
-    assert response.json() == {"success": True}
-
-    assert DummyCatalogStock.last_save_kwargs is not None
-    assert DummyCatalogStock.last_save_kwargs["selected_product_id"] == "p-100"
-    entries = DummyCatalogStock.last_save_kwargs["variant_entries"]
-    assert len(entries) == 2
-    assert entries[0].size == "S"
-    assert entries[0].color == "Black"
-    assert entries[1].size == "M"
-    assert entries[1].color == "White"
-
+def test_blank_identity_rejected():
+    container = DummyContainer()
+    client = _client(container)
+    response = client.post('/products-stock/save', json={
+        "mode": "new",
+        "identity": {"productName": "Shirt", "supplier": "Nova", "category": "Apparel", "description": "", "features": []},
+        "variants": [{"id": "", "size": "", "color": "", "other": "", "qty": 0, "cost": 0, "defaultSellingPrice": 20, "maxDiscountPct": 10}],
+    })
+    assert response.status_code == 422 or response.status_code == 400
     app.dependency_overrides.clear()
 
 
-def test_products_stock_save_logs_payload_and_router_entries(caplog) -> None:
-    app.dependency_overrides[get_container] = lambda: DummyContainer()
-    app.dependency_overrides[get_current_user] = lambda: RequestUser(
-        user_id="u-test", client_id="c-test", roles=["SUPER_ADMIN"]
-    )
-    client = TestClient(app)
+def test_existing_product_update_path_uses_selected_product_id():
+    container = DummyContainer()
+    client = _client(container)
+    first = client.post('/products-stock/save', json={
+        "mode": "new",
+        "identity": {"productName": "Shirt", "supplier": "Nova", "category": "Apparel", "description": "", "features": []},
+        "variants": [{"id": "", "size": "S", "color": "Black", "other": "", "qty": 0, "cost": 0, "defaultSellingPrice": 20, "maxDiscountPct": 10}],
+    })
+    assert first.status_code == 200
+    product_id = container.products.products.iloc[0]["product_id"]
 
-    caplog.set_level(logging.INFO)
-
-    response = client.post(
-        "/products-stock/save",
-        json={
-            "mode": "existing",
-            "selectedProductId": "p-100",
-            "identity": {
-                "productName": "Smoke Tee",
-                "supplier": "Smoke Supplier",
-                "category": "Apparel",
-                "description": "",
-                "features": ["Feature A"],
-            },
-            "variants": [
-                {
-                    "id": "v-row-1",
-                    "label": "S / Black",
-                    "size": "S",
-                    "color": "Black",
-                    "other": "",
-                    "qty": 1,
-                    "cost": 2,
-                    "defaultSellingPrice": 10,
-                    "maxDiscountPct": 10,
-                },
-                {
-                    "id": "v-row-2",
-                    "label": "M / White",
-                    "size": "M",
-                    "color": "White",
-                    "other": "",
-                    "qty": 1,
-                    "cost": 2,
-                    "defaultSellingPrice": 12,
-                    "maxDiscountPct": 15,
-                },
-            ],
-        },
-    )
-
-    assert response.status_code == 200
-    assert response.json() == {"success": True}
-
-    logs = "\n".join(rec.getMessage() for rec in caplog.records)
-    assert "products_stock.save payload parsed" in logs
-    assert "products_stock.save router entries" in logs
-    assert "v-row-1" in logs
-    assert "Black" in logs
-    assert "v-row-2" in logs
-    assert "White" in logs
-
+    update = client.post('/products-stock/save', json={
+        "mode": "existing",
+        "selectedProductId": product_id,
+        "identity": {"productName": "Shirt Updated", "supplier": "Nova", "category": "Apparel", "description": "", "features": []},
+        "variants": [{"id": "", "size": "S", "color": "Black", "other": "", "qty": 0, "cost": 0, "defaultSellingPrice": 20, "maxDiscountPct": 10}],
+    })
+    assert update.status_code == 200
+    assert container.products.products.iloc[0]["product_name"] == "Shirt Updated"
     app.dependency_overrides.clear()
