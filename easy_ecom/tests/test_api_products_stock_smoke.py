@@ -1,3 +1,4 @@
+import logging
 from fastapi.testclient import TestClient
 
 from easy_ecom.api.main import app
@@ -190,5 +191,67 @@ def test_products_stock_save_passes_distinct_variant_entries_and_selected_produc
     assert entries[0].color == "Black"
     assert entries[1].size == "M"
     assert entries[1].color == "White"
+
+    app.dependency_overrides.clear()
+
+
+def test_products_stock_save_logs_payload_and_router_entries(caplog) -> None:
+    app.dependency_overrides[get_container] = lambda: DummyContainer()
+    app.dependency_overrides[get_current_user] = lambda: RequestUser(
+        user_id="u-test", client_id="c-test", roles=["SUPER_ADMIN"]
+    )
+    client = TestClient(app)
+
+    caplog.set_level(logging.INFO)
+
+    response = client.post(
+        "/products-stock/save",
+        json={
+            "mode": "existing",
+            "selectedProductId": "p-100",
+            "identity": {
+                "productName": "Smoke Tee",
+                "supplier": "Smoke Supplier",
+                "category": "Apparel",
+                "description": "",
+                "features": ["Feature A"],
+            },
+            "variants": [
+                {
+                    "id": "v-row-1",
+                    "label": "S / Black",
+                    "size": "S",
+                    "color": "Black",
+                    "other": "",
+                    "qty": 1,
+                    "cost": 2,
+                    "defaultSellingPrice": 10,
+                    "maxDiscountPct": 10,
+                },
+                {
+                    "id": "v-row-2",
+                    "label": "M / White",
+                    "size": "M",
+                    "color": "White",
+                    "other": "",
+                    "qty": 1,
+                    "cost": 2,
+                    "defaultSellingPrice": 12,
+                    "maxDiscountPct": 15,
+                },
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"success": True}
+
+    logs = "\n".join(rec.getMessage() for rec in caplog.records)
+    assert "products_stock.save payload parsed" in logs
+    assert "products_stock.save router entries" in logs
+    assert "v-row-1" in logs
+    assert "Black" in logs
+    assert "v-row-2" in logs
+    assert "White" in logs
 
     app.dependency_overrides.clear()

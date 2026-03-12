@@ -1,4 +1,5 @@
 from pathlib import Path
+import logging
 
 from easy_ecom.data.repos.csv.inventory_repo import InventoryTxnRepo
 from easy_ecom.data.repos.csv.product_variants_repo import ProductVariantsRepo
@@ -412,6 +413,8 @@ def test_save_workspace_updates_label_only_variants_by_variant_id(tmp_path: Path
     assert upserts == 2
     assert len(variants) == 2
     assert {v["variant_name"] for v in variants} == {"Editable Tee | Single", "Editable Tee | Bundle"}
+
+
 def test_upsert_variant_treats_blank_and_whitespace_attributes_as_same_identity(tmp_path: Path):
     _, product_svc, _ = _service(tmp_path)
     product_id = product_svc.create(
@@ -453,3 +456,43 @@ def test_upsert_variant_treats_blank_and_whitespace_attributes_as_same_identity(
     assert first["variant_id"] == second["variant_id"]
     variants = product_svc.list_variants("c1", product_id)
     assert len(variants) == 1
+
+
+def test_save_workspace_logs_and_persists_two_distinct_variants_end_to_end(tmp_path: Path, caplog):
+    svc, product_svc, _ = _service(tmp_path)
+
+    caplog.set_level(logging.INFO)
+
+    product_id, _, upserts = svc.save_workspace(
+        client_id="c1",
+        user_id="u1",
+        typed_product_name="Trace Tee",
+        supplier="s1",
+        category="General",
+        description="",
+        features_text="",
+        default_selling_price=100.0,
+        max_discount_pct=10.0,
+        variant_entries=[
+            VariantWorkspaceEntry(size="S", color="Black", other="", qty=1, unit_cost=10),
+            VariantWorkspaceEntry(size="M", color="White", other="", qty=2, unit_cost=11),
+        ],
+    )
+
+    variants = product_svc.list_variants("c1", product_id)
+
+    assert upserts == 2
+    assert len(variants) == 2
+    assert {(v["size"], v["color"], v["other"]) for v in variants} == {
+        ("S", "Black", ""),
+        ("M", "White", ""),
+    }
+
+    logs = "\n".join(rec.getMessage() for rec in caplog.records)
+    assert "catalog_stock.save_workspace incoming entries" in logs
+    assert "product_service.upsert_variant input" in logs
+    assert "catalog_stock.save_workspace stored variants" in logs
+    assert "size=S" in logs
+    assert "color=Black" in logs
+    assert "size=M" in logs
+    assert "color=White" in logs
