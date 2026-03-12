@@ -501,3 +501,10 @@ This phase enforces referential integrity for inventory ledger rows at the corre
 - **Mitigation:** use `NOT VALID` FK + explicit review queue, so new writes are protected while historical cleanup proceeds safely.
 - **Risk:** accidental cross-tenant remapping during cleanup.
 - **Mitigation:** all repair/query logic is scoped by `(client_id, variant_id)` and never matches by `variant_id` alone for enforcement.
+
+
+## Inventory behavior (variant-only operations)
+
+- Inventory stock actions (manual adjustments and inbound operations) are variant-only.
+- Inventory lists can still show legacy product-level ledger rows for audit visibility, but those rows are non-actionable.
+- The inventory adjustment selector only shows variant items, preventing product-level legacy identities from being used in stock-affecting writes.
