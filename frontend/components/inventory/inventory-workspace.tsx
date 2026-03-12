@@ -237,7 +237,11 @@ export function InventoryWorkspace() {
           onAddCategory={(category) => setCategories((prev) => (prev.includes(category) ? prev : [...prev, category]))}
         />
         {mode === 'new' ? (
-          <VariantGenerator onGenerate={({ size, color, other }) => setVariants(generateVariantsFromInputs(identity.productName, size, color, other))} />
+          <VariantGenerator
+            onGenerate={({ size, color, other }) =>
+              setVariants(generateVariantsFromInputs({ productName: identity.productName, size, color, other }))
+            }
+          />
         ) : null}
         <VariantGrid
           variants={variants}
