@@ -14,6 +14,17 @@ Legacy Streamlit pages under `easy_ecom/app/` are retained only for controlled t
 3. Users, roles, inventory, products, customers, sales, finance, sequences, and audit all run through PostgreSQL at runtime.
 4. CSV assets are migration/bootstrap tooling only (`easy_ecom/scripts/*import*`, migration scripts).
 
+
+## Agent governance and decision boundaries
+
+The repository now includes dedicated instruction files for Codex agents to keep work scoped and production-safe:
+
+- Root governance: `AGENTS.md`
+- Business/technical source docs: `docs/business-rules.md`, `docs/architecture.md`, `docs/tenant-data-model.md`, `docs/pricing-strategy.md`
+- Scoped agent rulebooks: `frontend/AGENTS.md`, `backend/AGENTS.md`, `db/AGENTS.md`, `ai/AGENTS.md`
+
+When implementing changes, use these files as guardrails for tenant isolation, variant-level stock truth, auditability, and cross-layer contract consistency.
+
 ## Local setup (AWS-aligned)
 
 ```bash
