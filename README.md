@@ -251,6 +251,7 @@ The production Next.js frontend (`frontend/`) now uses a shared visual design sy
 - **Reusable primitives:** harmonized card, table, form field, badge, and status patterns reused across all operational modules (dashboard, inventory, sales, customers, finance, settings, integrations, AI review, etc.) to reduce style drift.
 - **Dashboard/UI polish:** executive KPI card presentation, clearer hierarchy for list/table sections, refined spacing, and cleaner empty/loading/error visual states.
 - **Auth experience:** redesigned login screen with a branded premium split layout while keeping existing sign-in logic, API usage, and redirect behavior unchanged.
+- **Global top-header search:** the header search is now an interactive scoped form (Orders, SKUs, Customers) that navigates to the corresponding operational workspace with a `q` query parameter, replacing the prior non-functional placeholder text.
 
 This update intentionally focuses on design language and maintainability (shared style tokens + reusable class patterns) rather than changing business logic.
 
