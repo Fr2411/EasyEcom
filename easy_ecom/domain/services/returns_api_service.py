@@ -273,6 +273,8 @@ class ReturnsApiService:
             return_items: list[SalesReturnItemModel] = []
             for line in payload.lines:
                 sale_item = by_item_id[line.sale_item_id]
+                if not str(sale_item.variant_id or "").strip():
+                    raise ValueError("Cannot return line without variant reference")
                 unit_price = self._to_float(sale_item.unit_selling_price)
                 line_total = unit_price * float(line.qty)
                 return_total += line_total

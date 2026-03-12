@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createPurchase, getPurchaseDetail, getPurchaseFormOptions, getPurchases } from '@/lib/api/purchases';
 import type { PurchaseDetail, PurchaseLookupProduct, PurchaseLookupSupplier } from '@/types/purchases';
 
-type DraftLine = { product_id: string; qty: number; unit_cost: number };
+type DraftLine = { variant_id: string; qty: number; unit_cost: number };
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
@@ -16,6 +16,7 @@ export function PurchasesWorkspace() {
   const [products, setProducts] = useState<PurchaseLookupProduct[]>([]);
   const [suppliers, setSuppliers] = useState<PurchaseLookupSupplier[]>([]);
   const [query, setQuery] = useState('');
+  const [productQuery, setProductQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,13 +26,13 @@ export function PurchasesWorkspace() {
   const [referenceNo, setReferenceNo] = useState('');
   const [paymentStatus, setPaymentStatus] = useState<'paid' | 'unpaid' | 'partial'>('unpaid');
   const [note, setNote] = useState('');
-  const [lines, setLines] = useState<DraftLine[]>([{ product_id: '', qty: 1, unit_cost: 0 }]);
+  const [lines, setLines] = useState<DraftLine[]>([{ variant_id: '', qty: 1, unit_cost: 0 }]);
 
   const load = async (q = query) => {
     try {
       setLoading(true);
       setError(null);
-      const [purchasesRes, options] = await Promise.all([getPurchases(q), getPurchaseFormOptions('')]);
+      const [purchasesRes, options] = await Promise.all([getPurchases(q), getPurchaseFormOptions(productQuery)]);
       setPurchases(purchasesRes.items.map((item) => ({ ...item, lines: [], note: '', created_by_user_id: '' })) as PurchaseDetail[]);
       setProducts(options.products);
       setSuppliers(options.suppliers);
@@ -44,17 +45,17 @@ export function PurchasesWorkspace() {
 
   useEffect(() => {
     void load('');
-  }, []);
+  }, [productQuery]);
 
   const subtotal = useMemo(() => lines.reduce((sum, line) => sum + line.qty * line.unit_cost, 0), [lines]);
 
-  const addLine = () => setLines((prev) => [...prev, { product_id: '', qty: 1, unit_cost: 0 }]);
+  const addLine = () => setLines((prev) => [...prev, { variant_id: '', qty: 1, unit_cost: 0 }]);
   const updateLine = (idx: number, patch: Partial<DraftLine>) => {
     setLines((prev) => prev.map((line, i) => (i === idx ? { ...line, ...patch } : line)));
   };
 
   const submitPurchase = async () => {
-    if (!purchaseDate || lines.some((line) => !line.product_id || line.qty <= 0 || line.unit_cost < 0)) return;
+    if (!purchaseDate || lines.some((line) => !line.variant_id || line.qty <= 0 || line.unit_cost < 0)) return;
     try {
       setSaving(true);
       setError(null);
@@ -64,7 +65,7 @@ export function PurchasesWorkspace() {
       setReferenceNo('');
       setPaymentStatus('unpaid');
       setNote('');
-      setLines([{ product_id: '', qty: 1, unit_cost: 0 }]);
+      setLines([{ variant_id: '', qty: 1, unit_cost: 0 }]);
       await load(query);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to create purchase.');
@@ -113,6 +114,9 @@ export function PurchasesWorkspace() {
           <label>Reference no
             <input value={referenceNo} onChange={(e) => setReferenceNo(e.target.value)} placeholder="Invoice/PO reference" />
           </label>
+          <label>Search variant (SKU/barcode/name)
+            <input value={productQuery} onChange={(e) => setProductQuery(e.target.value)} placeholder="Type SKU, barcode, product, variant" />
+          </label>
           <label>Payment status
             <select value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value as 'paid' | 'unpaid' | 'partial')}>
               <option value="unpaid">Unpaid</option>
@@ -122,9 +126,9 @@ export function PurchasesWorkspace() {
           </label>
           {lines.map((line, idx) => (
             <div key={idx} className="sale-line-row">
-              <select value={line.product_id} onChange={(e) => updateLine(idx, { product_id: e.target.value })}>
+              <select value={line.variant_id} onChange={(e) => updateLine(idx, { variant_id: e.target.value })}>
                 <option value="">Select product/variant</option>
-                {products.map((product) => <option key={product.product_id} value={product.product_id}>{product.label} (Stock: {product.current_stock})</option>)}
+                {products.map((product) => <option key={product.variant_id} value={product.variant_id}>{product.label} (Stock: {product.current_stock})</option>)}
               </select>
               <input aria-label={`Purchase quantity ${idx + 1}`} type="number" min={1} value={line.qty} onChange={(e) => updateLine(idx, { qty: Number(e.target.value || 0) })} />
               <input aria-label={`Unit cost ${idx + 1}`} type="number" min={0} step="0.01" value={line.unit_cost} onChange={(e) => updateLine(idx, { unit_cost: Number(e.target.value || 0) })} />

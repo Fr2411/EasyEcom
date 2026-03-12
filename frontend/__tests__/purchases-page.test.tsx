@@ -37,7 +37,7 @@ describe('PurchasesPage', () => {
   test('creates purchase and computes totals', async () => {
     getPurchasesMock.mockResolvedValue({ items: [] });
     getPurchaseFormOptionsMock.mockResolvedValue({
-      products: [{ product_id: 'prd-1', label: 'Paper', current_stock: 5 }],
+      products: [{ variant_id: 'var-1', product_id: 'prd-1', label: 'Paper', current_stock: 5, sku: 'PAPER-001', barcode: '' }],
       suppliers: [{ supplier_id: 'sup-1', name: 'Main Supplier' }],
     });
     createPurchaseMock.mockResolvedValue({ purchase_id: 'pur-new' });
@@ -45,7 +45,7 @@ describe('PurchasesPage', () => {
     render(<PurchasesPage />);
 
     await waitFor(() => expect(screen.getByText('Create Purchase / Stock-In')).toBeTruthy());
-    fireEvent.change(screen.getByDisplayValue('Select product/variant'), { target: { value: 'prd-1' } });
+    fireEvent.change(screen.getByDisplayValue('Select product/variant'), { target: { value: 'var-1' } });
     fireEvent.change(screen.getByLabelText('Purchase quantity 1'), { target: { value: '2' } });
     fireEvent.change(screen.getByLabelText('Unit cost 1'), { target: { value: '10' } });
 

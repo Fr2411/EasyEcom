@@ -12,6 +12,7 @@ export type PurchaseListItem = {
 
 export type PurchaseLine = {
   line_id: string;
+  variant_id: string;
   product_id: string;
   product_name: string;
   qty: number;
@@ -26,9 +27,12 @@ export type PurchaseDetail = PurchaseListItem & {
 };
 
 export type PurchaseLookupProduct = {
+  variant_id: string;
   product_id: string;
   label: string;
   current_stock: number;
+  sku: string;
+  barcode: string;
 };
 
 export type PurchaseLookupSupplier = {
@@ -42,5 +46,5 @@ export type PurchaseCreatePayload = {
   reference_no: string;
   note: string;
   payment_status: 'paid' | 'unpaid' | 'partial';
-  lines: Array<{ product_id: string; qty: number; unit_cost: number }>;
+  lines: Array<{ variant_id: string; qty: number; unit_cost: number }>;
 };
