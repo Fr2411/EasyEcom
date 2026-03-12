@@ -8,57 +8,28 @@ import { VariantGenerator } from '@/components/products-stock/variant-generator'
 import { VariantGrid } from '@/components/products-stock/variant-grid';
 import { SaveSummary } from '@/components/products-stock/save-summary';
 import { getProductsStockSnapshot, saveProductStock } from '@/lib/api/products-stock';
-import {
-  createEmptyVariant,
-  generateVariantsFromInputs,
-  summarizeVariants
-} from '@/lib/products-stock/variant-utils';
+import { createEmptyVariant, generateVariantsFromInputs, hasIdentity, summarizeVariants, variantIdentityKey } from '@/lib/products-stock/variant-utils';
 import type { ProductIdentity, ProductRecord, Variant, VariantMode } from '@/types/products-stock';
 
-const EMPTY_IDENTITY: ProductIdentity = {
-  productName: '',
-  supplier: '',
-  category: '',
-  description: '',
-  features: []
-};
+const EMPTY_IDENTITY: ProductIdentity = { productName: '', supplier: '', category: '', description: '', features: [] };
 
-function toLookup(products: ProductRecord[]) {
-  return products.map((product) => ({ id: product.id, name: product.identity.productName }));
-}
-
-
-function toVariantIdentityKey(variant: Variant): string {
-  const norm = (value: string | undefined) => value?.trim().toLowerCase() ?? '';
-  return `${norm(variant.size)}|${norm(variant.color)}|${norm(variant.other)}`;
-}
+const toLookup = (products: ProductRecord[]) => products.map((product) => ({ id: product.id, name: product.identity.productName }));
 
 function toErrorMessage(error: unknown, fallback: string): string {
-  if (error instanceof Error) {
-    const message = error.message.trim();
-    if (!message) {
-      return fallback;
-    }
-    try {
-      const parsed = JSON.parse(message) as { detail?: unknown; message?: unknown };
-      const detail = [parsed.detail, parsed.message].find((value) => typeof value === 'string' && value.trim());
-      if (typeof detail === 'string' && detail.trim()) {
-        return detail;
-      }
-    } catch {
-      // Non-JSON message, use plain error text below.
-    }
-    return message;
+  if (!(error instanceof Error)) return fallback;
+  if (!error.message.trim()) return fallback;
+  try {
+    const parsed = JSON.parse(error.message) as { detail?: string; message?: string };
+    return parsed.detail || parsed.message || error.message;
+  } catch {
+    return error.message;
   }
-
-  return fallback;
 }
 
 export function ProductsStockWorkspace() {
   const [products, setProducts] = useState<ProductRecord[]>([]);
   const [suppliers, setSuppliers] = useState<string[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
-
   const [mode, setMode] = useState<VariantMode>('new');
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [identity, setIdentity] = useState<ProductIdentity>(EMPTY_IDENTITY);
@@ -76,130 +47,63 @@ export function ProductsStockWorkspace() {
   };
 
   useEffect(() => {
-    loadSnapshot().catch((error) => {
-      setValidationMessage(toErrorMessage(error, 'Unable to load Products & Stock workspace.'));
-    });
+    loadSnapshot().catch((error) => setValidationMessage(toErrorMessage(error, 'Unable to load products and stock snapshot. Check backend connectivity.')));
   }, []);
 
   const summary = useMemo(() => summarizeVariants(variants), [variants]);
 
-  const resetWorkspace = () => {
-    setMode('new');
-    setSelectedProductId(null);
-    setIdentity(EMPTY_IDENTITY);
-    setVariants([]);
-    setValidationMessage(undefined);
-    setSameCostEnabled(false);
-    setSharedCost('');
-  };
-
-  const loadExistingProduct = (productId: string) => {
-    const existing = products.find((product) => product.id === productId);
-    if (!existing) {
-      return;
-    }
-
-    setMode('existing');
-    setSelectedProductId(productId);
-    setIdentity(existing.identity);
-    setVariants(existing.variants);
-    setValidationMessage(undefined);
-  };
-
-  const startNewProduct = (typedName: string) => {
-    setMode('new');
-    setSelectedProductId(null);
-    setIdentity({ ...EMPTY_IDENTITY, productName: typedName });
-    setVariants([]);
-    setValidationMessage(undefined);
-  };
-
-  const handleVariantChange = (id: string, field: keyof Variant, value: string) => {
-    setVariants((current) =>
-      current.map((variant) => {
-        if (variant.id !== id) {
-          return variant;
-        }
-
-        if (field === 'qty' || field === 'cost' || field === 'defaultSellingPrice' || field === 'maxDiscountPct') {
-          return { ...variant, [field]: Number(value) || 0 };
-        }
-
-        return { ...variant, [field]: value };
-      })
-    );
-  };
-
   const validate = (): string | undefined => {
-    if (!identity.productName.trim()) {
-      return 'Product name is required.';
-    }
-
-    if (variants.length === 0) {
-      return 'At least one variant is required.';
-    }
-
+    if (!identity.productName.trim()) return 'Product name is required.';
+    if (!variants.length) return 'At least one variant row is required.';
     const seen = new Set<string>();
-    for (const variant of variants) {
-      const key = toVariantIdentityKey(variant);
-      if (seen.has(key)) {
-        return 'Each variant must have a unique Size/Color/Other combination.';
-      }
+    for (let i = 0; i < variants.length; i += 1) {
+      const row = variants[i];
+      if (!hasIdentity(row)) return `Variant row ${i + 1} is blank. Fill size, color, or other.`;
+      const key = variantIdentityKey(row);
+      if (seen.has(key)) return 'Duplicate variant identity found. Size/Color/Other must be unique.';
       seen.add(key);
     }
-
     return undefined;
   };
 
   const handleSave = async () => {
     const error = validate();
     setValidationMessage(error);
-    if (error) {
-      return;
-    }
-
+    if (error) return;
     setIsSaving(true);
     try {
-      console.debug('[ProductsStockWorkspace] UI state before save', {
-        mode,
-        selectedProductId,
-        productName: identity.productName,
-        variants: variants.map((variant) => ({
-          id: variant.id,
-          label: variant.label,
-          size: variant.size ?? '',
-          color: variant.color ?? '',
-          other: variant.other ?? ''
-        }))
-      });
-      await saveProductStock({
-        mode,
-        identity,
-        variants,
-        selectedProductId: mode === 'existing' ? selectedProductId ?? undefined : undefined,
-      });
-      try {
-        await loadSnapshot();
-        setValidationMessage('Saved successfully.');
-      } catch (reloadError) {
-        setValidationMessage(
-          `Saved successfully, but refresh failed: ${toErrorMessage(reloadError, 'Unable to reload latest data.')}`
-        );
-      }
-    } catch (saveError) {
-      setValidationMessage(toErrorMessage(saveError, 'Unable to save product details.'));
+      await saveProductStock({ mode, identity, variants, selectedProductId: mode === 'existing' ? selectedProductId ?? undefined : undefined });
+      await loadSnapshot();
+      setValidationMessage('Saved successfully.');
+    } catch (errorSave) {
+      setValidationMessage(toErrorMessage(errorSave, 'Save failed due to server or network error.'));
     } finally {
       setIsSaving(false);
     }
   };
 
   return (
-    <PageShell
-      title="Products & Stock"
-      description="Manage product identity, variants, and stock economics from one compact workspace."
-    >
+    <PageShell title="Products & Stock" description="Variant-first catalog and opening stock workspace.">
       <div className="products-stock-layout" data-mode={mode} data-selected-product={selectedProductId ?? ''}>
-        <ProductChooser products={toLookup(products)} onSelectExisting={loadExistingProduct} onCreateNew={startNewProduct} />
+        <ProductChooser
+          products={toLookup(products)}
+          onSelectExisting={(productId) => {
+            const existing = products.find((product) => product.id === productId);
+            if (!existing) return;
+            setMode('existing');
+            setSelectedProductId(productId);
+            setIdentity(existing.identity);
+            setVariants(existing.variants);
+            setValidationMessage(undefined);
+          }}
+          onCreateNew={(typedName) => {
+            setMode('new');
+            setSelectedProductId(null);
+            setIdentity({ ...EMPTY_IDENTITY, productName: typedName });
+            setVariants([]);
+            setValidationMessage(undefined);
+          }}
+        />
 
         <ProductIdentityForm
           identity={identity}
@@ -210,20 +114,7 @@ export function ProductsStockWorkspace() {
           onAddCategory={(category) => setCategories((prev) => (prev.includes(category) ? prev : [...prev, category]))}
         />
 
-        {mode === 'new' ? (
-          <VariantGenerator
-            onGenerate={({ size, color, other }) =>
-              setVariants(
-                generateVariantsFromInputs({
-                  productName: identity.productName,
-                  size,
-                  color,
-                  other
-                })
-              )
-            }
-          />
-        ) : null}
+        {mode === 'new' ? <VariantGenerator onGenerate={({ size, color, other }) => setVariants(generateVariantsFromInputs({ size, color, other }))} /> : null}
 
         <VariantGrid
           variants={variants}
@@ -235,7 +126,18 @@ export function ProductsStockWorkspace() {
             const parsed = Number(sharedCost) || 0;
             setVariants((current) => current.map((variant) => ({ ...variant, cost: parsed })));
           }}
-          onVariantChange={handleVariantChange}
+          onVariantChange={(id, field, value) =>
+            setVariants((current) =>
+              current.map((variant) =>
+                variant.id !== id
+                  ? variant
+                  : {
+                      ...variant,
+                      [field]: field === 'qty' || field === 'cost' || field === 'defaultSellingPrice' || field === 'maxDiscountPct' ? Number(value) || 0 : value
+                    }
+              )
+            )
+          }
           onAddVariant={() => setVariants((current) => [...current, createEmptyVariant()])}
           onRemoveVariant={(id) => setVariants((current) => current.filter((variant) => variant.id !== id))}
         />
@@ -248,7 +150,15 @@ export function ProductsStockWorkspace() {
           isSaveDisabled={Boolean(validate())}
           validationMessage={validationMessage}
           onSave={handleSave}
-          onReset={resetWorkspace}
+          onReset={() => {
+            setMode('new');
+            setSelectedProductId(null);
+            setIdentity(EMPTY_IDENTITY);
+            setVariants([]);
+            setSameCostEnabled(false);
+            setSharedCost('');
+            setValidationMessage(undefined);
+          }}
         />
       </div>
     </PageShell>

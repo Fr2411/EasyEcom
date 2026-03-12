@@ -67,8 +67,6 @@ class ProductsPostgresRepo(PostgresRepo):
         "category",
         "prd_description",
         "prd_features_json",
-        "default_selling_price",
-        "max_discount_pct",
         "created_at",
         "is_active",
         "is_parent",

@@ -14,18 +14,6 @@ type VariantGridProps = {
   onRemoveVariant: (id: string) => void;
 };
 
-const columns: Array<{ key: keyof Variant | 'remove'; label: string }> = [
-  { key: 'label', label: 'Variant label' },
-  { key: 'size', label: 'Size' },
-  { key: 'color', label: 'Color' },
-  { key: 'other', label: 'Other' },
-  { key: 'qty', label: 'Qty' },
-  { key: 'cost', label: 'Cost' },
-  { key: 'defaultSellingPrice', label: 'Default Selling Price' },
-  { key: 'maxDiscountPct', label: 'Max Discount %' },
-  { key: 'remove', label: '' }
-];
-
 export function VariantGrid({
   variants,
   sameCostEnabled,
@@ -40,114 +28,40 @@ export function VariantGrid({
   return (
     <section className="ps-card">
       <div className="ps-headline-row">
-        <h3>Variants</h3>
-        <button type="button" onClick={onAddVariant}>
-          + Add variant
-        </button>
+        <h3>Variant grid</h3>
+        <button type="button" onClick={onAddVariant}>Add row</button>
       </div>
-
-      <div className="same-cost-row">
+      <div className="inline-add-row">
         <label>
-          <input
-            type="checkbox"
-            checked={sameCostEnabled}
-            onChange={(e) => onSameCostEnabledChange(e.target.checked)}
-          />
-          Same cost for all variants
+          <input type="checkbox" checked={sameCostEnabled} onChange={(e) => onSameCostEnabledChange(e.target.checked)} />
+          Same cost for all rows
         </label>
         {sameCostEnabled ? (
           <>
-            <input
-              type="number"
-              step="0.01"
-              value={sharedCost}
-              onChange={(e) => onSharedCostChange(e.target.value)}
-              placeholder="Shared cost"
-              aria-label="Shared cost"
-            />
-            <button type="button" onClick={onApplySharedCost}>
-              Apply shared cost
-            </button>
+            <input value={sharedCost} onChange={(e) => onSharedCostChange(e.target.value)} placeholder="Shared cost" />
+            <button type="button" onClick={onApplySharedCost}>Apply</button>
           </>
         ) : null}
       </div>
-
-      <div className="variant-grid-wrap">
-        <table className="variant-grid">
-          <thead>
-            <tr>
-              {columns.map((column) => (
-                <th key={column.key}>{column.label}</th>
-              ))}
+      <table>
+        <thead>
+          <tr><th>Size</th><th>Color</th><th>Other</th><th>Qty</th><th>Cost</th><th>Price</th><th>Max Discount %</th><th /></tr>
+        </thead>
+        <tbody>
+          {variants.map((variant) => (
+            <tr key={variant.id}>
+              <td><input value={variant.size} onChange={(e) => onVariantChange(variant.id, 'size', e.target.value)} /></td>
+              <td><input value={variant.color} onChange={(e) => onVariantChange(variant.id, 'color', e.target.value)} /></td>
+              <td><input value={variant.other} onChange={(e) => onVariantChange(variant.id, 'other', e.target.value)} /></td>
+              <td><input value={String(variant.qty)} onChange={(e) => onVariantChange(variant.id, 'qty', e.target.value)} /></td>
+              <td><input value={String(variant.cost)} onChange={(e) => onVariantChange(variant.id, 'cost', e.target.value)} /></td>
+              <td><input value={String(variant.defaultSellingPrice)} onChange={(e) => onVariantChange(variant.id, 'defaultSellingPrice', e.target.value)} /></td>
+              <td><input value={String(variant.maxDiscountPct)} onChange={(e) => onVariantChange(variant.id, 'maxDiscountPct', e.target.value)} /></td>
+              <td><button type="button" onClick={() => onRemoveVariant(variant.id)}>Remove</button></td>
             </tr>
-          </thead>
-          <tbody>
-            {variants.map((variant) => (
-              <tr key={variant.id}>
-                <td>
-                  <input
-                    value={variant.label}
-                    onChange={(e) => onVariantChange(variant.id, 'label', e.target.value)}
-                  />
-                </td>
-                <td>
-                  <input
-                    value={variant.size ?? ''}
-                    onChange={(e) => onVariantChange(variant.id, 'size', e.target.value)}
-                  />
-                </td>
-                <td>
-                  <input
-                    value={variant.color ?? ''}
-                    onChange={(e) => onVariantChange(variant.id, 'color', e.target.value)}
-                  />
-                </td>
-                <td>
-                  <input
-                    value={variant.other ?? ''}
-                    onChange={(e) => onVariantChange(variant.id, 'other', e.target.value)}
-                  />
-                </td>
-                <td>
-                  <input
-                    type="number"
-                    value={variant.qty}
-                    onChange={(e) => onVariantChange(variant.id, 'qty', e.target.value)}
-                  />
-                </td>
-                <td>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={variant.cost}
-                    onChange={(e) => onVariantChange(variant.id, 'cost', e.target.value)}
-                  />
-                </td>
-                <td>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={variant.defaultSellingPrice}
-                    onChange={(e) => onVariantChange(variant.id, 'defaultSellingPrice', e.target.value)}
-                  />
-                </td>
-                <td>
-                  <input
-                    type="number"
-                    value={variant.maxDiscountPct}
-                    onChange={(e) => onVariantChange(variant.id, 'maxDiscountPct', e.target.value)}
-                  />
-                </td>
-                <td>
-                  <button type="button" onClick={() => onRemoveVariant(variant.id)} aria-label={`Remove ${variant.label}`}>
-                    Remove
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+          ))}
+        </tbody>
+      </table>
     </section>
   );
 }
