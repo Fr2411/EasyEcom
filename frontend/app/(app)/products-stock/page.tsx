@@ -1,5 +1,5 @@
-import { ProductsStockWorkspace } from '@/components/products-stock/products-stock-workspace';
+import { redirect } from 'next/navigation';
 
 export default function ProductsStockPage() {
-  return <ProductsStockWorkspace />;
+  redirect('/inventory');
 }

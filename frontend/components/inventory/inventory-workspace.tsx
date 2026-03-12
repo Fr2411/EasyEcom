@@ -1,10 +1,26 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { createInboundStock, createInventoryAdjustment, getInventoryDetail, getInventoryItems, getInventoryMovements, receiveInboundStock } from '@/lib/api/inventory';
+import { createInventoryAdjustment, getInventoryDetail, getInventoryItems, getInventoryMovements } from '@/lib/api/inventory';
+import { getProductsStockSnapshot, saveProductStock } from '@/lib/api/products-stock';
+import { ProductChooser } from '@/components/products-stock/product-chooser';
+import { ProductIdentityForm } from '@/components/products-stock/product-identity';
+import { SaveSummary } from '@/components/products-stock/save-summary';
+import { VariantGenerator } from '@/components/products-stock/variant-generator';
+import { VariantGrid } from '@/components/products-stock/variant-grid';
+import { createEmptyVariant, generateVariantsFromInputs, summarizeVariants } from '@/lib/products-stock/variant-utils';
 import type { InventoryItem, InventoryMovement } from '@/types/inventory';
+import type { ProductIdentity, ProductRecord, Variant, VariantMode } from '@/types/products-stock';
 
 type AdjustmentType = 'stock_in' | 'stock_out' | 'correction';
+
+const EMPTY_IDENTITY: ProductIdentity = {
+  productName: '',
+  supplier: '',
+  category: '',
+  description: '',
+  features: [],
+};
 
 const toFiniteNumber = (value: unknown): number => {
   const parsed = typeof value === 'number' ? value : Number(value);
@@ -12,7 +28,6 @@ const toFiniteNumber = (value: unknown): number => {
 };
 
 const fmtQty = (value: unknown): string => toFiniteNumber(value).toFixed(2);
-
 const fmtMoney = (value: unknown): string => toFiniteNumber(value).toFixed(2);
 
 export function InventoryWorkspace() {
@@ -24,7 +39,6 @@ export function InventoryWorkspace() {
   const [endDate, setEndDate] = useState('');
   const [query, setQuery] = useState('');
 
-  const [inventoryView, setInventoryView] = useState<'catalog' | 'stocked'>('catalog');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,32 +51,44 @@ export function InventoryWorkspace() {
   const [reason, setReason] = useState('');
   const [note, setNote] = useState('');
   const [reference, setReference] = useState('');
-  const [inboundItemId, setInboundItemId] = useState('');
-  const [inboundQty, setInboundQty] = useState(1);
-  const [inboundCost, setInboundCost] = useState(0);
-  const [inboundRef, setInboundRef] = useState('');
-  const [inboundIdToReceive, setInboundIdToReceive] = useState('');
-  const [receiveQty, setReceiveQty] = useState(0);
-  const [receiveCost, setReceiveCost] = useState(0);
 
   const [detailItem, setDetailItem] = useState<InventoryItem | null>(null);
   const [detailMovements, setDetailMovements] = useState<InventoryMovement[]>([]);
 
-  const load = async (q = query) => {
+  const [products, setProducts] = useState<ProductRecord[]>([]);
+  const [suppliers, setSuppliers] = useState<string[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [mode, setMode] = useState<VariantMode>('new');
+  const [identity, setIdentity] = useState<ProductIdentity>(EMPTY_IDENTITY);
+  const [variants, setVariants] = useState<Variant[]>([]);
+  const [sameCostEnabled, setSameCostEnabled] = useState(false);
+  const [sharedCost, setSharedCost] = useState('');
+  const [catalogMessage, setCatalogMessage] = useState<string>();
+
+  const visibleItems = useMemo(
+    () => items.filter((item) => toFiniteNumber(item.sellable_qty) > 0 || toFiniteNumber(item.on_hand_qty) > 0),
+    [items],
+  );
+  const summary = useMemo(() => summarizeVariants(variants), [variants]);
+
+  const loadInventory = async (q = query) => {
     try {
       setLoading(true);
       setError(null);
       const [itemsRes, movementRes] = await Promise.all([
         getInventoryItems(q),
-        getInventoryMovements({ item_id: selectedItemId || undefined, movement_type: selectedMovementType || undefined, start_date: startDate || undefined, end_date: endDate || undefined, limit: 100 }),
+        getInventoryMovements({
+          item_id: selectedItemId || undefined,
+          movement_type: selectedMovementType || undefined,
+          start_date: startDate || undefined,
+          end_date: endDate || undefined,
+          limit: 100,
+        }),
       ]);
       setItems(itemsRes.items);
       setMovements(movementRes.items);
       if (!adjustItemId && itemsRes.items.length > 0) {
         setAdjustItemId(itemsRes.items[0].item_id);
-      }
-      if (!inboundItemId && itemsRes.items.length > 0) {
-        setInboundItemId(itemsRes.items[0].item_id);
       }
     } catch {
       setError('Unable to load inventory module right now.');
@@ -71,7 +97,20 @@ export function InventoryWorkspace() {
     }
   };
 
-  useEffect(() => { load(''); }, []);
+  const loadCatalog = async () => {
+    try {
+      const snapshot = await getProductsStockSnapshot();
+      setProducts(snapshot.products);
+      setSuppliers(snapshot.suppliers);
+      setCategories(snapshot.categories);
+    } catch {
+      setCatalogMessage('Unable to load product finder at the moment.');
+    }
+  };
+
+  useEffect(() => {
+    void Promise.all([loadInventory(''), loadCatalog()]);
+  }, []);
 
   const openDetail = async (itemId: string) => {
     try {
@@ -83,43 +122,68 @@ export function InventoryWorkspace() {
     }
   };
 
-  const createInbound = async () => {
-    if (!inboundItemId) return;
+  const loadExistingProduct = (productId: string) => {
+    const existing = products.find((product) => product.id === productId);
+    if (!existing) return;
+    setMode('existing');
+    setIdentity(existing.identity);
+    setVariants(existing.variants);
+    setCatalogMessage(undefined);
+  };
+
+  const startNewProduct = (typedName: string) => {
+    setMode('new');
+    setIdentity({ ...EMPTY_IDENTITY, productName: typedName });
+    setVariants([]);
+    setCatalogMessage(undefined);
+  };
+
+  const resetCatalog = () => {
+    setMode('new');
+    setIdentity(EMPTY_IDENTITY);
+    setVariants([]);
+    setCatalogMessage(undefined);
+    setSameCostEnabled(false);
+    setSharedCost('');
+  };
+
+  const handleVariantChange = (id: string, field: keyof Variant, value: string) => {
+    setVariants((current) =>
+      current.map((variant) => {
+        if (variant.id !== id) return variant;
+        if (field === 'qty' || field === 'cost' || field === 'defaultSellingPrice' || field === 'maxDiscountPct') {
+          return { ...variant, [field]: Number(value) || 0 };
+        }
+        return { ...variant, [field]: value };
+      }),
+    );
+  };
+
+  const validateCatalog = (): string | undefined => {
+    if (!identity.productName.trim()) return 'Product name is required.';
+    if (variants.length === 0) return 'At least one variant is required.';
+    return undefined;
+  };
+
+  const saveCatalogEntry = async () => {
+    const validationError = validateCatalog();
+    if (validationError) {
+      setCatalogMessage(validationError);
+      return;
+    }
+
     try {
       setSaving(true);
-      setError(null);
-      await createInboundStock({ item_id: inboundItemId, quantity: inboundQty, expected_unit_cost: inboundCost, reference: inboundRef });
-      setInboundRef('');
-      await load(query);
+      setCatalogMessage(undefined);
+      await saveProductStock({ mode, identity, variants });
+      setCatalogMessage('Product and stock saved successfully.');
+      await Promise.all([loadCatalog(), loadInventory(query)]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Inbound creation failed.');
+      setCatalogMessage(err instanceof Error ? err.message : 'Unable to save product details.');
     } finally {
       setSaving(false);
     }
   };
-
-  const markInboundReceived = async () => {
-    if (!inboundIdToReceive) return;
-    try {
-      setSaving(true);
-      setError(null);
-      await receiveInboundStock(inboundIdToReceive, { quantity: receiveQty || undefined, unit_cost: receiveCost || undefined });
-      setInboundIdToReceive('');
-      setReceiveQty(0);
-      await load(query);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Inbound receipt failed.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-
-  const visibleItems = useMemo(() => (
-    inventoryView === 'stocked'
-      ? items.filter((item) => toFiniteNumber(item.on_hand_qty) > 0 || toFiniteNumber(item.incoming_qty) > 0)
-      : items
-  ), [inventoryView, items]);
 
   const submitAdjustment = async () => {
     if (!adjustItemId) return;
@@ -136,8 +200,10 @@ export function InventoryWorkspace() {
         note,
         reference,
       });
-      setReason(''); setNote(''); setReference('');
-      await load(query);
+      setReason('');
+      setNote('');
+      setReference('');
+      await loadInventory(query);
       if (detailItem) await openDetail(detailItem.item_id);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Adjustment failed.');
@@ -148,39 +214,71 @@ export function InventoryWorkspace() {
 
   return (
     <section className="inventory-module">
+      <div className="products-stock-layout" data-mode={mode}>
+        <ProductChooser
+          products={products.map((product) => ({ id: product.id, name: product.identity.productName }))}
+          onSelectExisting={loadExistingProduct}
+          onCreateNew={startNewProduct}
+        />
+        <ProductIdentityForm
+          identity={identity}
+          suppliers={suppliers}
+          categories={categories}
+          onIdentityChange={setIdentity}
+          onAddSupplier={(supplier) => setSuppliers((prev) => (prev.includes(supplier) ? prev : [...prev, supplier]))}
+          onAddCategory={(category) => setCategories((prev) => (prev.includes(category) ? prev : [...prev, category]))}
+        />
+        {mode === 'new' ? (
+          <VariantGenerator onGenerate={({ size, color, other }) => setVariants(generateVariantsFromInputs(size, color, other))} />
+        ) : null}
+        <VariantGrid
+          variants={variants}
+          sameCostEnabled={sameCostEnabled}
+          sharedCost={sharedCost}
+          onSameCostEnabledChange={setSameCostEnabled}
+          onSharedCostChange={setSharedCost}
+          onApplySharedCost={() => {
+            const parsed = Number(sharedCost) || 0;
+            setVariants((current) => current.map((variant) => ({ ...variant, cost: parsed })));
+          }}
+          onVariantChange={handleVariantChange}
+          onAddVariant={() => setVariants((current) => [...current, createEmptyVariant()])}
+          onRemoveVariant={(id) => setVariants((current) => current.filter((variant) => variant.id !== id))}
+        />
+        <SaveSummary
+          variantCount={summary.variantCount}
+          totalQty={summary.totalQty}
+          estimatedStockCost={summary.estimatedStockCost}
+          isSaving={saving}
+          isSaveDisabled={Boolean(validateCatalog())}
+          validationMessage={catalogMessage}
+          onSave={saveCatalogEntry}
+          onReset={resetCatalog}
+        />
+      </div>
+
       <div className="inventory-toolbar">
         <input aria-label="Search inventory" placeholder="Search SKU, variant, product" value={query} onChange={(e) => setQuery(e.target.value)} />
-        <button type="button" onClick={() => load(query)}>Search</button>
-        <select aria-label="Inventory view mode" value={inventoryView} onChange={(e) => setInventoryView(e.target.value as 'catalog' | 'stocked')}>
-          <option value="catalog">Catalog view (all active items)</option>
-          <option value="stocked">Stocked only (on hand/incoming &gt; 0)</option>
-        </select>
-        <select aria-label="Filter item" value={selectedItemId} onChange={(e) => setSelectedItemId(e.target.value)}>
-          <option value="">All items</option>
-          {items.map((item) => <option key={item.item_id} value={item.item_id}>{item.item_name}</option>)}
-        </select>
+        <button type="button" onClick={() => loadInventory(query)}>Search</button>
         <select aria-label="Filter movement type" value={selectedMovementType} onChange={(e) => setSelectedMovementType(e.target.value)}>
           <option value="">All movements</option>
-          <option value="IN">IN</option>
-          <option value="OUT">OUT</option>
-          <option value="ADJUST">ADJUST</option>
-          <option value="ADJUST+">ADJUST+</option>
-          <option value="INBOUND_PENDING">INBOUND_PENDING</option>
-          <option value="INBOUND_RECEIVED">INBOUND_RECEIVED</option>
+          <option value="IN">Inbound</option>
+          <option value="OUT">Outbound</option>
+          <option value="RESERVE">Reserve</option>
+          <option value="RELEASE">Release</option>
+          <option value="ADJUST">Adjustments</option>
+          <option value="CORRECTION">Corrections</option>
         </select>
         <input aria-label="Start date" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
         <input aria-label="End date" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-        <button type="button" onClick={() => load(query)}>Apply Filters</button>
       </div>
 
       {error ? <p className="inventory-error">{error}</p> : null}
-      {loading ? <p className="inventory-loading">Loading inventory…</p> : null}
-
-      {!loading && items.length === 0 ? <div className="inventory-empty"><h3>No inventory yet</h3><p>Add stock from Products & Stock or use manual adjustments to start your ledger.</p></div> : null}
-
       <div className="inventory-grid">
         <div className="inventory-panel">
-          <h3>Current Stock</h3>
+          <h3>Current Stock (Available Items)</h3>
+          {loading ? <p>Loading inventory...</p> : null}
+          {!loading && visibleItems.length === 0 ? <div className="inventory-empty"><h4>No inventory yet</h4><p>Add stock from Inventory to start tracking available products.</p></div> : null}
           {!loading && visibleItems.length > 0 ? <table className="inventory-table"><thead><tr><th>Item</th><th>Parent Product</th><th>On Hand</th><th>Incoming</th><th>Sellable</th><th>Avg Cost</th><th>Value</th><th>Low stock</th></tr></thead><tbody>
             {visibleItems.map((item) => (
               <tr key={item.item_id} onClick={() => openDetail(item.item_id)}>
@@ -216,23 +314,6 @@ export function InventoryWorkspace() {
           <label>Note<textarea value={note} onChange={(e) => setNote(e.target.value)} /></label>
           <button type="button" onClick={submitAdjustment} disabled={saving}>{saving ? 'Applying...' : 'Apply Adjustment'}</button>
         </aside>
-        <aside className="inventory-panel">
-          <h3>Inbound Workflow</h3>
-          <label>Item<select value={inboundItemId} onChange={(e) => setInboundItemId(e.target.value)}>
-            <option value="">Select item</option>
-            {items.map((item) => <option key={item.item_id} value={item.item_id}>{item.item_name}</option>)}
-          </select></label>
-          <label>Incoming Qty<input type="number" min={0.01} step="0.01" value={inboundQty} onChange={(e) => setInboundQty(Number(e.target.value || 0))} /></label>
-          <label>Expected Unit Cost<input type="number" min={0.01} step="0.01" value={inboundCost} onChange={(e) => setInboundCost(Number(e.target.value || 0))} /></label>
-          <label>Reference<input value={inboundRef} onChange={(e) => setInboundRef(e.target.value)} /></label>
-          <button type="button" onClick={createInbound} disabled={saving}>{saving ? 'Saving...' : 'Create Incoming'}</button>
-          <hr />
-          <label>Inbound ID<input value={inboundIdToReceive} onChange={(e) => setInboundIdToReceive(e.target.value)} placeholder="INB-YYYY-00001" /></label>
-          <label>Receive Qty (optional full by default)<input type="number" min={0} step="0.01" value={receiveQty} onChange={(e) => setReceiveQty(Number(e.target.value || 0))} /></label>
-          <label>Receive Unit Cost (optional)<input type="number" min={0} step="0.01" value={receiveCost} onChange={(e) => setReceiveCost(Number(e.target.value || 0))} /></label>
-          <button type="button" onClick={markInboundReceived} disabled={saving}>{saving ? 'Saving...' : 'Mark Received'}</button>
-        </aside>
-
       </div>
 
       <div className="inventory-panel">
