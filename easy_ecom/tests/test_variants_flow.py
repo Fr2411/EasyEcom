@@ -56,3 +56,13 @@ def test_sales_records_variant_and_deducts_correct_variant_stock(tmp_path: Path)
     SalesOrderItemsRepo(store).append({"order_item_id": "i1", "order_id": "o1", "product_id": variant_id, "prd_description_snapshot": "", "qty": "2", "unit_selling_price": "100", "total_selling_price": "200"})
     sales.confirm_order("o1", {"client_id": "c1", "user_id": "u1"})
     assert inv.available_qty("c1", variant_id) == 3
+
+
+def test_product_create_generates_default_variant_with_readable_sku(tmp_path: Path):
+    store = setup_store(tmp_path)
+    svc = ProductService(ProductsRepo(store), ProductVariantsRepo(store))
+    pid = svc.create(ProductCreate(client_id="c1", supplier="s", product_name="Premium Tee", default_selling_price=50, max_discount_pct=10, sizes_csv="", colors_csv="", others_csv=""))
+    variants = svc.list_variants("c1", pid)
+    assert len(variants) == 1
+    assert variants[0]["variant_name"] == "Default"
+    assert variants[0]["sku_code"].startswith("PREMIU-")

@@ -5,25 +5,23 @@ from datetime import datetime, timezone
 
 from collections import defaultdict
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from easy_ecom.core.ids import new_uuid
 from easy_ecom.core.time_utils import now_iso
-from easy_ecom.domain.services.stock_policy import stock_deltas
 from easy_ecom.data.store.postgres_models import (
     CustomerModel,
     InventoryTxnModel,
-    ProductModel,
-    ProductVariantModel,
     SalesOrderItemModel,
     SalesOrderModel,
 )
+from easy_ecom.domain.services.saleable_items_service import SaleableItemsService
 
 
 @dataclass
 class SalesLineInput:
-    product_id: str
+    variant_id: str
     qty: float
     unit_price: float
 
@@ -31,26 +29,20 @@ class SalesLineInput:
 class SalesApiService:
     def __init__(self, session_factory: sessionmaker[Session]):
         self.session_factory = session_factory
+        self.saleable_items = SaleableItemsService()
 
-    @staticmethod
-    def _stock_for_product(session: Session, client_id: str, item_id: str) -> float:
-        rows = session.execute(
-            select(InventoryTxnModel.txn_type, InventoryTxnModel.qty).where(
-                InventoryTxnModel.client_id == client_id,
-                or_(
-                    InventoryTxnModel.variant_id == item_id,
-                    and_(InventoryTxnModel.variant_id == "", InventoryTxnModel.product_id == item_id),
-                ),
-            )
-        ).all()
-        total = 0.0
-        for txn_type, qty in rows:
-            try:
-                value = float(qty or 0)
-            except (TypeError, ValueError):
-                value = 0.0
-            total += stock_deltas(str(txn_type), value).on_hand
-        return total
+    def _stock_for_variant(self, session: Session, client_id: str, variant_id: str) -> float:
+        items = self.saleable_items.list_saleable_variants(
+            session=session,
+            client_id=client_id,
+            query=variant_id,
+            include_out_of_stock=True,
+            limit=1,
+        )
+        for item in items:
+            if item["variant_id"] == variant_id:
+                return float(item["available_qty"])
+        return 0.0
 
     def lookup_customers(self, client_id: str, query: str = "") -> list[dict[str, str]]:
         with self.session_factory() as session:
@@ -75,56 +67,27 @@ class SalesApiService:
 
     def lookup_products(self, client_id: str, query: str = "") -> list[dict[str, str | float]]:
         with self.session_factory() as session:
-            variants_stmt = select(ProductVariantModel, ProductModel).join(
-                ProductModel,
-                ProductModel.product_id == ProductVariantModel.parent_product_id,
-            ).where(
-                ProductVariantModel.client_id == client_id,
-                ProductModel.client_id == client_id,
-                ProductVariantModel.is_active == "true",
+            items = self.saleable_items.list_saleable_variants(
+                session=session,
+                client_id=client_id,
+                query=query,
+                include_out_of_stock=False,
+                limit=120,
             )
-            if query.strip():
-                needle = f"%{query.strip()}%"
-                variants_stmt = variants_stmt.where(
-                    ProductVariantModel.variant_name.ilike(needle) | ProductModel.product_name.ilike(needle)
-                )
-            rows = session.execute(variants_stmt.limit(120)).all()
-            if rows:
-                results = []
-                for variant, parent in rows:
-                    pid = variant.variant_id
-                    available_qty = self._stock_for_product(session, client_id, pid)
-                    if available_qty <= 0:
-                        continue
-                    results.append(
-                        {
-                            "product_id": pid,
-                            "label": f"{parent.product_name} / {variant.variant_name}",
-                            "default_unit_price": float(variant.default_selling_price or "0"),
-                            "available_qty": available_qty,
-                        }
-                    )
-                return results
-
-            products_stmt = select(ProductModel).where(ProductModel.client_id == client_id, ProductModel.is_active == "true")
-            if query.strip():
-                needle = f"%{query.strip()}%"
-                products_stmt = products_stmt.where(ProductModel.product_name.ilike(needle))
-            products = session.execute(products_stmt.limit(120)).scalars().all()
-            results = []
-            for p in products:
-                available_qty = self._stock_for_product(session, client_id, p.product_id)
-                if available_qty <= 0:
-                    continue
-                results.append(
-                    {
-                        "product_id": p.product_id,
-                        "label": p.product_name,
-                        "default_unit_price": float(p.default_selling_price or "0"),
-                        "available_qty": available_qty,
-                    }
-                )
-            return results
+        return [
+            {
+                "variant_id": str(item["variant_id"]),
+                "product_id": str(item["product_id"]),
+                "label": f"{item['product_name']} / {item['variant_name']} / {item['sku']}",
+                "sku": str(item["sku"]),
+                "barcode": str(item["barcode"]),
+                "product_name": str(item["product_name"]),
+                "variant_name": str(item["variant_name"]),
+                "default_unit_price": float(item["default_selling_price"]),
+                "available_qty": float(item["available_qty"]),
+            }
+            for item in items
+        ]
 
     def list_sales(self, client_id: str, query: str = "") -> list[dict[str, str | float]]:
         with self.session_factory() as session:
@@ -219,30 +182,32 @@ class SalesApiService:
 
             line_entities: list[SalesOrderItemModel] = []
             subtotal = 0.0
-            requested_by_product: dict[str, float] = defaultdict(float)
+            requested_by_variant: dict[str, float] = defaultdict(float)
             for line in lines:
-                requested_by_product[line.product_id] += line.qty
+                requested_by_variant[line.variant_id] += line.qty
 
-            for product_id, requested_qty in requested_by_product.items():
-                available = self._stock_for_product(session, client_id, product_id)
+            for variant_id, requested_qty in requested_by_variant.items():
+                available = self._stock_for_variant(session, client_id, variant_id)
                 if available < requested_qty:
-                    raise ValueError(f"Insufficient stock for {product_id}")
+                    raise ValueError(f"Insufficient stock for variant {variant_id}")
+
+            saleable_map = {
+                str(item["variant_id"]): item
+                for item in self.saleable_items.list_saleable_variants(
+                    session=session,
+                    client_id=client_id,
+                    query="",
+                    include_out_of_stock=True,
+                    limit=10000,
+                )
+            }
 
             for line in lines:
                 if line.qty <= 0 or line.unit_price < 0:
                     raise ValueError("Invalid sale line payload")
-                product = session.execute(
-                    select(ProductModel).where(ProductModel.client_id == client_id, ProductModel.product_id == line.product_id)
-                ).scalar_one_or_none()
-                variant = session.execute(
-                    select(ProductVariantModel).where(ProductVariantModel.client_id == client_id, ProductVariantModel.variant_id == line.product_id)
-                ).scalar_one_or_none()
-                if product is None and variant is None:
-                    raise ValueError(f"Invalid product reference: {line.product_id}")
-
-                canonical_product_id = product.product_id if product is not None else variant.parent_product_id
-                canonical_variant_id = "" if product is not None else variant.variant_id
-                product_name = product.product_name if product is not None else variant.variant_name
+                item = saleable_map.get(line.variant_id)
+                if item is None:
+                    raise ValueError(f"Invalid variant reference: {line.variant_id}")
                 total = float(line.qty) * float(line.unit_price)
                 subtotal += total
                 line_entities.append(
@@ -250,9 +215,9 @@ class SalesApiService:
                         order_item_id=new_uuid(),
                         order_id=sale_id,
                         client_id=client_id,
-                        product_id=canonical_product_id,
-                        variant_id=canonical_variant_id,
-                        product_name_snapshot=product_name,
+                        product_id=str(item["product_id"]),
+                        variant_id=line.variant_id,
+                        product_name_snapshot=f"{item['product_name']} / {item['variant_name']}",
                         qty=str(line.qty),
                         unit_selling_price=str(line.unit_price),
                         total_selling_price=str(total),
