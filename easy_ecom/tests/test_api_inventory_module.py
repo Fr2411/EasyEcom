@@ -247,6 +247,31 @@ def test_inventory_list_movements_and_adjustments(tmp_path: Path) -> None:
     assert after_receive.json()['item']['incoming_qty'] == 0.0
     assert after_receive.json()['item']['on_hand_qty'] == 5.0
 
+
+    add_ok = client.post('/inventory/add', json={
+        "product_id": "wrong-parent",
+        "variant_id": "v-tenant-a-l",
+        "product_name": "Wrong Name",
+        "qty": 2,
+        "unit_cost": 4,
+        "source_type": "manual",
+        "source_id": "manual-1",
+    })
+    assert add_ok.status_code == 200
+
+    post_add_detail = client.get('/inventory/v-tenant-a-l')
+    assert post_add_detail.status_code == 200
+    assert post_add_detail.json()['item']['on_hand_qty'] == 7.0
+
+    add_cross_tenant = client.post('/inventory/add', json={
+        "product_id": "p-tenant-b",
+        "variant_id": "v-tenant-b",
+        "product_name": "Other",
+        "qty": 1,
+        "unit_cost": 2,
+    })
+    assert add_cross_tenant.status_code == 404
+
     bad_payload = client.post('/inventory/adjustments', json={"item_id": "v-tenant-a", "adjustment_type": "correction", "quantity_delta": 0})
     assert bad_payload.status_code == 422
 
@@ -258,5 +283,11 @@ def test_inventory_list_movements_and_adjustments(tmp_path: Path) -> None:
 
     missing_variant_payload = client.post('/inventory/add', json={"product_id": "p-tenant-a", "product_name": "Tee", "qty": 1, "unit_cost": 1})
     assert missing_variant_payload.status_code == 422
+
+    parent_only_payload = client.post('/inventory/add', json={"product_id": "p-tenant-a", "variant_id": "p-tenant-a", "product_name": "Tee", "qty": 1, "unit_cost": 1})
+    assert parent_only_payload.status_code == 400
+
+    simple_product_payload = client.post('/inventory/add', json={"product_id": "p-tenant-a-simple", "variant_id": "p-tenant-a-simple", "product_name": "Cap", "qty": 1, "unit_cost": 1})
+    assert simple_product_payload.status_code == 400
 
     app.dependency_overrides.clear()
