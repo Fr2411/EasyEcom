@@ -186,4 +186,81 @@ describe('ProductsStockWorkspace', () => {
       expect(screen.getByText('Estimated Stock Cost: $376.25')).toBeTruthy();
     });
   });
+
+  test('save -> reload -> render keeps two distinct variants after persistence', async () => {
+    vi.mocked(saveProductStock).mockResolvedValueOnce({ success: true });
+    vi.mocked(getProductsStockSnapshot)
+      .mockResolvedValueOnce({
+        products: [],
+        suppliers: [],
+        categories: []
+      })
+      .mockResolvedValueOnce({
+        products: [
+          {
+            id: 'p-new',
+            identity: {
+              productName: 'Fresh Tee',
+              supplier: 'Nova Textiles',
+              category: 'Apparel',
+              description: '',
+              features: []
+            },
+            variants: [
+              {
+                id: 'v-new-1',
+                label: 'Fresh Tee / S / Black',
+                size: 'S',
+                color: 'Black',
+                qty: 1,
+                cost: 5,
+                defaultSellingPrice: 12,
+                maxDiscountPct: 10
+              },
+              {
+                id: 'v-new-2',
+                label: 'Fresh Tee / M / White',
+                size: 'M',
+                color: 'White',
+                qty: 2,
+                cost: 6,
+                defaultSellingPrice: 13,
+                maxDiscountPct: 10
+              }
+            ]
+          }
+        ],
+        suppliers: ['Nova Textiles'],
+        categories: ['Apparel']
+      });
+
+    render(<ProductsStockWorkspace />);
+
+    fireEvent.change(screen.getByLabelText('Product chooser input'), { target: { value: 'Fresh Tee' } });
+    fireEvent.click(screen.getByText('Add new product: "Fresh Tee"'));
+    fireEvent.change(screen.getByPlaceholderText('S, M, L'), { target: { value: 'S, M' } });
+    fireEvent.change(screen.getByPlaceholderText('Black, White'), { target: { value: 'Black, White' } });
+    fireEvent.click(screen.getByText('Generate combinations'));
+
+    fireEvent.click(screen.getByText('Save'));
+
+    await waitFor(() => {
+      expect(saveProductStock).toHaveBeenCalled();
+    });
+
+    const lastSaveCall = vi.mocked(saveProductStock).mock.calls.at(-1)?.[0];
+    expect(lastSaveCall?.variants.length).toBe(4);
+    expect(lastSaveCall?.variants[0].size).toBe('S');
+    expect(lastSaveCall?.variants[1].color).toBe('White');
+
+    fireEvent.change(screen.getByLabelText('Product chooser input'), { target: { value: 'Fresh Tee' } });
+    fireEvent.click(await screen.findByText('Fresh Tee'));
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Fresh Tee / S / Black')).toBeTruthy();
+      expect(screen.getByDisplayValue('Fresh Tee / M / White')).toBeTruthy();
+      expect(screen.getByText('Variants: 2')).toBeTruthy();
+    });
+  });
+
 });
