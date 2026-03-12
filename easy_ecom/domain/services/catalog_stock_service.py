@@ -120,13 +120,13 @@ class CatalogStockService:
         for size, color, other in itertools.product(sizes, colors, others):
             rows.append(
                 VariantWorkspaceEntry(
-                    variant_label=self.product_service._variant_name(size, color, other),
+                    variant_label=self.product_service._variant_name("", size, color, other),
                     size=size,
                     color=color,
                     other=other,
                     default_selling_price=float(default_selling_price),
                     max_discount_pct=float(max_discount_pct),
-                )
+                ),
             )
         return rows
 
@@ -181,7 +181,8 @@ class CatalogStockService:
                     sizes_csv="",
                     colors_csv="",
                     others_csv="",
-                )
+                ),
+                generate_variants_on_create=False,
             )
         else:
             product_id = str(product["product_id"])
@@ -248,9 +249,10 @@ class CatalogStockService:
                 other=row.other,
                 default_selling_price=float(row.default_selling_price or default_selling_price),
                 max_discount_pct=float(row.max_discount_pct or max_discount_pct),
+                variant_label=row.variant_label,
             )
             updated_variants += 1
-            if float(row.qty) > 0 and float(row.unit_cost) > 0 and not opening_written:
+            if float(row.qty) > 0 and float(row.unit_cost) > 0:
                 lot_ids.append(
                     self.inventory_service.add_stock(
                         client_id=client_id,
@@ -266,7 +268,6 @@ class CatalogStockService:
                         user_id=user_id,
                     )
                 )
-                opening_written = True
 
             if (
                 not opening_written

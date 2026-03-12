@@ -146,7 +146,7 @@ export function ProductsStockWorkspace() {
 
         {mode === 'new' ? (
           <VariantGenerator
-            onGenerate={({ size, color, other }) => setVariants(generateVariantsFromInputs(size, color, other))}
+            onGenerate={({ size, color, other }) => setVariants(generateVariantsFromInputs(identity.productName, size, color, other))}
           />
         ) : null}
 
