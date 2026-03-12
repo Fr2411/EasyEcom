@@ -22,6 +22,7 @@ The repository now includes dedicated instruction files for Codex agents to keep
 - Root governance: `AGENTS.md`
 - Business/technical source docs: `docs/business-rules.md`, `docs/architecture.md`, `docs/tenant-data-model.md`, `docs/pricing-strategy.md`
 - Scoped agent rulebooks: `frontend/AGENTS.md`, `backend/AGENTS.md`, `db/AGENTS.md`, `ai/AGENTS.md`
+- Frontend rulebook now explicitly documents UI/UX operating principles for dense business workflows (tables, variant-aware forms, role-aware visibility, dashboard usefulness, and request-efficiency expectations).
 
 When implementing changes, use these files as guardrails for tenant isolation, variant-level stock truth, auditability, and cross-layer contract consistency.
 
