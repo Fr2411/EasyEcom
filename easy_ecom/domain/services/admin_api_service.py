@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from easy_ecom.core.ids import new_uuid
 from easy_ecom.core.security import hash_password
 from easy_ecom.core.time_utils import now_iso
-from easy_ecom.data.store.postgres_models import UserModel, UserRoleModel
+from easy_ecom.data.store.postgres_models import ClientModel, UserModel, UserRoleModel
 
 DEFAULT_ROLE_CODES = [
     "SUPER_ADMIN",
@@ -28,6 +28,13 @@ class AdminUserRecord:
     is_active: bool
     created_at: str
     roles: list[str]
+
+
+@dataclass(frozen=True)
+class AdminTenantRecord:
+    client_id: str
+    business_name: str
+    owner_user: AdminUserRecord
 
 
 class AdminApiService:
@@ -75,6 +82,13 @@ class AdminApiService:
                 return user
         return None
 
+    def _assert_client_exists(self, session: Session, client_id: str) -> None:
+        existing = session.execute(
+            select(ClientModel.client_id).where(ClientModel.client_id == client_id)
+        ).scalar_one_or_none()
+        if existing is None:
+            raise ValueError("Client not found")
+
     def _assert_email_available(
         self, session: Session, email: str, exclude_user_id: str | None = None
     ) -> None:
@@ -97,6 +111,7 @@ class AdminApiService:
     ) -> AdminUserRecord:
         email_normalized = email.strip().lower()
         with self._session_factory() as session:
+            self._assert_client_exists(session, client_id)
             self._assert_email_available(session, email_normalized)
             user_id = new_uuid()
             user = UserModel(
@@ -114,6 +129,70 @@ class AdminApiService:
                 session.add(UserRoleModel(user_id=user_id, role_code=role_code))
             session.commit()
         return self.get_user_for_client(client_id, user_id)  # type: ignore[return-value]
+
+    def create_tenant_with_owner(
+        self,
+        *,
+        business_name: str,
+        owner_name: str,
+        owner_email: str,
+        owner_password: str,
+        currency_code: str,
+        owner_role_codes: list[str],
+    ) -> AdminTenantRecord:
+        cleaned_business_name = business_name.strip()
+        cleaned_owner_name = owner_name.strip()
+        cleaned_email = owner_email.strip().lower()
+        cleaned_currency_code = currency_code.strip().upper()
+        now = now_iso()
+
+        with self._session_factory() as session:
+            self._assert_email_available(session, cleaned_email)
+            client_id = new_uuid()
+            session.add(
+                ClientModel(
+                    client_id=client_id,
+                    business_name=cleaned_business_name,
+                    owner_name=cleaned_owner_name,
+                    phone="",
+                    email=cleaned_email,
+                    address="",
+                    currency_code=cleaned_currency_code,
+                    currency_symbol="",
+                    website_url="",
+                    facebook_url="",
+                    instagram_url="",
+                    whatsapp_number="",
+                    created_at=now,
+                    status="active",
+                    notes="",
+                )
+            )
+            user_id = new_uuid()
+            session.add(
+                UserModel(
+                    user_id=user_id,
+                    client_id=client_id,
+                    name=cleaned_owner_name,
+                    email=cleaned_email,
+                    password="",
+                    password_hash=hash_password(owner_password),
+                    is_active="true",
+                    created_at=now,
+                )
+            )
+            for role_code in owner_role_codes:
+                session.add(UserRoleModel(user_id=user_id, role_code=role_code))
+            session.commit()
+
+        owner = self.get_user_for_client(client_id=client_id, user_id=user_id)
+        if owner is None:
+            raise ValueError("Owner user creation failed")
+        return AdminTenantRecord(
+            client_id=client_id,
+            business_name=cleaned_business_name,
+            owner_user=owner,
+        )
 
     def update_user_profile(
         self,
