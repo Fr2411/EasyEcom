@@ -262,6 +262,7 @@ class ProductService:
         *,
         client_id: str,
         parent_product_id: str,
+        variant_id: str = "",
         size: str,
         color: str,
         other: str,
@@ -274,8 +275,43 @@ class ProductService:
         size = size.strip().title()
         color = color.strip().title()
         other = other.strip().title()
+        normalized_variant_id = str(variant_id or "").strip()
+        parent_product = self.get_by_id(client_id, parent_product_id)
+        variant_name = self._variant_name(
+            str(parent_product.get("product_name", "") if parent_product else ""),
+            size,
+            color,
+            other,
+            variant_label=variant_label,
+        )
         variants = self.variants_repo.all()
         if not variants.empty:
+            if normalized_variant_id:
+                by_id = variants[
+                    (variants["client_id"] == client_id)
+                    & (variants["parent_product_id"] == parent_product_id)
+                    & (variants["variant_id"].fillna("").astype(str) == normalized_variant_id)
+                ]
+                if not by_id.empty:
+                    row = by_id.iloc[0].to_dict()
+                    i = by_id.index[0]
+                    variants.loc[i, "size"] = size
+                    variants.loc[i, "color"] = color
+                    variants.loc[i, "other"] = other
+                    variants.loc[i, "variant_name"] = variant_name
+                    row["size"] = size
+                    row["color"] = color
+                    row["other"] = other
+                    row["variant_name"] = variant_name
+                    if default_selling_price is not None:
+                        variants.loc[i, "default_selling_price"] = str(default_selling_price)
+                        row["default_selling_price"] = str(default_selling_price)
+                    if max_discount_pct is not None:
+                        variants.loc[i, "max_discount_pct"] = str(max_discount_pct)
+                        row["max_discount_pct"] = str(max_discount_pct)
+                    self.variants_repo.save(variants)
+                    return row, False
+
             scoped = variants[
                 (variants["client_id"] == client_id)
                 & (variants["parent_product_id"] == parent_product_id)
@@ -283,14 +319,11 @@ class ProductService:
                 & (variants["color"].fillna("").astype(str).str.lower() == color.lower())
                 & (variants["other"].fillna("").astype(str).str.lower() == other.lower())
             ]
-            parent_product = self.get_by_id(client_id, parent_product_id)
-            variant_name = self._variant_name(
-                str(parent_product.get("product_name", "") if parent_product else ""),
-                size,
-                color,
-                other,
-                variant_label=variant_label,
-            )
+            if not (size or color or other):
+                scoped = scoped[
+                    scoped["variant_name"].fillna("").astype(str).str.lower()
+                    == variant_name.lower()
+                ]
             if not scoped.empty:
                 row = scoped.iloc[0].to_dict()
                 i = scoped.index[0]
