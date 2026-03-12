@@ -407,6 +407,9 @@ This checklist keeps your existing architecture intact while removing the common
 
 This release enforces a single operational rule across stock-affecting flows: **stock lives on `product_variants.variant_id`**, while `products.product_id` remains catalog/reporting identity.
 
+- `POST /inventory/add` now validates that `variant_id` belongs to the current tenant and derives `product_id` (parent context) and `product_name` server-side from that variant. Caller-supplied parent/product identity is no longer trusted for stock-affecting writes.
+- Product-only identifiers (including simple parent products without explicit variants) are rejected for new stock-affecting writes to prevent ambiguous ledger identity.
+
 ### What changed
 - Added canonical backend aggregation (`SaleableItemsService`) for saleable stock by variant (`variant_id`, `product_id`, `sku`, `barcode`, product + variant names, available qty, price).
 - Sales API and sales UI now operate on `variant_id` for cart lines, stock validation, and stock deduction.
