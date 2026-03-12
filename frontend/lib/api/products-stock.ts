@@ -15,13 +15,7 @@ type SaveApiPayload = {
 };
 
 export async function getProductsStockSnapshot(): Promise<ProductsStockSnapshot> {
-  const response = await apiClient<SnapshotApiResponse>('/products-stock/snapshot', {
-    headers: {
-      'X-User-Id': 'dev-super-admin',
-      'X-Client-Id': 'dev-client',
-      'X-Roles': 'SUPER_ADMIN'
-    }
-  });
+  const response = await apiClient<SnapshotApiResponse>('/products-stock/snapshot');
 
   return {
     products: response.products,
@@ -40,10 +34,5 @@ export async function saveProductStock(payload: SaveProductPayload): Promise<{ s
   return apiClient<{ success: true }>('/products-stock/save', {
     method: 'POST',
     body: JSON.stringify(body),
-    headers: {
-      'X-User-Id': 'dev-super-admin',
-      'X-Client-Id': 'dev-client',
-      'X-Roles': 'SUPER_ADMIN'
-    }
   });
 }

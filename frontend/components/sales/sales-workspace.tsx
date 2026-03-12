@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createSale, getSaleDetail, getSales, getSalesFormOptions } from '@/lib/api/sales';
+import { createCustomer } from '@/lib/api/customers';
 import type { SaleDetail, SaleLookupCustomer, SaleLookupProduct } from '@/types/sales';
 
 type DraftLine = { product_id: string; qty: number; unit_price: number };
@@ -16,6 +17,9 @@ export function SalesWorkspace() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [customerName, setCustomerName] = useState('');
+  const [customerEmail, setCustomerEmail] = useState('');
   const [customerId, setCustomerId] = useState('');
   const [discount, setDiscount] = useState(0);
   const [tax, setTax] = useState(0);
@@ -23,39 +27,101 @@ export function SalesWorkspace() {
   const [lines, setLines] = useState<DraftLine[]>([{ product_id: '', qty: 1, unit_price: 0 }]);
 
   const load = async (q = query) => {
-    try {
-      setLoading(true);
-      setError(null);
-      const [salesRes, options] = await Promise.all([getSales(q), getSalesFormOptions('')]);
-      setSales(salesRes.items.map((item) => ({ ...item, lines: [], note: '' })) as SaleDetail[]);
-      setCustomers(options.customers);
-      setProducts(options.products);
-    } catch {
-      setError('Unable to load sales workspace.');
-    } finally {
-      setLoading(false);
+    setLoading(true);
+    setError(null);
+
+    const [salesRes, optionsRes] = await Promise.allSettled([getSales(q), getSalesFormOptions('')]);
+
+    if (salesRes.status === 'fulfilled') {
+      setSales(salesRes.value.items.map((item) => ({ ...item, lines: [], note: '' })) as SaleDetail[]);
+    } else {
+      setError('Unable to load sales list.');
     }
+
+    if (optionsRes.status === 'fulfilled') {
+      setCustomers(optionsRes.value.customers);
+      setProducts(optionsRes.value.products.filter((product) => Number(product.available_qty) > 0));
+    } else {
+      setProducts([]);
+      setCustomers([]);
+      setError((prev) => prev ?? 'Unable to load sale form options.');
+    }
+
+    setLoading(false);
   };
 
-  useEffect(() => { load(''); }, []);
+  useEffect(() => {
+    void load('');
+  }, []);
 
   const subtotal = useMemo(() => lines.reduce((sum, line) => sum + line.qty * line.unit_price, 0), [lines]);
   const total = useMemo(() => Math.max(0, subtotal - discount + tax), [subtotal, discount, tax]);
 
   const addLine = () => setLines((prev) => [...prev, { product_id: '', qty: 1, unit_price: 0 }]);
-
   const updateLine = (idx: number, patch: Partial<DraftLine>) => {
     setLines((prev) => prev.map((line, i) => (i === idx ? { ...line, ...patch } : line)));
   };
 
+  const lookupCustomerByPhone = async (phone: string) => {
+    if (!phone.trim()) {
+      setCustomerId('');
+      return;
+    }
+
+    try {
+      const options = await getSalesFormOptions(phone.trim());
+      const matched = options.customers.find((item) => item.phone.trim() === phone.trim());
+      if (!matched) {
+        setCustomerId('');
+        setCustomerName('');
+        setCustomerEmail('');
+        return;
+      }
+      setCustomerId(matched.customer_id);
+      setCustomerName(matched.full_name);
+      setCustomerEmail(matched.email);
+    } catch {
+      setError('Unable to validate customer by phone.');
+    }
+  };
+
+  const resolveCustomer = async (): Promise<string | null> => {
+    if (!customerPhone.trim()) {
+      setError('Customer phone is required.');
+      return null;
+    }
+    if (customerId) return customerId;
+    if (!customerName.trim()) {
+      setError('Customer name is required for new customers.');
+      return null;
+    }
+
+    const created = await createCustomer({
+      full_name: customerName.trim(),
+      phone: customerPhone.trim(),
+      email: customerEmail.trim(),
+      address_line1: '',
+      city: '',
+      notes: '',
+    });
+    setCustomers((prev) => [created.customer, ...prev]);
+    setCustomerId(created.customer.customer_id);
+    return created.customer.customer_id;
+  };
+
   const submitSale = async () => {
-    if (!customerId || lines.some((l) => !l.product_id || l.qty <= 0)) return;
+    if (lines.some((l) => !l.product_id || l.qty <= 0)) return;
     try {
       setSaving(true);
       setError(null);
-      await createSale({ customer_id: customerId, lines, discount, tax, note });
+      const resolvedCustomerId = await resolveCustomer();
+      if (!resolvedCustomerId) return;
+
+      await createSale({ customer_id: resolvedCustomerId, lines, discount, tax, note });
       setLines([{ product_id: '', qty: 1, unit_price: 0 }]);
-      setDiscount(0); setTax(0); setNote('');
+      setDiscount(0);
+      setTax(0);
+      setNote('');
       await load(query);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to create sale.');
@@ -92,12 +158,22 @@ export function SalesWorkspace() {
 
         <aside className="sales-panel">
           <h3>Create Sale</h3>
-          <label>Customer
-            <select value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
-              <option value="">Select customer</option>
-              {customers.map((customer) => <option key={customer.customer_id} value={customer.customer_id}>{customer.full_name}</option>)}
-            </select>
+          <label>Customer Phone (Primary Identifier)
+            <input
+              value={customerPhone}
+              onChange={(e) => setCustomerPhone(e.target.value)}
+              onBlur={() => void lookupCustomerByPhone(customerPhone)}
+              placeholder="Enter phone number"
+            />
           </label>
+          <label>Customer Name
+            <input value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Auto-filled for existing customer" />
+          </label>
+          <label>Customer Email
+            <input value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} placeholder="Optional" />
+          </label>
+          {customerId ? <p className="sales-hint">Existing customer detected and pre-filled.</p> : <p className="sales-hint">New customer will be created when sale is submitted.</p>}
+
           {lines.map((line, idx) => (
             <div key={idx} className="sale-line-row">
               <select value={line.product_id} onChange={(e) => {
