@@ -41,4 +41,5 @@ export type SaveProductPayload = {
   mode: VariantMode;
   identity: ProductIdentity;
   variants: Variant[];
+  selectedProductId?: string;
 };

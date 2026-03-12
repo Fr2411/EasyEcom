@@ -329,3 +329,46 @@ def test_save_workspace_persists_distinct_variant_attributes(tmp_path: Path):
     assert ("", "White", "") in keys
     assert ("L", "Black", "") in keys
     assert ("L", "White", "") in keys
+
+
+def test_upsert_variant_treats_blank_and_whitespace_attributes_as_same_identity(tmp_path: Path):
+    _, product_svc, _ = _service(tmp_path)
+    product_id = product_svc.create(
+        ProductCreate(
+            client_id="c1",
+            supplier="s",
+            product_name="Identity Tee",
+            default_selling_price=100,
+            max_discount_pct=10,
+            sizes_csv="",
+            colors_csv="",
+            others_csv="",
+        )
+    )
+
+    first, created_first = product_svc.upsert_variant(
+        client_id="c1",
+        parent_product_id=product_id,
+        size="",
+        color="",
+        other="",
+        variant_label="Default",
+        default_selling_price=100,
+        max_discount_pct=10,
+    )
+    second, created_second = product_svc.upsert_variant(
+        client_id="c1",
+        parent_product_id=product_id,
+        size="   ",
+        color="",
+        other="",
+        variant_label="Default",
+        default_selling_price=120,
+        max_discount_pct=5,
+    )
+
+    assert created_first is False
+    assert created_second is False
+    assert first["variant_id"] == second["variant_id"]
+    variants = product_svc.list_variants("c1", product_id)
+    assert len(variants) == 1

@@ -27,6 +27,12 @@ function toLookup(products: ProductRecord[]) {
   return products.map((product) => ({ id: product.id, name: product.identity.productName }));
 }
 
+
+function toVariantIdentityKey(variant: Variant): string {
+  const norm = (value: string | undefined) => value?.trim().toLowerCase() ?? '';
+  return `${norm(variant.size)}|${norm(variant.color)}|${norm(variant.other)}`;
+}
+
 function toErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message.trim()) {
     return error.message;
@@ -120,6 +126,15 @@ export function ProductsStockWorkspace() {
       return 'At least one variant is required.';
     }
 
+    const seen = new Set<string>();
+    for (const variant of variants) {
+      const key = toVariantIdentityKey(variant);
+      if (seen.has(key)) {
+        return 'Each variant must have a unique Size/Color/Other combination.';
+      }
+      seen.add(key);
+    }
+
     return undefined;
   };
 
@@ -135,7 +150,8 @@ export function ProductsStockWorkspace() {
       await saveProductStock({
         mode,
         identity,
-        variants
+        variants,
+        selectedProductId: mode === 'existing' ? selectedProductId ?? undefined : undefined,
       });
       try {
         await loadSnapshot();
