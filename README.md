@@ -80,6 +80,14 @@ Key frontend vars (`frontend/.env.example`):
 
 
 
+## Products & Stock save/reload forensic hardening (2026-03)
+
+- Frontend save payload now carries `selectedProductId` when editing an existing product, so backend updates target the explicit parent product instead of only relying on typed name matching.
+- Variant grid now exposes and edits `size`, `color`, and `other` directly so manual multi-variant entry preserves true variant identity attributes, not just labels.
+- Frontend validation now blocks duplicate `(size,color,other)` combinations before save to prevent silent row collapse during backend upsert.
+- API regression coverage now verifies `/products-stock/save` forwards two distinct variant identities and selected product id to service layer.
+- Service regression coverage now verifies blank/whitespace variant attributes normalize to a single identity key (expected dedupe behavior), preventing NULL/empty-style drift.
+
 ## Catalog & Stock variant identity contract (critical)
 
 - Variant generation now uses an explicit object contract: `{ productName, size, color, other }` from frontend form state.

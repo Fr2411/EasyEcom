@@ -56,6 +56,8 @@ class DummyInventory:
 
 
 class DummyCatalogStock:
+    last_save_kwargs = None
+
     def list_supplier_options(self, client_id: str):
         return ["Nova Textiles"]
 
@@ -63,7 +65,8 @@ class DummyCatalogStock:
         return ["Apparel"]
 
     def save_workspace(self, **kwargs):
-        return "p-100", [], 1
+        DummyCatalogStock.last_save_kwargs = kwargs
+        return "p-100", [], len(kwargs.get('variant_entries', []))
 
 
 class DummyContainer:
@@ -126,5 +129,66 @@ def test_products_stock_save_smoke() -> None:
 
     assert response.status_code == 200
     assert response.json() == {"success": True}
+
+    app.dependency_overrides.clear()
+
+
+def test_products_stock_save_passes_distinct_variant_entries_and_selected_product_id() -> None:
+    app.dependency_overrides[get_container] = lambda: DummyContainer()
+    app.dependency_overrides[get_current_user] = lambda: RequestUser(
+        user_id="u-test", client_id="c-test", roles=["SUPER_ADMIN"]
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/products-stock/save",
+        json={
+            "mode": "existing",
+            "selectedProductId": "p-100",
+            "identity": {
+                "productName": "Smoke Tee",
+                "supplier": "Smoke Supplier",
+                "category": "Apparel",
+                "description": "",
+                "features": ["Feature A"],
+            },
+            "variants": [
+                {
+                    "id": "v-row-1",
+                    "label": "S / Black",
+                    "size": "S",
+                    "color": "Black",
+                    "other": "",
+                    "qty": 1,
+                    "cost": 2,
+                    "defaultSellingPrice": 10,
+                    "maxDiscountPct": 10,
+                },
+                {
+                    "id": "v-row-2",
+                    "label": "M / White",
+                    "size": "M",
+                    "color": "White",
+                    "other": "",
+                    "qty": 1,
+                    "cost": 2,
+                    "defaultSellingPrice": 12,
+                    "maxDiscountPct": 15,
+                },
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"success": True}
+
+    assert DummyCatalogStock.last_save_kwargs is not None
+    assert DummyCatalogStock.last_save_kwargs["selected_product_id"] == "p-100"
+    entries = DummyCatalogStock.last_save_kwargs["variant_entries"]
+    assert len(entries) == 2
+    assert entries[0].size == "S"
+    assert entries[0].color == "Black"
+    assert entries[1].size == "M"
+    assert entries[1].color == "White"
 
     app.dependency_overrides.clear()
