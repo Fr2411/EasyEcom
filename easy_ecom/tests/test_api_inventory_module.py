@@ -144,6 +144,27 @@ class InventoryContainer:
         self.inventory.add_stock("tenant-b", "p-tenant-b", "v-tenant-b", "Other", 7, 3, "", "seed", user_id="u-b")
         self.inventory.repo.append(
             {
+                "txn_id": "legacy-in-1",
+                "client_id": "tenant-a",
+                "timestamp": "2026-01-01T00:00:01Z",
+                "user_id": "u-a",
+                "txn_type": "IN",
+                "product_id": "p-tenant-a-simple",
+                "variant_id": "",
+                "product_name": "Cap",
+                "qty": "1",
+                "unit_cost": "4",
+                "total_cost": "4",
+                "supplier_snapshot": "",
+                "note": "legacy",
+                "source_type": "legacy_import",
+                "source_id": "legacy-1",
+                "lot_id": "legacy-lot-1",
+            }
+        )
+
+        self.inventory.repo.append(
+            {
                 "txn_id": "sale-out-1",
                 "client_id": "tenant-a",
                 "timestamp": "2026-01-01T00:00:00Z",
@@ -185,7 +206,9 @@ def test_inventory_list_movements_and_adjustments(tmp_path: Path) -> None:
     assert by_id['v-tenant-a-l']['on_hand_qty'] == 0.0
     assert by_id['v-tenant-a-l']['incoming_qty'] == 0.0
     assert by_id['v-tenant-a-l']['sellable_qty'] == 0.0
-    assert by_id['p-tenant-a-simple']['on_hand_qty'] == 0.0
+    assert by_id['p-tenant-a-simple']['on_hand_qty'] == 1.0
+    assert by_id['p-tenant-a-simple']['item_type'] == 'product'
+    assert by_id['p-tenant-a-simple']['actionable'] is False
     assert by_id['v-tenant-a-l']['parent_product_id'] == 'p-tenant-a'
 
     movements_res = client.get('/inventory/movements', params={"item_id": "v-tenant-a"})

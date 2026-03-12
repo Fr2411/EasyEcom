@@ -56,6 +56,7 @@ def _build_movement_rows(container: ServiceContainer, client_id: str) -> pd.Data
     d["item_name"] = d.get("inventory_product_name", "").astype(str)
     d["parent_product_id"] = d.get("parent_product_id", "").astype(str)
     d["parent_product_name"] = d.get("parent_product_name", "").astype(str)
+    d["inventory_identity_type"] = d.get("inventory_identity_type", "unmapped").astype(str)
 
     d = d.sort_values(["item_id", "timestamp", "txn_id"]).reset_index(drop=True)
     d["resulting_balance"] = d.groupby("item_id")["signed_qty"].cumsum()
@@ -86,18 +87,8 @@ def _catalog_inventory_base(container: ServiceContainer, client_id: str) -> pd.D
         products = products[products["is_active"] != "false"].copy()
 
     if variants.empty:
-        simple = products.copy()
-        if simple.empty:
-            return pd.DataFrame()
-        simple["item_id"] = simple["product_id"].astype(str)
-        simple["item_name"] = simple["product_name"].astype(str)
-        simple["parent_product_id"] = simple["product_id"].astype(str)
-        simple["parent_product_name"] = simple["product_name"].astype(str)
-        simple["variant_id"] = ""
-        simple["is_unmapped"] = False
-        simple["item_type"] = "product"
-        return simple[
-            [
+        return pd.DataFrame(
+            columns=[
                 "item_id",
                 "item_name",
                 "parent_product_id",
@@ -106,7 +97,7 @@ def _catalog_inventory_base(container: ServiceContainer, client_id: str) -> pd.D
                 "is_unmapped",
                 "item_type",
             ]
-        ]
+        )
 
     variants["is_active"] = variants.get("is_active", "true").astype(str).str.lower()
     active_variants = variants[variants["is_active"] != "false"].copy()
@@ -123,46 +114,17 @@ def _catalog_inventory_base(container: ServiceContainer, client_id: str) -> pd.D
     variant_items["item_type"] = "variant"
     variant_items["is_unmapped"] = False
 
-    variant_parent_ids = set(active_variants.get("parent_product_id", pd.Series(dtype=str)).astype(str))
-    simple_items = products[~products["product_id"].astype(str).isin(variant_parent_ids)].copy()
-    if not simple_items.empty:
-        simple_items["item_id"] = simple_items["product_id"].astype(str)
-        simple_items["item_name"] = simple_items["product_name"].astype(str)
-        simple_items["parent_product_id"] = simple_items["product_id"].astype(str)
-        simple_items["parent_product_name"] = simple_items["product_name"].astype(str)
-        simple_items["variant_id"] = ""
-        simple_items["item_type"] = "product"
-        simple_items["is_unmapped"] = False
-
-    base = pd.concat(
+    base = variant_items[
         [
-            variant_items[
-                [
-                    "item_id",
-                    "item_name",
-                    "parent_product_id",
-                    "parent_product_name",
-                    "variant_id",
-                    "is_unmapped",
-                    "item_type",
-                ]
-            ],
-            simple_items[
-                [
-                    "item_id",
-                    "item_name",
-                    "parent_product_id",
-                    "parent_product_name",
-                    "variant_id",
-                    "is_unmapped",
-                    "item_type",
-                ]
-            ]
-            if not simple_items.empty
-            else pd.DataFrame(),
-        ],
-        ignore_index=True,
-    )
+            "item_id",
+            "item_name",
+            "parent_product_id",
+            "parent_product_name",
+            "variant_id",
+            "is_unmapped",
+            "item_type",
+        ]
+    ]
     return base.drop_duplicates(subset=["item_id"], keep="first")
 
 
@@ -187,8 +149,10 @@ def _build_inventory_items(container: ServiceContainer, client_id: str) -> list[
             & movements["item_id"].astype(str).str.strip().ne("")
         ].copy()
         if not unresolved.empty:
-            unresolved["item_type"] = "unmapped"
-            unresolved["is_unmapped"] = True
+            identity = unresolved.get("inventory_identity_type", pd.Series("unmapped", index=unresolved.index)).astype(str)
+            unresolved["item_type"] = identity.map({"variant": "variant", "legacy_product": "product"}).fillna("unmapped")
+            unresolved_unmapped = unresolved.get("is_unmapped", pd.Series(False, index=unresolved.index))
+            unresolved["is_unmapped"] = unresolved_unmapped.astype(str).str.lower() == "true"
             base = pd.concat(
                 [
                     base,
@@ -279,6 +243,7 @@ def _build_inventory_items(container: ServiceContainer, client_id: str) -> list[
                 stock_value=value,
                 lot_count=int(row.get("lot_count", 0)),
                 low_stock=sellable_qty <= 5,
+                actionable=str(row.get("item_type") or _item_type(row)) == "variant",
             )
         )
     return sorted(items, key=lambda item: (item.low_stock is False, item.item_name.lower()))
