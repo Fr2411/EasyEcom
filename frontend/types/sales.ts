@@ -33,14 +33,19 @@ export type SaleLookupCustomer = {
 };
 
 export type SaleLookupProduct = {
+  variant_id: string;
   product_id: string;
+  sku: string;
+  barcode: string;
+  product_name: string;
+  variant_name: string;
   label: string;
   default_unit_price: number;
   available_qty: number;
 };
 
 export type SaleCreateLinePayload = {
-  product_id: string;
+  variant_id: string;
   qty: number;
   unit_price: number;
 };

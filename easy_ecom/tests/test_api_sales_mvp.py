@@ -42,7 +42,7 @@ class DummySalesService:
         return [{"customer_id": "cust-a", "full_name": "Alice", "phone": "111", "email": "alice@x.com"}]
 
     def lookup_products(self, client_id: str, query: str = ""):
-        return [{"product_id": "prd-1", "label": "Product A", "default_unit_price": 100.0, "available_qty": 9.0}]
+        return [{"variant_id": "var-1", "product_id": "prd-1", "sku": "SKU-1", "barcode": "", "product_name": "Product A", "variant_name": "Default", "label": "Product A / Default / SKU-1", "default_unit_price": 100.0, "available_qty": 9.0}]
 
     def get_sale_detail(self, client_id: str, sale_id: str):
         for row in self.sales:
@@ -66,7 +66,7 @@ class DummyContainer:
 def test_sales_requires_auth() -> None:
     client = TestClient(create_app())
     assert client.get('/sales').status_code == 401
-    assert client.post('/sales', json={"customer_id": "x", "lines": [{"product_id": "p", "qty": 1, "unit_price": 1}], "discount": 0, "tax": 0, "note": ""}).status_code == 401
+    assert client.post('/sales', json={"customer_id": "x", "lines": [{"variant_id": "v", "qty": 1, "unit_price": 1}], "discount": 0, "tax": 0, "note": ""}).status_code == 401
 
 
 def test_sales_list_create_detail_and_errors() -> None:
@@ -86,13 +86,13 @@ def test_sales_list_create_detail_and_errors() -> None:
     assert detail_res.status_code == 200
     assert detail_res.json()["lines"][0]["product_id"] == "prd-1"
 
-    create_ok = client.post('/sales', json={"customer_id": "cust-a", "lines": [{"product_id": "prd-1", "qty": 1, "unit_price": 50}], "discount": 0, "tax": 0, "note": ""})
+    create_ok = client.post('/sales', json={"customer_id": "cust-a", "lines": [{"variant_id": "var-1", "qty": 1, "unit_price": 50}], "discount": 0, "tax": 0, "note": ""})
     assert create_ok.status_code == 201
 
-    invalid_customer = client.post('/sales', json={"customer_id": "cust-other", "lines": [{"product_id": "prd-1", "qty": 1, "unit_price": 50}], "discount": 0, "tax": 0, "note": ""})
+    invalid_customer = client.post('/sales', json={"customer_id": "cust-other", "lines": [{"variant_id": "var-1", "qty": 1, "unit_price": 50}], "discount": 0, "tax": 0, "note": ""})
     assert invalid_customer.status_code == 400
 
-    stock_fail = client.post('/sales', json={"customer_id": "cust-a", "lines": [{"product_id": "prd-1", "qty": 99, "unit_price": 50}], "discount": 0, "tax": 0, "note": ""})
+    stock_fail = client.post('/sales', json={"customer_id": "cust-a", "lines": [{"variant_id": "var-1", "qty": 99, "unit_price": 50}], "discount": 0, "tax": 0, "note": ""})
     assert stock_fail.status_code == 400
 
     bad_payload = client.post('/sales', json={"customer_id": "cust-a", "lines": [], "discount": 0, "tax": 0, "note": ""})

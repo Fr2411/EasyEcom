@@ -5,7 +5,7 @@ import { createSale, getSaleDetail, getSales, getSalesFormOptions } from '@/lib/
 import { createCustomer } from '@/lib/api/customers';
 import type { SaleDetail, SaleLookupCustomer, SaleLookupProduct } from '@/types/sales';
 
-type DraftLine = { product_id: string; qty: number; unit_price: number };
+type DraftLine = { variant_id: string; qty: number; unit_price: number };
 
 export function SalesWorkspace() {
   const [sales, setSales] = useState<SaleDetail[]>([]);
@@ -13,6 +13,7 @@ export function SalesWorkspace() {
   const [customers, setCustomers] = useState<SaleLookupCustomer[]>([]);
   const [products, setProducts] = useState<SaleLookupProduct[]>([]);
   const [query, setQuery] = useState('');
+  const [itemQuery, setItemQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -24,13 +25,13 @@ export function SalesWorkspace() {
   const [discount, setDiscount] = useState(0);
   const [tax, setTax] = useState(0);
   const [note, setNote] = useState('');
-  const [lines, setLines] = useState<DraftLine[]>([{ product_id: '', qty: 1, unit_price: 0 }]);
+  const [lines, setLines] = useState<DraftLine[]>([{ variant_id: '', qty: 1, unit_price: 0 }]);
 
   const load = async (q = query) => {
     setLoading(true);
     setError(null);
 
-    const [salesRes, optionsRes] = await Promise.allSettled([getSales(q), getSalesFormOptions('')]);
+    const [salesRes, optionsRes] = await Promise.allSettled([getSales(q), getSalesFormOptions(itemQuery)]);
 
     if (salesRes.status === 'fulfilled') {
       setSales(salesRes.value.items.map((item) => ({ ...item, lines: [], note: '' })) as SaleDetail[]);
@@ -54,10 +55,17 @@ export function SalesWorkspace() {
     void load('');
   }, []);
 
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      void load(query);
+    }, 200);
+    return () => clearTimeout(handle);
+  }, [itemQuery]);
+
   const subtotal = useMemo(() => lines.reduce((sum, line) => sum + line.qty * line.unit_price, 0), [lines]);
   const total = useMemo(() => Math.max(0, subtotal - discount + tax), [subtotal, discount, tax]);
 
-  const addLine = () => setLines((prev) => [...prev, { product_id: '', qty: 1, unit_price: 0 }]);
+  const addLine = () => setLines((prev) => [...prev, { variant_id: '', qty: 1, unit_price: 0 }]);
   const updateLine = (idx: number, patch: Partial<DraftLine>) => {
     setLines((prev) => prev.map((line, i) => (i === idx ? { ...line, ...patch } : line)));
   };
@@ -110,7 +118,7 @@ export function SalesWorkspace() {
   };
 
   const submitSale = async () => {
-    if (lines.some((l) => !l.product_id || l.qty <= 0)) return;
+    if (lines.some((l) => !l.variant_id || l.qty <= 0)) return;
     try {
       setSaving(true);
       setError(null);
@@ -118,7 +126,7 @@ export function SalesWorkspace() {
       if (!resolvedCustomerId) return;
 
       await createSale({ customer_id: resolvedCustomerId, lines, discount, tax, note });
-      setLines([{ product_id: '', qty: 1, unit_price: 0 }]);
+      setLines([{ variant_id: '', qty: 1, unit_price: 0 }]);
       setDiscount(0);
       setTax(0);
       setNote('');
@@ -158,6 +166,9 @@ export function SalesWorkspace() {
 
         <aside className="sales-panel">
           <h3>Create Sale</h3>
+          <label>Find item (SKU / barcode / product / variant)
+            <input value={itemQuery} onChange={(e) => setItemQuery(e.target.value)} placeholder="Type to search saleable stock" />
+          </label>
           <label>Customer Phone (Primary Identifier)
             <input
               value={customerPhone}
@@ -176,12 +187,12 @@ export function SalesWorkspace() {
 
           {lines.map((line, idx) => (
             <div key={idx} className="sale-line-row">
-              <select value={line.product_id} onChange={(e) => {
-                const picked = products.find((item) => item.product_id === e.target.value);
-                updateLine(idx, { product_id: e.target.value, unit_price: picked?.default_unit_price ?? line.unit_price });
+              <select value={line.variant_id} onChange={(e) => {
+                const picked = products.find((item) => item.variant_id === e.target.value);
+                updateLine(idx, { variant_id: e.target.value, unit_price: picked?.default_unit_price ?? line.unit_price });
               }}>
-                <option value="">Select product/variant</option>
-                {products.map((product) => <option key={product.product_id} value={product.product_id}>{product.label} (Stock: {product.available_qty})</option>)}
+                <option value="">Select variant / SKU</option>
+                {products.map((product) => <option key={product.variant_id} value={product.variant_id}>{product.product_name} / {product.variant_name} / {product.sku} (Stock: {product.available_qty})</option>)}
               </select>
               <input aria-label={`Quantity ${idx + 1}`} type="number" min={1} value={line.qty} onChange={(e) => updateLine(idx, { qty: Number(e.target.value || 0) })} />
               <input aria-label={`Unit price ${idx + 1}`} type="number" min={0} step="0.01" value={line.unit_price} onChange={(e) => updateLine(idx, { unit_price: Number(e.target.value || 0) })} />

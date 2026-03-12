@@ -389,3 +389,23 @@ If UI widgets show placeholders/empty values despite data in RDS, verify this ex
    - Add synthetic checks for core user flows: login → dashboard → sales list → inventory list.
 
 This checklist keeps your existing architecture intact while removing the common integration gaps that make UI screens appear as placeholders.
+
+## Phase 18: Variant-Only Operational Stock Identity Cleanup
+
+This release enforces a single operational rule across stock-affecting flows: **stock lives on `product_variants.variant_id`**, while `products.product_id` remains catalog/reporting identity.
+
+### What changed
+- Added canonical backend aggregation (`SaleableItemsService`) for saleable stock by variant (`variant_id`, `product_id`, `sku`, `barcode`, product + variant names, available qty, price).
+- Sales API and sales UI now operate on `variant_id` for cart lines, stock validation, and stock deduction.
+- Sales item search now targets user-facing identifiers only: SKU, barcode, product name, variant name.
+- Empty search query no longer dumps large saleable-item lists in sales item picker.
+- Product variant model now includes optional `barcode`.
+- SKU generation is now human-readable and tenant-scoped (`<PRODUCTCODE>-NNN`), and default variant creation remains automatic when no options are supplied.
+
+### Migration highlights
+- New migration: `20260320_phase18_variant_operational_identity.sql`.
+- Adds `product_variants.barcode`, enforces non-null SKU storage, backfills legacy stock rows from parent products to variants when exactly one variant exists, and records unresolved ambiguous rows into `stock_identity_review_queue` for manual review.
+
+### Legacy compatibility
+- Parent `product_id` is retained in transaction rows for parent rollups and compatibility.
+- Operational writes/reads in the updated sales flow now always bind to `variant_id`.
