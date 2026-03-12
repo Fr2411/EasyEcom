@@ -567,3 +567,19 @@ This phase enforces referential integrity for inventory ledger rows at the corre
 - Inventory stock actions (manual adjustments and inbound operations) are variant-only.
 - Inventory lists can still show legacy product-level ledger rows for audit visibility, but those rows are non-actionable.
 - The inventory adjustment selector only shows variant items, preventing product-level legacy identities from being used in stock-affecting writes.
+
+## Products & Stock clean rebuild (Phase 22)
+
+The Products & Stock feature slice has been rebuilt as a strict variant-first flow:
+
+- Product is catalog-only metadata.
+- Variant identity is enforced by `(size, color, other)` with no label-based fallback.
+- Save requests now reject blank variant identity rows and duplicate identities.
+- Opening stock writes only after a real `variant_id` exists; no fallback stock row assignment is allowed.
+- Snapshot reload is built from persisted products + variants + ledger rollups.
+- API and UI now return explicit error detail for validation/network failures.
+
+Schema cleanup in this phase:
+
+- Migration `20260324_phase22_variant_pricing_only.sql` drops `products.default_selling_price` and `products.max_discount_pct`.
+- Pricing ownership remains only on `product_variants.default_selling_price` and `product_variants.max_discount_pct`.

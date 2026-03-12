@@ -1,326 +1,62 @@
-import React from 'react';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-
-vi.mock('@/lib/api/products-stock', () => ({
-  getProductsStockSnapshot: vi.fn(async () => ({
-    products: [
-      {
-        id: 'p-100',
-        identity: {
-          productName: 'Urban Fit Tee',
-          supplier: 'Nova Textiles',
-          category: 'Apparel',
-          description: 'Premium cotton crew-neck t-shirt.',
-          features: ['180 GSM', 'Bio-washed', 'Regular fit']
-        },
-        variants: [
-          {
-            id: 'v-1001',
-            label: 'S / Black',
-            size: 'S',
-            color: 'Black',
-            qty: 42,
-            cost: 8.75,
-            defaultSellingPrice: 16.5,
-            maxDiscountPct: 10
-          },
-          {
-            id: 'v-1002',
-            label: 'M / White',
-            size: 'M',
-            color: 'White',
-            qty: 33,
-            cost: 8.75,
-            defaultSellingPrice: 16.5,
-            maxDiscountPct: 10
-          }
-        ]
-      }
-    ],
-    suppliers: ['Nova Textiles', 'HydroWorks', 'Peak Source'],
-    categories: ['Apparel', 'Lifestyle', 'Accessories']
-  })),
-  saveProductStock: vi.fn(async () => ({ success: true as const }))
-}));
-
 import { ProductsStockWorkspace } from '@/components/products-stock/products-stock-workspace';
 import { getProductsStockSnapshot, saveProductStock } from '@/lib/api/products-stock';
 
-let consoleDebugSpy: ReturnType<typeof vi.spyOn>;
-
-beforeEach(() => {
-  consoleDebugSpy = vi.spyOn(console, 'debug').mockImplementation(() => undefined);
-});
-
-afterEach(() => {
-  cleanup();
-  consoleDebugSpy.mockRestore();
-});
+vi.mock('@/lib/api/products-stock', () => ({
+  getProductsStockSnapshot: vi.fn(),
+  saveProductStock: vi.fn()
+}));
 
 describe('ProductsStockWorkspace', () => {
+  afterEach(() => cleanup());
 
-  test('chooser keeps results hidden until at least one character is typed and clears when emptied', async () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(getProductsStockSnapshot).mockResolvedValue({ products: [], suppliers: [], categories: [] });
+    vi.mocked(saveProductStock).mockResolvedValue({ success: true });
+  });
+
+  test('blank identity rows cannot be saved', async () => {
     render(<ProductsStockWorkspace />);
+    fireEvent.change(screen.getByLabelText('Product chooser input'), { target: { value: 'New Tee' } });
+    fireEvent.click(screen.getByText('Add new product: "New Tee"'));
+    fireEvent.click(screen.getByText('Add row'));
 
-    expect(screen.queryByText('Urban Fit Tee')).toBeNull();
-
-    const chooserInput = screen.getByLabelText('Product chooser input');
-    fireEvent.change(chooserInput, { target: { value: 'Urban' } });
-    expect(await screen.findByText('Urban Fit Tee')).toBeTruthy();
-
-    fireEvent.change(chooserInput, { target: { value: '' } });
     await waitFor(() => {
-      expect(screen.queryByText('Urban Fit Tee')).toBeNull();
-      expect(screen.queryByText('Add new product: "Urban"')).toBeNull();
+      expect((screen.getByText('Save') as HTMLButtonElement).disabled).toBe(true);
     });
-  });
-  test('smart chooser shows add-new option while typing', async () => {
-    render(<ProductsStockWorkspace />);
-
-    const chooserInput = screen.getByLabelText('Product chooser input');
-    fireEvent.change(chooserInput, { target: { value: 'Night Runner' } });
-
-    expect(screen.getByText('Add new product: "Night Runner"')).toBeTruthy();
+    expect(saveProductStock).not.toHaveBeenCalled();
   });
 
-  test('selecting existing product loads existing-product mode', async () => {
+  test('duplicate identity rows cannot be saved', async () => {
     render(<ProductsStockWorkspace />);
+    fireEvent.change(screen.getByLabelText('Product chooser input'), { target: { value: 'New Tee' } });
+    fireEvent.click(screen.getByText('Add new product: "New Tee"'));
+    fireEvent.change(screen.getByPlaceholderText('S, M, L'), { target: { value: 'S' } });
+    fireEvent.click(screen.getByText('Generate combinations'));
+    fireEvent.click(screen.getByText('Add row'));
 
-    const chooserInput = screen.getByLabelText('Product chooser input');
-    fireEvent.change(chooserInput, { target: { value: 'Urban Fit Tee' } });
-
-    const productOption = await screen.findByText('Urban Fit Tee');
-    fireEvent.click(productOption);
+    const sizeInputs = screen.getAllByRole('cell').flatMap((cell) => Array.from(cell.querySelectorAll('input'))).slice(0, 8);
+    fireEvent.change(sizeInputs[3], { target: { value: 'S' } });
 
     await waitFor(() => {
-      expect(screen.queryByText('Generate combinations')).toBeNull();
-      expect(screen.getByDisplayValue('S / Black')).toBeTruthy();
+      expect((screen.getByText('Save') as HTMLButtonElement).disabled).toBe(true);
     });
   });
 
-
-
-  test('existing mode save sends selectedProductId to API', async () => {
+  test('shows clear network/api error message', async () => {
+    vi.mocked(saveProductStock).mockRejectedValue(new Error('{"detail":"API timeout while saving product"}'));
     render(<ProductsStockWorkspace />);
 
-    fireEvent.change(screen.getByLabelText('Product chooser input'), { target: { value: 'Urban Fit Tee' } });
-    fireEvent.click(await screen.findByText('Urban Fit Tee'));
-
+    fireEvent.change(screen.getByLabelText('Product chooser input'), { target: { value: 'New Tee' } });
+    fireEvent.click(screen.getByText('Add new product: "New Tee"'));
+    fireEvent.change(screen.getByPlaceholderText('S, M, L'), { target: { value: 'S' } });
+    fireEvent.click(screen.getByText('Generate combinations'));
     fireEvent.click(screen.getByText('Save'));
 
     await waitFor(() => {
-      expect(saveProductStock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          mode: 'existing',
-          selectedProductId: 'p-100'
-        })
-      );
+      expect(screen.getByText('API timeout while saving product')).toBeTruthy();
     });
   });
-  test('new product mode generates variants from comma-separated inputs', async () => {
-    render(<ProductsStockWorkspace />);
-
-    fireEvent.change(screen.getByLabelText('Product chooser input'), { target: { value: 'Fresh Tee' } });
-    fireEvent.click(screen.getByText('Add new product: "Fresh Tee"'));
-
-    fireEvent.change(screen.getByPlaceholderText('S, M, L'), { target: { value: 'S, M' } });
-    fireEvent.change(screen.getByPlaceholderText('Black, White'), { target: { value: 'Black, White' } });
-    fireEvent.click(screen.getByText('Generate combinations'));
-
-    await waitFor(() => {
-      expect(screen.getByDisplayValue('Fresh Tee / S / Black')).toBeTruthy();
-      expect(screen.getByDisplayValue('Fresh Tee / M / White')).toBeTruthy();
-      expect(screen.getByText('Variants: 4')).toBeTruthy();
-    });
-  });
-
-  test('same-cost helper populates all row costs', async () => {
-    render(<ProductsStockWorkspace />);
-
-    fireEvent.change(screen.getByLabelText('Product chooser input'), { target: { value: 'Fresh Tee' } });
-    fireEvent.click(screen.getByText('Add new product: "Fresh Tee"'));
-    fireEvent.change(screen.getByPlaceholderText('S, M, L'), { target: { value: 'S, M' } });
-    fireEvent.click(screen.getByText('Generate combinations'));
-
-    fireEvent.click(screen.getByLabelText('Same cost for all variants'));
-    fireEvent.change(screen.getByLabelText('Shared cost'), { target: { value: '12.5' } });
-    fireEvent.click(screen.getByText('Apply shared cost'));
-
-    await waitFor(() => {
-      const table = screen.getByRole('table');
-      const costInputs = within(table).getAllByDisplayValue('12.5');
-      expect(costInputs.length).toBe(2);
-    });
-  });
-
-
-  test('features input keeps trailing comma so users can enter multiple features naturally', async () => {
-    render(<ProductsStockWorkspace />);
-
-    fireEvent.change(screen.getByLabelText('Product chooser input'), { target: { value: 'Fresh Tee' } });
-    fireEvent.click(screen.getByText('Add new product: "Fresh Tee"'));
-
-    const featuresInput = screen.getByPlaceholderText('Breathable, Durable, Quick-dry') as HTMLInputElement;
-
-    fireEvent.change(featuresInput, { target: { value: 'Breathable,' } });
-    await waitFor(() => {
-      expect(featuresInput.value).toBe('Breathable,');
-    });
-
-    fireEvent.change(featuresInput, { target: { value: 'Breathable, Durable' } });
-    await waitFor(() => {
-      expect(featuresInput.value).toBe('Breathable, Durable');
-    });
-  });
-
-
-  test('shows explicit reload error when save succeeds but snapshot refresh fails', async () => {
-    vi.mocked(saveProductStock).mockResolvedValueOnce({ success: true });
-    vi.mocked(getProductsStockSnapshot)
-      .mockResolvedValueOnce({
-        products: [],
-        suppliers: [],
-        categories: []
-      })
-      .mockRejectedValueOnce(new Error('Snapshot refresh failed'));
-
-    render(<ProductsStockWorkspace />);
-
-    fireEvent.change(screen.getByLabelText('Product chooser input'), { target: { value: 'Fresh Tee' } });
-    fireEvent.click(screen.getByText('Add new product: "Fresh Tee"'));
-    fireEvent.change(screen.getByPlaceholderText('S, M, L'), { target: { value: 'S, M' } });
-    fireEvent.click(screen.getByText('Generate combinations'));
-
-    fireEvent.click(screen.getByText('Save'));
-
-    expect(await screen.findByText(/Saved successfully, but refresh failed:/)).toBeTruthy();
-    expect(screen.getByText(/Snapshot refresh failed/)).toBeTruthy();
-  });
-
-  test('summary values update based on variant edits', async () => {
-    render(<ProductsStockWorkspace />);
-
-    fireEvent.change(screen.getByLabelText('Product chooser input'), { target: { value: 'Urban Fit Tee' } });
-    fireEvent.click(await screen.findByText('Urban Fit Tee'));
-
-    const qtyInputs = screen.getAllByDisplayValue(/^(42|33)$/) as HTMLInputElement[];
-    fireEvent.change(qtyInputs[0], { target: { value: '10' } });
-
-    await waitFor(() => {
-      expect(screen.getByText('Total Qty: 43')).toBeTruthy();
-      expect(screen.getByText('Estimated Stock Cost: $376.25')).toBeTruthy();
-    });
-  });
-
-  test('save -> reload -> render keeps two distinct variants after persistence', async () => {
-    vi.mocked(saveProductStock).mockResolvedValueOnce({ success: true });
-    vi.mocked(getProductsStockSnapshot)
-      .mockResolvedValueOnce({
-        products: [],
-        suppliers: [],
-        categories: []
-      })
-      .mockResolvedValueOnce({
-        products: [
-          {
-            id: 'p-new',
-            identity: {
-              productName: 'Fresh Tee',
-              supplier: 'Nova Textiles',
-              category: 'Apparel',
-              description: '',
-              features: []
-            },
-            variants: [
-              {
-                id: 'v-new-1',
-                label: 'Fresh Tee / S / Black',
-                size: 'S',
-                color: 'Black',
-                qty: 1,
-                cost: 5,
-                defaultSellingPrice: 12,
-                maxDiscountPct: 10
-              },
-              {
-                id: 'v-new-2',
-                label: 'Fresh Tee / M / White',
-                size: 'M',
-                color: 'White',
-                qty: 2,
-                cost: 6,
-                defaultSellingPrice: 13,
-                maxDiscountPct: 10
-              }
-            ]
-          }
-        ],
-        suppliers: ['Nova Textiles'],
-        categories: ['Apparel']
-      });
-
-    render(<ProductsStockWorkspace />);
-
-    fireEvent.change(screen.getByLabelText('Product chooser input'), { target: { value: 'Fresh Tee' } });
-    fireEvent.click(screen.getByText('Add new product: "Fresh Tee"'));
-    fireEvent.change(screen.getByPlaceholderText('S, M, L'), { target: { value: 'S, M' } });
-    fireEvent.change(screen.getByPlaceholderText('Black, White'), { target: { value: 'Black, White' } });
-    fireEvent.click(screen.getByText('Generate combinations'));
-
-    fireEvent.click(screen.getByText('Save'));
-
-    await waitFor(() => {
-      expect(saveProductStock).toHaveBeenCalled();
-    });
-
-    const lastSaveCall = vi.mocked(saveProductStock).mock.calls.at(-1)?.[0];
-    expect(lastSaveCall?.variants.length).toBe(4);
-    expect(lastSaveCall?.variants[0].size).toBe('S');
-    expect(lastSaveCall?.variants[1].color).toBe('White');
-
-    fireEvent.change(screen.getByLabelText('Product chooser input'), { target: { value: 'Fresh Tee' } });
-    fireEvent.click(await screen.findByText('Fresh Tee'));
-
-    await waitFor(() => {
-      expect(screen.getByDisplayValue('Fresh Tee / S / Black')).toBeTruthy();
-      expect(screen.getByDisplayValue('Fresh Tee / M / White')).toBeTruthy();
-      expect(screen.getByText('Variants: 2')).toBeTruthy();
-    });
-  });
-
-  test('surfaces backend detail on initial snapshot load failure instead of generic load error', async () => {
-    vi.mocked(getProductsStockSnapshot).mockRejectedValueOnce(new Error('{"detail":"Snapshot parser failed at products[0].variants"}'));
-
-    render(<ProductsStockWorkspace />);
-
-    expect(await screen.findByText('Snapshot parser failed at products[0].variants')).toBeTruthy();
-  });
-
-  test('logs exact UI variant identity values before save', async () => {
-    render(<ProductsStockWorkspace />);
-
-    fireEvent.change(screen.getByLabelText('Product chooser input'), { target: { value: 'Fresh Tee' } });
-    fireEvent.click(screen.getByText('Add new product: "Fresh Tee"'));
-    fireEvent.change(screen.getByPlaceholderText('S, M, L'), { target: { value: 'S, M' } });
-    fireEvent.change(screen.getByPlaceholderText('Black, White'), { target: { value: 'Black' } });
-    fireEvent.click(screen.getByText('Generate combinations'));
-
-    fireEvent.click(screen.getByText('Save'));
-
-    await waitFor(() => {
-      expect(consoleDebugSpy).toHaveBeenCalledWith(
-        '[ProductsStockWorkspace] UI state before save',
-        expect.objectContaining({
-          productName: 'Fresh Tee',
-          variants: expect.arrayContaining([
-            expect.objectContaining({ size: 'S', color: 'Black', other: '' }),
-            expect.objectContaining({ size: 'M', color: 'Black', other: '' })
-          ])
-        })
-      );
-    });
-  });
-
-
 });

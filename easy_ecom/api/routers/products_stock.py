@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import json
-import logging
 
 import pandas as pd
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from easy_ecom.api.dependencies import (
     RequestUser,
@@ -23,17 +22,6 @@ from easy_ecom.api.schemas.products_stock import (
 from easy_ecom.domain.services.catalog_stock_service import VariantWorkspaceEntry
 
 router = APIRouter(prefix="/products-stock", tags=["products-stock"])
-logger = logging.getLogger(__name__)
-
-
-def _safe_float(value: object, default: float = 0.0) -> float:
-    try:
-        parsed = float(value)
-    except (TypeError, ValueError):
-        return default
-    if pd.isna(parsed):
-        return default
-    return parsed
 
 
 def _parse_features(raw_features: object) -> list[str]:
@@ -61,15 +49,10 @@ def _variant_stock_rollup(stock_rows: pd.DataFrame) -> dict[str, tuple[float, fl
     scoped = scoped[scoped["variant_id"].str.strip() != ""]
     if scoped.empty:
         return {}
-
     scoped["qty"] = pd.to_numeric(scoped["qty"], errors="coerce").fillna(0.0)
     scoped["unit_cost"] = pd.to_numeric(scoped["unit_cost"], errors="coerce").fillna(0.0)
     scoped["stock_value"] = scoped["qty"] * scoped["unit_cost"]
-
-    grouped = scoped.groupby("variant_id", as_index=False).agg(
-        qty=("qty", "sum"),
-        stock_value=("stock_value", "sum"),
-    )
+    grouped = scoped.groupby("variant_id", as_index=False).agg(qty=("qty", "sum"), stock_value=("stock_value", "sum"))
     return {
         str(row["variant_id"]): (
             float(row["qty"]),
@@ -89,50 +72,43 @@ def products_stock_snapshot(
     products_df = container.products.list_by_client(user.client_id)
     variants_df = container.products.list_variants_by_client(user.client_id)
     stock_df = container.inventory.stock_by_lot_with_issues(user.client_id)
-
     stock_by_variant = _variant_stock_rollup(stock_df)
+
     records: list[ProductRecord] = []
-
-    if not products_df.empty:
-        for _, row in products_df.iterrows():
-            product_id = str(row.get("product_id", ""))
-            product_variants = (
-                variants_df[variants_df["parent_product_id"].astype(str) == product_id].copy()
-                if not variants_df.empty
-                else pd.DataFrame()
-            )
-            variant_rows: list[VariantRecord] = []
-            if not product_variants.empty:
-                for _, variant in product_variants.iterrows():
-                    variant_id = str(variant.get("variant_id", ""))
-                    qty, cost = stock_by_variant.get(variant_id, (0.0, 0.0))
-                    variant_rows.append(
-                        VariantRecord(
-                            id=variant_id,
-                            label=str(variant.get("variant_name", "")),
-                            size=str(variant.get("size", "")) or None,
-                            color=str(variant.get("color", "")) or None,
-                            other=str(variant.get("other", "")) or None,
-                            qty=qty,
-                            cost=cost,
-                            defaultSellingPrice=_safe_float(variant.get("default_selling_price", 0.0)),
-                            maxDiscountPct=_safe_float(variant.get("max_discount_pct", 10.0), 10.0),
-                        )
-                    )
-
-            records.append(
-                ProductRecord(
-                    id=product_id,
-                    identity={
-                        "productName": str(row.get("product_name", "")),
-                        "supplier": str(row.get("supplier", "")),
-                        "category": str(row.get("category", "")) or "General",
-                        "description": str(row.get("prd_description", "")),
-                        "features": _parse_features(row.get("prd_features_json", "")),
-                    },
-                    variants=variant_rows,
+    for _, product in products_df.iterrows():
+        product_id = str(product.get("product_id", "")).strip()
+        scoped_variants = variants_df[variants_df["parent_product_id"].astype(str) == product_id] if not variants_df.empty else pd.DataFrame()
+        variant_rows: list[VariantRecord] = []
+        for _, variant in scoped_variants.iterrows():
+            variant_id = str(variant.get("variant_id", "")).strip()
+            if not variant_id:
+                continue
+            qty, cost = stock_by_variant.get(variant_id, (0.0, 0.0))
+            variant_rows.append(
+                VariantRecord(
+                    id=variant_id,
+                    size=str(variant.get("size", "") or ""),
+                    color=str(variant.get("color", "") or ""),
+                    other=str(variant.get("other", "") or ""),
+                    qty=qty,
+                    cost=cost,
+                    defaultSellingPrice=float(variant.get("default_selling_price", 0) or 0),
+                    maxDiscountPct=float(variant.get("max_discount_pct", 0) or 0),
                 )
             )
+        records.append(
+            ProductRecord(
+                id=product_id,
+                identity={
+                    "productName": str(product.get("product_name", "")),
+                    "supplier": str(product.get("supplier", "")),
+                    "category": str(product.get("category", "")) or "General",
+                    "description": str(product.get("prd_description", "")),
+                    "features": _parse_features(product.get("prd_features_json", "")),
+                },
+                variants=variant_rows,
+            )
+        )
 
     return ProductsStockSnapshotResponse(
         products=records,
@@ -148,65 +124,34 @@ def save_products_stock(
     container: ServiceContainer = Depends(get_container),
 ) -> SaveProductResponse:
     require_page_access(user, "Catalog & Stock")
-
-    features_text = "\n".join(payload.identity.features)
-    default_price = payload.variants[0].defaultSellingPrice if payload.variants else 0.0
-    default_discount = payload.variants[0].maxDiscountPct if payload.variants else 10.0
-
-    entries = [
-        VariantWorkspaceEntry(
-            variant_id=variant.id,
-            variant_label=variant.label,
-            size=variant.size or "",
-            color=variant.color or "",
-            other=variant.other or "",
-            qty=variant.qty,
-            unit_cost=variant.cost,
-            default_selling_price=variant.defaultSellingPrice,
-            max_discount_pct=variant.maxDiscountPct,
-            supplier=payload.identity.supplier,
-        )
-        for variant in payload.variants
-    ]
-
-    logger.info(
-        "products_stock.save payload parsed: mode=%s selected_product_id=%s variants=%s",
-        payload.mode,
-        payload.selectedProductId or "",
-        [
-            {
-                "id": variant.id,
-                "size": variant.size or "",
-                "color": variant.color or "",
-                "other": variant.other or "",
-            }
+    try:
+        entries = [
+            VariantWorkspaceEntry(
+                variant_id=variant.id,
+                size=variant.size,
+                color=variant.color,
+                other=variant.other,
+                qty=variant.qty,
+                unit_cost=variant.cost,
+                default_selling_price=variant.defaultSellingPrice,
+                max_discount_pct=variant.maxDiscountPct,
+                supplier=payload.identity.supplier,
+            )
             for variant in payload.variants
-        ],
-    )
-    logger.info(
-        "products_stock.save router entries: %s",
-        [
-            {
-                "variant_id": entry.variant_id,
-                "size": entry.size,
-                "color": entry.color,
-                "other": entry.other,
-            }
-            for entry in entries
-        ],
-    )
-
-    container.catalog_stock.save_workspace(
-        client_id=user.client_id,
-        user_id=user.user_id,
-        typed_product_name=payload.identity.productName,
-        supplier=payload.identity.supplier,
-        category=payload.identity.category,
-        description=payload.identity.description,
-        features_text=features_text,
-        default_selling_price=default_price,
-        max_discount_pct=default_discount,
-        variant_entries=entries,
-        selected_product_id=payload.selectedProductId or "",
-    )
+        ]
+        container.catalog_stock.save_workspace(
+            client_id=user.client_id,
+            user_id=user.user_id,
+            typed_product_name=payload.identity.productName,
+            supplier=payload.identity.supplier,
+            category=payload.identity.category,
+            description=payload.identity.description,
+            features_text="\n".join(payload.identity.features),
+            default_selling_price=0,
+            max_discount_pct=0,
+            variant_entries=entries,
+            selected_product_id=payload.selectedProductId or "",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return SaveProductResponse(success=True)
