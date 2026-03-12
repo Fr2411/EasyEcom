@@ -92,6 +92,25 @@ describe('ProductsStockWorkspace', () => {
     });
   });
 
+
+
+  test('existing mode save sends selectedProductId to API', async () => {
+    render(<ProductsStockWorkspace />);
+
+    fireEvent.change(screen.getByLabelText('Product chooser input'), { target: { value: 'Urban Fit Tee' } });
+    fireEvent.click(await screen.findByText('Urban Fit Tee'));
+
+    fireEvent.click(screen.getByText('Save'));
+
+    await waitFor(() => {
+      expect(saveProductStock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mode: 'existing',
+          selectedProductId: 'p-100'
+        })
+      );
+    });
+  });
   test('new product mode generates variants from comma-separated inputs', async () => {
     render(<ProductsStockWorkspace />);
 

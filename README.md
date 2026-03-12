@@ -82,6 +82,21 @@ Key frontend vars (`frontend/.env.example`):
 
 ## Products & Stock save/reload forensic hardening (2026-03)
 
+- Root cause confirmed: label-only variant rows (blank `size/color/other`) collapsed inside backend upsert identity matching, because dedupe key used only normalized attributes and ignored both `variant_id` and `variant_label`.
+- Persistence fix: `CatalogStockService.save_workspace` now forwards `variant_id` to `ProductService.upsert_variant`, and `upsert_variant` now prioritizes `(client_id,parent_product_id,variant_id)` for existing-row updates before attribute fallback matching.
+- Safety guard: for blank-attribute variants, fallback dedupe now also scopes by computed `variant_name`, allowing multiple intentional label-only variants under one product.
+- Added regressions proving full chain behavior for two label-only rows, update-by-variant-id behavior, and existing-product frontend save passing `selectedProductId`.
+
+### Products pricing fields on `products` table (dependency chain, not removed in this patch)
+
+`products.default_selling_price` and `products.max_discount_pct` are still written by `ProductService.create/update_master/update_pricing` and are still read as defaults/fallbacks by variant creation and other flows; removing them safely requires a coordinated multi-layer migration. Current known dependencies include:
+
+- Writers: `ProductService.create`, `ProductService.update_master`, `ProductService.update_pricing`.
+- Readers/fallbacks: `ProductService.generate_variants`, `ProductService.upsert_variant` (when per-variant values are missing), and API snapshot/reporting code paths that continue to expose product-level defaults.
+- Persistence/schema coupling: PostgreSQL model and migrations still include these columns, and CSV/table schema definitions include them as canonical fields.
+
+Because of those active dependencies, this patch intentionally avoids removing the columns and focuses only on preventing variant-row collapse in the true save path.
+
 - Frontend save payload now carries `selectedProductId` when editing an existing product, so backend updates target the explicit parent product instead of only relying on typed name matching.
 - Variant grid now exposes and edits `size`, `color`, and `other` directly so manual multi-variant entry preserves true variant identity attributes, not just labels.
 - Frontend validation now blocks duplicate `(size,color,other)` combinations before save to prevent silent row collapse during backend upsert.

@@ -244,6 +244,7 @@ class CatalogStockService:
             variant, _ = self.product_service.upsert_variant(
                 client_id=client_id,
                 parent_product_id=product_id,
+                variant_id=row.variant_id,
                 size=row.size,
                 color=row.color,
                 other=row.other,
