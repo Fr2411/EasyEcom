@@ -291,7 +291,7 @@ class ProductService:
                 other,
                 variant_label=variant_label,
             )
-            if not scoped.empty and not (not size and not color and not other and variant_label.strip()):
+            if not scoped.empty:
                 row = scoped.iloc[0].to_dict()
                 i = scoped.index[0]
                 variants.loc[i, "variant_name"] = variant_name

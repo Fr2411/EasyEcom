@@ -29,6 +29,7 @@ export async function saveProductStock(payload: SaveProductPayload): Promise<{ s
     mode: payload.mode,
     identity: payload.identity,
     variants: payload.variants,
+    selectedProductId: payload.selectedProductId,
   };
 
   return apiClient<{ success: true }>('/products-stock/save', {

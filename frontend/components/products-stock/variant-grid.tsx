@@ -16,6 +16,9 @@ type VariantGridProps = {
 
 const columns: Array<{ key: keyof Variant | 'remove'; label: string }> = [
   { key: 'label', label: 'Variant label' },
+  { key: 'size', label: 'Size' },
+  { key: 'color', label: 'Color' },
+  { key: 'other', label: 'Other' },
   { key: 'qty', label: 'Qty' },
   { key: 'cost', label: 'Cost' },
   { key: 'defaultSellingPrice', label: 'Default Selling Price' },
@@ -85,6 +88,24 @@ export function VariantGrid({
                   <input
                     value={variant.label}
                     onChange={(e) => onVariantChange(variant.id, 'label', e.target.value)}
+                  />
+                </td>
+                <td>
+                  <input
+                    value={variant.size ?? ''}
+                    onChange={(e) => onVariantChange(variant.id, 'size', e.target.value)}
+                  />
+                </td>
+                <td>
+                  <input
+                    value={variant.color ?? ''}
+                    onChange={(e) => onVariantChange(variant.id, 'color', e.target.value)}
+                  />
+                </td>
+                <td>
+                  <input
+                    value={variant.other ?? ''}
+                    onChange={(e) => onVariantChange(variant.id, 'other', e.target.value)}
                   />
                 </td>
                 <td>
