@@ -11,11 +11,16 @@ type ProductChooserProps = {
 
 export function ProductChooser({ products, onSelectExisting, onCreateNew }: ProductChooserProps) {
   const [query, setQuery] = useState('');
+  const normalizedQuery = query.trim();
+  const canSearchProducts = normalizedQuery.length >= 1;
 
   const filteredProducts = useMemo(() => {
-    const lowered = query.toLowerCase();
+    if (!canSearchProducts) {
+      return [];
+    }
+    const lowered = normalizedQuery.toLowerCase();
     return products.filter((product) => product.name.toLowerCase().includes(lowered));
-  }, [products, query]);
+  }, [canSearchProducts, normalizedQuery, products]);
 
   return (
     <section className="ps-card">
@@ -30,10 +35,10 @@ export function ProductChooser({ products, onSelectExisting, onCreateNew }: Prod
           aria-label="Product chooser input"
         />
         <ul className="chooser-list">
-          {query.trim() ? (
+          {canSearchProducts ? (
             <li>
-              <button type="button" onClick={() => onCreateNew(query.trim())}>
-                Add new product: "{query.trim()}"
+              <button type="button" onClick={() => onCreateNew(normalizedQuery)}>
+                Add new product: "{normalizedQuery}"
               </button>
             </li>
           ) : null}
