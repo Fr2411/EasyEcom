@@ -147,8 +147,6 @@ def save_products_stock(
             category=payload.identity.category,
             description=payload.identity.description,
             features_text="\n".join(payload.identity.features),
-            default_selling_price=0,
-            max_discount_pct=0,
             variant_entries=entries,
             selected_product_id=payload.selectedProductId or "",
         )

@@ -29,8 +29,6 @@ class ProductUpsertRequest(BaseModel):
     category: str = "General"
     description: str = ""
     features_text: str = ""
-    default_selling_price: float = 0.0
-    max_discount_pct: float = 10.0
     selected_product_id: str = ""
     variant_entries: list[VariantRow]
 
