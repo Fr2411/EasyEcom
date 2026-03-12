@@ -51,6 +51,22 @@ afterEach(() => {
 });
 
 describe('ProductsStockWorkspace', () => {
+
+  test('chooser keeps results hidden until at least one character is typed and clears when emptied', async () => {
+    render(<ProductsStockWorkspace />);
+
+    expect(screen.queryByText('Urban Fit Tee')).toBeNull();
+
+    const chooserInput = screen.getByLabelText('Product chooser input');
+    fireEvent.change(chooserInput, { target: { value: 'Urban' } });
+    expect(await screen.findByText('Urban Fit Tee')).toBeTruthy();
+
+    fireEvent.change(chooserInput, { target: { value: '' } });
+    await waitFor(() => {
+      expect(screen.queryByText('Urban Fit Tee')).toBeNull();
+      expect(screen.queryByText('Add new product: "Urban"')).toBeNull();
+    });
+  });
   test('smart chooser shows add-new option while typing', async () => {
     render(<ProductsStockWorkspace />);
 
