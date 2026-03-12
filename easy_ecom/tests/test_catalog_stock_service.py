@@ -331,6 +331,87 @@ def test_save_workspace_persists_distinct_variant_attributes(tmp_path: Path):
     assert ("L", "White", "") in keys
 
 
+
+
+def test_save_workspace_persists_multiple_label_only_variants(tmp_path: Path):
+    svc, product_svc, _ = _service(tmp_path)
+
+    product_id, _, upserts = svc.save_workspace(
+        client_id="c1",
+        user_id="u1",
+        typed_product_name="Label Tee",
+        supplier="s1",
+        category="General",
+        description="",
+        features_text="",
+        default_selling_price=50.0,
+        max_discount_pct=10.0,
+        variant_entries=[
+            VariantWorkspaceEntry(variant_label="Default", qty=0, unit_cost=0),
+            VariantWorkspaceEntry(variant_label="Pack", qty=0, unit_cost=0),
+        ],
+    )
+
+    variants = product_svc.list_variants("c1", product_id)
+
+    assert upserts == 2
+    assert len(variants) == 2
+    assert {v["variant_name"] for v in variants} == {"Label Tee | Default", "Label Tee | Pack"}
+
+
+def test_save_workspace_updates_label_only_variants_by_variant_id(tmp_path: Path):
+    svc, product_svc, _ = _service(tmp_path)
+
+    product_id, _, _ = svc.save_workspace(
+        client_id="c1",
+        user_id="u1",
+        typed_product_name="Editable Tee",
+        supplier="s1",
+        category="General",
+        description="",
+        features_text="",
+        default_selling_price=50.0,
+        max_discount_pct=10.0,
+        variant_entries=[
+            VariantWorkspaceEntry(variant_label="Default", qty=0, unit_cost=0),
+            VariantWorkspaceEntry(variant_label="Pack", qty=0, unit_cost=0),
+        ],
+    )
+
+    existing = product_svc.list_variants("c1", product_id)
+
+    _, _, upserts = svc.save_workspace(
+        client_id="c1",
+        user_id="u1",
+        typed_product_name="Editable Tee",
+        supplier="s1",
+        category="General",
+        description="",
+        features_text="",
+        default_selling_price=50.0,
+        max_discount_pct=10.0,
+        selected_product_id=product_id,
+        variant_entries=[
+            VariantWorkspaceEntry(
+                variant_id=existing[0]["variant_id"],
+                variant_label="Single",
+                qty=0,
+                unit_cost=0,
+            ),
+            VariantWorkspaceEntry(
+                variant_id=existing[1]["variant_id"],
+                variant_label="Bundle",
+                qty=0,
+                unit_cost=0,
+            ),
+        ],
+    )
+
+    variants = product_svc.list_variants("c1", product_id)
+
+    assert upserts == 2
+    assert len(variants) == 2
+    assert {v["variant_name"] for v in variants} == {"Editable Tee | Single", "Editable Tee | Bundle"}
 def test_upsert_variant_treats_blank_and_whitespace_attributes_as_same_identity(tmp_path: Path):
     _, product_svc, _ = _service(tmp_path)
     product_id = product_svc.create(
