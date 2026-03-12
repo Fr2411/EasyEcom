@@ -151,7 +151,26 @@ class DataReconciliationService:
 
         def resolve(row: pd.Series) -> dict[str, str]:
             raw_pid = str(row.get("product_id", "")).strip()
+            raw_vid = str(row.get("variant_id", "")).strip()
             raw_name = str(row.get("product_name", "")).strip()
+            if raw_vid and raw_vid in variant_by_id:
+                v = variant_by_id[raw_vid]
+                parent_product_id = str(v.get("parent_product_id", "")).strip()
+                return {
+                    "canonical_product_id": parent_product_id,
+                    "parent_product_id": parent_product_id,
+                    "variant_id": raw_vid,
+                    "variant_name": str(v.get("variant_name", "")).strip(),
+                    "issue_reason": "",
+                }
+            if raw_vid and raw_pid in by_id:
+                return {
+                    "canonical_product_id": raw_pid,
+                    "parent_product_id": raw_pid,
+                    "variant_id": raw_vid,
+                    "variant_name": raw_name or raw_vid,
+                    "issue_reason": "unmapped_variant_id_for_parent",
+                }
             if raw_pid in by_id:
                 return {
                     "canonical_product_id": raw_pid,
@@ -169,6 +188,14 @@ class DataReconciliationService:
                     "variant_id": raw_pid,
                     "variant_name": str(v.get("variant_name", "")).strip(),
                     "issue_reason": "",
+                }
+            if raw_vid:
+                return {
+                    "canonical_product_id": raw_pid or raw_vid,
+                    "parent_product_id": raw_pid or raw_vid,
+                    "variant_id": raw_vid,
+                    "variant_name": raw_name or raw_vid,
+                    "issue_reason": "unmapped_variant_id",
                 }
             if raw_name and raw_name.lower() in by_name:
                 mapped = str(by_name[raw_name.lower()])

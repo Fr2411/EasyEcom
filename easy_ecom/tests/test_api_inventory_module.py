@@ -124,8 +124,24 @@ class InventoryContainer:
             }
         )
 
-        self.inventory.add_stock("tenant-a", "v-tenant-a", "Size:M", 10, 2, "", "seed", user_id="u-a")
-        self.inventory.add_stock("tenant-b", "p-tenant-b", "Other", 7, 3, "", "seed", user_id="u-b")
+        variants_repo.append(
+            {
+                "variant_id": "v-tenant-b",
+                "client_id": "tenant-b",
+                "parent_product_id": "p-tenant-b",
+                "variant_name": "Default",
+                "size": "",
+                "color": "",
+                "other": "",
+                "sku_code": "SKU-B",
+                "default_selling_price": "10",
+                "max_discount_pct": "5",
+                "is_active": "true",
+                "created_at": "",
+            }
+        )
+        self.inventory.add_stock("tenant-a", "p-tenant-a", "v-tenant-a", "Size:M", 10, 2, "", "seed", user_id="u-a")
+        self.inventory.add_stock("tenant-b", "p-tenant-b", "v-tenant-b", "Other", 7, 3, "", "seed", user_id="u-b")
         self.inventory.repo.append(
             {
                 "txn_id": "sale-out-1",
@@ -133,7 +149,8 @@ class InventoryContainer:
                 "timestamp": "2026-01-01T00:00:00Z",
                 "user_id": "u-a",
                 "txn_type": "OUT",
-                "product_id": "v-tenant-a",
+                "product_id": "p-tenant-a",
+                "variant_id": "v-tenant-a",
                 "product_name": "Size:M",
                 "qty": "2",
                 "unit_cost": "0",
@@ -238,5 +255,8 @@ def test_inventory_list_movements_and_adjustments(tmp_path: Path) -> None:
 
     parent_adjust = client.post('/inventory/adjustments', json={"item_id": "p-tenant-a", "adjustment_type": "stock_in", "quantity": 1, "unit_cost": 1})
     assert parent_adjust.status_code == 400
+
+    missing_variant_payload = client.post('/inventory/add', json={"product_id": "p-tenant-a", "product_name": "Tee", "qty": 1, "unit_cost": 1})
+    assert missing_variant_payload.status_code == 422
 
     app.dependency_overrides.clear()

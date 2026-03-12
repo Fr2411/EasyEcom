@@ -166,6 +166,7 @@ class CatalogStockService:
         if product is None:
             product = self.product_service.get_by_name_ci(client_id, product_name)
 
+        is_new_product = product is None
         if product is None:
             product_id = self.product_service.create(
                 ProductCreate(
@@ -198,7 +199,40 @@ class CatalogStockService:
 
         lot_ids: list[str] = []
         updated_variants = 0
-        for row in variant_entries:
+        valid_entries = [
+            row
+            for row in variant_entries
+            if (
+                row.size.strip()
+                or row.color.strip()
+                or row.other.strip()
+                or row.variant_label.strip()
+            )
+        ]
+        stock_entries_without_variant = [
+            row
+            for row in variant_entries
+            if not (
+                row.size.strip()
+                or row.color.strip()
+                or row.other.strip()
+                or row.variant_label.strip()
+            )
+            and float(row.qty or 0) > 0
+            and float(row.unit_cost or 0) > 0
+        ]
+
+        if is_new_product and not valid_entries:
+            valid_entries = [
+                VariantWorkspaceEntry(
+                    variant_label="Default",
+                    default_selling_price=float(default_selling_price),
+                    max_discount_pct=float(max_discount_pct),
+                )
+            ]
+
+        opening_written = False
+        for row in valid_entries:
             if not (
                 row.size.strip()
                 or row.color.strip()
@@ -216,7 +250,7 @@ class CatalogStockService:
                 max_discount_pct=float(row.max_discount_pct or max_discount_pct),
             )
             updated_variants += 1
-            if float(row.qty) > 0 and float(row.unit_cost) > 0:
+            if float(row.qty) > 0 and float(row.unit_cost) > 0 and not opening_written:
                 lot_ids.append(
                     self.inventory_service.add_stock(
                         client_id=client_id,
@@ -232,6 +266,30 @@ class CatalogStockService:
                         user_id=user_id,
                     )
                 )
+                opening_written = True
+
+            if (
+                not opening_written
+                and stock_entries_without_variant
+                and str(variant.get("variant_id", "")).strip()
+            ):
+                opening_row = stock_entries_without_variant[0]
+                lot_ids.append(
+                    self.inventory_service.add_stock(
+                        client_id=client_id,
+                        product_id=product_id,
+                        variant_id=str(variant["variant_id"]),
+                        product_name=str(variant["variant_name"]),
+                        qty=float(opening_row.qty),
+                        unit_cost=float(opening_row.unit_cost),
+                        supplier_snapshot=opening_row.supplier.strip(),
+                        note=self._build_stock_note(opening_row.lot_reference, opening_row.received_date),
+                        source_type="catalog_stock",
+                        source_id=opening_row.lot_reference.strip(),
+                        user_id=user_id,
+                    )
+                )
+                opening_written = True
         return product_id, lot_ids, updated_variants
 
     @staticmethod
