@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import type { ProductIdentity } from '@/types/products-stock';
 import { featureListToInput, toFeatureList } from '@/lib/products-stock/variant-utils';
 
@@ -20,6 +21,19 @@ export function ProductIdentityForm({
   onAddSupplier,
   onAddCategory
 }: ProductIdentityProps) {
+  const [featuresInput, setFeaturesInput] = useState(featureListToInput(identity.features));
+
+  useEffect(() => {
+    const normalizedDraft = toFeatureList(featuresInput);
+    const isSynced =
+      normalizedDraft.length === identity.features.length &&
+      normalizedDraft.every((feature, index) => feature === identity.features[index]);
+
+    if (!isSynced) {
+      setFeaturesInput(featureListToInput(identity.features));
+    }
+  }, [featuresInput, identity.features]);
+
   const setField = <K extends keyof ProductIdentity>(field: K, value: ProductIdentity[K]) => {
     onIdentityChange({ ...identity, [field]: value });
   };
@@ -83,8 +97,12 @@ export function ProductIdentityForm({
         <label className="field-span-2">
           Features (comma-separated)
           <input
-            value={featureListToInput(identity.features)}
-            onChange={(e) => setField('features', toFeatureList(e.target.value))}
+            value={featuresInput}
+            onChange={(e) => {
+              const nextInput = e.target.value;
+              setFeaturesInput(nextInput);
+              setField('features', toFeatureList(nextInput));
+            }}
             placeholder="Breathable, Durable, Quick-dry"
           />
         </label>
