@@ -121,8 +121,8 @@ class CatalogStockService:
         sizes_csv: str,
         colors_csv: str,
         others_csv: str,
-        default_selling_price: float,
-        max_discount_pct: float,
+        default_selling_price: float | None = None,
+        max_discount_pct: float | None = None,
     ) -> list[VariantWorkspaceEntry]:
         sizes = self.product_service.normalize_options(sizes_csv) or [""]
         colors = self.product_service.normalize_options(colors_csv) or [""]
@@ -136,8 +136,6 @@ class CatalogStockService:
                     size=size,
                     color=color,
                     other=other,
-                    default_selling_price=float(default_selling_price),
-                    max_discount_pct=float(max_discount_pct),
                 ),
             )
         return rows
@@ -161,8 +159,8 @@ class CatalogStockService:
         category: str,
         description: str,
         features_text: str,
-        default_selling_price: float,
-        max_discount_pct: float,
+        default_selling_price: float | None = None,
+        max_discount_pct: float | None = None,
         variant_entries: list[VariantWorkspaceEntry],
         selected_product_id: str = "",
     ) -> tuple[str, list[str], int]:
@@ -214,8 +212,6 @@ class CatalogStockService:
                     category=category,
                     prd_description=description,
                     prd_features_json=parse_features_text(features_text),
-                    default_selling_price=0,
-                    max_discount_pct=0,
                     sizes_csv="",
                     colors_csv="",
                     others_csv="",
@@ -232,52 +228,48 @@ class CatalogStockService:
                 category=category,
                 prd_description=description,
                 prd_features_json=parse_features_text(features_text),
-                default_selling_price=0,
-                max_discount_pct=0,
             )
 
-        variants_df = self.product_service.variants_repo.all() if self.product_service.variants_repo is not None else pd.DataFrame()
-        scoped = variants_df[
-            (variants_df["client_id"] == client_id)
-            & (variants_df["parent_product_id"] == product_id)
-        ].copy() if not variants_df.empty else pd.DataFrame()
+        variants_df = (
+            self.product_service.variants_repo.all()
+            if self.product_service.variants_repo is not None
+            else pd.DataFrame()
+        )
+        scoped = (
+            variants_df[
+                (variants_df["client_id"] == client_id)
+                & (variants_df["parent_product_id"] == product_id)
+            ].copy()
+            if not variants_df.empty
+            else pd.DataFrame()
+        )
 
         existing_by_identity = {
             "|".join([
                 str(r.get("size", "")).strip().lower(),
                 str(r.get("color", "")).strip().lower(),
                 str(r.get("other", "")).strip().lower(),
-            ]): r
+            ]): str(r.get("variant_id", "")).strip()
             for _, r in scoped.iterrows()
         }
 
         lot_ids: list[str] = []
         upserts = 0
         for row in normalized_entries:
-            existing = existing_by_identity.get(row.identity_key())
-            if existing is not None:
-                variant_id = str(existing.get("variant_id", ""))
-                mask = variants_df["variant_id"].astype(str) == variant_id
-                variants_df.loc[mask, "variant_name"] = self.product_service._variant_name(product_name, row.size, row.color, row.other)
-                variants_df.loc[mask, "size"] = row.size
-                variants_df.loc[mask, "color"] = row.color
-                variants_df.loc[mask, "other"] = row.other
-                variants_df.loc[mask, "default_selling_price"] = str(row.default_selling_price)
-                variants_df.loc[mask, "max_discount_pct"] = str(row.max_discount_pct)
-            else:
-                created, _ = self.product_service.upsert_variant(
-                    client_id=client_id,
-                    parent_product_id=product_id,
-                    variant_id="",
-                    size=row.size,
-                    color=row.color,
-                    other=row.other,
-                    default_selling_price=row.default_selling_price,
-                    max_discount_pct=row.max_discount_pct,
-                )
-                variant_id = str(created.get("variant_id", "")).strip()
-                if not variant_id:
-                    raise ValueError("Failed to persist variant identity")
+            variant_id = existing_by_identity.get(row.identity_key(), "")
+            persisted, _ = self.product_service.upsert_variant(
+                client_id=client_id,
+                parent_product_id=product_id,
+                variant_id=variant_id,
+                size=row.size,
+                color=row.color,
+                other=row.other,
+                default_selling_price=row.default_selling_price,
+                max_discount_pct=row.max_discount_pct,
+            )
+            variant_id = str(persisted.get("variant_id", "")).strip()
+            if not variant_id:
+                raise ValueError("Failed to persist variant identity")
             if row.qty > 0:
                 if row.unit_cost <= 0:
                     raise ValueError("Stock rows with quantity must include a positive unit cost")
@@ -298,8 +290,6 @@ class CatalogStockService:
                 )
             upserts += 1
 
-        if self.product_service.variants_repo is not None and not variants_df.empty:
-            self.product_service.variants_repo.save(variants_df)
         return product_id, lot_ids, upserts
 
     @staticmethod
@@ -324,7 +314,6 @@ class CatalogStockService:
                         "product_name",
                         "total_available_qty",
                         "variant_count",
-                        "default_selling_price",
                         "avg_unit_cost",
                         "stock_value",
                     ]
@@ -332,10 +321,7 @@ class CatalogStockService:
                 {},
             )
 
-        price_cols = products[["product_id", "product_name", "default_selling_price"]].copy()
-        price_cols["default_selling_price"] = pd.to_numeric(
-            price_cols["default_selling_price"], errors="coerce"
-        ).fillna(0.0)
+        price_cols = products[["product_id", "product_name"]].copy()
 
         variant_counts = (
             variants.groupby("parent_product_id", as_index=False).agg(
@@ -358,7 +344,6 @@ class CatalogStockService:
                         "product_name",
                         "total_available_qty",
                         "variant_count",
-                        "default_selling_price",
                         "avg_unit_cost",
                         "stock_value",
                     ]
@@ -409,7 +394,6 @@ class CatalogStockService:
                 "product_name",
                 "total_available_qty",
                 "variant_count",
-                "default_selling_price",
                 "avg_unit_cost",
                 "stock_value",
             ]

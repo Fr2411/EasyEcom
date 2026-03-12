@@ -73,8 +73,6 @@ def upsert_product(
         category=payload.category,
         description=payload.description,
         features_text=payload.features_text,
-        default_selling_price=payload.default_selling_price,
-        max_discount_pct=payload.max_discount_pct,
         variant_entries=entries,
         selected_product_id=payload.selected_product_id,
     )

@@ -87,15 +87,16 @@ Key frontend vars (`frontend/.env.example`):
 - Safety guard: for blank-attribute variants, fallback dedupe now also scopes by computed `variant_name`, allowing multiple intentional label-only variants under one product.
 - Added regressions proving full chain behavior for two label-only rows, update-by-variant-id behavior, and existing-product frontend save passing `selectedProductId`.
 
-### Products pricing fields on `products` table (dependency chain, not removed in this patch)
+### Products pricing ownership (variant-only, completed for Products & Stock save path)
 
-`products.default_selling_price` and `products.max_discount_pct` are still written by `ProductService.create/update_master/update_pricing` and are still read as defaults/fallbacks by variant creation and other flows; removing them safely requires a coordinated multi-layer migration. Current known dependencies include:
+Products & Stock save is now fully variant-pricing-only:
 
-- Writers: `ProductService.create`, `ProductService.update_master`, `ProductService.update_pricing`.
-- Readers/fallbacks: `ProductService.generate_variants`, `ProductService.upsert_variant` (when per-variant values are missing), and API snapshot/reporting code paths that continue to expose product-level defaults.
-- Persistence/schema coupling: PostgreSQL model and migrations still include these columns, and CSV/table schema definitions include them as canonical fields.
+- `CatalogStockService.save_workspace` no longer sends parent pricing into `ProductCreate` or `ProductService.update_master`.
+- `ProductCreate` and `update_master` no longer require or persist `default_selling_price`/`max_discount_pct` at product-master level.
+- Product variant pricing remains on `product_variants.default_selling_price` and `product_variants.max_discount_pct` only.
+- Legacy fallback behavior that created implicit default variants from blank identity rows has been removed; rows must include at least one identity attribute (`size/color/other`) and duplicate identities are rejected.
 
-Because of those active dependencies, this patch intentionally avoids removing the columns and focuses only on preventing variant-row collapse in the true save path.
+This permanently eliminates the backend validation failure caused by parent `default_selling_price=0` in Products & Stock save.
 
 - Frontend save payload now carries `selectedProductId` when editing an existing product, so backend updates target the explicit parent product instead of only relying on typed name matching.
 - Variant grid now exposes and edits `size`, `color`, and `other` directly so manual multi-variant entry preserves true variant identity attributes, not just labels.
