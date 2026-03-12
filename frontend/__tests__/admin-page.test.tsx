@@ -4,6 +4,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 const getAdminUsersMock = vi.fn();
 const getAdminRolesMock = vi.fn();
 const getAdminAuditMock = vi.fn();
+const createAdminTenantMock = vi.fn();
 const createAdminUserMock = vi.fn();
 const updateAdminUserMock = vi.fn();
 const setAdminUserRolesMock = vi.fn();
@@ -13,6 +14,7 @@ vi.mock('@/lib/api/admin', () => ({
   getAdminUsers: (...args: unknown[]) => getAdminUsersMock(...args),
   getAdminRoles: (...args: unknown[]) => getAdminRolesMock(...args),
   getAdminAudit: (...args: unknown[]) => getAdminAuditMock(...args),
+  createAdminTenant: (...args: unknown[]) => createAdminTenantMock(...args),
   createAdminUser: (...args: unknown[]) => createAdminUserMock(...args),
   updateAdminUser: (...args: unknown[]) => updateAdminUserMock(...args),
   setAdminUserRoles: (...args: unknown[]) => setAdminUserRolesMock(...args),
@@ -29,6 +31,7 @@ afterEach(() => {
   getAdminUsersMock.mockReset();
   getAdminRolesMock.mockReset();
   getAdminAuditMock.mockReset();
+  createAdminTenantMock.mockReset();
   createAdminUserMock.mockReset();
   updateAdminUserMock.mockReset();
   setAdminUserRolesMock.mockReset();
@@ -60,6 +63,7 @@ describe('AdminPage', () => {
     getAdminUsersMock.mockResolvedValue({ items: [{ user_id: 'u-1', client_id: 'c-1', name: 'A', email: 'a@x.com', is_active: true, created_at: '', roles: ['CLIENT_OWNER'] }] });
     getAdminRolesMock.mockResolvedValue({ roles: ['SUPER_ADMIN', 'CLIENT_OWNER'] });
     getAdminAuditMock.mockResolvedValue({ supported: false, deferred_reason: 'Deferred', items: [] });
+    createAdminTenantMock.mockResolvedValue({ client_id: "c-2", business_name: "Biz", owner_user: { user_id: "u-9" } });
     createAdminUserMock.mockResolvedValue({ user: { user_id: 'u-2' } });
     updateAdminUserMock.mockResolvedValue({ user: { user_id: 'u-1' } });
     setAdminUserRolesMock.mockResolvedValue({ user: { user_id: 'u-1' } });
@@ -68,6 +72,7 @@ describe('AdminPage', () => {
 
     await waitFor(() => expect(screen.getByText('Tenant users')).toBeTruthy());
 
+    fireEvent.change(screen.getByLabelText('Client ID'), { target: { value: 'c-1' } });
     fireEvent.change(screen.getByLabelText('Full name'), { target: { value: 'New User' } });
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'new@x.com' } });
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'Password!1' } });

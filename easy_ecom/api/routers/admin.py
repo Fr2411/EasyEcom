@@ -10,9 +10,11 @@ from easy_ecom.api.dependencies import (
 )
 from easy_ecom.api.schemas.admin import (
     AdminAuditResponse,
+    AdminCreateTenantRequest,
     AdminCreateUserRequest,
     AdminRolesResponse,
     AdminSetRolesRequest,
+    AdminTenantCreateResponse,
     AdminUpdateUserRequest,
     AdminUserMutationResponse,
     AdminUserRecord,
@@ -62,6 +64,34 @@ def list_users(
     return AdminUsersResponse(items=[_to_schema_user(item) for item in records])
 
 
+@router.post("/tenants", response_model=AdminTenantCreateResponse, status_code=201)
+def create_tenant(
+    payload: AdminCreateTenantRequest,
+    user: RequestUser = Depends(get_current_user),
+    container: ServiceContainer = Depends(get_container),
+) -> AdminTenantCreateResponse:
+    _require_admin_access(user)
+    if "SUPER_ADMIN" not in user.roles:
+        raise HTTPException(status_code=403, detail="Only super admin can create new tenants")
+    admin = _require_container_admin(container)
+    try:
+        created = admin.create_tenant_with_owner(
+            business_name=payload.business_name,
+            owner_name=payload.owner_name,
+            owner_email=payload.owner_email,
+            owner_password=payload.owner_password,
+            currency_code=payload.currency_code,
+            owner_role_codes=["CLIENT_OWNER"],
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return AdminTenantCreateResponse(
+        client_id=created.client_id,
+        business_name=created.business_name,
+        owner_user=_to_schema_user(created.owner_user),
+    )
+
+
 @router.post("/users", response_model=AdminUserMutationResponse, status_code=201)
 def create_user(
     payload: AdminCreateUserRequest,
@@ -72,9 +102,15 @@ def create_user(
     admin = _require_container_admin(container)
     if "SUPER_ADMIN" in payload.role_codes and "SUPER_ADMIN" not in user.roles:
         raise HTTPException(status_code=403, detail="Only super admin can assign SUPER_ADMIN role")
+    target_client_id = user.client_id
+    if "SUPER_ADMIN" in user.roles and payload.client_id:
+        target_client_id = payload.client_id.strip()
+    elif payload.client_id and payload.client_id.strip() != user.client_id:
+        raise HTTPException(status_code=403, detail="Cannot assign user to a different tenant")
+
     try:
         created = admin.create_user(
-            client_id=user.client_id,
+            client_id=target_client_id,
             name=payload.name,
             email=payload.email,
             password=payload.password,
