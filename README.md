@@ -115,14 +115,14 @@ Phase 2 backend outcomes:
 
 Phase 6 adds a production inventory operations module:
 - Backend inventory APIs now include stock overview, movement ledger, item detail, and tenant-safe manual adjustment workflows.
-- Inventory list projection is catalog-backed: all active tenant products/variants are visible even with zero stock, while quantities/values are merged from stock ledger and movement history using a canonical item_id (variant when present, otherwise product).
-- Frontend now includes `/inventory` with stock table, movement ledger, filters, detail panel, and stock adjustment action flow.
+- Inventory list projection is now focused on available/sellable stock rows, while quantities/values are merged from stock ledger and movement history using a canonical item_id (variant when present, otherwise product).
+- Frontend now includes `/inventory` as the single stock workspace: find/create product, variant onboarding, available stock table, movement ledger, detail panel, and stock adjustment action flow.
 - Existing sales-created stock reductions remain visible through the same ledger source (`inventory_txn`), with no duplicate subtraction logic.
 
 ## Sales module delivery (Phase 5)
 
 - `docs/phase5_sales_module.md` — Sales MVP implementation details (tenant-scoped API endpoints, PostgreSQL schema additions, transactional stock impact, and deferred scope).
-- Sales frontend route (`/sales`) is now an operational module with recent list/search, multi-line create workflow, and detail inspection backed by real backend APIs (`GET/POST /sales`, `GET /sales/{sale_id}`, `GET /sales/form-options`).
+- Sales frontend route (`/sales`) is now an operational module with recent list/search, phone-first customer capture (auto-prefill/create), multi-line create workflow, and detail inspection backed by real backend APIs (`GET/POST /sales`, `GET /sales/{sale_id}`, `GET /sales/form-options`).
 
 
 ## Finance module delivery (Phase 7)
@@ -251,16 +251,8 @@ Inventory is modeled per-tenant as a **single location** with separated quantiti
 - `sellable_qty`: `max(0, on_hand_qty - reserved_qty - safety_stock_qty)` with `safety_stock_qty=0` for now.
 - `stock_value`: computed from on-hand lots only (`on_hand_qty * unit_cost` at lot level).
 - Shared stock semantics are centralized in `easy_ecom/domain/services/stock_policy.py` and reused by Inventory, Sales, Dashboard/metrics, Reports, and Purchases services to keep cross-tab stock totals consistent.
-- Inventory UI now supports explicit list modes: **Catalog view** (all active items) and **Stocked only** (rows with `on_hand_qty > 0` or `incoming_qty > 0`).
-
-### Inbound workflow
-
-- `POST /inventory/inbound`: creates pending incoming stock (`INBOUND_PENDING`) and increases `incoming_qty` only.
-- `POST /inventory/inbound/{inbound_id}/receive`: receives pending inbound into on-hand by:
-  1) posting an `INBOUND_RECEIVED` release to decrease incoming, and
-  2) posting regular `IN` lot entry to increase on-hand.
-
-Manual adjustments stay separate via `POST /inventory/adjustments` (`stock_in`, `stock_out`, `correction`).
+- Inventory UI now shows available/sellable rows by default and pairs this with the integrated "Find or create product" flow to add new or existing product stock from one tab.
+- Manual adjustments stay available via `POST /inventory/adjustments` (`stock_in`, `stock_out`, `correction`) and continue to write movement ledger entries used by Sales visibility.
 
 ## Phase 17: Multi-tenant stock/returns schema hardening (audit + refactor)
 
@@ -354,7 +346,7 @@ Do not build new features on deprecated structures.
 
 - Inventory UI now expects the backend stock shape fields: `on_hand_qty`, `incoming_qty`, `reserved_qty`, and `sellable_qty` (instead of legacy `available_qty`).
 - The inventory workspace formats stock and currency values through defensive numeric formatters so malformed/null API values render as `0.00` instead of crashing the page.
-- This keeps stock adjustment, inbound receiving, and movement ledger flows intact while matching the current inventory API response model.
+- This keeps stock adjustment and movement ledger flows intact while matching the current inventory API response model.
 
 
 
