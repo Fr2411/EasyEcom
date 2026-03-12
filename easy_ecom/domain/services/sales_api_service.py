@@ -35,7 +35,8 @@ class SalesApiService:
         items = self.saleable_items.list_saleable_variants(
             session=session,
             client_id=client_id,
-            query=variant_id,
+            query="",
+            variant_ids=[variant_id],
             include_out_of_stock=True,
             limit=1,
         )
@@ -184,12 +185,14 @@ class SalesApiService:
             subtotal = 0.0
             requested_by_variant: dict[str, float] = defaultdict(float)
             for line in lines:
+                if not str(line.variant_id).strip():
+                    raise ValueError("variant_id is required for sale lines")
                 requested_by_variant[line.variant_id] += line.qty
 
             for variant_id, requested_qty in requested_by_variant.items():
                 available = self._stock_for_variant(session, client_id, variant_id)
                 if available < requested_qty:
-                    raise ValueError(f"Insufficient stock for variant {variant_id}")
+                    raise ValueError("Insufficient stock for selected variant")
 
             saleable_map = {
                 str(item["variant_id"]): item
@@ -207,7 +210,7 @@ class SalesApiService:
                     raise ValueError("Invalid sale line payload")
                 item = saleable_map.get(line.variant_id)
                 if item is None:
-                    raise ValueError(f"Invalid variant reference: {line.variant_id}")
+                    raise ValueError("Invalid variant reference")
                 total = float(line.qty) * float(line.unit_price)
                 subtotal += total
                 line_entities.append(

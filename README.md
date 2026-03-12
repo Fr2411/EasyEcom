@@ -410,3 +410,22 @@ This release enforces a single operational rule across stock-affecting flows: **
 ### Legacy compatibility
 - Parent `product_id` is retained in transaction rows for parent rollups and compatibility.
 - Operational writes/reads in the updated sales flow now always bind to `variant_id`.
+
+
+## Stock Identity Rule (Variant-Operational)
+
+For all **new** operational data writes:
+
+- `products` is the parent catalog entity.
+- `product_variants` is the only sellable stock identity.
+- Stock-affecting writes (`inventory_txn`, `purchase_items`, `sales_order_items`, `sales_return_items`) must include `variant_id`.
+- `product_id` remains a parent/reporting reference only.
+
+### Canonical stock source
+
+The backend canonical source for saleable availability is `SaleableItemsService.list_saleable_variants(...)`, used by sales and purchase selectors. Search supports SKU, barcode, product name, and variant name.
+
+### UX behavior
+
+- Sales and purchases item pickers operate on variant IDs.
+- Empty lookup query does not return a full product dump by default.

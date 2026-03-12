@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field
 
 
 class PurchaseLineRequest(BaseModel):
-    product_id: str = Field(min_length=1)
+    variant_id: str = Field(min_length=1)
     qty: float = Field(gt=0)
     unit_cost: float = Field(ge=0)
 
@@ -56,9 +56,12 @@ class PurchaseCreateResponse(BaseModel):
 
 
 class PurchaseLookupProduct(BaseModel):
+    variant_id: str
     product_id: str
     label: str
     current_stock: float
+    sku: str = ""
+    barcode: str = ""
 
 
 class PurchaseLookupSupplier(BaseModel):

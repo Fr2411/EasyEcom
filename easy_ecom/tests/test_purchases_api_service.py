@@ -6,6 +6,7 @@ from easy_ecom.data.store.postgres_models import (
     FinanceExpenseModel,
     InventoryTxnModel,
     ProductModel,
+    ProductVariantModel,
     PurchaseItemModel,
     PurchaseModel,
     SupplierModel,
@@ -29,6 +30,7 @@ def _seed(factory):
     with factory() as session:
         session.add(TenantSettingsModel(client_id='tenant-a', purchases_prefix='BUY'))
         session.add(ProductModel(product_id='prd-1', client_id='tenant-a', product_name='Paper', is_active='true'))
+        session.add(ProductVariantModel(variant_id='var-1', client_id='tenant-a', parent_product_id='prd-1', variant_name='Default', sku_code='PAPER-001', is_active='true'))
         session.add(ProductModel(product_id='prd-2', client_id='tenant-b', product_name='Other', is_active='true'))
         session.add(SupplierModel(supplier_id='sup-1', client_id='tenant-a', name='Main Supplier', is_active='true'))
         session.commit()
@@ -47,7 +49,7 @@ def test_create_purchase_updates_inventory_and_finance() -> None:
             reference_no='INV-77',
             note='stock in',
             payment_status='unpaid',
-            lines=[PurchaseLineInput(product_id='prd-1', qty=3, unit_cost=12.5)],
+            lines=[PurchaseLineInput(variant_id='var-1', qty=3, unit_cost=12.5)],
         ),
     )
 
@@ -62,6 +64,7 @@ def test_create_purchase_updates_inventory_and_finance() -> None:
     assert len(lines) == 1
     assert len(txns) == 1
     assert txns[0].txn_type == 'IN'
+    assert txns[0].variant_id == 'var-1'
     assert txns[0].source_type == 'purchase'
     assert expense.category == 'Purchases'
     assert expense.payment_status == 'unpaid'
@@ -81,10 +84,10 @@ def test_create_purchase_rejects_cross_tenant_product() -> None:
                 reference_no='',
                 note='',
                 payment_status='paid',
-                lines=[PurchaseLineInput(product_id='prd-2', qty=1, unit_cost=3)],
+                lines=[PurchaseLineInput(variant_id='prd-2', qty=1, unit_cost=3)],
             ),
         )
     except ValueError as exc:
-        assert 'Invalid product reference' in str(exc)
+        assert 'Invalid variant reference' in str(exc)
     else:
         raise AssertionError('expected ValueError')

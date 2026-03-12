@@ -220,7 +220,8 @@ class CatalogStockService:
                 lot_ids.append(
                     self.inventory_service.add_stock(
                         client_id=client_id,
-                        product_id=str(variant["variant_id"]),
+                        product_id=product_id,
+                        variant_id=str(variant["variant_id"]),
                         product_name=str(variant["variant_name"]),
                         qty=float(row.qty),
                         unit_cost=float(row.unit_cost),
