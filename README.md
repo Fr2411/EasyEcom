@@ -79,6 +79,15 @@ Key frontend vars (`frontend/.env.example`):
 
 
 
+
+## Catalog & Stock variant identity contract (critical)
+
+- Variant generation now uses an explicit object contract: `{ productName, size, color, other }` from frontend form state.
+- Generated variant rows preserve real attribute axes (`size`, `color`, `other`) as persistence identity inputs.
+- Backend variant upsert deduplication remains based on `(client_id, parent_product_id, size, color, other)`, so each true attribute combination is stored as a distinct `product_variants` row.
+- Variant display label is treated as presentation text only and is not the stock identity.
+- Stock-affecting writes continue to resolve through `variant_id` only.
+
 ## Tenant provisioning hardening (critical isolation fix)
 
 - Super Admin can now create a **new tenant/business** through `POST /admin/tenants`, which atomically creates:

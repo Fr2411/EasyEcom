@@ -293,3 +293,39 @@ def test_variant_name_starts_with_product_name(tmp_path: Path):
 
     variants = product_svc.list_variants("c1", product_id)
     assert variants[0]["variant_name"].startswith("Bottle | ")
+
+
+def test_save_workspace_persists_distinct_variant_attributes(tmp_path: Path):
+    svc, product_svc, _ = _service(tmp_path)
+
+    product_id, _, upserts = svc.save_workspace(
+        client_id="c1",
+        user_id="u1",
+        typed_product_name="Attribute Tee",
+        supplier="s1",
+        category="General",
+        description="",
+        features_text="",
+        default_selling_price=100.0,
+        max_discount_pct=10.0,
+        variant_entries=[
+            VariantWorkspaceEntry(size="S", color="", other="", qty=0, unit_cost=0),
+            VariantWorkspaceEntry(size="M", color="", other="", qty=0, unit_cost=0),
+            VariantWorkspaceEntry(size="", color="Black", other="", qty=0, unit_cost=0),
+            VariantWorkspaceEntry(size="", color="White", other="", qty=0, unit_cost=0),
+            VariantWorkspaceEntry(size="L", color="Black", other="", qty=0, unit_cost=0),
+            VariantWorkspaceEntry(size="L", color="White", other="", qty=0, unit_cost=0),
+        ],
+    )
+
+    variants = product_svc.list_variants("c1", product_id)
+    keys = {(v.get("size", ""), v.get("color", ""), v.get("other", "")) for v in variants}
+
+    assert upserts == 6
+    assert len(variants) == 6
+    assert ("S", "", "") in keys
+    assert ("M", "", "") in keys
+    assert ("", "Black", "") in keys
+    assert ("", "White", "") in keys
+    assert ("L", "Black", "") in keys
+    assert ("L", "White", "") in keys

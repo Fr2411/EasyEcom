@@ -45,6 +45,7 @@ vi.mock('@/lib/api/products-stock', () => ({
 }));
 
 import { ProductsStockWorkspace } from '@/components/products-stock/products-stock-workspace';
+import { getProductsStockSnapshot, saveProductStock } from '@/lib/api/products-stock';
 
 afterEach(() => {
   cleanup();
@@ -146,6 +147,31 @@ describe('ProductsStockWorkspace', () => {
       expect(featuresInput.value).toBe('Breathable, Durable');
     });
   });
+
+
+  test('shows explicit reload error when save succeeds but snapshot refresh fails', async () => {
+    vi.mocked(saveProductStock).mockResolvedValueOnce({ success: true });
+    vi.mocked(getProductsStockSnapshot)
+      .mockResolvedValueOnce({
+        products: [],
+        suppliers: [],
+        categories: []
+      })
+      .mockRejectedValueOnce(new Error('Snapshot refresh failed'));
+
+    render(<ProductsStockWorkspace />);
+
+    fireEvent.change(screen.getByLabelText('Product chooser input'), { target: { value: 'Fresh Tee' } });
+    fireEvent.click(screen.getByText('Add new product: "Fresh Tee"'));
+    fireEvent.change(screen.getByPlaceholderText('S, M, L'), { target: { value: 'S, M' } });
+    fireEvent.click(screen.getByText('Generate combinations'));
+
+    fireEvent.click(screen.getByText('Save'));
+
+    expect(await screen.findByText(/Saved successfully, but refresh failed:/)).toBeTruthy();
+    expect(screen.getByText(/Snapshot refresh failed/)).toBeTruthy();
+  });
+
   test('summary values update based on variant edits', async () => {
     render(<ProductsStockWorkspace />);
 
