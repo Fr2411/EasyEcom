@@ -11,3 +11,5 @@ export type AdminUser = {
 export type AdminUsersResponse = { items: AdminUser[] };
 export type AdminRolesResponse = { roles: string[] };
 export type AdminAuditResponse = { supported: boolean; deferred_reason: string; items: Array<Record<string, string>> };
+
+export type AdminTenantCreateResponse = { client_id: string; business_name: string; owner_user: AdminUser };

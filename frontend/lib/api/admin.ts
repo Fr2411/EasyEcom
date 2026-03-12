@@ -6,6 +6,7 @@ export async function getAdminUsers() {
 }
 
 export async function createAdminUser(payload: {
+  client_id?: string;
   name: string;
   email: string;
   password: string;
@@ -38,4 +39,18 @@ export async function getAdminRoles() {
 
 export async function getAdminAudit() {
   return apiClient<AdminAuditResponse>('/admin/audit');
+}
+
+
+export async function createAdminTenant(payload: {
+  business_name: string;
+  owner_name: string;
+  owner_email: string;
+  owner_password: string;
+  currency_code: string;
+}) {
+  return apiClient<{ client_id: string; business_name: string; owner_user: AdminUser }>('/admin/tenants', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }
