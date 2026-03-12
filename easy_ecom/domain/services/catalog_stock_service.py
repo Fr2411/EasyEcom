@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import itertools
+import logging
 from dataclasses import dataclass
 
 import pandas as pd
@@ -10,6 +11,9 @@ from easy_ecom.domain.models.product import ProductCreate
 from easy_ecom.domain.services.inventory_service import InventoryService
 from easy_ecom.domain.services.product_features import parse_features_text
 from easy_ecom.domain.services.product_service import ProductService
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -233,7 +237,30 @@ class CatalogStockService:
             ]
 
         opening_written = False
+        logger.info(
+            "catalog_stock.save_workspace incoming entries: product=%s selected_product_id=%s entries=%s",
+            product_name,
+            selected_product_id.strip(),
+            [
+                {
+                    "variant_id": row.variant_id,
+                    "size": row.size,
+                    "color": row.color,
+                    "other": row.other,
+                    "variant_label": row.variant_label,
+                }
+                for row in valid_entries
+            ],
+        )
         for row in valid_entries:
+            logger.info(
+                "catalog_stock.save_workspace upserting variant: variant_id=%s size=%s color=%s other=%s label=%s",
+                row.variant_id,
+                row.size,
+                row.color,
+                row.other,
+                row.variant_label,
+            )
             if not (
                 row.size.strip()
                 or row.color.strip()
@@ -292,6 +319,21 @@ class CatalogStockService:
                     )
                 )
                 opening_written = True
+
+        persisted_variants = self.product_service.list_variants(client_id, product_id)
+        logger.info(
+            "catalog_stock.save_workspace stored variants: product_id=%s rows=%s",
+            product_id,
+            [
+                {
+                    "variant_id": str(v.get("variant_id", "")),
+                    "size": str(v.get("size", "")),
+                    "color": str(v.get("color", "")),
+                    "other": str(v.get("other", "")),
+                }
+                for v in persisted_variants
+            ],
+        )
         return product_id, lot_ids, updated_variants
 
     @staticmethod

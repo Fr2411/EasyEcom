@@ -102,6 +102,8 @@ Because of those active dependencies, this patch intentionally avoids removing t
 - Frontend validation now blocks duplicate `(size,color,other)` combinations before save to prevent silent row collapse during backend upsert.
 - API regression coverage now verifies `/products-stock/save` forwards two distinct variant identities and selected product id to service layer.
 - Service regression coverage now verifies blank/whitespace variant attributes normalize to a single identity key (expected dedupe behavior), preventing NULL/empty-style drift.
+- Products & Stock save pipeline now logs trace points for variant identity values at router payload parse, `VariantWorkspaceEntry` mapping, `save_workspace` loop, `upsert_variant`, and final stored rows, making it practical to verify that distinct UI variants persist as distinct DB rows.
+- Products & Stock load/save UI error handling now surfaces backend `detail` messages (including JSON-formatted API errors) instead of vague load failures, and preserves explicit post-save refresh failure context.
 
 ## Catalog & Stock variant identity contract (critical)
 

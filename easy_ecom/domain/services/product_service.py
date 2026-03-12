@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import itertools
+import logging
 
 from easy_ecom.core.ids import new_uuid
 from easy_ecom.core.time_utils import now_iso
 from easy_ecom.data.repos.base import TabularRepo
 from easy_ecom.domain.models.product import ProductCreate, ProductPricingUpdate
+
+
+logger = logging.getLogger(__name__)
 
 
 class ProductService:
@@ -277,6 +281,16 @@ class ProductService:
         other = other.strip().title()
         normalized_variant_id = str(variant_id or "").strip()
         parent_product = self.get_by_id(client_id, parent_product_id)
+        logger.info(
+            "product_service.upsert_variant input: client_id=%s parent_product_id=%s variant_id=%s size=%s color=%s other=%s label=%s",
+            client_id,
+            parent_product_id,
+            normalized_variant_id,
+            size,
+            color,
+            other,
+            variant_label,
+        )
         variant_name = self._variant_name(
             str(parent_product.get("product_name", "") if parent_product else ""),
             size,
@@ -310,6 +324,7 @@ class ProductService:
                         variants.loc[i, "max_discount_pct"] = str(max_discount_pct)
                         row["max_discount_pct"] = str(max_discount_pct)
                     self.variants_repo.save(variants)
+                    logger.info("product_service.upsert_variant updated existing by variant_id: variant_id=%s size=%s color=%s other=%s", row.get("variant_id", ""), row.get("size", ""), row.get("color", ""), row.get("other", ""))
                     return row, False
 
             scoped = variants[
@@ -337,6 +352,7 @@ class ProductService:
                         variants.loc[i, "max_discount_pct"] = str(max_discount_pct)
                         row["max_discount_pct"] = str(max_discount_pct)
                 self.variants_repo.save(variants)
+                logger.info("product_service.upsert_variant matched existing by identity: variant_id=%s size=%s color=%s other=%s", row.get("variant_id", ""), row.get("size", ""), row.get("color", ""), row.get("other", ""))
                 return row, False
 
         products = self.list_by_client(client_id)
@@ -370,6 +386,7 @@ class ProductService:
             "created_at": now_iso(),
         }
         self.variants_repo.append(record)
+        logger.info("product_service.upsert_variant created variant: variant_id=%s size=%s color=%s other=%s", record["variant_id"], record["size"], record["color"], record["other"])
         return record, True
 
     def update_pricing(

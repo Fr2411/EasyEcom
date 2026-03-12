@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 
 import pandas as pd
 from fastapi import APIRouter, Depends
@@ -22,6 +23,7 @@ from easy_ecom.api.schemas.products_stock import (
 from easy_ecom.domain.services.catalog_stock_service import VariantWorkspaceEntry
 
 router = APIRouter(prefix="/products-stock", tags=["products-stock"])
+logger = logging.getLogger(__name__)
 
 
 def _safe_float(value: object, default: float = 0.0) -> float:
@@ -166,6 +168,33 @@ def save_products_stock(
         )
         for variant in payload.variants
     ]
+
+    logger.info(
+        "products_stock.save payload parsed: mode=%s selected_product_id=%s variants=%s",
+        payload.mode,
+        payload.selectedProductId or "",
+        [
+            {
+                "id": variant.id,
+                "size": variant.size or "",
+                "color": variant.color or "",
+                "other": variant.other or "",
+            }
+            for variant in payload.variants
+        ],
+    )
+    logger.info(
+        "products_stock.save router entries: %s",
+        [
+            {
+                "variant_id": entry.variant_id,
+                "size": entry.size,
+                "color": entry.color,
+                "other": entry.other,
+            }
+            for entry in entries
+        ],
+    )
 
     container.catalog_stock.save_workspace(
         client_id=user.client_id,
