@@ -215,7 +215,7 @@ def test_new_product_with_blank_variant_rows_auto_creates_default_variant(tmp_pa
     variants = product_svc.list_variants("c1", product_id)
     assert upserts == 1
     assert len(variants) == 1
-    assert variants[0]["variant_name"] == "Default"
+    assert variants[0]["variant_name"] == "Bottle | Default"
     assert lots == []
 
 
@@ -245,3 +245,51 @@ def test_new_product_with_opening_stock_and_blank_variant_fields_posts_stock_for
     assert txns.iloc[0]["txn_type"] == "IN"
     assert txns.iloc[0]["variant_id"] == variants[0]["variant_id"]
     assert txns.iloc[0]["product_id"] == product_id
+
+
+def test_new_product_with_multiple_variant_opening_stock_posts_each_variant(tmp_path: Path):
+    svc, product_svc, inv_svc = _service(tmp_path)
+
+    product_id, lots, upserts = svc.save_workspace(
+        client_id="c1",
+        user_id="u1",
+        typed_product_name="Sneaker",
+        supplier="s1",
+        category="General",
+        description="",
+        features_text="",
+        default_selling_price=80.0,
+        max_discount_pct=10.0,
+        variant_entries=[
+            VariantWorkspaceEntry(size="M", color="Red", qty=2, unit_cost=20),
+            VariantWorkspaceEntry(size="L", color="Blue", qty=3, unit_cost=25),
+        ],
+    )
+
+    variants = product_svc.list_variants("c1", product_id)
+    txns = inv_svc.repo.all()
+
+    assert upserts == 2
+    assert len(variants) == 2
+    assert len(lots) == 2
+    assert len(txns) == 2
+
+
+def test_variant_name_starts_with_product_name(tmp_path: Path):
+    svc, product_svc, _ = _service(tmp_path)
+
+    product_id, _, _ = svc.save_workspace(
+        client_id="c1",
+        user_id="u1",
+        typed_product_name="Bottle",
+        supplier="s1",
+        category="General",
+        description="",
+        features_text="",
+        default_selling_price=35.0,
+        max_discount_pct=5.0,
+        variant_entries=[VariantWorkspaceEntry(size="M", color="Green")],
+    )
+
+    variants = product_svc.list_variants("c1", product_id)
+    assert variants[0]["variant_name"].startswith("Bottle | ")

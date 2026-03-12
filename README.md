@@ -255,6 +255,13 @@ The production Next.js frontend (`frontend/`) now uses a shared visual design sy
 This update intentionally focuses on design language and maintainability (shared style tokens + reusable class patterns) rather than changing business logic.
 
 
+## Catalog & variant save flow guardrails
+
+- Variant naming is now normalized so stored `variant_name` always starts with the parent product name (for example `Premium Tee | Size:M | Color:Black`).
+- Product creation from the catalog workspace no longer auto-inserts an extra default variant before user-defined variant rows are processed, preventing unintended duplicate/default rows.
+- Catalog save now writes opening stock for **each** variant row with positive `qty` and `cost` values (not only the first row), ensuring variant-level inventory transactions align with the full payload entered in UI.
+- Frontend new-product variant generation now prefixes variant labels with product name in the grid to keep UI semantics aligned with backend persistence.
+
 ## Inventory quantity model (single-location)
 
 Inventory is modeled per-tenant as a **single location** with separated quantities:

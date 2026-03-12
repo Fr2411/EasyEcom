@@ -64,5 +64,5 @@ def test_product_create_generates_default_variant_with_readable_sku(tmp_path: Pa
     pid = svc.create(ProductCreate(client_id="c1", supplier="s", product_name="Premium Tee", default_selling_price=50, max_discount_pct=10, sizes_csv="", colors_csv="", others_csv=""))
     variants = svc.list_variants("c1", pid)
     assert len(variants) == 1
-    assert variants[0]["variant_name"] == "Default"
+    assert variants[0]["variant_name"] == "Premium Tee | Default"
     assert variants[0]["sku_code"].startswith("PREMIU-")
