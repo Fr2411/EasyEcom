@@ -468,3 +468,36 @@ Recent hardening enforces variant identity for all future stock-affecting writes
   - Runtime validation now aligns with this invariant so malformed writes fail fast.
 
 This means newly-created products cannot enter saleable inventory state with stock but without a variant, and future inventory movements are always variant-addressable.
+
+## Phase 20: `inventory_txn` composite tenant+variant FK rollout (safe mode)
+
+Migration: `easy_ecom/migrations/20260322_phase20_inventory_txn_variant_fk.sql`
+
+This phase enforces referential integrity for inventory ledger rows at the correct stock identity and tenant boundary:
+
+- target FK: `inventory_txn(client_id, variant_id) -> product_variants(client_id, variant_id)`
+- FK is added with `NOT VALID` first to avoid blocking production when historical bad rows exist.
+
+### What the migration does
+
+1. Adds/ensures required indexes for FK safety and query performance.
+2. Performs deterministic repair for rows that can be auto-mapped safely (single variant under the parent product within the same tenant).
+3. Quarantines unresolved legacy rows into `inventory_txn_variant_fk_review_queue` with explicit issue types:
+   - `missing_variant_id`
+   - `tenant_mismatch_variant_id`
+   - `orphan_variant_id`
+4. Adds the composite FK as `NOT VALID`.
+5. Attempts immediate validation only if unresolved violations are zero; otherwise leaves FK in `NOT VALID` and raises a notice.
+
+### Production rollout prerequisites
+
+- `product_variants` must contain tenant-correct variant records for all active stock SKUs.
+- Operational writes should already be variant-first (covered by prior phases).
+- Runbooks should include ownership for reviewing and remediating queue rows in `inventory_txn_variant_fk_review_queue`.
+
+### Risk and mitigation
+
+- **Risk:** legacy rows with blank/mismatched/orphan variant references can block strict FK validation.
+- **Mitigation:** use `NOT VALID` FK + explicit review queue, so new writes are protected while historical cleanup proceeds safely.
+- **Risk:** accidental cross-tenant remapping during cleanup.
+- **Mitigation:** all repair/query logic is scoped by `(client_id, variant_id)` and never matches by `variant_id` alone for enforcement.
