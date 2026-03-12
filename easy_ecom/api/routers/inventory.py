@@ -294,7 +294,10 @@ def _validate_inventory_item(container: ServiceContainer, client_id: str, item_i
         scoped = variants[variants["variant_id"].astype(str) == item_id]
         if not scoped.empty:
             row = scoped.iloc[0]
-            return str(row["variant_id"]), str(row.get("variant_name", row["variant_id"])), str(row.get("parent_product_id", ""))
+            parent_product_id = str(row.get("parent_product_id", "")).strip()
+            if not parent_product_id:
+                raise HTTPException(status_code=400, detail="Variant is missing parent product context")
+            return str(row["variant_id"]), str(row.get("variant_name", row["variant_id"])), parent_product_id
 
     products = container.products.list_by_client(client_id)
     if not products.empty:
@@ -316,6 +319,19 @@ def _validate_inventory_item(container: ServiceContainer, client_id: str, item_i
             )
 
     raise HTTPException(status_code=404, detail="Inventory item not found for tenant")
+
+
+def _resolve_inventory_variant(
+    container: ServiceContainer,
+    client_id: str,
+    *,
+    item_id: str | None = None,
+    variant_id: str | None = None,
+) -> tuple[str, str, str]:
+    candidate = (item_id or variant_id or "").strip()
+    if not candidate:
+        raise HTTPException(status_code=400, detail="variant_id is required for stock-affecting writes")
+    return _validate_inventory_item(container, client_id, candidate)
 
 
 def _movements_response(d: pd.DataFrame) -> list[InventoryMovement]:
@@ -591,11 +607,16 @@ def add_inventory(
     container: ServiceContainer = Depends(get_container),
 ) -> InventoryAddResponse:
     require_page_access(user, "Catalog & Stock")
+    variant_id, variant_name, parent_product_id = _resolve_inventory_variant(
+        container,
+        user.client_id,
+        variant_id=payload.variant_id,
+    )
     lot_id = container.inventory.add_stock(
         client_id=user.client_id,
-        product_id=payload.product_id,
-        variant_id=payload.variant_id,
-        product_name=payload.product_name,
+        product_id=parent_product_id,
+        variant_id=variant_id,
+        product_name=variant_name,
         qty=payload.qty,
         unit_cost=payload.unit_cost,
         supplier_snapshot=payload.supplier_snapshot,

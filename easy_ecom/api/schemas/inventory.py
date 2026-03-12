@@ -6,9 +6,9 @@ from pydantic import BaseModel, Field, model_validator
 
 
 class InventoryAddRequest(BaseModel):
-    product_id: str
+    product_id: str = ""
     variant_id: str = Field(min_length=1)
-    product_name: str
+    product_name: str = ""
     qty: float = Field(gt=0)
     unit_cost: float = Field(gt=0)
     supplier_snapshot: str = ""
