@@ -93,12 +93,15 @@ class SalesApiService:
                 results = []
                 for variant, parent in rows:
                     pid = variant.variant_id
+                    available_qty = self._stock_for_product(session, client_id, pid)
+                    if available_qty <= 0:
+                        continue
                     results.append(
                         {
                             "product_id": pid,
                             "label": f"{parent.product_name} / {variant.variant_name}",
                             "default_unit_price": float(variant.default_selling_price or "0"),
-                            "available_qty": self._stock_for_product(session, client_id, pid),
+                            "available_qty": available_qty,
                         }
                     )
                 return results
@@ -108,15 +111,20 @@ class SalesApiService:
                 needle = f"%{query.strip()}%"
                 products_stmt = products_stmt.where(ProductModel.product_name.ilike(needle))
             products = session.execute(products_stmt.limit(120)).scalars().all()
-            return [
-                {
-                    "product_id": p.product_id,
-                    "label": p.product_name,
-                    "default_unit_price": float(p.default_selling_price or "0"),
-                    "available_qty": self._stock_for_product(session, client_id, p.product_id),
-                }
-                for p in products
-            ]
+            results = []
+            for p in products:
+                available_qty = self._stock_for_product(session, client_id, p.product_id)
+                if available_qty <= 0:
+                    continue
+                results.append(
+                    {
+                        "product_id": p.product_id,
+                        "label": p.product_name,
+                        "default_unit_price": float(p.default_selling_price or "0"),
+                        "available_qty": available_qty,
+                    }
+                )
+            return results
 
     def list_sales(self, client_id: str, query: str = "") -> list[dict[str, str | float]]:
         with self.session_factory() as session:
