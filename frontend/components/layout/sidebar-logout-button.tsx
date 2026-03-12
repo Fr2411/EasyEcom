@@ -3,10 +3,12 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { logout } from '@/lib/api/auth';
+import { useAuth } from '@/components/auth/auth-provider';
 
 export function SidebarLogoutButton() {
   const router = useRouter();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const { clearAuth } = useAuth();
 
   const handleLogout = async () => {
     if (isLoggingOut) {
@@ -19,6 +21,7 @@ export function SidebarLogoutButton() {
     } catch {
       // Ignore logout API errors and still force redirect to login.
     } finally {
+      clearAuth();
       router.replace('/login');
       router.refresh();
       setIsLoggingOut(false);
