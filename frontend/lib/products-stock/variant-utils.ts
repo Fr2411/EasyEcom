@@ -9,10 +9,20 @@ function parseCsvValues(value: string): string[] {
     .filter(Boolean);
 }
 
-export function generateVariantsFromInputs(productNameInput: string, sizeInput: string, colorInput: string, otherInput: string): Variant[] {
-  const sizes = parseCsvValues(sizeInput);
-  const colors = parseCsvValues(colorInput);
-  const others = parseCsvValues(otherInput);
+export function generateVariantsFromInputs({
+  productName,
+  size,
+  color,
+  other
+}: {
+  productName: string;
+  size: string;
+  color: string;
+  other: string;
+}): Variant[] {
+  const sizes = parseCsvValues(size);
+  const colors = parseCsvValues(color);
+  const others = parseCsvValues(other);
 
   const sizeSource = sizes.length ? sizes : [''];
   const colorSource = colors.length ? colors : [''];
@@ -23,7 +33,7 @@ export function generateVariantsFromInputs(productNameInput: string, sizeInput: 
   sizeSource.forEach((size) => {
     colorSource.forEach((color) => {
       otherSource.forEach((other) => {
-        const base = productNameInput.trim();
+        const base = productName.trim();
         const detail = [size, color, other].filter(Boolean).join(' / ') || 'Standard';
         const label = base ? `${base} / ${detail}` : detail;
         variants.push({
