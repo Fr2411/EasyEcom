@@ -18,6 +18,7 @@ type AuthContextValue = {
   loading: boolean;
   bootstrapError: AuthBootstrapError;
   refreshAuth: () => Promise<void>;
+  clearAuth: () => void;
 };
 
 const AuthContext = createContext<AuthContextValue>({
@@ -25,6 +26,7 @@ const AuthContext = createContext<AuthContextValue>({
   loading: true,
   bootstrapError: 'none',
   refreshAuth: async () => undefined,
+  clearAuth: () => undefined,
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -58,13 +60,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const clearAuth = useCallback(() => {
+    setUser(null);
+    setBootstrapError('unauthorized');
+    setLoading(false);
+  }, []);
+
   useEffect(() => {
     void refreshAuth();
   }, [refreshAuth]);
 
   const value = useMemo(
-    () => ({ user, loading, bootstrapError, refreshAuth }),
-    [user, loading, bootstrapError, refreshAuth]
+    () => ({ user, loading, bootstrapError, refreshAuth, clearAuth }),
+    [user, loading, bootstrapError, refreshAuth, clearAuth]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

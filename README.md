@@ -92,6 +92,7 @@ Key frontend vars (`frontend/.env.example`):
 - Root layout (`frontend/app/layout.tsx`) wraps the entire frontend tree in `AuthProvider`, ensuring auth state is available across both public and protected routes.
 - Login (`public-only`) routes also render a visible loading fallback while redirecting authenticated users to `/dashboard`, preventing blank-screen transitions.
 - Login page uses shared auth bootstrap refresh immediately after successful sign-in so dashboard transition and auth context stay in sync.
+- Sidebar logout now clears in-memory auth context immediately (`clearAuth`) before redirecting to `/login`, so protected UI never remains visible after logout clicks even if API/cookie cleanup is delayed.
 - Dashboard route now always renders visible placeholder content inside `PageShell`, so post-login redirects never land on a blank screen even while KPI modules are still in development.
 
 
