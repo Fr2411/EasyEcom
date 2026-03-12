@@ -11,6 +11,12 @@ export type Variant = {
   other: string;
 };
 
+export type VariantGenerationInput = {
+  size: string;
+  color: string;
+  other: string;
+};
+
 export type ProductIdentity = {
   productName: string;
   supplier: string;

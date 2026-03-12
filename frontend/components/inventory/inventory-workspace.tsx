@@ -239,7 +239,7 @@ export function InventoryWorkspace() {
         {mode === 'new' ? (
           <VariantGenerator
             onGenerate={({ size, color, other }) =>
-              setVariants(generateVariantsFromInputs({ productName: identity.productName, size, color, other }))
+              setVariants(generateVariantsFromInputs({ size, color, other }))
             }
           />
         ) : null}
