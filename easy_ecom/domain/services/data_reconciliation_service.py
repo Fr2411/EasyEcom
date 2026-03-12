@@ -107,6 +107,7 @@ class DataReconciliationService:
                     "canonical_product_name",
                     "inventory_product_id",
                     "inventory_product_name",
+                    "inventory_identity_type",
                     "parent_product_id",
                     "parent_product_name",
                     "variant_id",
@@ -277,6 +278,9 @@ class DataReconciliationService:
         d["inventory_product_name"] = d["variant_name"].where(
             d["variant_id"].astype(str).str.strip() != "", d["canonical_product_name"]
         )
+        d["inventory_identity_type"] = "variant"
+        d.loc[d["variant_id"].astype(str).str.strip() == "", "inventory_identity_type"] = "legacy_product"
+        d.loc[d["is_unmapped"], "inventory_identity_type"] = "unmapped"
         return d
 
     def inventory_stock_by_lot(self, client_id: str | None) -> pd.DataFrame:

@@ -12,6 +12,7 @@ export type InventoryItem = {
   stock_value: number;
   lot_count: number;
   low_stock: boolean;
+  actionable: boolean;
 };
 
 export type InventoryMovement = {
