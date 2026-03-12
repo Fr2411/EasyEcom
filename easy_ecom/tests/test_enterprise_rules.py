@@ -64,6 +64,43 @@ def test_return_approval_permission_and_refund_ledger(tmp_path: Path):
     assert float(refund_entries.iloc[0]["amount"]) == 100
 
 
+
+
+def test_client_create_generates_unique_client_id_on_collision(tmp_path: Path, monkeypatch):
+    from easy_ecom.domain.services import client_service as client_service_module
+
+    store = setup_store(tmp_path)
+    svc = ClientService(ClientsRepo(store))
+
+    ids = iter(["dup-id", "dup-id", "unique-id"])
+    monkeypatch.setattr(client_service_module, "new_uuid", lambda: next(ids))
+
+    first = svc.create(
+        ClientCreate(
+            business_name="B1",
+            owner_name="O1",
+            phone="",
+            email="one@example.com",
+            address="",
+            currency_code="USD",
+            currency_symbol="$",
+        )
+    )
+    second = svc.create(
+        ClientCreate(
+            business_name="B2",
+            owner_name="O2",
+            phone="",
+            email="two@example.com",
+            address="",
+            currency_code="USD",
+            currency_symbol="$",
+        )
+    )
+
+    assert first == "dup-id"
+    assert second == "unique-id"
+
 def test_currency_fields_persist(tmp_path: Path):
     store = setup_store(tmp_path)
     svc = ClientService(ClientsRepo(store))

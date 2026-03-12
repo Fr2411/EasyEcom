@@ -10,8 +10,17 @@ class ClientService:
     def __init__(self, repo: ClientsRepo):
         self.repo = repo
 
+    def _generate_unique_client_id(self) -> str:
+        clients = self.repo.all()
+        existing_ids = set(clients.get("client_id", []).astype(str).str.strip()) if not clients.empty else set()
+        for _ in range(10):
+            candidate = new_uuid()
+            if candidate not in existing_ids:
+                return candidate
+        raise ValueError("Could not generate a unique client ID")
+
     def create(self, payload: ClientCreate) -> str:
-        client_id = new_uuid()
+        client_id = self._generate_unique_client_id()
         self.repo.append(
             {
                 "client_id": client_id,

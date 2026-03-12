@@ -12,7 +12,8 @@ Legacy Streamlit pages under `easy_ecom/app/` are retained only for controlled t
 1. Frontend (`frontend/`) calls FastAPI (`easy_ecom/api/main.py`).
 2. FastAPI services use repository adapters backed by PostgreSQL tables.
 3. Users, roles, inventory, products, customers, sales, finance, sequences, and audit all run through PostgreSQL at runtime.
-4. CSV assets are migration/bootstrap tooling only (`easy_ecom/scripts/*import*`, migration scripts).
+4. Tenant/client onboarding now enforces unique `client_id` generation with collision retry protection, so new clients cannot be created with reused IDs even if an ID generator repeats.
+5. CSV assets are migration/bootstrap tooling only (`easy_ecom/scripts/*import*`, migration scripts).
 
 
 ## Agent governance and decision boundaries
