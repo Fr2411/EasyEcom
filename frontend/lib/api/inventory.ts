@@ -34,6 +34,21 @@ export async function createInventoryAdjustment(payload: InventoryAdjustmentPayl
   });
 }
 
+export async function createOpeningStock(payload: {
+  product_id: string;
+  lines: Array<{
+    variant_id: string;
+    qty: number;
+    unit_cost: number;
+    reference?: string;
+    note?: string;
+  }>;
+}): Promise<{ success: boolean; product_id: string; lot_ids: string[] }> {
+  return apiClient('/inventory/opening-stock', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
 
 export async function createInboundStock(payload: {
   item_id: string;

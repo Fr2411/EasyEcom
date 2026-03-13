@@ -124,7 +124,11 @@ class StockLedgerService:
         note: str,
         reference: str,
     ) -> str:
-        inbound_id = reference.strip() or self.new_inbound_id()
+        inbound_id = self.new_inbound_id()
+        pending_note_parts = [note.strip()]
+        if reference.strip():
+            pending_note_parts.append(f"ref:{reference.strip()}")
+        pending_note = " | ".join(part for part in pending_note_parts if part)
         self.post_inbound(
             session=session,
             client_id=client_id,
@@ -133,7 +137,7 @@ class StockLedgerService:
             qty=qty,
             unit_cost=unit_cost,
             supplier_snapshot=supplier_snapshot,
-            note=note,
+            note=pending_note,
             source_type="inbound_pending",
             source_id=inbound_id,
             txn_type="INBOUND_PENDING",
@@ -151,17 +155,25 @@ class StockLedgerService:
         unit_cost: float | None,
         note: str,
     ) -> tuple[str, str, float]:
-        rows = session.execute(
+        pending_rows = session.execute(
             select(InventoryTxnModel).where(
                 InventoryTxnModel.client_id == client_id,
                 InventoryTxnModel.source_type == "inbound_pending",
                 InventoryTxnModel.source_id == inbound_id,
             )
         ).scalars().all()
-        if not rows:
+        if not pending_rows:
             raise ValueError("Inbound record not found")
 
-        seed = rows[0]
+        all_rows = session.execute(
+            select(InventoryTxnModel).where(
+                InventoryTxnModel.client_id == client_id,
+                InventoryTxnModel.source_id == inbound_id,
+                InventoryTxnModel.source_type.in_(["inbound_pending", "inbound_pending_release"]),
+            )
+        ).scalars().all()
+
+        seed = pending_rows[0]
         variant = VariantContext(
             product_id=str(seed.product_id),
             product_name="",
@@ -169,7 +181,7 @@ class StockLedgerService:
             variant_name=str(seed.product_name or seed.variant_id),
         )
         pending_qty = 0.0
-        for row in rows:
+        for row in all_rows:
             pending_qty += stock_deltas(str(row.txn_type), self._to_float(row.qty)).incoming
         if pending_qty <= 0:
             raise ValueError("Inbound record not found")

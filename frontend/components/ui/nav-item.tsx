@@ -26,6 +26,7 @@ const ICONS = {
   dashboard: Gauge,
   reports: BarChart3,
   package: Boxes,
+  catalog: Boxes,
   inventory: PackageSearch,
   sales: ShoppingCart,
   customers: Users,

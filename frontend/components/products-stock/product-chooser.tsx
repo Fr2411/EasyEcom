@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import type { ProductLookupOption } from '@/types/products-stock';
+import type { ProductLookupOption } from '@/types/catalog';
 
 type ProductChooserProps = {
   products: ProductLookupOption[];

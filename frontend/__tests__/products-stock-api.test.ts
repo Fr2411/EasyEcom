@@ -6,27 +6,25 @@ vi.mock('@/lib/api', () => ({
   apiClient: (...args: unknown[]) => apiClientMock(...args),
 }));
 
-import { getProductsStockSnapshot, saveProductStock } from '@/lib/api/products-stock';
+import { getCatalogProducts, saveCatalogProduct } from '@/lib/api/catalog';
 
-describe('products-stock api mapping', () => {
+describe('catalog api mapping', () => {
   beforeEach(() => {
     apiClientMock.mockReset();
   });
 
-  test('maps snapshot variants from id to variant_id and generates stable rowId', async () => {
+  test('maps snapshot variants to frontend tempId + variant_id shape', async () => {
     apiClientMock.mockResolvedValue({
       products: [
         {
-          id: 'p-1',
+          product_id: 'p-1',
           identity: { productName: 'Tee', supplier: 'S', category: 'C', description: '', features: [] },
           variants: [
             {
-              id: 'v-1',
+              variant_id: 'v-1',
               size: 'M',
               color: 'Black',
               other: '',
-              qty: 2,
-              cost: 10,
               defaultSellingPrice: 20,
               maxDiscountPct: 10,
             },
@@ -37,7 +35,7 @@ describe('products-stock api mapping', () => {
       categories: ['C'],
     });
 
-    const snapshot = await getProductsStockSnapshot();
+    const snapshot = await getCatalogProducts();
 
     expect(snapshot.products[0].variants[0]).toEqual(
       expect.objectContaining({
@@ -46,13 +44,13 @@ describe('products-stock api mapping', () => {
         color: 'Black',
       }),
     );
-    expect(snapshot.products[0].variants[0].rowId).toBeTruthy();
+    expect(snapshot.products[0].variants[0].tempId).toBeTruthy();
   });
 
-  test('maps save payload variants to id', async () => {
-    apiClientMock.mockResolvedValue({ success: true });
+  test('posts create payload without frontend temp ids or stock fields', async () => {
+    apiClientMock.mockResolvedValue({ product_id: 'p-1', variant_count: 2 });
 
-    await saveProductStock({
+    await saveCatalogProduct({
       mode: 'new',
       identity: {
         productName: 'Tee',
@@ -63,24 +61,19 @@ describe('products-stock api mapping', () => {
       },
       variants: [
         {
-          rowId: 'row-existing',
+          tempId: 'temp-existing',
           variant_id: 'v-existing',
           size: 'M',
           color: 'Black',
           other: 'Cotton',
-          qty: 4,
-          cost: 12,
           defaultSellingPrice: 24,
           maxDiscountPct: 10,
         },
         {
-          rowId: 'row-manual',
-          variant_id: 'v-manual',
+          tempId: 'temp-manual',
           size: '',
           color: 'Blue',
           other: '',
-          qty: 1,
-          cost: 8,
           defaultSellingPrice: 16,
           maxDiscountPct: 10,
         },
@@ -88,13 +81,22 @@ describe('products-stock api mapping', () => {
     });
 
     expect(apiClientMock).toHaveBeenCalledTimes(1);
-    const [, requestOptions] = apiClientMock.mock.calls[0] as [string, { body: string }];
+    const [path, requestOptions] = apiClientMock.mock.calls[0] as [string, { body: string; method: string }];
     const body = JSON.parse(requestOptions.body);
 
-    expect(body.mode).toBe('new');
+    expect(path).toBe('/catalog/products');
+    expect(requestOptions.method).toBe('POST');
     expect(body.variants).toEqual([
-      expect.objectContaining({ id: 'v-existing', size: 'M', color: 'Black', other: 'Cotton' }),
-      expect.objectContaining({ id: 'v-manual', color: 'Blue' }),
+      expect.objectContaining({
+        variant_id: 'v-existing',
+        size: 'M',
+        color: 'Black',
+        other: 'Cotton',
+      }),
+      expect.objectContaining({
+        color: 'Blue',
+        defaultSellingPrice: 16,
+      }),
     ]);
   });
 });
