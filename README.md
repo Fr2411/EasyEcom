@@ -311,6 +311,9 @@ This update intentionally focuses on design language and maintainability (shared
 
 ## Catalog & variant save flow guardrails
 
+- Catalog save now executes in **two phases** for stronger consistency: it first pre-validates every variant row (identity presence, duplicate identity, qty/cost constraints, numeric sanity checks) before any write is attempted.
+- Persistence is now treated as a **single unit of work**: all variant upserts are completed before inventory posting starts, and any downstream row failure aborts/rolls back the entire save to prevent partial writes.
+- PostgreSQL mode uses a transaction-capable repository path for atomic variant + inventory writes; CSV mode uses safe snapshot/restore fallback so failures still return a single failure outcome without partial persisted changes.
 - Variant naming is now normalized so stored `variant_name` always starts with the parent product name (for example `Premium Tee | Size:M | Color:Black`).
 - Product creation from the catalog workspace no longer auto-inserts an extra default variant before user-defined variant rows are processed, preventing unintended duplicate/default rows.
 - Catalog save now writes opening stock for **each** variant row with positive `qty` and `cost` values (not only the first row), ensuring variant-level inventory transactions align with the full payload entered in UI.
