@@ -233,6 +233,7 @@ Phase 6 adds a production inventory operations module:
 
 - `docs/phase13_ai_readiness.md` — AI-readiness implementation details (tenant-scoped read-only context contracts, automation-safe inbound inquiry hook, and deferred external-channel scope).
 - Backend now exposes typed AI-safe context APIs (`/ai/context/*`) and internal automation hook entrypoint (`POST /ai/hooks/inbound-inquiry`) grounded on canonical PostgreSQL business data with strict session tenant isolation.
+- AI stock context contracts are variant-first: `/ai/context/stock` and `/ai/context/low-stock` now return variant-level availability (`variant_id`, `variant_name`, `available_qty`) as source-of-truth, with optional product rollups only as derived summaries.
 
 
 ## External channel integration foundation (Phase 14)
