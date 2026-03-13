@@ -9,6 +9,10 @@ vi.mock('@/components/auth/auth-route-guard', () => ({
   )
 }));
 
+vi.mock('@/components/ui/nav-item', () => ({
+  NavItem: ({ item }: { item: { label: string; href: string } }) => <a href={item.href}>{item.label}</a>
+}));
+
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ replace: vi.fn() }),
   usePathname: () => '/dashboard'
@@ -28,6 +32,7 @@ describe('AppLayout', () => {
 
     expect(screen.getByTestId('auth-route-guard')).toBeTruthy();
     expect(screen.getByLabelText('Primary')).toBeTruthy();
+    expect(screen.getByRole('img', { name: 'Easy-Ecom' })).toBeTruthy();
     expect(screen.getByText('Operations Workspace')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Log out' })).toBeTruthy();
     expect(screen.getByText('Dashboard body content')).toBeTruthy();

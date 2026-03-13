@@ -5,6 +5,7 @@ import { login } from '@/lib/api/auth';
 import { AuthRouteGuard } from '@/components/auth/auth-route-guard';
 import { useAuth } from '@/components/auth/auth-provider';
 import { ApiError, ApiNetworkError } from '@/lib/api/client';
+import { EasyEcomLogo } from '@/components/branding/easy-ecom-logo';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -51,7 +52,12 @@ export default function LoginPage() {
     <AuthRouteGuard mode="public-only">
       <main className="login-page">
         <section className="login-hero">
-          <p className="eyebrow">EasyEcom</p>
+          <div className="login-hero-logo">
+            <EasyEcomLogo
+              className="easyecom-logo easyecom-logo-hero"
+              imageClassName="easyecom-logo-image easyecom-logo-hero"
+            />
+          </div>
           <h1>Welcome to your operations command center.</h1>
           <p>Monitor inventory, sales, finance, and automation workflows in one premium workspace.</p>
         </section>

@@ -24,6 +24,8 @@ from easy_ecom.api.schemas.inventory import (
     InventoryListResponse,
     InventoryMovement,
     InventoryMovementsResponse,
+    OpeningStockRequest,
+    OpeningStockResponse,
 )
 
 from easy_ecom.domain.services.stock_policy import ON_HAND_INBOUND_TYPES, stock_deltas
@@ -135,6 +137,18 @@ def _item_type(row: pd.Series) -> str:
     return "variant" if variant_id else "product"
 
 
+def _availability_status(*, item_type: str, on_hand_qty: float, incoming_qty: float, sellable_qty: float, low_stock: bool) -> str:
+    if item_type == "unmapped":
+        return "unmapped"
+    if sellable_qty > 0 and low_stock:
+        return "low_stock"
+    if sellable_qty > 0:
+        return "in_stock"
+    if incoming_qty > 0:
+        return "incoming"
+    return "out_of_stock"
+
+
 def _build_inventory_items(container: ServiceContainer, client_id: str) -> list[InventoryItemSummary]:
     catalog_base = _catalog_inventory_base(container, client_id)
     movements = _build_movement_rows(container, client_id)
@@ -228,13 +242,22 @@ def _build_inventory_items(container: ServiceContainer, client_id: str) -> list[
         value = float(row.get("stock_value", 0.0))
         avg_cost = value / on_hand_qty if on_hand_qty > 0 else fallback_costs.get(str(row["item_id"]), 0.0)
         item_name = str(row.get("item_name", "") or row["item_id"])
+        item_type = str(row.get("item_type") or _item_type(row))
+        low_stock = sellable_qty <= 5
         items.append(
             InventoryItemSummary(
                 item_id=str(row["item_id"]),
                 item_name=item_name,
                 parent_product_id=str(row.get("parent_product_id", "") or ""),
                 parent_product_name=str(row.get("parent_product_name", "") or ""),
-                item_type=str(row.get("item_type") or _item_type(row)),
+                item_type=item_type,
+                availability_status=_availability_status(
+                    item_type=item_type,
+                    on_hand_qty=on_hand_qty,
+                    incoming_qty=incoming_qty,
+                    sellable_qty=sellable_qty,
+                    low_stock=low_stock,
+                ),
                 on_hand_qty=on_hand_qty,
                 incoming_qty=incoming_qty,
                 reserved_qty=reserved_qty,
@@ -242,8 +265,8 @@ def _build_inventory_items(container: ServiceContainer, client_id: str) -> list[
                 avg_unit_cost=avg_cost,
                 stock_value=value,
                 lot_count=int(row.get("lot_count", 0)),
-                low_stock=sellable_qty <= 5,
-                actionable=str(row.get("item_type") or _item_type(row)) == "variant",
+                low_stock=low_stock,
+                actionable=item_type == "variant",
             )
         )
     return sorted(items, key=lambda item: (item.low_stock is False, item.item_name.lower()))
@@ -297,6 +320,10 @@ def _resolve_inventory_variant(
     if not candidate:
         raise HTTPException(status_code=400, detail="variant_id is required for stock-affecting writes")
     return _validate_inventory_item(container, client_id, candidate)
+
+
+def _stock_ledger(container: ServiceContainer):
+    return getattr(container, "stock_ledger", None)
 
 
 def _movements_response(d: pd.DataFrame) -> list[InventoryMovement]:
@@ -411,12 +438,86 @@ def create_adjustment(
     source_id = payload.reference.strip()
     if not source_id:
         source_id = f"manual-{user.user_id}"
+    stock_ledger = _stock_ledger(container)
 
     lot_ids: list[str] = []
     before_ids = set(container.inventory.repo.all().get("txn_id", pd.Series(dtype=str)).astype(str).tolist())
 
     try:
-        if payload.adjustment_type == "stock_in":
+        if stock_ledger is not None:
+            with stock_ledger.session_factory() as session:
+                variant = stock_ledger.resolve_variant(
+                    session,
+                    client_id=user.client_id,
+                    variant_id=item_id,
+                )
+                if payload.adjustment_type == "stock_in":
+                    unit_cost = payload.unit_cost if payload.unit_cost is not None else avg_unit_cost
+                    if unit_cost <= 0:
+                        raise HTTPException(status_code=400, detail="unit_cost is required for stock-in when no historical cost exists")
+                    qty = float(payload.quantity or 0)
+                    lot_ids.append(
+                        stock_ledger.post_inbound(
+                            session=session,
+                            client_id=user.client_id,
+                            user_id=user.user_id,
+                            variant=variant,
+                            qty=qty,
+                            unit_cost=unit_cost,
+                            supplier_snapshot="",
+                            note=note,
+                            source_type="manual_stock_in",
+                            source_id=source_id,
+                        )
+                    )
+                    applied_delta = qty
+                elif payload.adjustment_type == "stock_out":
+                    qty = float(payload.quantity or 0)
+                    stock_ledger.consume_fifo(
+                        session=session,
+                        client_id=user.client_id,
+                        user_id=user.user_id,
+                        variant=variant,
+                        qty=qty,
+                        source_type="manual_stock_out",
+                        source_id=source_id,
+                        note=note,
+                    )
+                    applied_delta = -qty
+                else:
+                    delta = float(payload.quantity_delta or 0)
+                    if delta > 0:
+                        unit_cost = payload.unit_cost if payload.unit_cost is not None else avg_unit_cost
+                        if unit_cost <= 0:
+                            raise HTTPException(status_code=400, detail="unit_cost is required for positive correction when no historical cost exists")
+                        lot_ids.append(
+                            stock_ledger.post_inbound(
+                                session=session,
+                                client_id=user.client_id,
+                                user_id=user.user_id,
+                                variant=variant,
+                                qty=delta,
+                                unit_cost=unit_cost,
+                                supplier_snapshot="",
+                                note=note,
+                                source_type="manual_correction",
+                                source_id=source_id,
+                            )
+                        )
+                    else:
+                        stock_ledger.consume_fifo(
+                            session=session,
+                            client_id=user.client_id,
+                            user_id=user.user_id,
+                            variant=variant,
+                            qty=abs(delta),
+                            source_type="manual_correction",
+                            source_id=source_id,
+                            note=note,
+                        )
+                    applied_delta = delta
+                session.commit()
+        elif payload.adjustment_type == "stock_in":
             unit_cost = payload.unit_cost if payload.unit_cost is not None else avg_unit_cost
             if unit_cost <= 0:
                 raise HTTPException(status_code=400, detail="unit_cost is required for stock-in when no historical cost exists")
@@ -511,20 +612,41 @@ def create_inbound(
 ) -> InventoryInboundCreateResponse:
     require_page_access(user, "Catalog & Stock")
     item_id, item_name, parent_product_id = _validate_inventory_item(container, user.client_id, payload.item_id)
+    stock_ledger = _stock_ledger(container)
 
     source_id = payload.reference.strip() or f"manual-{user.user_id}"
-    inbound_id = container.inventory.create_incoming_stock(
-        client_id=user.client_id,
-        product_id=parent_product_id,
-        variant_id=item_id,
-        product_name=item_name,
-        qty=payload.quantity,
-        unit_cost=payload.expected_unit_cost,
-        supplier_snapshot=payload.supplier_snapshot,
-        note=payload.note,
-        source_id=source_id,
-        user_id=user.user_id,
-    )
+    if stock_ledger is not None:
+        with stock_ledger.session_factory() as session:
+            variant = stock_ledger.resolve_variant(
+                session,
+                client_id=user.client_id,
+                variant_id=item_id,
+            )
+            inbound_id = stock_ledger.create_pending_inbound(
+                session=session,
+                client_id=user.client_id,
+                user_id=user.user_id,
+                variant=variant,
+                qty=payload.quantity,
+                unit_cost=payload.expected_unit_cost,
+                supplier_snapshot=payload.supplier_snapshot,
+                note=payload.note,
+                reference=source_id,
+            )
+            session.commit()
+    else:
+        inbound_id = container.inventory.create_incoming_stock(
+            client_id=user.client_id,
+            product_id=parent_product_id,
+            variant_id=item_id,
+            product_name=item_name,
+            qty=payload.quantity,
+            unit_cost=payload.expected_unit_cost,
+            supplier_snapshot=payload.supplier_snapshot,
+            note=payload.note,
+            source_id=source_id,
+            user_id=user.user_id,
+        )
 
     item = next((entry for entry in _build_inventory_items(container, user.client_id) if entry.item_id == item_id), None)
     pending_qty = item.incoming_qty if item else payload.quantity
@@ -544,15 +666,29 @@ def receive_inbound(
     container: ServiceContainer = Depends(get_container),
 ) -> InventoryInboundReceiveResponse:
     require_page_access(user, "Catalog & Stock")
+    stock_ledger = _stock_ledger(container)
     try:
-        item_id, lot_id, received_qty = container.inventory.receive_incoming_stock(
-            client_id=user.client_id,
-            inbound_id=inbound_id,
-            qty=payload.quantity,
-            unit_cost=payload.unit_cost,
-            note=payload.note,
-            user_id=user.user_id,
-        )
+        if stock_ledger is not None:
+            with stock_ledger.session_factory() as session:
+                item_id, lot_id, received_qty = stock_ledger.receive_pending_inbound(
+                    session=session,
+                    client_id=user.client_id,
+                    user_id=user.user_id,
+                    inbound_id=inbound_id,
+                    qty=payload.quantity,
+                    unit_cost=payload.unit_cost,
+                    note=payload.note,
+                )
+                session.commit()
+        else:
+            item_id, lot_id, received_qty = container.inventory.receive_incoming_stock(
+                client_id=user.client_id,
+                inbound_id=inbound_id,
+                qty=payload.quantity,
+                unit_cost=payload.unit_cost,
+                note=payload.note,
+                user_id=user.user_id,
+            )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -563,6 +699,78 @@ def receive_inbound(
         received_qty=received_qty,
         lot_id=lot_id,
     )
+
+
+@router.post("/opening-stock", response_model=OpeningStockResponse, status_code=201)
+def create_opening_stock(
+    payload: OpeningStockRequest,
+    user: RequestUser = Depends(get_current_user),
+    container: ServiceContainer = Depends(get_container),
+) -> OpeningStockResponse:
+    require_page_access(user, "Catalog & Stock")
+    stock_ledger = _stock_ledger(container)
+    lot_ids: list[str] = []
+
+    if stock_ledger is not None:
+        try:
+            with stock_ledger.session_factory() as session:
+                for line in payload.lines:
+                    variant = stock_ledger.resolve_variant(
+                        session,
+                        client_id=user.client_id,
+                        variant_id=line.variant_id,
+                    )
+                    if variant.product_id != payload.product_id:
+                        raise HTTPException(
+                            status_code=400,
+                            detail="All opening stock lines must belong to the selected product",
+                        )
+                    lot_ids.append(
+                        stock_ledger.post_inbound(
+                            session=session,
+                            client_id=user.client_id,
+                            user_id=user.user_id,
+                            variant=variant,
+                            qty=line.qty,
+                            unit_cost=line.unit_cost,
+                            supplier_snapshot="",
+                            note=line.note.strip(),
+                            source_type="opening_stock",
+                            source_id=line.reference.strip() or payload.product_id,
+                        )
+                    )
+                session.commit()
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    else:
+        for line in payload.lines:
+            variant_id, variant_name, parent_product_id = _resolve_inventory_variant(
+                container,
+                user.client_id,
+                variant_id=line.variant_id,
+            )
+            if parent_product_id != payload.product_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="All opening stock lines must belong to the selected product",
+                )
+            lot_ids.append(
+                container.inventory.add_stock(
+                    client_id=user.client_id,
+                    product_id=parent_product_id,
+                    variant_id=variant_id,
+                    product_name=variant_name,
+                    qty=line.qty,
+                    unit_cost=line.unit_cost,
+                    supplier_snapshot="",
+                    note=line.note.strip(),
+                    source_type="opening_stock",
+                    source_id=line.reference.strip() or payload.product_id,
+                    user_id=user.user_id,
+                )
+            )
+
+    return OpeningStockResponse(success=True, product_id=payload.product_id, lot_ids=lot_ids)
 
 
 @router.post("/add", response_model=InventoryAddResponse)
@@ -577,17 +785,42 @@ def add_inventory(
         user.client_id,
         variant_id=payload.variant_id,
     )
-    lot_id = container.inventory.add_stock(
-        client_id=user.client_id,
-        product_id=parent_product_id,
-        variant_id=variant_id,
-        product_name=variant_name,
-        qty=payload.qty,
-        unit_cost=payload.unit_cost,
-        supplier_snapshot=payload.supplier_snapshot,
-        note=payload.note,
-        source_type=payload.source_type,
-        source_id=payload.source_id,
-        user_id=user.user_id,
-    )
+    stock_ledger = _stock_ledger(container)
+    if stock_ledger is not None:
+        try:
+            with stock_ledger.session_factory() as session:
+                variant = stock_ledger.resolve_variant(
+                    session,
+                    client_id=user.client_id,
+                    variant_id=variant_id,
+                )
+                lot_id = stock_ledger.post_inbound(
+                    session=session,
+                    client_id=user.client_id,
+                    user_id=user.user_id,
+                    variant=variant,
+                    qty=payload.qty,
+                    unit_cost=payload.unit_cost,
+                    supplier_snapshot=payload.supplier_snapshot,
+                    note=payload.note,
+                    source_type=payload.source_type,
+                    source_id=payload.source_id,
+                )
+                session.commit()
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    else:
+        lot_id = container.inventory.add_stock(
+            client_id=user.client_id,
+            product_id=parent_product_id,
+            variant_id=variant_id,
+            product_name=variant_name,
+            qty=payload.qty,
+            unit_cost=payload.unit_cost,
+            supplier_snapshot=payload.supplier_snapshot,
+            note=payload.note,
+            source_type=payload.source_type,
+            source_id=payload.source_id,
+            user_id=user.user_id,
+        )
     return InventoryAddResponse(lot_id=lot_id)

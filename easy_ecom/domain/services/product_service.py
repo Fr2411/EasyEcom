@@ -180,6 +180,7 @@ class ProductService:
                 "color": color,
                 "other": other,
                 "sku_code": sku_code,
+                "barcode": "",
                 "default_selling_price": "0",
                 "max_discount_pct": "0",
                 "is_active": "true",
@@ -307,10 +308,12 @@ class ProductService:
                     variants.loc[i, "color"] = color
                     variants.loc[i, "other"] = other
                     variants.loc[i, "variant_name"] = variant_name
+                    variants.loc[i, "is_active"] = "true"
                     row["size"] = size
                     row["color"] = color
                     row["other"] = other
                     row["variant_name"] = variant_name
+                    row["is_active"] = "true"
                     if default_selling_price is not None:
                         variants.loc[i, "default_selling_price"] = str(default_selling_price)
                         row["default_selling_price"] = str(default_selling_price)
@@ -337,7 +340,9 @@ class ProductService:
                 row = scoped.iloc[0].to_dict()
                 i = scoped.index[0]
                 variants.loc[i, "variant_name"] = variant_name
+                variants.loc[i, "is_active"] = "true"
                 row["variant_name"] = variant_name
+                row["is_active"] = "true"
                 if default_selling_price is not None or max_discount_pct is not None:
                     if default_selling_price is not None:
                         variants.loc[i, "default_selling_price"] = str(default_selling_price)
@@ -366,6 +371,7 @@ class ProductService:
             "color": color,
             "other": other,
             "sku_code": sku_code,
+            "barcode": "",
             "default_selling_price": str(default_selling_price if default_selling_price is not None else 0),
             "max_discount_pct": str(max_discount_pct if max_discount_pct is not None else 0),
             "is_active": "true",

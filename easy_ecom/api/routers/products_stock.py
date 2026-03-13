@@ -150,6 +150,8 @@ def save_products_stock(
             features_text="\n".join(payload.identity.features),
             variant_entries=entries,
             selected_product_id=payload.selectedProductId or "",
+            operation="update" if payload.mode == "existing" else "create",
+            post_stock=True,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

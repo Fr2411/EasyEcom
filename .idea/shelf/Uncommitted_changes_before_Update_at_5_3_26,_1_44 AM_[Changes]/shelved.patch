@@ -1,0 +1,19 @@
+Index: .env.example
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>DATA_DIR=easy_ecom/data_files\nAPP_TITLE=Easy_Ecom\nALLOW_BACKORDER=false\nSUPER_ADMIN_EMAIL=admin@easyecom.local\nSUPER_ADMIN_PASSWORD=ChangeMe123!\nCREATE_DEFAULT_CLIENT=false\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.env.example b/.env.example
+--- a/.env.example	(revision 4332a21998e1277c82e800dc11739621100ea1ef)
++++ b/.env.example	(date 1772659919462)
+@@ -1,6 +1,6 @@
+ DATA_DIR=easy_ecom/data_files
+ APP_TITLE=Easy_Ecom
+ ALLOW_BACKORDER=false
+-SUPER_ADMIN_EMAIL=admin@easyecom.local
+-SUPER_ADMIN_PASSWORD=ChangeMe123!
++SUPER_ADMIN_EMAIL=frabby24@gmail.com
++SUPER_ADMIN_PASSWORD=Fr@241189
+ CREATE_DEFAULT_CLIENT=false

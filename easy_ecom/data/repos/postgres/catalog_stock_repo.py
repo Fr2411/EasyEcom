@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from easy_ecom.core.ids import new_uuid
 from easy_ecom.core.time_utils import now_iso
-from easy_ecom.data.store.postgres_models import InventoryTxnModel, ProductVariantModel
+from easy_ecom.data.store.postgres_models import ProductVariantModel
+from easy_ecom.domain.services.stock_ledger_service import StockLedgerService, VariantContext
 
 if TYPE_CHECKING:
     from easy_ecom.domain.services.catalog_stock_service import VariantWorkspaceEntry
@@ -16,6 +17,7 @@ if TYPE_CHECKING:
 class CatalogStockPostgresRepo:
     def __init__(self, session_factory: sessionmaker[Session]):
         self.session_factory = session_factory
+        self.stock_ledger = StockLedgerService(session_factory)
 
     def persist_workspace_rows(
         self,
@@ -26,11 +28,14 @@ class CatalogStockPostgresRepo:
         product_name: str,
         entries: list[VariantWorkspaceEntry],
         existing_by_identity: dict[str, str],
+        post_stock: bool = True,
+        archive_missing: bool = True,
     ) -> list[str]:
         lot_ids: list[str] = []
+        kept_variant_ids: list[str] = []
         with self.session_factory.begin() as session:
             for entry in entries:
-                variant_id = self._upsert_variant(
+                variant = self._upsert_variant(
                     session=session,
                     client_id=client_id,
                     product_id=product_id,
@@ -38,35 +43,24 @@ class CatalogStockPostgresRepo:
                     entry=entry,
                     existing_variant_id=entry.variant_id or existing_by_identity.get(entry.identity_key(), ""),
                 )
+                variant_id = str(variant.variant_id)
                 existing_by_identity[entry.identity_key()] = variant_id
-                if entry.qty <= 0:
+                kept_variant_ids.append(variant_id)
+                if not post_stock or entry.qty <= 0:
                     continue
-                lot_id = self._next_lot_id(session=session, client_id=client_id)
-                lot_ids.append(lot_id)
-                session.add(
-                    InventoryTxnModel(
-                        txn_id=new_uuid(),
+                lot_ids.append(
+                    self.stock_ledger.post_inbound(
+                        session=session,
                         client_id=client_id,
-                        timestamp=now_iso(),
                         user_id=user_id,
-                        txn_type="IN",
-                        product_id=product_id,
-                        variant_id=variant_id,
-                        product_name=f"{product_name} | "
-                        + " | ".join(
-                            [
-                                part
-                                for part in [
-                                    f"Size:{entry.size}" if entry.size else "",
-                                    f"Color:{entry.color}" if entry.color else "",
-                                    f"Other:{entry.other}" if entry.other else "",
-                                ]
-                                if part
-                            ]
+                        variant=VariantContext(
+                            product_id=product_id,
+                            product_name=product_name,
+                            variant_id=variant_id,
+                            variant_name=str(variant.variant_name or variant_id),
                         ),
-                        qty=str(entry.qty),
-                        unit_cost=str(entry.unit_cost),
-                        total_cost=str(entry.qty * entry.unit_cost),
+                        qty=entry.qty,
+                        unit_cost=entry.unit_cost,
                         supplier_snapshot=entry.supplier,
                         note=" | ".join(
                             [
@@ -79,9 +73,15 @@ class CatalogStockPostgresRepo:
                             ]
                         ),
                         source_type="catalog_stock",
-                        source_id=entry.lot_reference,
-                        lot_id=lot_id,
+                        source_id=entry.lot_reference or f"catalog-stock:{product_id}",
                     )
+                )
+            if archive_missing:
+                self._archive_missing_variants(
+                    session=session,
+                    client_id=client_id,
+                    product_id=product_id,
+                    keep_variant_ids=kept_variant_ids,
                 )
         return lot_ids
 
@@ -94,7 +94,7 @@ class CatalogStockPostgresRepo:
         product_name: str,
         entry: VariantWorkspaceEntry,
         existing_variant_id: str,
-    ) -> str:
+    ) -> ProductVariantModel:
         variant = None
         if existing_variant_id:
             variant = session.execute(
@@ -143,7 +143,8 @@ class CatalogStockPostgresRepo:
             variant.variant_name = variant_name
             variant.default_selling_price = str(entry.default_selling_price)
             variant.max_discount_pct = str(entry.max_discount_pct)
-        return str(variant.variant_id)
+            variant.is_active = "true"
+        return variant
 
     @staticmethod
     def _variant_name(product_name: str, entry: VariantWorkspaceEntry) -> str:
@@ -157,22 +158,23 @@ class CatalogStockPostgresRepo:
         suffix = " | ".join(parts) if parts else "Default"
         return f"{product_name} | {suffix}" if product_name else suffix
 
-    def _next_lot_id(self, *, session: Session, client_id: str) -> str:
-        year = now_iso()[:4]
+    @staticmethod
+    def _archive_missing_variants(
+        *,
+        session: Session,
+        client_id: str,
+        product_id: str,
+        keep_variant_ids: list[str],
+    ) -> None:
         rows = session.execute(
-            select(InventoryTxnModel.lot_id).where(
-                and_(
-                    InventoryTxnModel.client_id == client_id,
-                    InventoryTxnModel.lot_id.like(f"LOT-{year}-%"),
-                    or_(InventoryTxnModel.lot_id.is_not(None), InventoryTxnModel.lot_id != ""),
-                )
+            select(ProductVariantModel).where(
+                ProductVariantModel.client_id == client_id,
+                ProductVariantModel.parent_product_id == product_id,
             )
-        ).all()
-        max_no = 0
+        ).scalars().all()
+        keep = set(str(variant_id) for variant_id in keep_variant_ids if str(variant_id).strip())
         for row in rows:
-            lot_id = str(row[0] or "")
-            try:
-                max_no = max(max_no, int(lot_id.split("-")[-1]))
-            except Exception:
-                continue
-        return f"LOT-{year}-{max_no + 1:05d}"
+            if str(row.variant_id) in keep:
+                row.is_active = "true"
+            else:
+                row.is_active = "false"
