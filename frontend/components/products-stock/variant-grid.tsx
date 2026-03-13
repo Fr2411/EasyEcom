@@ -9,9 +9,9 @@ type VariantGridProps = {
   onSameCostEnabledChange: (enabled: boolean) => void;
   onSharedCostChange: (value: string) => void;
   onApplySharedCost: () => void;
-  onVariantChange: (id: string, field: keyof Variant, value: string) => void;
+  onVariantChange: (rowId: string, field: keyof Variant, value: string) => void;
   onAddVariant: () => void;
-  onRemoveVariant: (id: string) => void;
+  onRemoveVariant: (rowId: string) => void;
 };
 
 export function VariantGrid({
@@ -49,15 +49,15 @@ export function VariantGrid({
         </thead>
         <tbody>
           {variants.map((variant) => (
-            <tr key={variant.id}>
-              <td><input value={variant.size} onChange={(e) => onVariantChange(variant.id, 'size', e.target.value)} /></td>
-              <td><input value={variant.color} onChange={(e) => onVariantChange(variant.id, 'color', e.target.value)} /></td>
-              <td><input value={variant.other} onChange={(e) => onVariantChange(variant.id, 'other', e.target.value)} /></td>
-              <td><input value={String(variant.qty)} onChange={(e) => onVariantChange(variant.id, 'qty', e.target.value)} /></td>
-              <td><input value={String(variant.cost)} onChange={(e) => onVariantChange(variant.id, 'cost', e.target.value)} /></td>
-              <td><input value={String(variant.defaultSellingPrice)} onChange={(e) => onVariantChange(variant.id, 'defaultSellingPrice', e.target.value)} /></td>
-              <td><input value={String(variant.maxDiscountPct)} onChange={(e) => onVariantChange(variant.id, 'maxDiscountPct', e.target.value)} /></td>
-              <td><button type="button" onClick={() => onRemoveVariant(variant.id)}>Remove</button></td>
+            <tr key={variant.rowId}>
+              <td><input value={variant.size} onChange={(e) => onVariantChange(variant.rowId, 'size', e.target.value)} /></td>
+              <td><input value={variant.color} onChange={(e) => onVariantChange(variant.rowId, 'color', e.target.value)} /></td>
+              <td><input value={variant.other} onChange={(e) => onVariantChange(variant.rowId, 'other', e.target.value)} /></td>
+              <td><input value={String(variant.qty)} onChange={(e) => onVariantChange(variant.rowId, 'qty', e.target.value)} /></td>
+              <td><input value={String(variant.cost)} onChange={(e) => onVariantChange(variant.rowId, 'cost', e.target.value)} /></td>
+              <td><input value={String(variant.defaultSellingPrice)} onChange={(e) => onVariantChange(variant.rowId, 'defaultSellingPrice', e.target.value)} /></td>
+              <td><input value={String(variant.maxDiscountPct)} onChange={(e) => onVariantChange(variant.rowId, 'maxDiscountPct', e.target.value)} /></td>
+              <td><button type="button" onClick={() => onRemoveVariant(variant.rowId)}>Remove</button></td>
             </tr>
           ))}
         </tbody>

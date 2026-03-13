@@ -9,7 +9,7 @@ import { VariantGrid } from '@/components/products-stock/variant-grid';
 import { SaveSummary } from '@/components/products-stock/save-summary';
 import { getProductsStockSnapshot, saveProductStock } from '@/lib/api/products-stock';
 import { createEmptyVariant, generateVariantsFromInputs, hasIdentity, summarizeVariants, variantIdentityKey } from '@/lib/products-stock/variant-utils';
-import type { ProductIdentity, ProductRecord, Variant, VariantMode } from '@/types/products-stock';
+import type { ProductIdentity, ProductRecord, SaveProductPayload, Variant, VariantMode } from '@/types/products-stock';
 
 const EMPTY_IDENTITY: ProductIdentity = { productName: '', supplier: '', category: '', description: '', features: [] };
 
@@ -72,7 +72,13 @@ export function ProductsStockWorkspace() {
     if (error) return;
     setIsSaving(true);
     try {
-      await saveProductStock({ mode, identity, variants, selectedProductId: mode === 'existing' ? selectedProductId ?? undefined : undefined });
+      const payload: SaveProductPayload = {
+        mode,
+        identity,
+        variants,
+        selectedProductId: mode === 'existing' ? selectedProductId ?? undefined : undefined,
+      };
+      await saveProductStock(payload);
       await loadSnapshot();
       setValidationMessage('Saved successfully.');
     } catch (errorSave) {
@@ -129,7 +135,7 @@ export function ProductsStockWorkspace() {
           onVariantChange={(id, field, value) =>
             setVariants((current) =>
               current.map((variant) =>
-                variant.id !== id
+                variant.rowId !== id
                   ? variant
                   : {
                       ...variant,
@@ -139,7 +145,7 @@ export function ProductsStockWorkspace() {
             )
           }
           onAddVariant={() => setVariants((current) => [...current, createEmptyVariant()])}
-          onRemoveVariant={(id) => setVariants((current) => current.filter((variant) => variant.id !== id))}
+          onRemoveVariant={(id) => setVariants((current) => current.filter((variant) => variant.rowId !== id))}
         />
 
         <SaveSummary

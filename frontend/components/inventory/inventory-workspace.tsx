@@ -10,7 +10,7 @@ import { VariantGenerator } from '@/components/products-stock/variant-generator'
 import { VariantGrid } from '@/components/products-stock/variant-grid';
 import { createEmptyVariant, generateVariantsFromInputs, hasIdentity, summarizeVariants, variantIdentityKey } from '@/lib/products-stock/variant-utils';
 import type { InventoryItem, InventoryMovement } from '@/types/inventory';
-import type { ProductIdentity, ProductRecord, Variant, VariantMode } from '@/types/products-stock';
+import type { ProductIdentity, ProductRecord, SaveProductPayload, Variant, VariantMode } from '@/types/products-stock';
 
 type AdjustmentType = 'stock_in' | 'stock_out' | 'correction';
 
@@ -162,7 +162,7 @@ export function InventoryWorkspace() {
   const handleVariantChange = (id: string, field: keyof Variant, value: string) => {
     setVariants((current) =>
       current.map((variant) => {
-        if (variant.id !== id) return variant;
+        if (variant.rowId !== id) return variant;
         if (field === 'qty' || field === 'cost' || field === 'defaultSellingPrice' || field === 'maxDiscountPct') {
           return { ...variant, [field]: Number(value) || 0 };
         }
@@ -216,12 +216,13 @@ export function InventoryWorkspace() {
     try {
       setSaving(true);
       setCatalogMessage(undefined);
-      await saveProductStock({
+      const payload: SaveProductPayload = {
         mode,
         identity,
         variants,
         selectedProductId: mode === 'existing' ? selectedProductId ?? undefined : undefined,
-      });
+      };
+      await saveProductStock(payload);
       setCatalogMessage('Product and stock saved successfully.');
       await Promise.all([loadCatalog(), loadInventory(query)]);
     } catch (err) {
@@ -293,7 +294,7 @@ export function InventoryWorkspace() {
           }}
           onVariantChange={handleVariantChange}
           onAddVariant={() => setVariants((current) => [...current, createEmptyVariant()])}
-          onRemoveVariant={(id) => setVariants((current) => current.filter((variant) => variant.id !== id))}
+          onRemoveVariant={(id) => setVariants((current) => current.filter((variant) => variant.rowId !== id))}
         />
         <SaveSummary
           variantCount={summary.variantCount}
