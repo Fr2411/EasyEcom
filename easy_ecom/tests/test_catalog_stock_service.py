@@ -224,6 +224,59 @@ def test_new_product_with_multiple_variant_opening_stock_posts_each_variant(tmp_
     assert len(txns) == 2
 
 
+def test_save_workspace_rolls_back_all_csv_writes_when_inventory_post_fails(tmp_path: Path):
+    svc, product_svc, inv_svc = _service(tmp_path)
+    original_add_stock = inv_svc.add_stock
+
+    def fail_on_second(*args, **kwargs):
+        if len(inv_svc.repo.all()) >= 1:
+            raise ValueError("forced inventory failure")
+        return original_add_stock(*args, **kwargs)
+
+    inv_svc.add_stock = fail_on_second
+
+    try:
+        svc.save_workspace(
+            client_id="c1",
+            user_id="u1",
+            typed_product_name="Rollback Tee",
+            supplier="s1",
+            category="General",
+            description="",
+            features_text="",
+            variant_entries=[
+                VariantWorkspaceEntry(size="M", color="Red", qty=2, unit_cost=20),
+                VariantWorkspaceEntry(size="L", color="Blue", qty=3, unit_cost=25),
+            ],
+        )
+        raise AssertionError("expected ValueError")
+    except ValueError as exc:
+        assert "forced inventory failure" in str(exc)
+
+    assert product_svc.list_by_client("c1").empty
+    assert product_svc.list_variants_by_client("c1").empty
+    assert inv_svc.repo.all().empty
+
+
+def test_save_workspace_rejects_non_finite_numeric_values(tmp_path: Path):
+    svc, _, _ = _service(tmp_path)
+
+    try:
+        svc.save_workspace(
+            client_id="c1",
+            user_id="u1",
+            typed_product_name="Numeric Tee",
+            supplier="s1",
+            category="General",
+            description="",
+            features_text="",
+            variant_entries=[VariantWorkspaceEntry(size="M", color="Red", qty=float("inf"), unit_cost=10)],
+        )
+        raise AssertionError("expected ValueError")
+    except ValueError as exc:
+        assert "finite number" in str(exc)
+
+
 def test_variant_name_starts_with_product_name(tmp_path: Path):
     svc, product_svc, _ = _service(tmp_path)
 
