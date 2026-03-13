@@ -30,7 +30,8 @@ export function generateVariantsFromInputs({ size, color, other }: VariantGenera
     colorSource.forEach((c) => {
       otherSource.forEach((o) => {
         rows.push({
-          id: crypto.randomUUID(),
+          rowId: crypto.randomUUID(),
+          variant_id: crypto.randomUUID(),
           size: s,
           color: c,
           other: o,
@@ -55,7 +56,8 @@ export const featureListToInput = (features: string[]): string => features.join(
 
 export function createEmptyVariant(): Variant {
   return {
-    id: crypto.randomUUID(),
+    rowId: crypto.randomUUID(),
+    variant_id: crypto.randomUUID(),
     size: '',
     color: '',
     other: '',

@@ -1,7 +1,8 @@
 export type VariantMode = 'existing' | 'new';
 
 export type Variant = {
-  id: string;
+  rowId: string;
+  variant_id: string;
   qty: number;
   cost: number;
   defaultSellingPrice: number;
@@ -46,5 +47,24 @@ export type SaveProductPayload = {
   mode: VariantMode;
   identity: ProductIdentity;
   variants: Variant[];
+  selectedProductId?: string;
+};
+
+export type SaveVariant = {
+  variant_id: string;
+  variant_name: string;
+  qty: number;
+  cost: number;
+  defaultSellingPrice: number;
+  maxDiscountPct: number;
+  size: string;
+  color: string;
+  other: string;
+};
+
+export type SaveProductApiPayload = {
+  mode: VariantMode;
+  identity: ProductIdentity;
+  variants: SaveVariant[];
   selectedProductId?: string;
 };
