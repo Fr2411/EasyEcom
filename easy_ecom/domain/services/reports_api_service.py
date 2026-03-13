@@ -16,6 +16,7 @@ from easy_ecom.data.store.postgres_models import (
     ProductModel,
     PurchaseItemModel,
     PurchaseModel,
+    ProductVariantModel,
     SalesOrderItemModel,
     SalesOrderModel,
     SalesReturnItemModel,
@@ -177,6 +178,9 @@ class ReportsApiService:
             products = session.execute(
                 select(ProductModel).where(ProductModel.client_id == client_id)
             ).scalars().all()
+            variants = session.execute(
+                select(ProductVariantModel).where(ProductVariantModel.client_id == client_id)
+            ).scalars().all()
             txns = session.execute(
                 select(InventoryTxnModel).where(InventoryTxnModel.client_id == client_id)
             ).scalars().all()
@@ -184,23 +188,60 @@ class ReportsApiService:
         if filters.category:
             products = [p for p in products if (p.category or "") == filters.category]
         product_ids = {p.product_id for p in products}
+
+        variants = [v for v in variants if v.parent_product_id in product_ids]
+        variant_by_id = {v.variant_id: v for v in variants}
+        product_by_id = {p.product_id: p for p in products}
+        qty_by_variant: dict[str, float] = defaultdict(float)
         qty_by_product: dict[str, float] = defaultdict(float)
+
         for txn in txns:
             if txn.product_id not in product_ids:
                 continue
+            if not txn.variant_id:
+                continue
             qty = self._to_float(txn.qty)
-            qty_by_product[txn.product_id] += stock_deltas(str(txn.txn_type), qty).on_hand
+            signed_qty = stock_deltas(str(txn.txn_type), qty).on_hand
+            qty_by_variant[txn.variant_id] += signed_qty
+
+        for variant_id, current_qty in qty_by_variant.items():
+            variant = variant_by_id.get(variant_id)
+            parent_product_id = variant.parent_product_id if variant else None
+            if not parent_product_id:
+                continue
+            qty_by_product[parent_product_id] += current_qty
+
+        variant_rows = []
+        for variant in variants:
+            product = product_by_id.get(variant.parent_product_id)
+            if product is None:
+                continue
+            variant_rows.append(
+                {
+                    "variant_id": variant.variant_id,
+                    "variant_name": variant.variant_name,
+                    "sku_code": variant.sku_code,
+                    "product_id": product.product_id,
+                    "product_name": product.product_name,
+                    "current_qty": qty_by_variant.get(variant.variant_id, 0.0),
+                    "is_active": str(variant.is_active).lower() == "true",
+                }
+            )
 
         low = []
         total_units = 0.0
-        for p in products:
-            current = qty_by_product.get(p.product_id, 0.0)
+
+        for row in variant_rows:
+            current = float(row["current_qty"])
             total_units += max(0.0, current)
-            if current > 0 and current <= 5:
+            if row["is_active"] and current > 0 and current <= 5:
                 low.append(
                     {
-                        "product_id": p.product_id,
-                        "product_name": p.product_name,
+                        "product_id": str(row["product_id"]),
+                        "product_name": str(row["product_name"]),
+                        "variant_id": str(row["variant_id"]),
+                        "variant_name": str(row["variant_name"]),
+                        "sku_code": str(row["sku_code"]),
                         "current_qty": current,
                     }
                 )
@@ -222,9 +263,28 @@ class ReportsApiService:
         return {
             "from_date": filters.from_date.isoformat(),
             "to_date": filters.to_date.isoformat(),
-            "total_skus_with_stock": sum(1 for v in qty_by_product.values() if v > 0),
+            "total_skus_with_stock": sum(1 for row in variant_rows if float(row["current_qty"]) > 0),
             "total_stock_units": total_units,
             "low_stock_items": sorted(low, key=lambda row: row["current_qty"])[:20],
+            "variant_stock_rows": [
+                {
+                    "variant_id": str(row["variant_id"]),
+                    "variant_name": str(row["variant_name"]),
+                    "sku_code": str(row["sku_code"]),
+                    "product_id": str(row["product_id"]),
+                    "product_name": str(row["product_name"]),
+                    "current_qty": float(row["current_qty"]),
+                }
+                for row in sorted(variant_rows, key=lambda item: (str(item["product_name"]), str(item["variant_name"]), str(item["variant_id"])))
+            ],
+            "product_stock_rollups": [
+                {
+                    "product_id": p.product_id,
+                    "product_name": p.product_name,
+                    "current_qty": float(qty_by_product.get(p.product_id, 0.0)),
+                }
+                for p in sorted(products, key=lambda product: product.product_name)
+            ],
             "stock_movement_trend": [
                 {"period": period, "qty_in": row["qty_in"], "qty_out": row["qty_out"]}
                 for period, row in sorted(movement.items(), key=lambda x: x[0])
@@ -382,4 +442,3 @@ class ReportsApiService:
             "returns_total": returns["return_amount_total"],
             "purchases_total": purchases["purchases_subtotal"],
         }
-
