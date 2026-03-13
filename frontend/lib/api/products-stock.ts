@@ -15,17 +15,9 @@ type SnapshotApiResponse = {
   categories: string[];
 };
 
-function buildVariantName(variant: Pick<Variant, 'size' | 'color' | 'other'>): string {
-  return [variant.size, variant.color, variant.other]
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .join(' / ');
-}
-
 function mapVariantForSave(variant: Variant): SaveVariant {
   return {
-    variant_id: variant.variant_id,
-    variant_name: buildVariantName(variant),
+    id: variant.variant_id,
     qty: variant.qty,
     cost: variant.cost,
     defaultSellingPrice: variant.defaultSellingPrice,

@@ -101,7 +101,7 @@ Products & Stock save is now fully variant-pricing-only:
 This permanently eliminates the backend validation failure caused by parent `default_selling_price=0` in Products & Stock save.
 
 - Frontend save payload now carries `selectedProductId` when editing an existing product, so backend updates target the explicit parent product instead of only relying on typed name matching.
-- Frontend save adapter now maps UI rows to explicit API variant contract (`variant_id`, `variant_name`), and variant grid row keys are isolated as UI-only `rowId` to keep React editing stable without leaking rendering IDs into backend payloads.
+- Frontend save adapter now maps UI rows to explicit API variant contract (`id`, `size`, `color`, `other`, `qty`, `cost`, `defaultSellingPrice`, `maxDiscountPct`), and variant grid row keys are isolated as UI-only `rowId` to keep React editing stable without leaking rendering IDs into backend payloads.
 - Variant grid now exposes and edits `size`, `color`, and `other` directly so manual multi-variant entry preserves true variant identity attributes, not just labels.
 - Frontend validation now blocks duplicate `(size,color,other)` combinations before save to prevent silent row collapse during backend upsert.
 - Inventory page (`/inventory`) now enforces the same variant-save contract as Products & Stock workspace: existing-product saves include `selectedProductId`, and frontend validation blocks blank or duplicate variant identities (including manual rows with qty/cost/price/discount but no identity) before API submission.
@@ -110,6 +110,21 @@ This permanently eliminates the backend validation failure caused by parent `def
 - Service regression coverage now verifies blank/whitespace variant attributes normalize to a single identity key (expected dedupe behavior), preventing NULL/empty-style drift.
 - Products & Stock save pipeline now logs trace points for variant identity values at router payload parse, `VariantWorkspaceEntry` mapping, `save_workspace` loop, `upsert_variant`, and final stored rows, making it practical to verify that distinct UI variants persist as distinct DB rows.
 - Products & Stock load/save UI error handling now surfaces backend `detail` messages (including JSON-formatted API errors) instead of vague load failures, and preserves explicit post-save refresh failure context.
+
+
+
+### Products-stock API payload contract (save)
+
+`POST /products-stock/save` variant rows use backend-normalized field names:
+
+- `id`: existing variant identifier (blank for new variants)
+- `size`, `color`, `other`: variant identity attributes (at least one required)
+- `qty`, `cost`: opening/inbound stock input values
+- `defaultSellingPrice`, `maxDiscountPct`: variant pricing controls
+
+Notes:
+- `variant_id` and `variant_name` are not part of the save request contract anymore.
+- Snapshot responses still expose variant identity as `id`; frontend maps this to local `variant_id` state only for UI editing continuity.
 
 ## Catalog & Stock variant identity contract (critical)
 
