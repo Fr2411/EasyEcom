@@ -3,11 +3,13 @@ export type CatalogMode = 'existing' | 'new';
 export type CatalogVariant = {
   tempId: string;
   variant_id?: string;
+  defaultPurchasePrice: number;
   defaultSellingPrice: number;
   maxDiscountPct: number;
   size: string;
   color: string;
   other: string;
+  isArchived?: boolean;
 };
 
 export type VariantGenerationInput = {
@@ -45,11 +47,13 @@ export type SaveCatalogPayload = {
   mode: CatalogMode;
   identity: ProductIdentity;
   variants: CatalogVariant[];
+  archiveVariantIds?: string[];
   selectedProductId?: string;
 };
 
 export type SaveCatalogVariant = {
   variant_id?: string;
+  defaultPurchasePrice: number;
   defaultSellingPrice: number;
   maxDiscountPct: number;
   size: string;
@@ -60,4 +64,5 @@ export type SaveCatalogVariant = {
 export type SaveCatalogApiPayload = {
   identity: ProductIdentity;
   variants: SaveCatalogVariant[];
+  archiveVariantIds?: string[];
 };

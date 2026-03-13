@@ -206,6 +206,7 @@ describe('InventoryPage', () => {
               size: 'M',
               color: 'Red',
               other: '',
+              defaultPurchasePrice: 11,
               defaultSellingPrice: 20,
               maxDiscountPct: 10,
             },
@@ -222,6 +223,7 @@ describe('InventoryPage', () => {
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Opening Stock' })).toBeTruthy());
     const unitCostInputs = screen.getAllByLabelText('Unit Cost');
     const openingUnitCost = unitCostInputs[0] as HTMLInputElement;
+    expect(openingUnitCost.value).toBe('11');
     fireEvent.change(openingUnitCost, { target: { value: '12' } });
     fireEvent.click(screen.getByRole('button', { name: 'Post Opening Stock' }));
 

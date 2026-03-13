@@ -77,6 +77,75 @@ def test_existing_product_mode_can_add_new_variant(tmp_path: Path):
     assert any(v["size"] == "L" and v["color"] == "Blue" for v in variants)
 
 
+def test_existing_product_omission_does_not_archive_other_variants(tmp_path: Path):
+    svc, product_svc, _ = _service(tmp_path)
+    product_id = product_svc.create(
+        ProductCreate(
+            client_id="c1",
+            supplier="s",
+            product_name="Jogger",
+            sizes_csv="M,L",
+            colors_csv="Black",
+            others_csv="",
+        )
+    )
+    original_variants = product_svc.list_variants("c1", product_id)
+    keep_variant = next(variant for variant in original_variants if variant["size"] == "M")
+
+    svc.save_workspace(
+        client_id="c1",
+        user_id="u1",
+        typed_product_name="Jogger",
+        supplier="s",
+        category="General",
+        description="",
+        features_text="",
+        selected_product_id=product_id,
+        variant_entries=[
+            VariantWorkspaceEntry(
+                variant_id=str(keep_variant["variant_id"]),
+                size="M",
+                color="Black",
+                qty=0,
+                unit_cost=0,
+            )
+        ],
+        archive_variant_ids=[],
+    )
+
+    refreshed = product_svc.list_variants("c1", product_id)
+    assert len(refreshed) == 2
+
+
+def test_default_purchase_price_persists_on_variant_save(tmp_path: Path):
+    svc, product_svc, _ = _service(tmp_path)
+
+    product_id, _, _ = svc.save_workspace(
+        client_id="c1",
+        user_id="u1",
+        typed_product_name="Sneaker",
+        supplier="s1",
+        category="General",
+        description="",
+        features_text="",
+        variant_entries=[
+            VariantWorkspaceEntry(
+                size="M",
+                color="Red",
+                qty=0,
+                unit_cost=0,
+                default_purchase_price=18,
+                default_selling_price=32,
+            )
+        ],
+        post_stock=False,
+    )
+
+    variants = product_svc.list_variants("c1", product_id)
+    assert len(variants) == 1
+    assert float(variants[0]["default_purchase_price"]) == 18.0
+
+
 def test_new_product_mode_generates_variants_from_option_axes(tmp_path: Path):
     svc, _, _ = _service(tmp_path)
 

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 
-import { generateVariantsFromInputs } from '@/lib/products-stock/variant-utils';
+import { generateVariantsFromInputs, mergeCatalogVariants } from '@/lib/products-stock/variant-utils';
 
 describe('generateVariantsFromInputs', () => {
   test('generates distinct size-only variants', () => {
@@ -66,5 +66,32 @@ describe('generateVariantsFromInputs', () => {
       ['M', 'Black'],
       ['M', 'White']
     ]);
+  });
+
+  test('merges generated variants into existing rows instead of replacing them', () => {
+    const current = [
+      {
+        tempId: 'existing',
+        variant_id: 'v-1',
+        size: 'M',
+        color: 'Black',
+        other: '',
+        defaultPurchasePrice: 10,
+        defaultSellingPrice: 20,
+        maxDiscountPct: 10,
+        isArchived: false,
+      },
+    ];
+
+    const incoming = generateVariantsFromInputs({
+      size: 'L',
+      color: 'Black',
+      other: '',
+    });
+
+    const merged = mergeCatalogVariants(current, incoming);
+
+    expect(merged).toHaveLength(2);
+    expect(merged.map((row) => row.size)).toEqual(['M', 'L']);
   });
 });

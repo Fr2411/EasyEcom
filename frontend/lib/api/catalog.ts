@@ -27,14 +27,17 @@ function mapApiVariant(variant: ApiCatalogVariant): CatalogVariant {
     size: variant.size,
     color: variant.color,
     other: variant.other,
+    defaultPurchasePrice: variant.defaultPurchasePrice,
     defaultSellingPrice: variant.defaultSellingPrice,
     maxDiscountPct: variant.maxDiscountPct,
+    isArchived: false,
   };
 }
 
 function mapVariantForSave(variant: CatalogVariant): SaveCatalogVariant {
   return {
     variant_id: variant.variant_id,
+    defaultPurchasePrice: variant.defaultPurchasePrice,
     defaultSellingPrice: variant.defaultSellingPrice,
     maxDiscountPct: variant.maxDiscountPct,
     size: variant.size,
@@ -47,6 +50,7 @@ function toApiPayload(payload: SaveCatalogPayload): SaveCatalogApiPayload {
   return {
     identity: payload.identity,
     variants: payload.variants.map(mapVariantForSave),
+    archiveVariantIds: payload.archiveVariantIds ?? [],
   };
 }
 
@@ -59,6 +63,14 @@ export async function getCatalogProducts(): Promise<CatalogSnapshot> {
     })),
     suppliers: response.suppliers,
     categories: response.categories,
+  };
+}
+
+export async function getCatalogProduct(productId: string): Promise<CatalogProductRecord> {
+  const response = await apiClient<ApiCatalogProductRecord>(`/catalog/products/${productId}`);
+  return {
+    ...response,
+    variants: response.variants.map(mapApiVariant),
   };
 }
 

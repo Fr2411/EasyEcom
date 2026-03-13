@@ -23,11 +23,11 @@ type OpeningStockLineDraft = {
   note: string;
 };
 
-const createOpeningLine = (variantId = ''): OpeningStockLineDraft => ({
+const createOpeningLine = (variantId = '', defaultUnitCost = 0): OpeningStockLineDraft => ({
   tempId: crypto.randomUUID(),
   variant_id: variantId,
   qty: 1,
-  unit_cost: 0,
+  unit_cost: defaultUnitCost,
   reference: '',
   note: '',
 });
@@ -64,6 +64,13 @@ function availabilityLabel(status: InventoryItem['availability_status']): string
     default:
       return 'Unmapped';
   }
+}
+
+function findVariantDefaultCost(product: CatalogProductRecord | null, variantId: string): number {
+  if (!product || !variantId) return 0;
+  return (
+    product.variants.find((variant) => variant.variant_id === variantId)?.defaultPurchasePrice ?? 0
+  );
 }
 
 export function InventoryWorkspace() {
@@ -179,7 +186,9 @@ export function InventoryWorkspace() {
         return filtered;
       }
       const firstVariantId = openingProduct.variants[0]?.variant_id ?? '';
-      return firstVariantId ? [createOpeningLine(firstVariantId)] : [];
+      return firstVariantId
+        ? [createOpeningLine(firstVariantId, findVariantDefaultCost(openingProduct, firstVariantId))]
+        : [];
     });
   }, [openingProduct]);
 
@@ -252,7 +261,11 @@ export function InventoryWorkspace() {
       });
       setMessage(`Opening stock recorded into ${response.lot_ids.length} lot(s).`);
       const firstVariantId = openingProduct.variants[0]?.variant_id ?? '';
-      setOpeningLines(firstVariantId ? [createOpeningLine(firstVariantId)] : []);
+      setOpeningLines(
+        firstVariantId
+          ? [createOpeningLine(firstVariantId, findVariantDefaultCost(openingProduct, firstVariantId))]
+          : [],
+      );
       await loadInventory(query);
     } catch (submitError) {
       setError(toErrorMessage(submitError, 'Opening stock failed.'));
@@ -368,7 +381,14 @@ export function InventoryWorkspace() {
                           current.map((currentLine) =>
                             currentLine.tempId !== line.tempId
                               ? currentLine
-                              : { ...currentLine, variant_id: event.target.value }
+                              : {
+                                  ...currentLine,
+                                  variant_id: event.target.value,
+                                  unit_cost: findVariantDefaultCost(
+                                    openingProduct,
+                                    event.target.value,
+                                  ),
+                                }
                           )
                         )
                       }
@@ -466,7 +486,13 @@ export function InventoryWorkspace() {
                 onClick={() => {
                   const firstVariantId = openingProduct?.variants[0]?.variant_id ?? '';
                   if (!firstVariantId) return;
-                  setOpeningLines((current) => [...current, createOpeningLine(firstVariantId)]);
+                  setOpeningLines((current) => [
+                    ...current,
+                    createOpeningLine(
+                      firstVariantId,
+                      findVariantDefaultCost(openingProduct, firstVariantId),
+                    ),
+                  ]);
                 }}
                 disabled={!openingProduct?.variants.length}
               >

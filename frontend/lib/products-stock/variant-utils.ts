@@ -45,8 +45,10 @@ export function generateVariantsFromInputs({ size, color, other }: VariantGenera
           size: s,
           color: c,
           other: o,
+          defaultPurchasePrice: 0,
           defaultSellingPrice: 0,
-          maxDiscountPct: DEFAULT_DISCOUNT
+          maxDiscountPct: DEFAULT_DISCOUNT,
+          isArchived: false,
         });
       });
     });
@@ -68,12 +70,58 @@ export function createEmptyVariant(): CatalogVariant {
     size: '',
     color: '',
     other: '',
+    defaultPurchasePrice: 0,
     defaultSellingPrice: 0,
-    maxDiscountPct: DEFAULT_DISCOUNT
+    maxDiscountPct: DEFAULT_DISCOUNT,
+    isArchived: false,
   };
 }
 
 export function summarizeVariants(variants: CatalogVariant[]) {
-  const pricedVariants = variants.filter((variant) => Number(variant.defaultSellingPrice) > 0).length;
-  return { variantCount: variants.length, pricedVariants };
+  const activeVariants = variants.filter((variant) => !variant.isArchived);
+  const archivedVariants = variants.length - activeVariants.length;
+  const pricedVariants = activeVariants.filter((variant) => Number(variant.defaultSellingPrice) > 0).length;
+  const costedVariants = activeVariants.filter((variant) => Number(variant.defaultPurchasePrice) > 0).length;
+  return {
+    variantCount: activeVariants.length,
+    archivedVariants,
+    pricedVariants,
+    costedVariants,
+  };
+}
+
+export function mergeCatalogVariants(
+  current: CatalogVariant[],
+  incoming: CatalogVariant[],
+): CatalogVariant[] {
+  const merged = current.filter(
+    (variant) => Boolean(variant.variant_id) || Boolean(variant.isArchived) || hasIdentity(variant),
+  );
+  const existingByIdentity = new Map(
+    merged
+      .filter((variant) => hasIdentity(variant))
+      .map((variant) => [variantIdentityKey(variant), variant.tempId]),
+  );
+
+  incoming.forEach((variant) => {
+    const key = variantIdentityKey(variant);
+    if (!hasIdentity(variant)) return;
+    const existingTempId = existingByIdentity.get(key);
+    if (!existingTempId) {
+      merged.push(variant);
+      existingByIdentity.set(key, variant.tempId);
+      return;
+    }
+    const existingIndex = merged.findIndex((row) => row.tempId === existingTempId);
+    if (existingIndex === -1) return;
+    merged[existingIndex] = {
+      ...merged[existingIndex],
+      isArchived: false,
+      size: merged[existingIndex].size || variant.size,
+      color: merged[existingIndex].color || variant.color,
+      other: merged[existingIndex].other || variant.other,
+    };
+  });
+
+  return merged;
 }
