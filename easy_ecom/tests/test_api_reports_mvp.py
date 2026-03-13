@@ -1,7 +1,12 @@
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 from easy_ecom.api.dependencies import RequestUser, get_container, get_current_user
 from easy_ecom.api.main import app, create_app
+from easy_ecom.data.store.postgres_db import Base
+from easy_ecom.data.store.postgres_models import InventoryTxnModel, ProductModel, ProductVariantModel
+from easy_ecom.domain.services.reports_api_service import ReportsApiService
 
 
 class DummyReportsService:
@@ -26,7 +31,8 @@ class DummyReportsService:
     def inventory_report(self, *, client_id: str, filters):
         return {
             'from_date': '2026-01-01', 'to_date': '2026-01-31', 'total_skus_with_stock': 0, 'total_stock_units': 0,
-            'low_stock_items': [], 'stock_movement_trend': [], 'inventory_value': None,
+            'low_stock_items': [], 'variant_stock_rows': [], 'product_stock_rollups': [],
+            'stock_movement_trend': [], 'inventory_value': None,
             'deferred_metrics': [{'metric': 'inventory_value', 'reason': 'deferred'}],
         }
 
@@ -82,3 +88,72 @@ def test_reports_tenant_scoped_and_validation() -> None:
     assert empty.json()['inventory_value'] is None
 
     app.dependency_overrides.clear()
+
+
+def test_inventory_report_rolls_up_products_from_variant_stock() -> None:
+    engine = create_engine('sqlite+pysqlite:///:memory:', future=True)
+    Base.metadata.create_all(engine)
+    sf = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
+    with sf() as session:
+        session.add(ProductModel(product_id='prd-1', client_id='tenant-a', product_name='Shirt', category='tops', is_active='true'))
+        session.add(ProductVariantModel(variant_id='var-1', client_id='tenant-a', parent_product_id='prd-1', variant_name='Size M', sku_code='SHIRT-M', is_active='true'))
+        session.add(ProductVariantModel(variant_id='var-2', client_id='tenant-a', parent_product_id='prd-1', variant_name='Size L', sku_code='SHIRT-L', is_active='true'))
+        session.add(ProductVariantModel(variant_id='var-3', client_id='tenant-a', parent_product_id='prd-1', variant_name='Size XL', sku_code='SHIRT-XL', is_active='false'))
+        session.add(InventoryTxnModel(txn_id='t1', client_id='tenant-a', timestamp='2026-01-05T00:00:00Z', txn_type='IN', product_id='prd-1', variant_id='var-1', qty='10'))
+        session.add(InventoryTxnModel(txn_id='t2', client_id='tenant-a', timestamp='2026-01-06T00:00:00Z', txn_type='OUT', product_id='prd-1', variant_id='var-1', qty='4'))
+        session.add(InventoryTxnModel(txn_id='t3', client_id='tenant-a', timestamp='2026-01-07T00:00:00Z', txn_type='IN', product_id='prd-1', variant_id='var-2', qty='2'))
+        session.add(InventoryTxnModel(txn_id='t4', client_id='tenant-a', timestamp='2026-01-08T00:00:00Z', txn_type='IN', product_id='prd-1', variant_id='var-3', qty='1'))
+        session.commit()
+
+    service = ReportsApiService(sf)
+    filters = service.build_filters(
+        from_date=None,
+        to_date=None,
+        product_id='',
+        category='tops',
+        customer_id='',
+    )
+
+    report = service.inventory_report(client_id='tenant-a', filters=filters)
+
+    assert report['total_skus_with_stock'] == 3
+    assert report['total_stock_units'] == 9.0
+    assert report['product_stock_rollups'] == [
+        {'product_id': 'prd-1', 'product_name': 'Shirt', 'current_qty': 9.0}
+    ]
+
+    rows_by_variant = {row['variant_id']: row for row in report['variant_stock_rows']}
+    assert rows_by_variant['var-1']['current_qty'] == 6.0
+    assert rows_by_variant['var-2']['current_qty'] == 2.0
+    assert rows_by_variant['var-3']['current_qty'] == 1.0
+
+
+def test_inventory_report_low_stock_checks_only_active_variants() -> None:
+    engine = create_engine('sqlite+pysqlite:///:memory:', future=True)
+    Base.metadata.create_all(engine)
+    sf = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
+    with sf() as session:
+        session.add(ProductModel(product_id='prd-2', client_id='tenant-a', product_name='Sneaker', category='shoes', is_active='true'))
+        session.add(ProductVariantModel(variant_id='var-4', client_id='tenant-a', parent_product_id='prd-2', variant_name='42', sku_code='SNKR-42', is_active='true'))
+        session.add(ProductVariantModel(variant_id='var-5', client_id='tenant-a', parent_product_id='prd-2', variant_name='43', sku_code='SNKR-43', is_active='true'))
+        session.add(ProductVariantModel(variant_id='var-6', client_id='tenant-a', parent_product_id='prd-2', variant_name='44', sku_code='SNKR-44', is_active='false'))
+        session.add(InventoryTxnModel(txn_id='t5', client_id='tenant-a', timestamp='2026-01-10T00:00:00Z', txn_type='IN', product_id='prd-2', variant_id='var-4', qty='5'))
+        session.add(InventoryTxnModel(txn_id='t6', client_id='tenant-a', timestamp='2026-01-10T00:00:00Z', txn_type='IN', product_id='prd-2', variant_id='var-5', qty='8'))
+        session.add(InventoryTxnModel(txn_id='t7', client_id='tenant-a', timestamp='2026-01-10T00:00:00Z', txn_type='IN', product_id='prd-2', variant_id='var-6', qty='2'))
+        session.commit()
+
+    service = ReportsApiService(sf)
+    filters = service.build_filters(
+        from_date=None,
+        to_date=None,
+        product_id='',
+        category='shoes',
+        customer_id='',
+    )
+
+    report = service.inventory_report(client_id='tenant-a', filters=filters)
+    low_variant_ids = {row['variant_id'] for row in report['low_stock_items']}
+
+    assert low_variant_ids == {'var-4'}

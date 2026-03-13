@@ -41,6 +41,18 @@ class SalesReportResponse(BaseModel):
 class InventoryStockSummary(BaseModel):
     product_id: str
     product_name: str
+    variant_id: str = ""
+    variant_name: str = ""
+    sku_code: str = ""
+    current_qty: float
+
+
+class InventoryVariantStockRow(BaseModel):
+    variant_id: str
+    variant_name: str
+    sku_code: str
+    product_id: str
+    product_name: str
     current_qty: float
 
 
@@ -56,6 +68,8 @@ class InventoryReportResponse(BaseModel):
     total_skus_with_stock: int
     total_stock_units: float
     low_stock_items: list[InventoryStockSummary]
+    variant_stock_rows: list[InventoryVariantStockRow] = Field(default_factory=list)
+    product_stock_rollups: list[InventoryStockSummary] = Field(default_factory=list)
     stock_movement_trend: list[InventoryMovementPoint]
     inventory_value: float | None
     deferred_metrics: list[ReportDeferredMetric] = Field(default_factory=list)

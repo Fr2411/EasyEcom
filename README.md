@@ -226,6 +226,7 @@ Phase 6 adds a production inventory operations module:
 
 - `docs/phase12_reporting_analytics.md` — Reporting & Analytics MVP implementation details (tenant-safe APIs, truthful metric derivation, and deferred metric boundaries).
 - Reports frontend route (`/reports`) is now an operational analytics module with date range filters, overview KPIs, and sectioned sales/inventory/products/finance/returns/purchases reporting backed by backend APIs (`GET /reports/*`).
+- Inventory reporting now computes stock at `variant_id` level from `inventory_txn`, exposes per-variant rows (`variant_stock_rows`), and derives product totals (`product_stock_rollups`) by rolling up variant balances to keep parent product metrics compatibility-safe.
 - Reports frontend now uses partial-load behavior (`Promise.allSettled`) so individual section failures show targeted warnings instead of blanking the full page when overview is available.
 
 
