@@ -55,7 +55,7 @@ export function PurchasesWorkspace() {
   };
 
   const submitPurchase = async () => {
-    if (!purchaseDate || lines.some((line) => !line.variant_id || line.qty <= 0 || line.unit_cost < 0)) return;
+    if (!purchaseDate || lines.some((line) => !line.variant_id || line.qty <= 0 || line.unit_cost <= 0)) return;
     try {
       setSaving(true);
       setError(null);
@@ -126,12 +126,21 @@ export function PurchasesWorkspace() {
           </label>
           {lines.map((line, idx) => (
             <div key={idx} className="sale-line-row">
-              <select value={line.variant_id} onChange={(e) => updateLine(idx, { variant_id: e.target.value })}>
+              <select
+                value={line.variant_id}
+                onChange={(e) => {
+                  const selected = products.find((product) => product.variant_id === e.target.value);
+                  updateLine(idx, {
+                    variant_id: e.target.value,
+                    unit_cost: selected?.default_purchase_price ?? 0,
+                  });
+                }}
+              >
                 <option value="">Select product/variant</option>
                 {products.map((product) => <option key={product.variant_id} value={product.variant_id}>{product.label} (Stock: {product.current_stock})</option>)}
               </select>
               <input aria-label={`Purchase quantity ${idx + 1}`} type="number" min={1} value={line.qty} onChange={(e) => updateLine(idx, { qty: Number(e.target.value || 0) })} />
-              <input aria-label={`Unit cost ${idx + 1}`} type="number" min={0} step="0.01" value={line.unit_cost} onChange={(e) => updateLine(idx, { unit_cost: Number(e.target.value || 0) })} />
+              <input aria-label={`Unit cost ${idx + 1}`} type="number" min={0.01} step="0.01" value={line.unit_cost} onChange={(e) => updateLine(idx, { unit_cost: Number(e.target.value || 0) })} />
               <strong>{(line.qty * line.unit_cost).toFixed(2)}</strong>
             </div>
           ))}

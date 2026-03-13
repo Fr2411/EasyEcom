@@ -31,6 +31,7 @@ export type PurchaseLookupProduct = {
   product_id: string;
   label: string;
   current_stock: number;
+  default_purchase_price: number;
   sku: string;
   barcode: string;
 };

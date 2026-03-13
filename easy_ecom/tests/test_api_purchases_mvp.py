@@ -46,7 +46,7 @@ class DummyPurchasesService:
         if client_id != "tenant-a":
             return {"products": [], "suppliers": []}
         return {
-            "products": [{"variant_id": "var-1", "product_id": "prd-1", "label": "Product A", "current_stock": 6, "sku": "", "barcode": ""}],
+            "products": [{"variant_id": "var-1", "product_id": "prd-1", "label": "Product A", "current_stock": 6, "default_purchase_price": 50, "sku": "", "barcode": ""}],
             "suppliers": [{"supplier_id": "sup-1", "name": "Nova Supplies"}],
         }
 
@@ -88,6 +88,7 @@ def test_purchases_endpoints_tenant_scoped_and_validation() -> None:
     assert options.status_code == 200
     assert options.json()['products'][0]['product_id'] == 'prd-1'
     assert options.json()['products'][0]['variant_id'] == 'var-1'
+    assert options.json()['products'][0]['default_purchase_price'] == 50
 
     detail = client.get('/purchases/pur-1')
     assert detail.status_code == 200

@@ -103,6 +103,7 @@ class DummyProducts:
                 "size": "",
                 "color": "",
                 "other": "",
+                "default_purchase_price": "5",
                 "default_selling_price": "10",
                 "max_discount_pct": "10",
             }
@@ -166,6 +167,7 @@ def test_core_api_endpoints() -> None:
     ).status_code == 200
     assert client.get("/stock/explorer").status_code == 200
     assert client.get("/products-stock/snapshot").status_code == 200
+    assert client.get("/catalog/products").status_code == 200
     assert client.post(
         "/products-stock/save",
         json={
@@ -186,6 +188,7 @@ def test_core_api_endpoints() -> None:
                     "other": "",
                     "qty": 1,
                     "cost": 2,
+                    "defaultPurchasePrice": 5,
                     "defaultSellingPrice": 10,
                     "maxDiscountPct": 10,
                 }

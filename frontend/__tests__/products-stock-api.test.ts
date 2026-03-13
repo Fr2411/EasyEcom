@@ -25,6 +25,7 @@ describe('catalog api mapping', () => {
               size: 'M',
               color: 'Black',
               other: '',
+              defaultPurchasePrice: 11,
               defaultSellingPrice: 20,
               maxDiscountPct: 10,
             },
@@ -42,6 +43,7 @@ describe('catalog api mapping', () => {
         variant_id: 'v-1',
         size: 'M',
         color: 'Black',
+        defaultPurchasePrice: 11,
       }),
     );
     expect(snapshot.products[0].variants[0].tempId).toBeTruthy();
@@ -66,6 +68,7 @@ describe('catalog api mapping', () => {
           size: 'M',
           color: 'Black',
           other: 'Cotton',
+          defaultPurchasePrice: 14,
           defaultSellingPrice: 24,
           maxDiscountPct: 10,
         },
@@ -74,10 +77,12 @@ describe('catalog api mapping', () => {
           size: '',
           color: 'Blue',
           other: '',
+          defaultPurchasePrice: 9,
           defaultSellingPrice: 16,
           maxDiscountPct: 10,
         },
       ],
+      archiveVariantIds: ['v-archive'],
     });
 
     expect(apiClientMock).toHaveBeenCalledTimes(1);
@@ -92,11 +97,14 @@ describe('catalog api mapping', () => {
         size: 'M',
         color: 'Black',
         other: 'Cotton',
+        defaultPurchasePrice: 14,
       }),
       expect.objectContaining({
         color: 'Blue',
+        defaultPurchasePrice: 9,
         defaultSellingPrice: 16,
       }),
     ]);
+    expect(body.archiveVariantIds).toEqual(['v-archive']);
   });
 });

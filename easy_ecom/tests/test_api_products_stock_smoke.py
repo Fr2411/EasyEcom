@@ -8,13 +8,16 @@ from easy_ecom.api.main import app
 class DummyProducts:
     def __init__(self):
         self.products = pd.DataFrame(columns=["product_id", "product_name", "supplier", "category", "prd_description", "prd_features_json", "client_id", "is_active"])
-        self.variants = pd.DataFrame(columns=["variant_id", "parent_product_id", "variant_name", "size", "color", "other", "default_selling_price", "max_discount_pct", "client_id", "is_active"])
+        self.variants = pd.DataFrame(columns=["variant_id", "parent_product_id", "variant_name", "size", "color", "other", "default_purchase_price", "default_selling_price", "max_discount_pct", "client_id", "is_active"])
 
     def list_by_client(self, client_id: str):
         return self.products[self.products["client_id"] == client_id].copy()
 
     def list_variants_by_client(self, client_id: str):
-        return self.variants[self.variants["client_id"] == client_id].copy()
+        return self.variants[
+            (self.variants["client_id"] == client_id)
+            & (self.variants["is_active"].astype(str).str.lower() == "true")
+        ].copy()
 
 
 
@@ -56,9 +59,30 @@ class DummyCatalogStock:
         client_id = kwargs["client_id"]
         selected = kwargs.get("selected_product_id", "")
         name = kwargs["typed_product_name"]
+        operation = kwargs.get("operation", "auto")
+        matches = self.products.products[
+            (self.products.products["client_id"] == client_id)
+            & (self.products.products["product_name"].astype(str).str.lower() == name.lower())
+        ]
+
+        if operation == "create":
+            if not matches.empty:
+                raise ValueError("Duplicate product name for this client")
+        elif operation == "update":
+            if not selected:
+                raise ValueError("Update flow requires selected_product_id")
+            dup = matches[matches["product_id"].astype(str) != str(selected)]
+            if not dup.empty:
+                raise ValueError("Duplicate product name for this client")
+
         if selected:
             product_id = selected
-            self.products.products.loc[self.products.products["product_id"] == product_id, "product_name"] = name
+            self.products.products.loc[self.products.products["product_id"] == product_id, ["product_name", "supplier", "category", "prd_description"]] = [
+                name,
+                kwargs["supplier"],
+                kwargs["category"],
+                kwargs["description"],
+            ]
         else:
             product_id = f"p-{self.next_product}"
             self.next_product += 1
@@ -93,12 +117,14 @@ class DummyCatalogStock:
             by_id = scoped[scoped["variant_id"].astype(str) == candidate_id] if candidate_id else pd.DataFrame()
             if not by_id.empty:
                 variant_id = str(by_id.iloc[0]["variant_id"])
-                self.products.variants.loc[by_id.index, ["size", "color", "other", "default_selling_price", "max_discount_pct"]] = [
+                self.products.variants.loc[by_id.index, ["size", "color", "other", "default_purchase_price", "default_selling_price", "max_discount_pct", "is_active"]] = [
                     row.size,
                     row.color,
                     row.other,
+                    str(getattr(row, "default_purchase_price", 0)),
                     str(row.default_selling_price),
                     str(row.max_discount_pct),
+                    "true",
                 ]
             else:
                 existing = scoped[
@@ -118,6 +144,7 @@ class DummyCatalogStock:
                             "size": row.size,
                             "color": row.color,
                             "other": row.other,
+                            "default_purchase_price": str(getattr(row, "default_purchase_price", 0)),
                             "default_selling_price": str(row.default_selling_price),
                             "max_discount_pct": str(row.max_discount_pct),
                             "client_id": client_id,
@@ -126,12 +153,31 @@ class DummyCatalogStock:
                     ], ignore_index=True)
                 else:
                     variant_id = str(existing.iloc[0]["variant_id"])
+                    self.products.variants.loc[existing.index, ["default_purchase_price", "default_selling_price", "max_discount_pct", "is_active"]] = [
+                        str(getattr(row, "default_purchase_price", 0)),
+                        str(row.default_selling_price),
+                        str(row.max_discount_pct),
+                        "true",
+                    ]
 
             if row.qty > 0:
                 self.inventory.rows = pd.concat([
                     self.inventory.rows,
                     pd.DataFrame([{"product_id": product_id, "variant_id": variant_id, "qty": row.qty, "unit_cost": row.unit_cost, "lot_id": f"lot-{len(self.inventory.rows)+1}", "client_id": client_id}])
                 ], ignore_index=True)
+
+        archive_ids = {
+            str(variant_id)
+            for variant_id in kwargs.get("archive_variant_ids", [])
+            if str(variant_id).strip()
+        }
+        if archive_ids:
+            mask = (
+                (self.products.variants["client_id"] == client_id)
+                & (self.products.variants["parent_product_id"] == product_id)
+                & (self.products.variants["variant_id"].astype(str).isin(archive_ids))
+            )
+            self.products.variants.loc[mask, "is_active"] = "false"
 
         return product_id, [], len(kwargs["variant_entries"])
 
@@ -316,5 +362,114 @@ def test_existing_variant_id_update_and_new_variant_create_keep_snapshot_invento
     inv_ids = {item['item_id'] for item in inv_body['items']}
     assert existing_variant_id in inv_ids
     assert len(inv_ids) == 2
+
+    app.dependency_overrides.clear()
+
+
+def test_catalog_routes_return_default_purchase_price_and_preserve_omitted_variants():
+    container = DummyContainer()
+    client = _client(container)
+
+    create = client.post('/catalog/products', json={
+        "identity": {"productName": "Catalog Tee", "supplier": "Nova", "category": "Apparel", "description": "", "features": []},
+        "variants": [
+            {"variant_id": "", "size": "S", "color": "Black", "other": "", "defaultPurchasePrice": 11, "defaultSellingPrice": 20, "maxDiscountPct": 10},
+            {"variant_id": "", "size": "M", "color": "Black", "other": "", "defaultPurchasePrice": 12, "defaultSellingPrice": 22, "maxDiscountPct": 10},
+        ],
+    })
+    assert create.status_code == 201
+    product_id = create.json()["product_id"]
+
+    listed = client.get('/catalog/products')
+    assert listed.status_code == 200
+    product = listed.json()["products"][0]
+    assert product["variants"][0]["defaultPurchasePrice"] == 11
+
+    existing_variant_id = next(
+        row["variant_id"]
+        for row in product["variants"]
+        if row["size"] == "S" and row["color"] == "Black"
+    )
+    update = client.patch(f'/catalog/products/{product_id}', json={
+        "identity": {"productName": "Catalog Tee", "supplier": "Nova", "category": "Apparel", "description": "", "features": []},
+        "variants": [
+            {"variant_id": existing_variant_id, "size": "S", "color": "Black", "other": "", "defaultPurchasePrice": 13, "defaultSellingPrice": 21, "maxDiscountPct": 10},
+            {"variant_id": "", "size": "L", "color": "Black", "other": "", "defaultPurchasePrice": 14, "defaultSellingPrice": 24, "maxDiscountPct": 10},
+        ],
+    })
+    assert update.status_code == 200
+
+    detail = client.get(f'/catalog/products/{product_id}')
+    assert detail.status_code == 200
+    variants = detail.json()["variants"]
+    assert len(variants) == 3
+    keys = {(row["size"], row["color"], row["other"]) for row in variants}
+    assert ("M", "Black", "") in keys
+    assert ("L", "Black", "") in keys
+    assert next(row for row in variants if row["size"] == "S")["defaultPurchasePrice"] == 13
+
+    app.dependency_overrides.clear()
+
+
+def test_catalog_duplicate_name_create_returns_conflict():
+    container = DummyContainer()
+    client = _client(container)
+
+    first = client.post('/catalog/products', json={
+        "identity": {"productName": "Duplicate Tee", "supplier": "Nova", "category": "Apparel", "description": "", "features": []},
+        "variants": [{"variant_id": "", "size": "S", "color": "Black", "other": "", "defaultPurchasePrice": 11, "defaultSellingPrice": 20, "maxDiscountPct": 10}],
+    })
+    assert first.status_code == 201
+
+    second = client.post('/catalog/products', json={
+        "identity": {"productName": "Duplicate Tee", "supplier": "Nova", "category": "Apparel", "description": "", "features": []},
+        "variants": [{"variant_id": "", "size": "M", "color": "Black", "other": "", "defaultPurchasePrice": 12, "defaultSellingPrice": 22, "maxDiscountPct": 10}],
+    })
+    assert second.status_code == 409
+
+    app.dependency_overrides.clear()
+
+
+def test_catalog_update_archives_only_explicit_variant_ids():
+    container = DummyContainer()
+    client = _client(container)
+
+    create = client.post('/catalog/products', json={
+        "identity": {"productName": "Archive Tee", "supplier": "Nova", "category": "Apparel", "description": "", "features": []},
+        "variants": [
+            {"variant_id": "", "size": "S", "color": "Black", "other": "", "defaultPurchasePrice": 11, "defaultSellingPrice": 20, "maxDiscountPct": 10},
+            {"variant_id": "", "size": "M", "color": "Black", "other": "", "defaultPurchasePrice": 12, "defaultSellingPrice": 22, "maxDiscountPct": 10},
+        ],
+    })
+    assert create.status_code == 201
+    product_id = create.json()["product_id"]
+
+    detail = client.get(f'/catalog/products/{product_id}')
+    variants = detail.json()["variants"]
+    keep_variant = next(row for row in variants if row["size"] == "S")
+    archive_variant = next(row for row in variants if row["size"] == "M")
+
+    update = client.patch(f'/catalog/products/{product_id}', json={
+        "identity": {"productName": "Archive Tee", "supplier": "Nova", "category": "Apparel", "description": "", "features": []},
+        "variants": [
+            {
+                "variant_id": keep_variant["variant_id"],
+                "size": keep_variant["size"],
+                "color": keep_variant["color"],
+                "other": keep_variant["other"],
+                "defaultPurchasePrice": keep_variant["defaultPurchasePrice"],
+                "defaultSellingPrice": keep_variant["defaultSellingPrice"],
+                "maxDiscountPct": keep_variant["maxDiscountPct"],
+            }
+        ],
+        "archiveVariantIds": [archive_variant["variant_id"]],
+    })
+    assert update.status_code == 200
+
+    refreshed = client.get(f'/catalog/products/{product_id}')
+    assert refreshed.status_code == 200
+    rows = refreshed.json()["variants"]
+    assert len(rows) == 1
+    assert rows[0]["variant_id"] == keep_variant["variant_id"]
 
     app.dependency_overrides.clear()

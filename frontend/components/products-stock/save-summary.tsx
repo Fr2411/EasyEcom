@@ -2,6 +2,8 @@
 
 type SaveSummaryProps = {
   variantCount: number;
+  archivedVariants: number;
+  costedVariants: number;
   pricedVariants: number;
   isSaving: boolean;
   isSaveDisabled: boolean;
@@ -12,6 +14,8 @@ type SaveSummaryProps = {
 
 export function SaveSummary({
   variantCount,
+  archivedVariants,
+  costedVariants,
   pricedVariants,
   isSaving,
   isSaveDisabled,
@@ -22,8 +26,10 @@ export function SaveSummary({
   return (
     <section className="save-bar" aria-live="polite">
       <div className="save-summary-items">
-        <span>Variants: {variantCount}</span>
-        <span>Priced Variants: {pricedVariants}</span>
+        <span>Active Variants: {variantCount}</span>
+        <span>Cost Defaults Set: {costedVariants}</span>
+        <span>Selling Prices Set: {pricedVariants}</span>
+        <span>Archiving on Save: {archivedVariants}</span>
         <span>Stock comes from opening stock, purchases, or adjustments.</span>
       </div>
       {validationMessage ? <p className="validation-message">{validationMessage}</p> : null}
