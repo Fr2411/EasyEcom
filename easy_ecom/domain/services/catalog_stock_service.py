@@ -3,11 +3,13 @@ from __future__ import annotations
 import json
 import itertools
 import logging
+import math
 from dataclasses import dataclass
 
 import pandas as pd
 
 from easy_ecom.domain.models.product import ProductCreate
+from easy_ecom.data.repos.postgres.base import PostgresRepo
 from easy_ecom.domain.services.inventory_service import InventoryService
 from easy_ecom.domain.services.product_features import parse_features_text
 from easy_ecom.domain.services.product_service import ProductService
@@ -166,30 +168,21 @@ class CatalogStockService:
         if not variant_entries:
             raise ValueError("At least one variant is required")
 
-        normalized_entries: list[VariantWorkspaceEntry] = []
-        seen: set[str] = set()
-        for index, entry in enumerate(variant_entries, start=1):
-            row = VariantWorkspaceEntry(
-                variant_id=str(entry.variant_id or "").strip(),
-                variant_label=str(entry.variant_label or "").strip(),
-                size=str(entry.size or "").strip().title(),
-                color=str(entry.color or "").strip().title(),
-                other=str(entry.other or "").strip().title(),
-                qty=float(entry.qty or 0),
-                unit_cost=float(entry.unit_cost or 0),
-                default_selling_price=float(entry.default_selling_price or 0),
-                max_discount_pct=float(entry.max_discount_pct or 0),
-                lot_reference=str(entry.lot_reference or "").strip(),
-                supplier=str(entry.supplier or "").strip(),
-                received_date=str(entry.received_date or "").strip(),
-            )
-            if not row.has_identity():
-                raise ValueError(f"Variant row {index} must include at least one identity field (size/color/other)")
-            key = row.identity_key()
-            if key in seen:
-                raise ValueError("Duplicate variant identity in request: each size/color/other combination must be unique")
-            seen.add(key)
-            normalized_entries.append(row)
+        normalized_entries = self._prevalidate_entries(variant_entries)
+
+        supports_postgres_txn = self._supports_postgres_transaction()
+        products_snapshot = None
+        variants_snapshot = None
+        inventory_snapshot = None
+        sequences_snapshot = None
+        if not supports_postgres_txn:
+            products_snapshot = self.product_service.repo.all().copy()
+            if self.product_service.variants_repo is not None:
+                variants_snapshot = self.product_service.variants_repo.all().copy()
+            inventory_snapshot = self.inventory_service.repo.all().copy()
+            sequence_repo = getattr(self.inventory_service.seq_service, "repo", None)
+            if sequence_repo is not None:
+                sequences_snapshot = sequence_repo.all().copy()
 
         product = (
             self.product_service.get_by_id(client_id, selected_product_id)
@@ -249,8 +242,108 @@ class CatalogStockService:
             for _, r in scoped.iterrows()
         }
 
+        try:
+            if supports_postgres_txn:
+                return self._save_workspace_postgres_transactional(
+                    client_id=client_id,
+                    user_id=user_id,
+                    product_id=product_id,
+                    product_name=product_name,
+                    normalized_entries=normalized_entries,
+                    existing_by_identity=existing_by_identity,
+                )
+
+            return self._save_workspace_staged_csv(
+                client_id=client_id,
+                user_id=user_id,
+                product_id=product_id,
+                product_name=product_name,
+                normalized_entries=normalized_entries,
+                existing_by_identity=existing_by_identity,
+            )
+        except Exception:
+            if not supports_postgres_txn:
+                if products_snapshot is not None:
+                    self.product_service.repo.save(products_snapshot)
+                if variants_snapshot is not None and self.product_service.variants_repo is not None:
+                    self.product_service.variants_repo.save(variants_snapshot)
+                if inventory_snapshot is not None:
+                    self.inventory_service.repo.save(inventory_snapshot)
+                sequence_repo = getattr(self.inventory_service.seq_service, "repo", None)
+                if sequences_snapshot is not None and sequence_repo is not None:
+                    sequence_repo.save(sequences_snapshot)
+            raise
+
+    def _prevalidate_entries(self, variant_entries: list[VariantWorkspaceEntry]) -> list[VariantWorkspaceEntry]:
+        normalized_entries: list[VariantWorkspaceEntry] = []
+        seen: set[str] = set()
+        for index, entry in enumerate(variant_entries, start=1):
+            row = VariantWorkspaceEntry(
+                variant_id=str(entry.variant_id or "").strip(),
+                variant_label=str(entry.variant_label or "").strip(),
+                size=str(entry.size or "").strip().title(),
+                color=str(entry.color or "").strip().title(),
+                other=str(entry.other or "").strip().title(),
+                qty=self._to_valid_number(entry.qty, f"Variant row {index} qty"),
+                unit_cost=self._to_valid_number(entry.unit_cost, f"Variant row {index} unit_cost"),
+                default_selling_price=self._to_valid_number(entry.default_selling_price, f"Variant row {index} default_selling_price"),
+                max_discount_pct=self._to_valid_number(entry.max_discount_pct, f"Variant row {index} max_discount_pct"),
+                lot_reference=str(entry.lot_reference or "").strip(),
+                supplier=str(entry.supplier or "").strip(),
+                received_date=str(entry.received_date or "").strip(),
+            )
+            if not row.has_identity():
+                raise ValueError(f"Variant row {index} must include at least one identity field (size/color/other)")
+            key = row.identity_key()
+            if key in seen:
+                raise ValueError("Duplicate variant identity in request: each size/color/other combination must be unique")
+            seen.add(key)
+
+            if row.qty < 0:
+                raise ValueError(f"Variant row {index} qty must be >= 0")
+            if row.unit_cost < 0:
+                raise ValueError(f"Variant row {index} unit_cost must be >= 0")
+            if row.default_selling_price < 0:
+                raise ValueError(f"Variant row {index} default_selling_price must be >= 0")
+            if row.max_discount_pct < 0 or row.max_discount_pct > 100:
+                raise ValueError(f"Variant row {index} max_discount_pct must be between 0 and 100")
+            if row.qty > 0 and row.unit_cost <= 0:
+                raise ValueError("Stock rows with quantity must include a positive unit cost")
+
+            normalized_entries.append(row)
+        return normalized_entries
+
+    @staticmethod
+    def _to_valid_number(value: object, field_name: str) -> float:
+        try:
+            number = float(value or 0)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{field_name} must be numeric") from exc
+        if not math.isfinite(number):
+            raise ValueError(f"{field_name} must be a finite number")
+        return number
+
+    def _supports_postgres_transaction(self) -> bool:
+        repos = [
+            self.product_service.repo,
+            self.product_service.variants_repo,
+            self.inventory_service.repo,
+        ]
+        return all(isinstance(repo, PostgresRepo) for repo in repos if repo is not None)
+
+    def _save_workspace_staged_csv(
+        self,
+        *,
+        client_id: str,
+        user_id: str,
+        product_id: str,
+        product_name: str,
+        normalized_entries: list[VariantWorkspaceEntry],
+        existing_by_identity: dict[str, str],
+    ) -> tuple[str, list[str], int]:
+        if self.product_service.variants_repo is None:
+            raise ValueError("Variant repository not configured")
         lot_ids: list[str] = []
-        upserts = 0
         for row in normalized_entries:
             variant_id = row.variant_id or existing_by_identity.get(row.identity_key(), "")
             persisted, _ = self.product_service.upsert_variant(
@@ -268,8 +361,6 @@ class CatalogStockService:
                 raise ValueError("Failed to persist variant identity")
             existing_by_identity[row.identity_key()] = variant_id
             if row.qty > 0:
-                if row.unit_cost <= 0:
-                    raise ValueError("Stock rows with quantity must include a positive unit cost")
                 lot_ids.append(
                     self.inventory_service.add_stock(
                         client_id=client_id,
@@ -285,9 +376,36 @@ class CatalogStockService:
                         user_id=user_id,
                     )
                 )
-            upserts += 1
+        return product_id, lot_ids, len(normalized_entries)
 
-        return product_id, lot_ids, upserts
+    def _save_workspace_postgres_transactional(
+        self,
+        *,
+        client_id: str,
+        user_id: str,
+        product_id: str,
+        product_name: str,
+        normalized_entries: list[VariantWorkspaceEntry],
+        existing_by_identity: dict[str, str],
+    ) -> tuple[str, list[str], int]:
+        from easy_ecom.data.repos.postgres.catalog_stock_repo import CatalogStockPostgresRepo
+
+        products_repo = self.product_service.repo
+        variants_repo = self.product_service.variants_repo
+        inventory_repo = self.inventory_service.repo
+        if not isinstance(products_repo, PostgresRepo) or not isinstance(variants_repo, PostgresRepo) or not isinstance(inventory_repo, PostgresRepo):
+            raise ValueError("Postgres repositories are required")
+
+        repo = CatalogStockPostgresRepo(products_repo.session_factory)
+        lot_ids = repo.persist_workspace_rows(
+            client_id=client_id,
+            user_id=user_id,
+            product_id=product_id,
+            product_name=product_name,
+            entries=normalized_entries,
+            existing_by_identity=existing_by_identity,
+        )
+        return product_id, lot_ids, len(normalized_entries)
 
     @staticmethod
     def _build_stock_note(lot_reference: str, received_date: str) -> str:
