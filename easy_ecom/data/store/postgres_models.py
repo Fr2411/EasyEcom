@@ -142,6 +142,8 @@ class ProductVariantModel(Base):
     other: Mapped[str] = mapped_column(String(64), default="")
     sku_code: Mapped[str] = mapped_column(String(128), default="")
     barcode: Mapped[str] = mapped_column(String(128), default="")
+    default_selling_price: Mapped[str] = mapped_column(String(64), default="0")
+    max_discount_pct: Mapped[str] = mapped_column(String(64), default="0")
     is_active: Mapped[str] = mapped_column(String(8), default="true")
     created_at: Mapped[str] = mapped_column(String(64), default="")
 
@@ -164,6 +166,7 @@ class InventoryTxnModel(Base):
     note: Mapped[str] = mapped_column(Text, default="")
     source_type: Mapped[str] = mapped_column(String(64), default="")
     source_id: Mapped[str] = mapped_column(String(64), default="")
+    source_line_id: Mapped[str] = mapped_column(String(64), default="")
     lot_id: Mapped[str] = mapped_column(String(64), default="")
 
 

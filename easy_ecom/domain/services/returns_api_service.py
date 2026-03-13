@@ -11,12 +11,12 @@ from easy_ecom.core.ids import new_uuid
 from easy_ecom.core.time_utils import now_iso
 from easy_ecom.data.store.postgres_models import (
     CustomerModel,
-    InventoryTxnModel,
     SalesOrderItemModel,
     SalesOrderModel,
     SalesReturnItemModel,
     SalesReturnModel,
 )
+from easy_ecom.domain.services.stock_ledger_service import StockLedgerService
 
 
 @dataclass
@@ -38,6 +38,7 @@ class ReturnCreateInput:
 class ReturnsApiService:
     def __init__(self, session_factory: sessionmaker[Session]):
         self.session_factory = session_factory
+        self.stock_ledger = StockLedgerService(session_factory)
 
     @staticmethod
     def _to_float(value: object, default: float = 0.0) -> float:
@@ -329,25 +330,14 @@ class ReturnsApiService:
             session.add_all(return_items)
 
             for line in return_items:
-                session.add(
-                    InventoryTxnModel(
-                        txn_id=new_uuid(),
-                        client_id=client_id,
-                        timestamp=now_iso(),
-                        user_id=user_id,
-                        txn_type="IN",
-                        product_id=line.product_id,
-                        variant_id=line.variant_id,
-                        product_name=line.product_name_snapshot,
-                        qty=line.return_qty,
-                        unit_cost=line.unit_price,
-                        total_cost=line.line_total,
-                        supplier_snapshot="",
-                        note=f"return:{return_no}",
-                        source_type="sale_return",
-                        source_id=return_id,
-                        lot_id="",
-                    )
+                self.stock_ledger.restore_sale_line(
+                    session=session,
+                    client_id=client_id,
+                    user_id=user_id,
+                    sale_line_id=line.sale_item_id,
+                    qty=self._to_float(line.return_qty),
+                    source_id=return_id,
+                    note=f"return:{return_no}",
                 )
 
             order.grand_total = str(new_sale_total)

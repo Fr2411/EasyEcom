@@ -161,6 +161,8 @@ class CatalogStockService:
         features_text: str,
         variant_entries: list[VariantWorkspaceEntry],
         selected_product_id: str = "",
+        operation: str = "auto",
+        post_stock: bool = True,
     ) -> tuple[str, list[str], int]:
         product_name = typed_product_name.strip()
         if not product_name:
@@ -168,7 +170,7 @@ class CatalogStockService:
         if not variant_entries:
             raise ValueError("At least one variant is required")
 
-        normalized_entries = self._prevalidate_entries(variant_entries)
+        normalized_entries = self._prevalidate_entries(variant_entries, post_stock=post_stock)
 
         supports_postgres_txn = self._supports_postgres_transaction()
         products_snapshot = None
@@ -184,15 +186,20 @@ class CatalogStockService:
             if sequence_repo is not None:
                 sequences_snapshot = sequence_repo.all().copy()
 
+        selected_id = selected_product_id.strip()
+        explicit_operation = operation.strip().lower()
         product = (
-            self.product_service.get_by_id(client_id, selected_product_id)
-            if selected_product_id.strip()
+            self.product_service.get_by_id(client_id, selected_id)
+            if selected_id
             else None
         )
-        if product is None:
-            product = self.product_service.get_by_name_ci(client_id, product_name)
+        existing_by_name = self.product_service.get_by_name_ci(client_id, product_name)
 
-        if product is None:
+        if explicit_operation == "create":
+            if selected_id:
+                raise ValueError("Create flow must not include selected_product_id")
+            if existing_by_name is not None:
+                raise ValueError("Duplicate product name for this client")
             product_id = self.product_service.create(
                 ProductCreate(
                     client_id=client_id,
@@ -207,7 +214,11 @@ class CatalogStockService:
                 ),
                 generate_variants_on_create=False,
             )
-        else:
+        elif explicit_operation == "update":
+            if not selected_id:
+                raise ValueError("Update flow requires selected_product_id")
+            if product is None:
+                raise ValueError("Product not found for this client")
             product_id = str(product["product_id"])
             self.product_service.update_master(
                 client_id=client_id,
@@ -218,6 +229,34 @@ class CatalogStockService:
                 prd_description=description,
                 prd_features_json=parse_features_text(features_text),
             )
+        else:
+            resolved_product = product or existing_by_name
+            if resolved_product is None:
+                product_id = self.product_service.create(
+                    ProductCreate(
+                        client_id=client_id,
+                        supplier=supplier,
+                        product_name=product_name,
+                        category=category,
+                        prd_description=description,
+                        prd_features_json=parse_features_text(features_text),
+                        sizes_csv="",
+                        colors_csv="",
+                        others_csv="",
+                    ),
+                    generate_variants_on_create=False,
+                )
+            else:
+                product_id = str(resolved_product["product_id"])
+                self.product_service.update_master(
+                    client_id=client_id,
+                    product_id=product_id,
+                    supplier=supplier,
+                    product_name=product_name,
+                    category=category,
+                    prd_description=description,
+                    prd_features_json=parse_features_text(features_text),
+                )
 
         variants_df = (
             self.product_service.variants_repo.all()
@@ -251,6 +290,7 @@ class CatalogStockService:
                     product_name=product_name,
                     normalized_entries=normalized_entries,
                     existing_by_identity=existing_by_identity,
+                    post_stock=post_stock,
                 )
 
             return self._save_workspace_staged_csv(
@@ -260,6 +300,7 @@ class CatalogStockService:
                 product_name=product_name,
                 normalized_entries=normalized_entries,
                 existing_by_identity=existing_by_identity,
+                post_stock=post_stock,
             )
         except Exception:
             if not supports_postgres_txn:
@@ -274,7 +315,12 @@ class CatalogStockService:
                     sequence_repo.save(sequences_snapshot)
             raise
 
-    def _prevalidate_entries(self, variant_entries: list[VariantWorkspaceEntry]) -> list[VariantWorkspaceEntry]:
+    def _prevalidate_entries(
+        self,
+        variant_entries: list[VariantWorkspaceEntry],
+        *,
+        post_stock: bool,
+    ) -> list[VariantWorkspaceEntry]:
         normalized_entries: list[VariantWorkspaceEntry] = []
         seen: set[str] = set()
         for index, entry in enumerate(variant_entries, start=1):
@@ -307,7 +353,9 @@ class CatalogStockService:
                 raise ValueError(f"Variant row {index} default_selling_price must be >= 0")
             if row.max_discount_pct < 0 or row.max_discount_pct > 100:
                 raise ValueError(f"Variant row {index} max_discount_pct must be between 0 and 100")
-            if row.qty > 0 and row.unit_cost <= 0:
+            if not post_stock and (row.qty != 0 or row.unit_cost != 0):
+                raise ValueError("Catalog save does not accept stock quantities or unit costs")
+            if post_stock and row.qty > 0 and row.unit_cost <= 0:
                 raise ValueError("Stock rows with quantity must include a positive unit cost")
 
             normalized_entries.append(row)
@@ -340,10 +388,12 @@ class CatalogStockService:
         product_name: str,
         normalized_entries: list[VariantWorkspaceEntry],
         existing_by_identity: dict[str, str],
+        post_stock: bool,
     ) -> tuple[str, list[str], int]:
         if self.product_service.variants_repo is None:
             raise ValueError("Variant repository not configured")
         lot_ids: list[str] = []
+        kept_variant_ids: list[str] = []
         for row in normalized_entries:
             variant_id = row.variant_id or existing_by_identity.get(row.identity_key(), "")
             persisted, _ = self.product_service.upsert_variant(
@@ -360,7 +410,8 @@ class CatalogStockService:
             if not variant_id:
                 raise ValueError("Failed to persist variant identity")
             existing_by_identity[row.identity_key()] = variant_id
-            if row.qty > 0:
+            kept_variant_ids.append(variant_id)
+            if post_stock and row.qty > 0:
                 lot_ids.append(
                     self.inventory_service.add_stock(
                         client_id=client_id,
@@ -376,6 +427,11 @@ class CatalogStockService:
                         user_id=user_id,
                     )
                 )
+        self._archive_missing_variants_csv(
+            client_id=client_id,
+            product_id=product_id,
+            keep_variant_ids=kept_variant_ids,
+        )
         return product_id, lot_ids, len(normalized_entries)
 
     def _save_workspace_postgres_transactional(
@@ -387,6 +443,7 @@ class CatalogStockService:
         product_name: str,
         normalized_entries: list[VariantWorkspaceEntry],
         existing_by_identity: dict[str, str],
+        post_stock: bool,
     ) -> tuple[str, list[str], int]:
         from easy_ecom.data.repos.postgres.catalog_stock_repo import CatalogStockPostgresRepo
 
@@ -404,8 +461,38 @@ class CatalogStockService:
             product_name=product_name,
             entries=normalized_entries,
             existing_by_identity=existing_by_identity,
+            post_stock=post_stock,
         )
         return product_id, lot_ids, len(normalized_entries)
+
+    def _archive_missing_variants_csv(
+        self,
+        *,
+        client_id: str,
+        product_id: str,
+        keep_variant_ids: list[str],
+    ) -> None:
+        if self.product_service.variants_repo is None:
+            return
+        variants = self.product_service.variants_repo.all()
+        if variants.empty:
+            return
+        scoped = variants[
+            (variants["client_id"] == client_id)
+            & (variants["parent_product_id"] == product_id)
+        ].index
+        if len(scoped) == 0:
+            return
+        keep = {
+            str(variant_id).strip()
+            for variant_id in keep_variant_ids
+            if str(variant_id).strip()
+        }
+        for idx in scoped:
+            variants.loc[idx, "is_active"] = (
+                "true" if str(variants.loc[idx, "variant_id"]).strip() in keep else "false"
+            )
+        self.product_service.variants_repo.save(variants)
 
     @staticmethod
     def _build_stock_note(lot_reference: str, received_date: str) -> str:

@@ -1,0 +1,66 @@
+Index: .env.example
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>APP_TITLE=Easy_Ecom\nALLOW_BACKORDER=false\n\n# Bootstrap-only admin seed (used by init_data, not ongoing auth source).\nSUPER_ADMIN_EMAIL=\nSUPER_ADMIN_PASSWORD=\nCREATE_DEFAULT_CLIENT=false\n\n# Canonical runtime storage: AWS RDS Postgres.\nSTORAGE_BACKEND=postgres\nDATABASE_URL=postgresql+psycopg://<user>:<password>@<rds-endpoint>:5432/<db_name>\nPOSTGRES_ECHO=false\nPOSTGRES_POOL_SIZE=5\nPOSTGRES_MAX_OVERFLOW=10\n\n# API/session settings\nSESSION_SECRET=change-me-in-production\nSESSION_COOKIE_NAME=easy_ecom_session\nSESSION_COOKIE_SECURE=true\nSESSION_COOKIE_DOMAIN=\nSESSION_COOKIE_SAMESITE=none\n\n# Frontend origins (Amplify domains or custom domains)\nCORS_ALLOW_ORIGINS=https://main.<your-amplify-id>.amplifyapp.com\nBCRYPT_ROUNDS=12\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.env.example b/.env.example
+--- a/.env.example	(revision 59e4a808406035d3d2412001410669ba2982a3cf)
++++ b/.env.example	(date 1773151593824)
+@@ -2,8 +2,8 @@
+ ALLOW_BACKORDER=false
+ 
+ # Bootstrap-only admin seed (used by init_data, not ongoing auth source).
+-SUPER_ADMIN_EMAIL=
+-SUPER_ADMIN_PASSWORD=
++SUPER_ADMIN_EMAIL= Frabby24@gmail.com
++SUPER_ADMIN_PASSWORD= Fr@241189
+ CREATE_DEFAULT_CLIENT=false
+ 
+ # Canonical runtime storage: AWS RDS Postgres.
+Index: README.md
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+># Easy_Ecom\n\nEasyEcom is a multi-tenant commerce platform with:\n- **Canonical frontend:** Next.js app in `frontend/` (AWS Amplify)\n- **Canonical backend:** FastAPI app in `easy_ecom/api` (AWS App Runner)\n- **Canonical data/auth source:** AWS RDS PostgreSQL\n\nLegacy Streamlit pages under `easy_ecom/app/` are retained only for controlled transition and are **not part of production runtime**.\n\n## Runtime architecture (single source of truth)\n\n1. Frontend (`frontend/`) calls FastAPI (`easy_ecom/api/main.py`).\n2. FastAPI services use repository adapters backed by PostgreSQL tables.\n3. Users, roles, inventory, products, customers, sales, finance, sequences, and audit all run through PostgreSQL at runtime.\n4. CSV assets are migration/bootstrap tooling only (`easy_ecom/scripts/*import*`, migration scripts).\n\n## Local setup (AWS-aligned)\n\n```bash\npython -m venv .venv\nsource .venv/bin/activate\npip install -e .[dev]\ncp .env.example .env\npython -m easy_ecom.scripts.init_data\npython -m uvicorn easy_ecom.api.main:app --reload\n```\n\nFrontend:\n```bash\ncd frontend\nnpm install\ncp .env.example .env.local\nnpm run dev\n```\n\n## Deployment\n\n### Production backend deploy shortcut\n\nUse the production deploy helper for backend and/or database schema changes:\n\n```bash\n./scripts/deploy_prod.sh\n```\n\n### Frontend (canonical)\n- AWS Amplify using root `amplify.yml` (appRoot: `frontend`).\n\n### Backend (canonical)\n- AWS App Runner using `apprunner.yaml`.\n- Runtime command is `./startup.sh`, which initializes bootstrap data then runs:\n  - `uvicorn easy_ecom.api.main:app --host 0.0.0.0 --port $PORT`\n\n## Configuration\n\nUse AWS-managed environment variables / secrets injection in Amplify and App Runner.\n\nKey backend vars (see `.env.example`):\n- `DATABASE_URL` (RDS DSN)\n- `SESSION_SECRET`\n- `CORS_ALLOW_ORIGINS`\n- optional bootstrap seed: `SUPER_ADMIN_EMAIL`, `SUPER_ADMIN_PASSWORD`\n\nKey frontend vars (`frontend/.env.example`):\n- `NEXT_PUBLIC_API_BASE_URL`\n- `NEXT_PUBLIC_SESSION_COOKIE_NAME`\n\n\n## Auth session flow (cookie-based)\n\n- `POST /auth/login` validates credentials against PostgreSQL, then issues signed cookie `easy_ecom_session` (`HttpOnly`, same-site/secure flags from backend config).\n- Session payload stores `user_id`, `client_id`, `email`, `name`, `roles`, and expiry (`exp`) signed by `SESSION_SECRET`.\n- `GET /auth/me` now uses strict session payload validation: missing cookie, bad signature, malformed payload, expired payload, or missing roles return `401 Unauthorized` (never `500`).\n- Frontend middleware and env parsing normalize `NEXT_PUBLIC_SESSION_COOKIE_NAME` so quoted values (for example, `\"easy_ecom_session\"`) still resolve correctly, and middleware only enforces missing-session redirects for protected paths (it does not force-redirect `/login` based on cookie presence alone).\n- Frontend bootstrap (`AuthProvider`) keeps `credentials: include`, exposes a `refreshAuth()` retry path, and distinguishes bootstrap failures: `401` (`unauthorized`), `5xx` (`server`), network failures (`network`), and fallback unknown errors.\n- Protected app routes are wrapped in `AuthRouteGuard`; instead of returning `null`, they now render visible loading states during bootstrap/redirect and a visible retryable error state when `/auth/me` fails for non-`401` reasons.\n- Login (`public-only`) routes also render a visible loading fallback while redirecting authenticated users to `/dashboard`, preventing blank-screen transitions.\n- Session-cookie parsing treats stale sentinel values (`deleted`, `null`, `undefined`) as invalid so middleware redirects stale-cookie dashboard requests to `/login` earlier.\n- Login page uses shared auth bootstrap refresh immediately after successful sign-in so dashboard transition and auth context stay in sync.\n\n## Migration and legacy\n\n- CSV files in `easy_ecom/data_files/` are no longer a production persistence path.\n- Keep migration scripts for one-time import and reconciliation.\n- Streamlit UI is deprecated and excluded from production startup.\n\n## Local RDS Access (DBeaver / psql)\n\nStep 1:\nRun:\n```bash\nbash scripts/db_tunnel.sh\n```\n\nStep 2:\nIn DBeaver use:\n- Host: 127.0.0.1\n- Port: 5433\n- Database: easyecom\n- Username: easyecom_admin\n\nOptional:\n```bash\nbash scripts/db_psql.sh\n```\n\n- This works because RDS is private and accessed via EC2 SSH tunnel.\n- If SSH fails, check EC2 security group inbound rule for current public IP.\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/README.md b/README.md
+--- a/README.md	(revision 59e4a808406035d3d2412001410669ba2982a3cf)
++++ b/README.md	(date 1773151593835)
+@@ -20,7 +20,7 @@
+ python -m venv .venv
+ source .venv/bin/activate
+ pip install -e .[dev]
+-cp .env.example .env
++cp .env.example
+ python -m easy_ecom.scripts.init_data
+ python -m uvicorn easy_ecom.api.main:app --reload
+ ```
+Index: .env
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>DATA_DIR=easy_ecom/data_files\nAPP_TITLE=Easy_Ecom\nALLOW_BACKORDER=false\nSUPER_ADMIN_EMAIL=frabby24@gmail.com\nSUPER_ADMIN_PASSWORD=Fr@241189\nCREATE_DEFAULT_CLIENT=false\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/.env b/.env
+--- a/.env	(revision 59e4a808406035d3d2412001410669ba2982a3cf)
++++ b/.env	(date 1773151593841)
+@@ -4,3 +4,14 @@
+ SUPER_ADMIN_EMAIL=frabby24@gmail.com
+ SUPER_ADMIN_PASSWORD=Fr@241189
+ CREATE_DEFAULT_CLIENT=false
++STORAGE_BACKEND=CSV
++POSTGRES_HOST=localhost
++POSTGRES_PORT=5432
++POSTGRES_DB=easy_ecom
++POSTGRES_USER=easy_ecom
++POSTGRES_PASSWORD=easy_ecom
++POSTGRES_ECHO=false
++POSTGRES_POOL_SIZE=5
++POSTGRES_MAX_OVERFLOW=10
++# Optional override for full DSN. Supports testing with sqlite as well.
++# POSTGRES_DSN=postgresql+psycopg://easy_ecom:easy_ecom@localhost:5432/easy_ecom
+\ No newline at end of file

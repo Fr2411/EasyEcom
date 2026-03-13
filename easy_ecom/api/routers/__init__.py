@@ -7,6 +7,7 @@ from easy_ecom.api.routers.finance import router as finance_router
 from easy_ecom.api.routers.dashboard import router as dashboard_router
 from easy_ecom.api.routers.health import router as health_router
 from easy_ecom.api.routers.inventory import router as inventory_router
+from easy_ecom.api.routers.catalog import router as catalog_router
 from easy_ecom.api.routers.products import router as products_router
 from easy_ecom.api.routers.products_stock import router as products_stock_router
 from easy_ecom.api.routers.sales import router as sales_router
@@ -28,6 +29,7 @@ api_router.include_router(admin_router)
 
 # Canonical protected business API surface.
 api_router.include_router(dashboard_router)
+api_router.include_router(catalog_router)
 api_router.include_router(products_router)
 api_router.include_router(products_stock_router)
 api_router.include_router(inventory_router)

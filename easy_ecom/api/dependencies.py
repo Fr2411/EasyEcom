@@ -27,6 +27,11 @@ from easy_ecom.data.repos.csv.sequences_repo import SequencesRepo
 from easy_ecom.data.repos.csv.users_repo import RolesRepo, UserRolesRepo, UsersRepo
 from easy_ecom.data.repos.postgres.auth_repo import PostgresAuthRepo
 from easy_ecom.data.repos.postgres.customers_repo import CustomersPostgresRepo
+from easy_ecom.data.repos.postgres.products_stock_repo import (
+    InventoryTxnPostgresRepo,
+    ProductsPostgresRepo,
+    ProductVariantsPostgresRepo,
+)
 from easy_ecom.data.store.postgres_db import build_postgres_engine, build_session_factory
 from easy_ecom.data.store.runtime import build_runtime_store
 from easy_ecom.data.store.schema import TABLE_SCHEMAS
@@ -46,6 +51,7 @@ from easy_ecom.domain.services.customer_service import CustomerService
 from easy_ecom.domain.services.settings_api_service import SettingsApiService
 from easy_ecom.domain.services.purchases_api_service import PurchasesApiService
 from easy_ecom.domain.services.reports_api_service import ReportsApiService
+from easy_ecom.domain.services.stock_ledger_service import StockLedgerService
 from easy_ecom.domain.services.ai_context_service import AiContextService
 from easy_ecom.domain.services.integrations_service import IntegrationsService
 from easy_ecom.domain.services.ai_review_service import AiReviewService
@@ -83,13 +89,20 @@ class ServiceContainer:
 
         if settings.storage_backend == "csv":
             self.auth = AuthService(CsvAuthRepo(users_repo, user_roles_repo))
+            session_factory = None
         else:
             engine = build_postgres_engine(settings)
-            self.auth = AuthService(PostgresAuthRepo(build_session_factory(engine)))
+            session_factory = build_session_factory(engine)
+            self.auth = AuthService(PostgresAuthRepo(session_factory))
 
-        products_repo = ProductsRepo(self.store)
-        variants_repo = ProductVariantsRepo(self.store)
-        inventory_repo = InventoryTxnRepo(self.store)
+        if session_factory is None:
+            products_repo = ProductsRepo(self.store)
+            variants_repo = ProductVariantsRepo(self.store)
+            inventory_repo = InventoryTxnRepo(self.store)
+        else:
+            products_repo = ProductsPostgresRepo(session_factory)
+            variants_repo = ProductVariantsPostgresRepo(session_factory)
+            inventory_repo = InventoryTxnPostgresRepo(session_factory)
         self.products = ProductService(products_repo, variants_repo)
         self.inventory = InventoryService(
             inventory_repo,
@@ -97,6 +110,7 @@ class ServiceContainer:
             products_repo=products_repo,
             variants_repo=variants_repo,
         )
+        self.stock_ledger = StockLedgerService(session_factory) if session_factory is not None else None
         self.catalog_stock = CatalogStockService(self.products, self.inventory)
         self.dashboard = DashboardService(
             inventory_repo,
@@ -120,9 +134,7 @@ class ServiceContainer:
         self.integrations = None
         self.ai_review = None
         self.automation = None
-        if settings.storage_backend == "postgres":
-            engine = build_postgres_engine(settings)
-            session_factory = build_session_factory(engine)
+        if session_factory is not None:
             self.customers = CustomerService(CustomersPostgresRepo(session_factory))
             self.sales_mvp = SalesApiService(session_factory)
             self.finance_mvp = FinanceApiService(session_factory)

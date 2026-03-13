@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
@@ -71,7 +71,7 @@ class ReportsApiService:
         category: str,
         customer_id: str,
     ) -> ReportFilters:
-        end = to_date or datetime.now(UTC).date()
+        end = to_date or datetime.now(timezone.utc).date()
         start = from_date or (end - timedelta(days=29))
         if start > end:
             raise ValueError("from_date must be <= to_date")

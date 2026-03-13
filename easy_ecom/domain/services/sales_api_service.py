@@ -12,11 +12,11 @@ from easy_ecom.core.ids import new_uuid
 from easy_ecom.core.time_utils import now_iso
 from easy_ecom.data.store.postgres_models import (
     CustomerModel,
-    InventoryTxnModel,
     SalesOrderItemModel,
     SalesOrderModel,
 )
 from easy_ecom.domain.services.saleable_items_service import SaleableItemsService
+from easy_ecom.domain.services.stock_ledger_service import StockLedgerService
 
 
 @dataclass
@@ -30,6 +30,7 @@ class SalesApiService:
     def __init__(self, session_factory: sessionmaker[Session]):
         self.session_factory = session_factory
         self.saleable_items = SaleableItemsService()
+        self.stock_ledger = StockLedgerService(session_factory)
 
     def _stock_for_variant(self, session: Session, client_id: str, variant_id: str) -> float:
         items = self.saleable_items.list_saleable_variants(
@@ -182,6 +183,7 @@ class SalesApiService:
                 raise ValueError("Invalid customer for tenant")
 
             line_entities: list[SalesOrderItemModel] = []
+            line_variant_ids: list[str] = []
             subtotal = 0.0
             requested_by_variant: dict[str, float] = defaultdict(float)
             for line in lines:
@@ -213,19 +215,19 @@ class SalesApiService:
                     raise ValueError("Invalid variant reference")
                 total = float(line.qty) * float(line.unit_price)
                 subtotal += total
-                line_entities.append(
-                    SalesOrderItemModel(
-                        order_item_id=new_uuid(),
-                        order_id=sale_id,
-                        client_id=client_id,
-                        product_id=str(item["product_id"]),
-                        variant_id=line.variant_id,
-                        product_name_snapshot=f"{item['product_name']} / {item['variant_name']}",
-                        qty=str(line.qty),
-                        unit_selling_price=str(line.unit_price),
-                        total_selling_price=str(total),
-                    )
+                line_entity = SalesOrderItemModel(
+                    order_item_id=new_uuid(),
+                    order_id=sale_id,
+                    client_id=client_id,
+                    product_id=str(item["product_id"]),
+                    variant_id=line.variant_id,
+                    product_name_snapshot=f"{item['product_name']} / {item['variant_name']}",
+                    qty=str(line.qty),
+                    unit_selling_price=str(line.unit_price),
+                    total_selling_price=str(total),
                 )
+                line_entities.append(line_entity)
+                line_variant_ids.append(line.variant_id)
 
             grand_total = max(0.0, subtotal - max(0.0, discount) + max(0.0, tax))
             order = SalesOrderModel(
@@ -248,26 +250,25 @@ class SalesApiService:
             session.add(order)
             session.add_all(line_entities)
 
+            variant_contexts = {
+                variant_id: self.stock_ledger.resolve_variant(
+                    session,
+                    client_id=client_id,
+                    variant_id=variant_id,
+                )
+                for variant_id in set(line_variant_ids)
+            }
             for line in line_entities:
-                session.add(
-                    InventoryTxnModel(
-                        txn_id=new_uuid(),
-                        client_id=client_id,
-                        timestamp=now_iso(),
-                        user_id=user_id,
-                        txn_type="OUT",
-                        product_id=line.product_id,
-                        variant_id=line.variant_id,
-                        product_name=line.product_name_snapshot,
-                        qty=line.qty,
-                        unit_cost="0",
-                        total_cost="0",
-                        supplier_snapshot="",
-                        note=f"sale:{sale_no}",
-                        source_type="sale",
-                        source_id=sale_id,
-                        lot_id="",
-                    )
+                self.stock_ledger.consume_fifo(
+                    session=session,
+                    client_id=client_id,
+                    user_id=user_id,
+                    variant=variant_contexts[line.variant_id],
+                    qty=float(line.qty or "0"),
+                    source_type="sale",
+                    source_id=sale_id,
+                    source_line_id=line.order_item_id,
+                    note=f"sale:{sale_no}",
                 )
             session.commit()
 

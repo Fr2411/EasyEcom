@@ -1,6 +1,7 @@
 import { NAV_ITEMS } from '@/types/navigation';
 import { NavItem } from '@/components/ui/nav-item';
 import { SidebarLogoutButton } from '@/components/layout/sidebar-logout-button';
+import { EasyEcomLogo } from '@/components/branding/easy-ecom-logo';
 
 const groupedNavigation = NAV_ITEMS.reduce<Record<string, typeof NAV_ITEMS>>((acc, item) => {
   if (!acc[item.group]) {
@@ -14,7 +15,12 @@ export function Sidebar() {
   return (
     <aside className="sidebar" aria-label="Primary">
       <div className="brand-block">
-        <p className="eyebrow">EasyEcom</p>
+        <div className="brand-logo-wrap">
+          <EasyEcomLogo
+            className="easyecom-logo easyecom-logo-sidebar"
+            imageClassName="easyecom-logo-image easyecom-logo-sidebar"
+          />
+        </div>
         <h1 className="brand-title">Operations Hub</h1>
         <p className="brand-subtitle">Business Command Center</p>
       </div>

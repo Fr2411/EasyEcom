@@ -88,6 +88,7 @@ class ProductVariantsPostgresRepo(PostgresRepo):
         "color",
         "other",
         "sku_code",
+        "barcode",
         "default_selling_price",
         "max_discount_pct",
         "is_active",
@@ -113,5 +114,6 @@ class InventoryTxnPostgresRepo(PostgresRepo):
         "note",
         "source_type",
         "source_id",
+        "source_line_id",
         "lot_id",
     ]

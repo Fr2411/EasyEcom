@@ -29,6 +29,7 @@ describe('LoginPage', () => {
     render(<LoginPage />);
 
     expect(screen.getByRole('heading', { name: 'EasyEcom Login' })).toBeTruthy();
+    expect(screen.getByRole('img', { name: 'Easy-Ecom' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeTruthy();
   });
 

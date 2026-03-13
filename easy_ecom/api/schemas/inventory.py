@@ -27,6 +27,7 @@ class InventoryItemSummary(BaseModel):
     parent_product_id: str = ""
     parent_product_name: str = ""
     item_type: Literal["product", "variant", "unmapped"]
+    availability_status: Literal["in_stock", "incoming", "low_stock", "out_of_stock", "unmapped"]
     on_hand_qty: float
     incoming_qty: float
     reserved_qty: float
@@ -121,6 +122,25 @@ class InventoryInboundReceiveResponse(BaseModel):
     item_id: str
     received_qty: float
     lot_id: str
+
+
+class OpeningStockLineRequest(BaseModel):
+    variant_id: str = Field(min_length=1)
+    qty: float = Field(gt=0)
+    unit_cost: float = Field(gt=0)
+    reference: str = Field(default="", max_length=120)
+    note: str = Field(default="", max_length=500)
+
+
+class OpeningStockRequest(BaseModel):
+    product_id: str = Field(min_length=1)
+    lines: list[OpeningStockLineRequest] = Field(min_length=1)
+
+
+class OpeningStockResponse(BaseModel):
+    success: bool
+    product_id: str
+    lot_ids: list[str]
 
 
 class InventoryDetailResponse(BaseModel):

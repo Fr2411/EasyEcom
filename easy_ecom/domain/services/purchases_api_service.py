@@ -9,10 +9,9 @@ from sqlalchemy.orm import Session, sessionmaker
 from easy_ecom.core.ids import new_uuid
 from easy_ecom.core.time_utils import now_iso
 from easy_ecom.domain.services.saleable_items_service import SaleableItemsService
+from easy_ecom.domain.services.stock_ledger_service import StockLedgerService
 from easy_ecom.data.store.postgres_models import (
     FinanceExpenseModel,
-    InventoryTxnModel,
-    ProductVariantModel,
     PurchaseItemModel,
     PurchaseModel,
     SupplierModel,
@@ -41,6 +40,7 @@ class PurchasesApiService:
     def __init__(self, session_factory: sessionmaker[Session]):
         self.session_factory = session_factory
         self.saleable_items = SaleableItemsService()
+        self.stock_ledger = StockLedgerService(session_factory)
 
     @staticmethod
     def _to_float(value: object, default: float = 0.0) -> float:
@@ -255,37 +255,32 @@ class PurchasesApiService:
 
             subtotal = 0.0
             item_entities: list[PurchaseItemModel] = []
+            line_posts: list[tuple[PurchaseItemModel, float, float]] = []
             for line in payload.lines:
                 if line.qty <= 0:
                     raise ValueError("Purchase quantity must be > 0")
                 if line.unit_cost < 0:
                     raise ValueError("Purchase unit_cost must be >= 0")
-                variant = session.execute(
-                    select(ProductVariantModel).where(
-                        ProductVariantModel.client_id == client_id,
-                        ProductVariantModel.variant_id == line.variant_id,
-                    )
-                ).scalar_one_or_none()
-                if variant is None:
-                    raise ValueError(f"Invalid variant reference: {line.variant_id}")
-                canonical_product_id = variant.parent_product_id
-                canonical_variant_id = variant.variant_id
-                product_name = variant.variant_name
+                variant = self.stock_ledger.resolve_variant(
+                    session,
+                    client_id=client_id,
+                    variant_id=line.variant_id,
+                )
                 line_total = float(line.qty) * float(line.unit_cost)
                 subtotal += line_total
-                item_entities.append(
-                    PurchaseItemModel(
-                        purchase_item_id=new_uuid(),
-                        purchase_id=purchase_id,
-                        client_id=client_id,
-                        product_id=canonical_product_id,
-                        variant_id=canonical_variant_id,
-                        product_name_snapshot=product_name,
-                        qty=str(line.qty),
-                        unit_cost=str(line.unit_cost),
-                        line_total=str(line_total),
-                    )
+                item_entity = PurchaseItemModel(
+                    purchase_item_id=new_uuid(),
+                    purchase_id=purchase_id,
+                    client_id=client_id,
+                    product_id=variant.product_id,
+                    variant_id=variant.variant_id,
+                    product_name_snapshot=f"{variant.product_name} / {variant.variant_name}",
+                    qty=str(line.qty),
+                    unit_cost=str(line.unit_cost),
+                    line_total=str(line_total),
                 )
+                item_entities.append(item_entity)
+                line_posts.append((item_entity, float(line.qty), float(line.unit_cost)))
 
             purchase = PurchaseModel(
                 purchase_id=purchase_id,
@@ -304,47 +299,24 @@ class PurchasesApiService:
             session.add(purchase)
             session.add_all(item_entities)
 
-            inventory_rollup: dict[tuple[str, str], dict[str, str]] = {}
-            for line in item_entities:
-                key = (line.variant_id, line.unit_cost)
-                current = inventory_rollup.get(key)
-                qty = self._to_float(line.qty)
-                line_total = self._to_float(line.line_total)
-                if current is None:
-                    inventory_rollup[key] = {
-                        "product_id": line.product_id,
-                        "variant_id": line.variant_id,
-                        "product_name": line.product_name_snapshot,
-                        "qty": str(qty),
-                        "unit_cost": line.unit_cost,
-                        "total_cost": str(line_total),
-                    }
-                else:
-                    merged_qty = self._to_float(current["qty"]) + qty
-                    merged_total = self._to_float(current["total_cost"]) + line_total
-                    current["qty"] = str(merged_qty)
-                    current["total_cost"] = str(merged_total)
-
-            for row in inventory_rollup.values():
-                session.add(
-                    InventoryTxnModel(
-                        txn_id=new_uuid(),
-                        client_id=client_id,
-                        timestamp=now_iso(),
-                        user_id=user_id,
-                        txn_type="IN",
-                        product_id=row["product_id"],
-                        variant_id=row["variant_id"],
-                        product_name=row["product_name"],
-                        qty=row["qty"],
-                        unit_cost=row["unit_cost"],
-                        total_cost=row["total_cost"],
-                        supplier_snapshot=supplier_name,
-                        note=f"purchase:{purchase_no}",
-                        source_type="purchase",
-                        source_id=purchase_id,
-                        lot_id="",
-                    )
+            for line, qty, unit_cost in line_posts:
+                variant = self.stock_ledger.resolve_variant(
+                    session,
+                    client_id=client_id,
+                    variant_id=line.variant_id,
+                )
+                self.stock_ledger.post_inbound(
+                    session=session,
+                    client_id=client_id,
+                    user_id=user_id,
+                    variant=variant,
+                    qty=qty,
+                    unit_cost=unit_cost,
+                    supplier_snapshot=supplier_name,
+                    note=f"purchase:{purchase_no}",
+                    source_type="purchase",
+                    source_id=purchase_id,
+                    source_line_id=line.purchase_item_id,
                 )
 
             session.add(
