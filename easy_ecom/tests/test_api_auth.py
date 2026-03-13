@@ -82,12 +82,12 @@ def test_logout(monkeypatch, tmp_path: Path):
     assert response.status_code == 200
 
 
-def test_protected_endpoint_rejects_anonymous(monkeypatch, tmp_path: Path):
+def test_session_endpoint_rejects_anonymous(monkeypatch, tmp_path: Path):
     runtime = _setup_runtime(tmp_path)
     monkeypatch.setattr(deps, "settings", runtime.settings)
 
     client = TestClient(create_app())
-    response = client.get("/products-stock/snapshot")
+    response = client.get("/session/me")
 
     assert response.status_code == 401
 

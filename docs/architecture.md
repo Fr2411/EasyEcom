@@ -1,37 +1,21 @@
 # Architecture Direction
 
-## Application Structure
-- **Frontend:** `frontend/` (Next.js) handles user workflows, form UX, and API consumption.
-- **Backend:** `easy_ecom/api` and domain/data layers handle validation, authorization, orchestration, and persistence.
-- **Database:** PostgreSQL is the runtime source of truth for auth, catalog, inventory ledger, transactions, and reporting.
-- **Legacy artifacts:** historical Streamlit and CSV migration code are archived and not part of the active source tree/runtime.
+## Current foundation
+- Frontend shell: Next.js placeholder application in `frontend/`
+- Backend shell: FastAPI auth/session/health service in `easy_ecom/api`
+- Runtime data source: PostgreSQL through `DATABASE_URL`
+- Bootstrap: `easy_ecom/scripts/init_data.py` seeds roles and an optional super-admin
 
-## Data Flow
-1. Frontend sends authenticated, tenant-context API requests.
-2. Backend validates payload semantics and role/tenant authorization.
-3. Backend executes business logic using domain services and repository adapters.
-4. Database commits transactional state (including inventory ledger rows).
-5. Backend returns normalized API contract responses to frontend.
+## Preserved infrastructure contracts
+- Amplify remains the frontend hosting path
+- EC2-backed deployment wiring remains preserved in repo scripts
+- RDS remains the database boundary
+- Existing env var names and startup entrypoints stay stable during the rebuild
 
-## API Boundaries
-- Frontend never bypasses backend for business writes.
-- Backend owns business-rule enforcement and identity/tenant guarantees.
-- Request/response schema changes must be versioned or coordinated across affected modules.
+## Deliberately removed from runtime
+- Business write/read flows for catalog, inventory, sales, customers, finance, returns, purchases, reports, integrations, AI review, automation, admin, and settings
+- Business schema ownership outside the auth core
+- Business calculations and derived reporting logic
 
-## Database Ownership Rules
-- Schema constraints, indexes, and foreign keys protect business invariants.
-- Variant-level stock truth is authoritative; product-level stock is derived only.
-- Inventory ledger is immutable truth; denormalized fields are derived aids.
-
-## AWS Deployment Direction
-- Frontend: AWS Amplify.
-- Backend: AWS App Runner.
-- Database: AWS RDS PostgreSQL.
-- Secrets/config: managed environment variables and secure secret injection.
-
-## Performance and Cost Principles
-- Optimize for correctness first, then efficiency.
-- Prefer indexed tenant-scoped queries and narrow payloads.
-- Avoid N+1 and full-table scans on hot tenant paths.
-- Keep background processing minimal and justified.
-- Favor simple managed patterns over costly complexity.
+## Rebuild rule
+- New features must be added back intentionally from this auth-only baseline instead of reviving deleted modules.

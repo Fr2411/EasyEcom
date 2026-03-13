@@ -1,0 +1,85 @@
+BEGIN;
+
+DROP TABLE IF EXISTS automation_decisions CASCADE;
+DROP TABLE IF EXISTS tenant_automation_policies CASCADE;
+DROP TABLE IF EXISTS ai_review_drafts CASCADE;
+DROP TABLE IF EXISTS alembic_version CASCADE;
+DROP TABLE IF EXISTS channel_messages CASCADE;
+DROP TABLE IF EXISTS channel_conversations CASCADE;
+DROP TABLE IF EXISTS channel_integrations CASCADE;
+DROP TABLE IF EXISTS import_errors CASCADE;
+DROP TABLE IF EXISTS import_runs CASCADE;
+DROP TABLE IF EXISTS purchase_items CASCADE;
+DROP TABLE IF EXISTS purchases CASCADE;
+DROP TABLE IF EXISTS sales_return_items CASCADE;
+DROP TABLE IF EXISTS sales_returns CASCADE;
+DROP TABLE IF EXISTS finance_expenses CASCADE;
+DROP TABLE IF EXISTS sales_order_items CASCADE;
+DROP TABLE IF EXISTS sales_orders CASCADE;
+DROP TABLE IF EXISTS inventory_txn CASCADE;
+DROP TABLE IF EXISTS product_variants CASCADE;
+DROP TABLE IF EXISTS products CASCADE;
+DROP TABLE IF EXISTS customers CASCADE;
+DROP TABLE IF EXISTS suppliers CASCADE;
+DROP TABLE IF EXISTS categories CASCADE;
+DROP TABLE IF EXISTS tenant_settings CASCADE;
+DROP TABLE IF EXISTS refunds CASCADE;
+DROP TABLE IF EXISTS return_items CASCADE;
+DROP TABLE IF EXISTS returns CASCADE;
+DROP TABLE IF EXISTS audit_log CASCADE;
+DROP TABLE IF EXISTS sequences CASCADE;
+DROP TABLE IF EXISTS ledger CASCADE;
+DROP TABLE IF EXISTS payments CASCADE;
+DROP TABLE IF EXISTS shipments CASCADE;
+DROP TABLE IF EXISTS invoices CASCADE;
+
+DROP TABLE IF EXISTS user_roles CASCADE;
+DROP TABLE IF EXISTS roles CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
+DROP TABLE IF EXISTS clients CASCADE;
+
+CREATE TABLE clients (
+    client_id VARCHAR(64) PRIMARY KEY,
+    business_name VARCHAR(255) NOT NULL DEFAULT '',
+    owner_name VARCHAR(255) NOT NULL DEFAULT '',
+    phone VARCHAR(64) NOT NULL DEFAULT '',
+    email VARCHAR(255) NOT NULL DEFAULT '',
+    address TEXT NOT NULL DEFAULT '',
+    currency_code VARCHAR(16) NOT NULL DEFAULT '',
+    currency_symbol VARCHAR(8) NOT NULL DEFAULT '',
+    website_url VARCHAR(255) NOT NULL DEFAULT '',
+    facebook_url VARCHAR(255) NOT NULL DEFAULT '',
+    instagram_url VARCHAR(255) NOT NULL DEFAULT '',
+    whatsapp_number VARCHAR(64) NOT NULL DEFAULT '',
+    created_at VARCHAR(64) NOT NULL DEFAULT '',
+    status VARCHAR(32) NOT NULL DEFAULT '',
+    notes TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE roles (
+    role_code VARCHAR(64) PRIMARY KEY,
+    role_name VARCHAR(255) NOT NULL DEFAULT '',
+    description TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE users (
+    user_id VARCHAR(64) PRIMARY KEY,
+    client_id VARCHAR(64) NOT NULL,
+    name VARCHAR(255) NOT NULL DEFAULT '',
+    email VARCHAR(255) NOT NULL DEFAULT '',
+    password TEXT NOT NULL DEFAULT '',
+    password_hash TEXT NOT NULL DEFAULT '',
+    is_active VARCHAR(8) NOT NULL DEFAULT 'true',
+    created_at VARCHAR(64) NOT NULL DEFAULT ''
+);
+
+CREATE INDEX ix_users_client_id ON users (client_id);
+CREATE INDEX ix_users_email ON users (email);
+
+CREATE TABLE user_roles (
+    user_id VARCHAR(64) NOT NULL,
+    role_code VARCHAR(64) NOT NULL,
+    PRIMARY KEY (user_id, role_code)
+);
+
+COMMIT;
