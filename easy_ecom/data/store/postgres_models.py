@@ -142,6 +142,7 @@ class ProductVariantModel(Base):
     other: Mapped[str] = mapped_column(String(64), default="")
     sku_code: Mapped[str] = mapped_column(String(128), default="")
     barcode: Mapped[str] = mapped_column(String(128), default="")
+    default_purchase_price: Mapped[str] = mapped_column(String(64), default="0")
     default_selling_price: Mapped[str] = mapped_column(String(64), default="0")
     max_discount_pct: Mapped[str] = mapped_column(String(64), default="0")
     is_active: Mapped[str] = mapped_column(String(8), default="true")

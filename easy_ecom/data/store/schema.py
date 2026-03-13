@@ -6,7 +6,7 @@ TABLE_SCHEMAS: dict[str, list[str]] = {
     "roles.csv": ["role_code", "role_name", "description"],
     "user_roles.csv": ["user_id", "role_code"],
     "products.csv": ["product_id", "client_id", "supplier", "product_name", "category", "prd_description", "prd_features_json", "created_at", "is_active", "is_parent", "sizes_csv", "colors_csv", "others_csv", "parent_product_id"],
-    "product_variants.csv": ["variant_id", "client_id", "parent_product_id", "variant_name", "size", "color", "other", "sku_code", "barcode", "default_selling_price", "max_discount_pct", "is_active", "created_at"],
+    "product_variants.csv": ["variant_id", "client_id", "parent_product_id", "variant_name", "size", "color", "other", "sku_code", "barcode", "default_purchase_price", "default_selling_price", "max_discount_pct", "is_active", "created_at"],
     "customers.csv": ["customer_id", "client_id", "created_at", "updated_at", "full_name", "phone", "email", "whatsapp", "address_line1", "address_line2", "area", "city", "state", "postal_code", "country", "preferred_contact_channel", "marketing_opt_in", "tags", "notes", "is_active"],
     "inventory_txn.csv": ["txn_id", "client_id", "timestamp", "user_id", "txn_type", "product_id", "variant_id", "product_name", "qty", "unit_cost", "total_cost", "supplier_snapshot", "note", "source_type", "source_id", "source_line_id", "lot_id"],
     "sales_orders.csv": ["order_id", "client_id", "timestamp", "customer_id", "status", "order_status", "payment_status", "fulfillment_status", "return_status", "subtotal", "discount", "tax", "delivery_cost", "grand_total", "amount_paid", "amount_refunded", "balance_due", "pricing_locked_at", "customer_snapshot_json", "delivery_provider", "note"],

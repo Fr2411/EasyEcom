@@ -8,17 +8,14 @@ from easy_ecom.data.repos.csv.inventory_repo import InventoryTxnRepo
 from easy_ecom.data.repos.csv.product_variants_repo import ProductVariantsRepo
 from easy_ecom.data.repos.csv.products_repo import ProductsRepo
 from easy_ecom.data.repos.csv.sequences_repo import SequencesRepo
-from easy_ecom.data.store.csv_store import CsvStore
-from easy_ecom.data.store.schema import TABLE_SCHEMAS
 from easy_ecom.domain.services.inventory_service import InventoryService, SequenceService
 from easy_ecom.domain.services.product_service import ProductService
+from easy_ecom.tests.support.sqlite_runtime import build_sqlite_runtime
 
 
 class InventoryContainer:
     def __init__(self, tmp_path: Path) -> None:
-        store = CsvStore(tmp_path)
-        for table, columns in TABLE_SCHEMAS.items():
-            store.ensure_table(table, columns)
+        store = build_sqlite_runtime(tmp_path, "api_inventory.db").store
 
         products_repo = ProductsRepo(store)
         variants_repo = ProductVariantsRepo(store)

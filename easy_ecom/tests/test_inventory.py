@@ -1,17 +1,13 @@
 from pathlib import Path
 
-from easy_ecom.data.store.csv_store import CsvStore
-from easy_ecom.data.store.schema import TABLE_SCHEMAS
 from easy_ecom.data.repos.csv.inventory_repo import InventoryTxnRepo
 from easy_ecom.data.repos.csv.sequences_repo import SequencesRepo
 from easy_ecom.domain.services.inventory_service import InventoryService, SequenceService
+from easy_ecom.tests.support.sqlite_runtime import build_sqlite_runtime
 
 
-def setup_store(tmp_path: Path) -> CsvStore:
-    store = CsvStore(tmp_path)
-    for t, c in TABLE_SCHEMAS.items():
-        store.ensure_table(t, c)
-    return store
+def setup_store(tmp_path: Path):
+    return build_sqlite_runtime(tmp_path, "inventory.db").store
 
 
 def test_fifo_allocation(tmp_path: Path):

@@ -1,20 +1,17 @@
 from __future__ import annotations
 
 from easy_ecom.core.config import Settings
-from easy_ecom.data.store.csv_store import CsvStore
 from easy_ecom.data.store.postgres import build_postgres_engine, init_postgres_schema
+from easy_ecom.data.store.postgres_db import Engine
 from easy_ecom.data.store.postgres_table_store import PostgresTableStore
 from easy_ecom.data.store.tabular_store import TabularStore
 
 
-def build_runtime_store(settings: Settings) -> TabularStore:
-    if settings.storage_backend == "csv":
-        return CsvStore(settings.data_dir)
-
+def build_runtime_engine(settings: Settings) -> Engine:
     engine = build_postgres_engine(settings)
     init_postgres_schema(engine)
-    return PostgresTableStore(engine)
+    return engine
 
 
-def build_csv_store(settings: Settings) -> CsvStore:
-    return CsvStore(settings.data_dir)
+def build_runtime_store(settings: Settings, engine: Engine | None = None) -> TabularStore:
+    return PostgresTableStore(engine or build_runtime_engine(settings))

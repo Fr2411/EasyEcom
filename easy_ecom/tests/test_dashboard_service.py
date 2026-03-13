@@ -8,19 +8,15 @@ from easy_ecom.data.repos.csv.inventory_repo import InventoryTxnRepo
 from easy_ecom.data.repos.csv.product_variants_repo import ProductVariantsRepo
 from easy_ecom.data.repos.csv.products_repo import ProductsRepo
 from easy_ecom.data.repos.csv.sales_repo import InvoicesRepo, SalesOrderItemsRepo, SalesOrdersRepo
-from easy_ecom.data.store.csv_store import CsvStore
-from easy_ecom.data.store.schema import TABLE_SCHEMAS
 from easy_ecom.domain.services.dashboard_service import DashboardService
+from easy_ecom.tests.support.sqlite_runtime import build_sqlite_runtime
 
 
-def setup_store(tmp_path: Path) -> CsvStore:
-    store = CsvStore(tmp_path)
-    for table_name, columns in TABLE_SCHEMAS.items():
-        store.ensure_table(table_name, columns)
-    return store
+def setup_store(tmp_path: Path):
+    return build_sqlite_runtime(tmp_path, "dashboard.db").store
 
 
-def build_service(store: CsvStore) -> DashboardService:
+def build_service(store) -> DashboardService:
     return DashboardService(
         InventoryTxnRepo(store),
         LedgerRepo(store),

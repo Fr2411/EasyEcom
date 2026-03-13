@@ -181,6 +181,7 @@ class ProductService:
                 "other": other,
                 "sku_code": sku_code,
                 "barcode": "",
+                "default_purchase_price": "0",
                 "default_selling_price": "0",
                 "max_discount_pct": "0",
                 "is_active": "true",
@@ -265,6 +266,7 @@ class ProductService:
         size: str,
         color: str,
         other: str,
+        default_purchase_price: float | None = None,
         default_selling_price: float | None = None,
         max_discount_pct: float | None = None,
         variant_label: str = "",
@@ -314,6 +316,9 @@ class ProductService:
                     row["other"] = other
                     row["variant_name"] = variant_name
                     row["is_active"] = "true"
+                    if default_purchase_price is not None:
+                        variants.loc[i, "default_purchase_price"] = str(default_purchase_price)
+                        row["default_purchase_price"] = str(default_purchase_price)
                     if default_selling_price is not None:
                         variants.loc[i, "default_selling_price"] = str(default_selling_price)
                         row["default_selling_price"] = str(default_selling_price)
@@ -343,7 +348,14 @@ class ProductService:
                 variants.loc[i, "is_active"] = "true"
                 row["variant_name"] = variant_name
                 row["is_active"] = "true"
-                if default_selling_price is not None or max_discount_pct is not None:
+                if (
+                    default_purchase_price is not None
+                    or default_selling_price is not None
+                    or max_discount_pct is not None
+                ):
+                    if default_purchase_price is not None:
+                        variants.loc[i, "default_purchase_price"] = str(default_purchase_price)
+                        row["default_purchase_price"] = str(default_purchase_price)
                     if default_selling_price is not None:
                         variants.loc[i, "default_selling_price"] = str(default_selling_price)
                         row["default_selling_price"] = str(default_selling_price)
@@ -372,6 +384,7 @@ class ProductService:
             "other": other,
             "sku_code": sku_code,
             "barcode": "",
+            "default_purchase_price": str(default_purchase_price if default_purchase_price is not None else 0),
             "default_selling_price": str(default_selling_price if default_selling_price is not None else 0),
             "max_discount_pct": str(max_discount_pct if max_discount_pct is not None else 0),
             "is_active": "true",

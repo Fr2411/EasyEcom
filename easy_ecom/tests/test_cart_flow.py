@@ -13,18 +13,15 @@ from easy_ecom.data.repos.csv.sales_repo import (
     ShipmentsRepo,
 )
 from easy_ecom.data.repos.csv.sequences_repo import SequencesRepo
-from easy_ecom.data.store.csv_store import CsvStore
-from easy_ecom.data.store.schema import TABLE_SCHEMAS
 from easy_ecom.domain.models.sales import SaleItem
 from easy_ecom.domain.services.finance_service import FinanceService
 from easy_ecom.domain.services.inventory_service import InventoryService, SequenceService
 from easy_ecom.domain.services.sales_service import SalesService
+from easy_ecom.tests.support.sqlite_runtime import build_sqlite_runtime
 
 
-def setup_store(tmp_path: Path) -> tuple[CsvStore, SalesService]:
-    store = CsvStore(tmp_path)
-    for t, c in TABLE_SCHEMAS.items():
-        store.ensure_table(t, c)
+def setup_store(tmp_path: Path):
+    store = build_sqlite_runtime(tmp_path, "cart_flow.db").store
     seq = SequenceService(SequencesRepo(store))
     inv = InventoryService(InventoryTxnRepo(store), seq)
     fin = FinanceService(LedgerRepo(store), InventoryTxnRepo(store))
@@ -44,7 +41,7 @@ def setup_store(tmp_path: Path) -> tuple[CsvStore, SalesService]:
     return store, svc
 
 
-def seed_common_data(store: CsvStore):
+def seed_common_data(store):
     ProductsRepo(store).append(
         {
             "product_id": "p1",

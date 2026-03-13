@@ -5,41 +5,28 @@ from fastapi.testclient import TestClient
 import pytest
 
 from easy_ecom.api.main import create_app
-from easy_ecom.core.config import Settings
 from easy_ecom.api import dependencies as deps
 from easy_ecom.core.security import hash_password
-from easy_ecom.data.store.csv_store import CsvStore
-from easy_ecom.data.store.schema import TABLE_SCHEMAS
+from easy_ecom.tests.support.sqlite_runtime import build_sqlite_runtime, seed_auth_user
 
 
-def _setup_store(tmp_path: Path) -> CsvStore:
-    store = CsvStore(tmp_path)
-    for table_name, columns in TABLE_SCHEMAS.items():
-        store.ensure_table(table_name, columns)
-    return store
+def _setup_runtime(tmp_path: Path):
+    return build_sqlite_runtime(tmp_path, "api_auth.db")
 
 
-def _append_user(store: CsvStore, *, password: str = "", password_hash: str = "", is_active: str = "true") -> None:
-    store.append(
-        "users.csv",
-        {
-            "user_id": "u1",
-            "client_id": "c1",
-            "name": "User One",
-            "email": "u1@example.com",
-            "password": password,
-            "password_hash": password_hash,
-            "is_active": is_active,
-            "created_at": "",
-        },
+def _append_user(runtime, *, password: str = "", password_hash: str = "", is_active: str = "true") -> None:
+    seed_auth_user(
+        runtime.session_factory,
+        password=password,
+        password_hash=password_hash,
+        is_active=is_active,
     )
-    store.append("user_roles.csv", {"user_id": "u1", "role_code": "SUPER_ADMIN"})
 
 
 def test_valid_login(monkeypatch, tmp_path: Path):
-    monkeypatch.setattr(deps, "settings", Settings(data_dir=tmp_path, storage_backend="csv"))
-    store = _setup_store(tmp_path)
-    _append_user(store, password_hash=hash_password("secret"))
+    runtime = _setup_runtime(tmp_path)
+    monkeypatch.setattr(deps, "settings", runtime.settings)
+    _append_user(runtime, password_hash=hash_password("secret"))
 
     client = TestClient(create_app())
     response = client.post("/auth/login", json={"email": "u1@example.com", "password": "secret"})
@@ -49,9 +36,9 @@ def test_valid_login(monkeypatch, tmp_path: Path):
 
 
 def test_invalid_password(monkeypatch, tmp_path: Path):
-    monkeypatch.setattr(deps, "settings", Settings(data_dir=tmp_path, storage_backend="csv"))
-    store = _setup_store(tmp_path)
-    _append_user(store, password_hash=hash_password("secret"))
+    runtime = _setup_runtime(tmp_path)
+    monkeypatch.setattr(deps, "settings", runtime.settings)
+    _append_user(runtime, password_hash=hash_password("secret"))
 
     client = TestClient(create_app())
     response = client.post("/auth/login", json={"email": "u1@example.com", "password": "bad"})
@@ -59,9 +46,9 @@ def test_invalid_password(monkeypatch, tmp_path: Path):
 
 
 def test_inactive_user_blocked(monkeypatch, tmp_path: Path):
-    monkeypatch.setattr(deps, "settings", Settings(data_dir=tmp_path, storage_backend="csv"))
-    store = _setup_store(tmp_path)
-    _append_user(store, password_hash=hash_password("secret"), is_active="false")
+    runtime = _setup_runtime(tmp_path)
+    monkeypatch.setattr(deps, "settings", runtime.settings)
+    _append_user(runtime, password_hash=hash_password("secret"), is_active="false")
 
     client = TestClient(create_app())
     response = client.post("/auth/login", json={"email": "u1@example.com", "password": "secret"})
@@ -69,24 +56,24 @@ def test_inactive_user_blocked(monkeypatch, tmp_path: Path):
 
 
 def test_legacy_plaintext_migrates(monkeypatch, tmp_path: Path):
-    monkeypatch.setattr(deps, "settings", Settings(data_dir=tmp_path, storage_backend="csv"))
-    store = _setup_store(tmp_path)
-    _append_user(store, password="legacy-secret", password_hash="")
+    runtime = _setup_runtime(tmp_path)
+    monkeypatch.setattr(deps, "settings", runtime.settings)
+    _append_user(runtime, password="legacy-secret", password_hash="")
 
     client = TestClient(create_app())
     response = client.post("/auth/login", json={"email": "u1@example.com", "password": "legacy-secret"})
 
     assert response.status_code == 200
-    users = store.read("users.csv")
+    users = runtime.store.read("users.csv")
     row = users[users["user_id"] == "u1"].iloc[0]
     assert row["password"] == ""
     assert str(row["password_hash"]).startswith("$2")
 
 
 def test_logout(monkeypatch, tmp_path: Path):
-    monkeypatch.setattr(deps, "settings", Settings(data_dir=tmp_path, storage_backend="csv"))
-    store = _setup_store(tmp_path)
-    _append_user(store, password_hash=hash_password("secret"))
+    runtime = _setup_runtime(tmp_path)
+    monkeypatch.setattr(deps, "settings", runtime.settings)
+    _append_user(runtime, password_hash=hash_password("secret"))
 
     client = TestClient(create_app())
     client.post("/auth/login", json={"email": "u1@example.com", "password": "secret"})
@@ -96,8 +83,8 @@ def test_logout(monkeypatch, tmp_path: Path):
 
 
 def test_protected_endpoint_rejects_anonymous(monkeypatch, tmp_path: Path):
-    monkeypatch.setattr(deps, "settings", Settings(data_dir=tmp_path, storage_backend="csv"))
-    _setup_store(tmp_path)
+    runtime = _setup_runtime(tmp_path)
+    monkeypatch.setattr(deps, "settings", runtime.settings)
 
     client = TestClient(create_app())
     response = client.get("/products-stock/snapshot")
@@ -106,9 +93,9 @@ def test_protected_endpoint_rejects_anonymous(monkeypatch, tmp_path: Path):
 
 
 def test_login_then_me_returns_authenticated_user(monkeypatch, tmp_path: Path):
-    monkeypatch.setattr(deps, "settings", Settings(data_dir=tmp_path, storage_backend="csv"))
-    store = _setup_store(tmp_path)
-    _append_user(store, password_hash=hash_password("secret"))
+    runtime = _setup_runtime(tmp_path)
+    monkeypatch.setattr(deps, "settings", runtime.settings)
+    _append_user(runtime, password_hash=hash_password("secret"))
 
     client = TestClient(create_app())
     login_response = client.post("/auth/login", json={"email": "u1@example.com", "password": "secret"})
@@ -128,8 +115,8 @@ def test_login_then_me_returns_authenticated_user(monkeypatch, tmp_path: Path):
 
 
 def test_me_requires_cookie(monkeypatch, tmp_path: Path):
-    monkeypatch.setattr(deps, "settings", Settings(data_dir=tmp_path, storage_backend="csv"))
-    _setup_store(tmp_path)
+    runtime = _setup_runtime(tmp_path)
+    monkeypatch.setattr(deps, "settings", runtime.settings)
 
     client = TestClient(create_app())
     response = client.get("/auth/me")
@@ -138,8 +125,8 @@ def test_me_requires_cookie(monkeypatch, tmp_path: Path):
 
 
 def test_me_rejects_corrupted_cookie(monkeypatch, tmp_path: Path):
-    monkeypatch.setattr(deps, "settings", Settings(data_dir=tmp_path, storage_backend="csv"))
-    _setup_store(tmp_path)
+    runtime = _setup_runtime(tmp_path)
+    monkeypatch.setattr(deps, "settings", runtime.settings)
 
     client = TestClient(create_app())
     client.cookies.set("easy_ecom_session", "not-a-valid-token")
@@ -149,9 +136,9 @@ def test_me_rejects_corrupted_cookie(monkeypatch, tmp_path: Path):
 
 
 def test_logout_then_me_is_unauthorized(monkeypatch, tmp_path: Path):
-    monkeypatch.setattr(deps, "settings", Settings(data_dir=tmp_path, storage_backend="csv"))
-    store = _setup_store(tmp_path)
-    _append_user(store, password_hash=hash_password("secret"))
+    runtime = _setup_runtime(tmp_path)
+    monkeypatch.setattr(deps, "settings", runtime.settings)
+    _append_user(runtime, password_hash=hash_password("secret"))
 
     client = TestClient(create_app())
     login_response = client.post("/auth/login", json={"email": "u1@example.com", "password": "secret"})
@@ -167,7 +154,8 @@ def test_logout_then_me_is_unauthorized(monkeypatch, tmp_path: Path):
 def test_roles_round_trip_and_id_normalization(monkeypatch, tmp_path: Path):
     from easy_ecom.api.dependencies import get_authenticated_user
 
-    monkeypatch.setattr(deps, "settings", Settings(data_dir=tmp_path, storage_backend="csv"))
+    runtime = _setup_runtime(tmp_path)
+    monkeypatch.setattr(deps, "settings", runtime.settings)
     signer = deps.SessionSigner(deps.settings.session_secret)
     token = signer.dumps(
         {
@@ -189,7 +177,8 @@ def test_roles_round_trip_and_id_normalization(monkeypatch, tmp_path: Path):
 def test_me_rejects_missing_roles(monkeypatch, tmp_path: Path):
     from easy_ecom.api.dependencies import get_authenticated_user
 
-    monkeypatch.setattr(deps, "settings", Settings(data_dir=tmp_path, storage_backend="csv"))
+    runtime = _setup_runtime(tmp_path)
+    monkeypatch.setattr(deps, "settings", runtime.settings)
     signer = deps.SessionSigner(deps.settings.session_secret)
     token = signer.dumps(
         {
@@ -209,7 +198,8 @@ def test_me_rejects_missing_roles(monkeypatch, tmp_path: Path):
 def test_me_rejects_missing_client_id(monkeypatch, tmp_path: Path):
     from easy_ecom.api.dependencies import get_authenticated_user
 
-    monkeypatch.setattr(deps, "settings", Settings(data_dir=tmp_path, storage_backend="csv"))
+    runtime = _setup_runtime(tmp_path)
+    monkeypatch.setattr(deps, "settings", runtime.settings)
     signer = deps.SessionSigner(deps.settings.session_secret)
     token = signer.dumps(
         {

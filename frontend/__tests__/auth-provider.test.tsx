@@ -40,7 +40,7 @@ describe('AuthProvider bootstrap states', () => {
   });
 
   test('marks 401 as unauthorized', async () => {
-    vi.mocked(getCurrentUser).mockRejectedValueOnce(new ApiError('unauthorized', 401));
+    vi.mocked(getCurrentUser).mockRejectedValueOnce(new ApiError(401, 'unauthorized'));
     render(
       <AuthProvider>
         <AuthConsumer />
@@ -51,7 +51,7 @@ describe('AuthProvider bootstrap states', () => {
   });
 
   test('marks 500 as server', async () => {
-    vi.mocked(getCurrentUser).mockRejectedValueOnce(new ApiError('server', 500));
+    vi.mocked(getCurrentUser).mockRejectedValueOnce(new ApiError(500, 'server'));
     render(
       <AuthProvider>
         <AuthConsumer />

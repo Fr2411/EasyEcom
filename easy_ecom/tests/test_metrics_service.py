@@ -12,19 +12,15 @@ from easy_ecom.data.repos.csv.sales_repo import (
     SalesOrderItemsRepo,
     SalesOrdersRepo,
 )
-from easy_ecom.data.store.csv_store import CsvStore
-from easy_ecom.data.store.schema import TABLE_SCHEMAS
 from easy_ecom.domain.services.metrics_service import DateRange, MetricsService
+from easy_ecom.tests.support.sqlite_runtime import build_sqlite_runtime
 
 
-def setup_store(tmp_path: Path) -> CsvStore:
-    store = CsvStore(tmp_path)
-    for t, c in TABLE_SCHEMAS.items():
-        store.ensure_table(t, c)
-    return store
+def setup_store(tmp_path: Path):
+    return build_sqlite_runtime(tmp_path, "metrics.db").store
 
 
-def build_svc(store: CsvStore) -> MetricsService:
+def build_svc(store) -> MetricsService:
     return MetricsService(
         InventoryTxnRepo(store),
         LedgerRepo(store),

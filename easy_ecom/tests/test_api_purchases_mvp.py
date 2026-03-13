@@ -24,6 +24,7 @@ class DummyPurchasesService:
                         {
                             "line_id": "line-1",
                             "product_id": "prd-1",
+                            "variant_id": "var-1",
                             "product_name": "Product A",
                             "qty": 2,
                             "unit_cost": 60,
@@ -45,7 +46,7 @@ class DummyPurchasesService:
         if client_id != "tenant-a":
             return {"products": [], "suppliers": []}
         return {
-            "products": [{"product_id": "prd-1", "label": "Product A", "current_stock": 6}],
+            "products": [{"variant_id": "var-1", "product_id": "prd-1", "label": "Product A", "current_stock": 6, "sku": "", "barcode": ""}],
             "suppliers": [{"supplier_id": "sup-1", "name": "Nova Supplies"}],
         }
 
@@ -56,7 +57,7 @@ class DummyPurchasesService:
         return None
 
     def create_purchase(self, *, client_id: str, user_id: str, payload):
-        if payload.lines[0].product_id == "other-tenant":
+        if payload.lines[0].variant_id == "other-tenant":
             raise ValueError("Invalid product reference: other-tenant")
         if payload.lines[0].qty <= 0:
             raise ValueError("Purchase quantity must be > 0")
@@ -71,7 +72,7 @@ class DummyContainer:
 def test_purchases_requires_auth() -> None:
     client = TestClient(create_app())
     assert client.get('/purchases').status_code == 401
-    assert client.post('/purchases', json={"purchase_date": "2026-03-14", "supplier_id": "", "reference_no": "", "note": "", "payment_status": "unpaid", "lines": [{"product_id": "prd", "qty": 1, "unit_cost": 1}]}).status_code == 401
+    assert client.post('/purchases', json={"purchase_date": "2026-03-14", "supplier_id": "", "reference_no": "", "note": "", "payment_status": "unpaid", "lines": [{"variant_id": "var-1", "qty": 1, "unit_cost": 1}]}).status_code == 401
 
 
 def test_purchases_endpoints_tenant_scoped_and_validation() -> None:
@@ -86,15 +87,17 @@ def test_purchases_endpoints_tenant_scoped_and_validation() -> None:
     options = client.get('/purchases/form-options')
     assert options.status_code == 200
     assert options.json()['products'][0]['product_id'] == 'prd-1'
+    assert options.json()['products'][0]['variant_id'] == 'var-1'
 
     detail = client.get('/purchases/pur-1')
     assert detail.status_code == 200
     assert detail.json()['lines'][0]['product_id'] == 'prd-1'
+    assert detail.json()['lines'][0]['variant_id'] == 'var-1'
 
-    created = client.post('/purchases', json={"purchase_date": "2026-03-14", "supplier_id": "sup-1", "reference_no": "INV-2", "note": "", "payment_status": "unpaid", "lines": [{"product_id": "prd-1", "qty": 1, "unit_cost": 50}]})
+    created = client.post('/purchases', json={"purchase_date": "2026-03-14", "supplier_id": "sup-1", "reference_no": "INV-2", "note": "", "payment_status": "unpaid", "lines": [{"variant_id": "var-1", "qty": 1, "unit_cost": 50}]})
     assert created.status_code == 201
 
-    bad_product = client.post('/purchases', json={"purchase_date": "2026-03-14", "supplier_id": "", "reference_no": "", "note": "", "payment_status": "unpaid", "lines": [{"product_id": "other-tenant", "qty": 1, "unit_cost": 50}]})
+    bad_product = client.post('/purchases', json={"purchase_date": "2026-03-14", "supplier_id": "", "reference_no": "", "note": "", "payment_status": "unpaid", "lines": [{"variant_id": "other-tenant", "qty": 1, "unit_cost": 50}]})
     assert bad_product.status_code == 400
 
     app.dependency_overrides[get_current_user] = lambda: RequestUser(user_id='u2', client_id='tenant-b', roles=['CLIENT_OWNER'])

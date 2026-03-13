@@ -16,6 +16,7 @@ class CatalogVariantRecord(BaseModel):
     size: str = ""
     color: str = ""
     other: str = ""
+    defaultPurchasePrice: float = 0.0
     defaultSellingPrice: float = 0.0
     maxDiscountPct: float = 10.0
 
@@ -45,16 +46,21 @@ class CatalogProductsResponse(BaseModel):
 
 class CatalogProductRequest(BaseModel):
     identity: CatalogProductIdentity
-    variants: list[CatalogVariantRecord] = Field(min_length=1)
+    variants: list[CatalogVariantRecord] = Field(default_factory=list)
+    archiveVariantIds: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_variants(self) -> "CatalogProductRequest":
+        if not self.variants and not self.archiveVariantIds:
+            raise ValueError("At least one active variant or archiveVariantIds entry is required")
         seen: set[str] = set()
         for index, variant in enumerate(self.variants, start=1):
             if not variant.has_identity:
                 raise ValueError(
                     f"Variant row {index} must include at least one identity field (size/color/other)"
                 )
+            if variant.defaultPurchasePrice < 0:
+                raise ValueError(f"Variant row {index} defaultPurchasePrice must be >= 0")
             if variant.defaultSellingPrice < 0:
                 raise ValueError(f"Variant row {index} defaultSellingPrice must be >= 0")
             if variant.maxDiscountPct < 0 or variant.maxDiscountPct > 100:
