@@ -22,6 +22,9 @@ vi.mock('@/lib/api/products-stock', () => ({
 
 import InventoryPage from '@/app/(app)/inventory/page';
 
+const EMPTY_INVENTORY = { items: [] };
+const EMPTY_CATALOG = { products: [], suppliers: [], categories: [] };
+
 afterEach(() => {
   cleanup();
   getInventoryItemsMock.mockReset();
@@ -62,8 +65,6 @@ describe('InventoryPage', () => {
     await waitFor(() => expect(createInventoryAdjustmentMock).toHaveBeenCalled());
   });
 
-
-
   test('hides legacy product rows from adjustment selector', async () => {
     getInventoryItemsMock.mockResolvedValue({
       items: [
@@ -96,5 +97,120 @@ describe('InventoryPage', () => {
     await waitFor(() => expect(screen.getByText(/Inventory Detail/)).toBeTruthy());
 
     expect(screen.getAllByText('0.00').length).toBeGreaterThan(0);
+  });
+
+  test('new product with generated variants persists all generated variants', async () => {
+    getInventoryItemsMock.mockResolvedValue(EMPTY_INVENTORY);
+    getInventoryMovementsMock.mockResolvedValue(EMPTY_INVENTORY);
+    getProductsStockSnapshotMock.mockResolvedValue(EMPTY_CATALOG);
+    saveProductStockMock.mockResolvedValue({ success: true });
+
+    render(<InventoryPage />);
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Find or create product' })).toBeTruthy());
+    fireEvent.change(screen.getByLabelText('Product chooser input'), { target: { value: 'Cotton Tee' } });
+    fireEvent.click(screen.getByText('Add new product: "Cotton Tee"'));
+
+    fireEvent.change(screen.getByPlaceholderText('S, M, L'), { target: { value: 'S,M' } });
+    fireEvent.change(screen.getByPlaceholderText('Black, White'), { target: { value: 'Red,Blue' } });
+    fireEvent.click(screen.getByText('Generate combinations'));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(saveProductStockMock).toHaveBeenCalledTimes(1));
+    expect(saveProductStockMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: 'new',
+        identity: expect.objectContaining({ productName: 'Cotton Tee' }),
+        selectedProductId: undefined,
+      }),
+    );
+    const payload = saveProductStockMock.mock.calls[0][0] as { variants: unknown[] };
+    expect(payload.variants).toHaveLength(4);
+  });
+
+  test('existing product update persists added variants with selectedProductId', async () => {
+    getInventoryItemsMock.mockResolvedValue(EMPTY_INVENTORY);
+    getInventoryMovementsMock.mockResolvedValue(EMPTY_INVENTORY);
+    getProductsStockSnapshotMock.mockResolvedValue({
+      products: [
+        {
+          id: 'p-101',
+          identity: {
+            productName: 'Urban Tee',
+            supplier: 'Nova',
+            category: 'Apparel',
+            description: '',
+            features: [],
+          },
+          variants: [
+            {
+              id: 'v-101',
+              size: 'M',
+              color: 'Red',
+              other: '',
+              qty: 2,
+              cost: 10,
+              defaultSellingPrice: 20,
+              maxDiscountPct: 10,
+            },
+          ],
+        },
+      ],
+      suppliers: ['Nova'],
+      categories: ['Apparel'],
+    });
+    saveProductStockMock.mockResolvedValue({ success: true });
+
+    render(<InventoryPage />);
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Find or create product' })).toBeTruthy());
+    fireEvent.change(screen.getByLabelText('Product chooser input'), { target: { value: 'Urban Tee' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Urban Tee' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add row' }));
+
+    const table = screen.getByRole('table');
+    const rows = Array.from(table.querySelectorAll('tbody tr'));
+    const newRowInputs = Array.from(rows[rows.length - 1].querySelectorAll('input'));
+    fireEvent.change(newRowInputs[0], { target: { value: 'L' } });
+    fireEvent.change(newRowInputs[1], { target: { value: 'Blue' } });
+    fireEvent.change(newRowInputs[3], { target: { value: '5' } });
+    fireEvent.change(newRowInputs[4], { target: { value: '12' } });
+    fireEvent.change(newRowInputs[5], { target: { value: '24' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(saveProductStockMock).toHaveBeenCalledTimes(1));
+    expect(saveProductStockMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: 'existing',
+        selectedProductId: 'p-101',
+      }),
+    );
+    const payload = saveProductStockMock.mock.calls[0][0] as { variants: Array<{ size: string; color: string }> };
+    expect(payload.variants).toHaveLength(2);
+    expect(payload.variants).toEqual(expect.arrayContaining([expect.objectContaining({ size: 'L', color: 'Blue' })]));
+  });
+
+  test('blank manual rows with business values are blocked before save', async () => {
+    getInventoryItemsMock.mockResolvedValue(EMPTY_INVENTORY);
+    getInventoryMovementsMock.mockResolvedValue(EMPTY_INVENTORY);
+    getProductsStockSnapshotMock.mockResolvedValue(EMPTY_CATALOG);
+
+    render(<InventoryPage />);
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Find or create product' })).toBeTruthy());
+    fireEvent.change(screen.getByLabelText('Product chooser input'), { target: { value: 'Basic Tee' } });
+    fireEvent.click(screen.getByText('Add new product: "Basic Tee"'));
+    fireEvent.click(screen.getByRole('button', { name: 'Add row' }));
+
+    const table = screen.getByRole('table');
+    const firstRowInputs = Array.from(table.querySelectorAll('tbody tr')[0].querySelectorAll('input'));
+    fireEvent.change(firstRowInputs[3], { target: { value: '3' } });
+
+    await waitFor(() => {
+      const saveButton = screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement;
+      expect(saveButton.disabled).toBe(true);
+    });
+    expect(saveProductStockMock).not.toHaveBeenCalled();
   });
 });

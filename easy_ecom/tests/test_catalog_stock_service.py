@@ -38,8 +38,6 @@ def test_existing_product_workspace_loads_existing_variants(tmp_path: Path):
             client_id="c1",
             supplier="s",
             product_name="Tee",
-            default_selling_price=100,
-            max_discount_pct=10,
             sizes_csv="M,L",
             colors_csv="Red",
             others_csv="",
@@ -60,8 +58,6 @@ def test_existing_product_mode_can_add_new_variant(tmp_path: Path):
             client_id="c1",
             supplier="s",
             product_name="Shirt",
-            default_selling_price=50,
-            max_discount_pct=8,
             sizes_csv="M",
             colors_csv="Blue",
             others_csv="",
@@ -76,8 +72,6 @@ def test_existing_product_mode_can_add_new_variant(tmp_path: Path):
         category="General",
         description="",
         features_text="",
-        default_selling_price=55,
-        max_discount_pct=9,
         selected_product_id=product_id,
         variant_entries=[VariantWorkspaceEntry(size="L", color="Blue", qty=0, unit_cost=0)],
     )
@@ -94,8 +88,6 @@ def test_new_product_mode_generates_variants_from_option_axes(tmp_path: Path):
         sizes_csv="s,m",
         colors_csv="red,blue",
         others_csv="cotton",
-        default_selling_price=120,
-        max_discount_pct=10,
     )
 
     keys = {(r.size, r.color, r.other) for r in rows}
@@ -146,8 +138,6 @@ def test_save_and_workspace_flow_remains_tenant_scoped(tmp_path: Path):
             client_id="cA",
             supplier="s",
             product_name="Shared Name",
-            default_selling_price=100,
-            max_discount_pct=10,
             sizes_csv="",
             colors_csv="",
             others_csv="",
@@ -158,8 +148,6 @@ def test_save_and_workspace_flow_remains_tenant_scoped(tmp_path: Path):
             client_id="cB",
             supplier="s",
             product_name="Shared Name",
-            default_selling_price=100,
-            max_discount_pct=10,
             sizes_csv="",
             colors_csv="",
             others_csv="",
@@ -177,8 +165,6 @@ def test_save_and_workspace_flow_remains_tenant_scoped(tmp_path: Path):
         category="A",
         description="desc",
         features_text="feature",
-        default_selling_price=110.0,
-        max_discount_pct=15.0,
         variant_entries=[VariantWorkspaceEntry(size="X", color="Black", qty=0, unit_cost=0)],
         selected_product_id=product_a,
     )
@@ -223,8 +209,6 @@ def test_new_product_with_multiple_variant_opening_stock_posts_each_variant(tmp_
         category="General",
         description="",
         features_text="",
-        default_selling_price=80.0,
-        max_discount_pct=10.0,
         variant_entries=[
             VariantWorkspaceEntry(size="M", color="Red", qty=2, unit_cost=20),
             VariantWorkspaceEntry(size="L", color="Blue", qty=3, unit_cost=25),
@@ -251,8 +235,6 @@ def test_variant_name_starts_with_product_name(tmp_path: Path):
         category="General",
         description="",
         features_text="",
-        default_selling_price=35.0,
-        max_discount_pct=5.0,
         variant_entries=[VariantWorkspaceEntry(size="M", color="Green")],
     )
 
@@ -271,8 +253,6 @@ def test_save_workspace_persists_distinct_variant_attributes(tmp_path: Path):
         category="General",
         description="",
         features_text="",
-        default_selling_price=100.0,
-        max_discount_pct=10.0,
         variant_entries=[
             VariantWorkspaceEntry(size="S", color="", other="", qty=0, unit_cost=0),
             VariantWorkspaceEntry(size="M", color="", other="", qty=0, unit_cost=0),
@@ -331,8 +311,6 @@ def test_save_workspace_allows_parent_price_zero_and_keeps_pricing_on_variants_o
         category="General",
         description="",
         features_text="",
-        default_selling_price=0,
-        max_discount_pct=0,
         variant_entries=[
             VariantWorkspaceEntry(size="M", color="Red", default_selling_price=199, max_discount_pct=15),
             VariantWorkspaceEntry(size="L", color="Blue", default_selling_price=249, max_discount_pct=20),
@@ -365,8 +343,6 @@ def test_save_workspace_logs_and_persists_two_distinct_variants_end_to_end(tmp_p
         category="General",
         description="",
         features_text="",
-        default_selling_price=100.0,
-        max_discount_pct=10.0,
         variant_entries=[
             VariantWorkspaceEntry(size="S", color="Black", other="", qty=1, unit_cost=10),
             VariantWorkspaceEntry(size="M", color="White", other="", qty=2, unit_cost=11),
