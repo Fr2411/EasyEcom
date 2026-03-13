@@ -25,6 +25,7 @@ The repository now includes dedicated instruction files for Codex agents to keep
 - Scoped agent rulebooks: `frontend/AGENTS.md`, `backend/AGENTS.md`, `db/AGENTS.md`, `ai/AGENTS.md`
 - Frontend rulebook now explicitly documents UI/UX operating principles for dense business workflows (tables, variant-aware forms, role-aware visibility, dashboard usefulness, and request-efficiency expectations).
 - Frontend variant generation contract is standardized via `VariantGenerationInput` (`size/color/other` only), and all workspaces now call `generateVariantsFromInputs` with the same minimal payload to keep type safety stable in Amplify builds.
+- Variant CSV parsing in `frontend/lib/products-stock/variant-utils.ts` now trims and case-insensitively deduplicates per input dimension while preserving the first typed display casing, which prevents avoidable duplicate variant rows before validation.
 
 When implementing changes, use these files as guardrails for tenant isolation, variant-level stock truth, auditability, and cross-layer contract consistency.
 
