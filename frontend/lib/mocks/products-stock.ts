@@ -12,7 +12,8 @@ const MOCK_PRODUCTS: ProductRecord[] = [
     },
     variants: [
       {
-        id: 'v-1001',
+        rowId: 'row-v-1001',
+        variant_id: 'v-1001',
         size: 'S',
         color: 'Black',
         other: '',
@@ -22,7 +23,8 @@ const MOCK_PRODUCTS: ProductRecord[] = [
         maxDiscountPct: 10
       },
       {
-        id: 'v-1002',
+        rowId: 'row-v-1002',
+        variant_id: 'v-1002',
         size: 'M',
         color: 'White',
         other: '',
@@ -44,7 +46,8 @@ const MOCK_PRODUCTS: ProductRecord[] = [
     },
     variants: [
       {
-        id: 'v-2001',
+        rowId: 'row-v-2001',
+        variant_id: 'v-2001',
         size: '',
         color: 'Navy',
         other: 'Matte',

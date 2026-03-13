@@ -144,7 +144,8 @@ describe('InventoryPage', () => {
           },
           variants: [
             {
-              id: 'v-101',
+              rowId: 'row-v-101',
+              variant_id: 'v-101',
               size: 'M',
               color: 'Red',
               other: '',
