@@ -51,8 +51,7 @@ export type SaveProductPayload = {
 };
 
 export type SaveVariant = {
-  variant_id: string;
-  variant_name: string;
+  id: string;
   qty: number;
   cost: number;
   defaultSellingPrice: number;

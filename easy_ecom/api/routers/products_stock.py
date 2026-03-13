@@ -23,6 +23,20 @@ from easy_ecom.domain.services.catalog_stock_service import VariantWorkspaceEntr
 
 router = APIRouter(prefix="/products-stock", tags=["products-stock"])
 
+def _to_workspace_entry(variant: VariantRecord, supplier: str) -> VariantWorkspaceEntry:
+    return VariantWorkspaceEntry(
+        variant_id=str(variant.id or '').strip(),
+        size=str(variant.size or '').strip(),
+        color=str(variant.color or '').strip(),
+        other=str(variant.other or '').strip(),
+        qty=float(variant.qty),
+        unit_cost=float(variant.cost),
+        default_selling_price=float(variant.defaultSellingPrice),
+        max_discount_pct=float(variant.maxDiscountPct),
+        supplier=supplier,
+    )
+
+
 
 def _parse_features(raw_features: object) -> list[str]:
     if raw_features is None:
@@ -125,20 +139,7 @@ def save_products_stock(
 ) -> SaveProductResponse:
     require_page_access(user, "Catalog & Stock")
     try:
-        entries = [
-            VariantWorkspaceEntry(
-                variant_id=variant.id,
-                size=variant.size,
-                color=variant.color,
-                other=variant.other,
-                qty=variant.qty,
-                unit_cost=variant.cost,
-                default_selling_price=variant.defaultSellingPrice,
-                max_discount_pct=variant.maxDiscountPct,
-                supplier=payload.identity.supplier,
-            )
-            for variant in payload.variants
-        ]
+        entries = [_to_workspace_entry(variant, payload.identity.supplier) for variant in payload.variants]
         container.catalog_stock.save_workspace(
             client_id=user.client_id,
             user_id=user.user_id,
