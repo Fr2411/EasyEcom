@@ -2,8 +2,7 @@
 
 type SaveSummaryProps = {
   variantCount: number;
-  totalQty: number;
-  estimatedStockCost: number;
+  pricedVariants: number;
   isSaving: boolean;
   isSaveDisabled: boolean;
   validationMessage?: string;
@@ -13,8 +12,7 @@ type SaveSummaryProps = {
 
 export function SaveSummary({
   variantCount,
-  totalQty,
-  estimatedStockCost,
+  pricedVariants,
   isSaving,
   isSaveDisabled,
   validationMessage,
@@ -25,8 +23,8 @@ export function SaveSummary({
     <section className="save-bar" aria-live="polite">
       <div className="save-summary-items">
         <span>Variants: {variantCount}</span>
-        <span>Total Qty: {totalQty}</span>
-        <span>Estimated Stock Cost: ${estimatedStockCost.toFixed(2)}</span>
+        <span>Priced Variants: {pricedVariants}</span>
+        <span>Stock comes from opening stock, purchases, or adjustments.</span>
       </div>
       {validationMessage ? <p className="validation-message">{validationMessage}</p> : null}
       <div className="save-actions">

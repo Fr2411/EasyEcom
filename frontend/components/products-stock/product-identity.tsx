@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { ProductIdentity } from '@/types/products-stock';
+import type { ProductIdentity } from '@/types/catalog';
 import { featureListToInput, toFeatureList } from '@/lib/products-stock/variant-utils';
 
 type ProductIdentityProps = {

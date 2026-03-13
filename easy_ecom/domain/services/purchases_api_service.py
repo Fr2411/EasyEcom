@@ -259,8 +259,8 @@ class PurchasesApiService:
             for line in payload.lines:
                 if line.qty <= 0:
                     raise ValueError("Purchase quantity must be > 0")
-                if line.unit_cost < 0:
-                    raise ValueError("Purchase unit_cost must be >= 0")
+                if line.unit_cost <= 0:
+                    raise ValueError("Purchase unit_cost must be > 0")
                 variant = self.stock_ledger.resolve_variant(
                     session,
                     client_id=client_id,

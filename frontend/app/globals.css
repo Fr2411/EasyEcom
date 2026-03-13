@@ -126,7 +126,6 @@ button:disabled {
 
 .easyecom-logo-sidebar {
   width: min(100%, 200px);
-  filter: drop-shadow(0 8px 18px rgba(22, 136, 255, 0.12));
 }
 
 .eyebrow { margin: 0; color: var(--text-muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; }
@@ -422,10 +421,6 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
   width: min(100%, 320px);
   margin-bottom: 0.85rem;
   line-height: 0;
-}
-
-.easyecom-logo-hero {
-  filter: drop-shadow(0 14px 24px rgba(22, 136, 255, 0.14));
 }
 
 .login-hero h1 { margin: 0.45rem 0 0.8rem; max-width: 25ch; font-size: clamp(1.5rem, 2.5vw, 2.1rem); }

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
@@ -129,7 +129,7 @@ class AiContextService:
 
         return {
             "tenant_id": client_id,
-            "generated_at": datetime.now(UTC).isoformat(),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
             "products_count": len(data["products"]),
             "variants_count": len(data["variants"]),
             "active_customers_count": sum(1 for c in data["customers"] if (c.is_active or "true") == "true"),
@@ -242,7 +242,7 @@ class AiContextService:
 
     def sales_context(self, *, client_id: str, days: int = 7) -> dict[str, object]:
         data = self._fetch_tenant_data(client_id)
-        since = datetime.now(UTC) - timedelta(days=max(1, min(days, 90)))
+        since = datetime.now(timezone.utc) - timedelta(days=max(1, min(days, 90)))
         orders = [o for o in data["orders"] if o.status == "confirmed" and (self._day(o.timestamp) or since) >= since]
         order_ids = {o.order_id for o in orders}
 
@@ -327,7 +327,7 @@ class AiContextService:
 
     def recent_activity_context(self, *, client_id: str, days: int = 7) -> dict[str, object]:
         data = self._fetch_tenant_data(client_id)
-        since = datetime.now(UTC) - timedelta(days=max(1, min(days, 30)))
+        since = datetime.now(timezone.utc) - timedelta(days=max(1, min(days, 30)))
         inventory_events = []
         for txn in data["txns"]:
             event_at = self._day(txn.timestamp)

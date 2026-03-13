@@ -4,7 +4,7 @@ import hashlib
 import hmac
 import json
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
@@ -213,7 +213,7 @@ class IntegrationsService:
             ts = int(timestamp)
         except ValueError:
             return False
-        now_ts = int(datetime.now(UTC).timestamp())
+        now_ts = int(datetime.now(timezone.utc).timestamp())
         return abs(now_ts - ts) <= tolerance_seconds
 
 
