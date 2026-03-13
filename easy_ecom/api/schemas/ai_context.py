@@ -29,6 +29,14 @@ class AiProductsContextResponse(BaseModel):
 class AiStockContextItem(BaseModel):
     product_id: str
     product_name: str
+    variant_id: str
+    variant_name: str
+    available_qty: float
+
+
+class AiStockProductRollupItem(BaseModel):
+    product_id: str
+    product_name: str
     available_qty: float
 
 
@@ -36,6 +44,7 @@ class AiStockContextResponse(BaseModel):
     product_id: str | None
     count: int
     items: list[AiStockContextItem] = Field(default_factory=list)
+    product_rollup: list[AiStockProductRollupItem] = Field(default_factory=list)
 
 
 class AiSalesTopProduct(BaseModel):
