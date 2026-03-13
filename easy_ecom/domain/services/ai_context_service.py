@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
+from easy_ecom.domain.services.stock_policy import stock_deltas
 from easy_ecom.data.store.postgres_models import (
     CustomerModel,
     InventoryTxnModel,
@@ -82,16 +83,35 @@ class AiContextService:
             "settings": [settings] if settings else [],
         }
 
-    def _stock_by_product(self, txns: list[InventoryTxnModel]) -> dict[str, float]:
+    def _stock_by_variant(self, txns: list[InventoryTxnModel]) -> dict[str, float]:
         balances: dict[str, float] = defaultdict(float)
         for txn in txns:
-            qty = self._to_float(txn.qty)
-            balances[txn.product_id] += qty if txn.txn_type in {"IN", "ADJUST", "ADJUST+"} else -qty
+            variant_id = str(txn.variant_id or "").strip()
+            if not variant_id:
+                continue
+            balances[variant_id] += stock_deltas(str(txn.txn_type), self._to_float(txn.qty)).on_hand
         return balances
+
+    def _product_stock_rollup(
+        self,
+        *,
+        products: list[ProductModel],
+        variants: list[ProductVariantModel],
+        stock_by_variant: dict[str, float],
+    ) -> list[dict[str, object]]:
+        variants_by_product: dict[str, list[ProductVariantModel]] = defaultdict(list)
+        for variant in variants:
+            variants_by_product[variant.parent_product_id].append(variant)
+
+        rows: list[dict[str, object]] = []
+        for product in products:
+            total = sum(stock_by_variant.get(variant.variant_id, 0.0) for variant in variants_by_product.get(product.product_id, []))
+            rows.append({"product_id": product.product_id, "product_name": product.product_name, "available_qty": total})
+        return rows
 
     def overview(self, *, client_id: str) -> dict[str, object]:
         data = self._fetch_tenant_data(client_id)
-        stock = self._stock_by_product(data["txns"])
+        stock_by_variant = self._stock_by_variant(data["txns"])
         confirmed_orders = [o for o in data["orders"] if o.status == "confirmed"]
         revenue = sum(self._to_float(o.grand_total) for o in confirmed_orders)
         low_threshold = 5
@@ -101,11 +121,11 @@ class AiContextService:
             except ValueError:
                 low_threshold = 5
 
-        low_stock_count = 0
-        for product in data["products"]:
-            qty = stock.get(product.product_id, 0.0)
-            if qty <= low_threshold:
-                low_stock_count += 1
+        low_stock_count = sum(
+            1
+            for variant in data["variants"]
+            if (variant.is_active or "true") == "true" and stock_by_variant.get(variant.variant_id, 0.0) <= low_threshold
+        )
 
         return {
             "tenant_id": client_id,
@@ -132,7 +152,7 @@ class AiContextService:
 
     def products_context(self, *, client_id: str, query: str = "", limit: int = 20) -> dict[str, object]:
         data = self._fetch_tenant_data(client_id)
-        stock = self._stock_by_product(data["txns"])
+        stock_by_variant = self._stock_by_variant(data["txns"])
         variants_by_product: dict[str, list[ProductVariantModel]] = defaultdict(list)
         for variant in data["variants"]:
             variants_by_product[variant.parent_product_id].append(variant)
@@ -148,7 +168,10 @@ class AiContextService:
                     "product_name": product.product_name,
                     "category": product.category,
                     "default_price": self._to_float(product.default_selling_price),
-                    "stock_qty": stock.get(product.product_id, 0.0),
+                    "stock_qty": sum(
+                        stock_by_variant.get(variant.variant_id, 0.0)
+                        for variant in variants_by_product.get(product.product_id, [])
+                    ),
                     "variants": [
                         {
                             "variant_id": variant.variant_id,
@@ -168,30 +191,52 @@ class AiContextService:
 
     def stock_context(self, *, client_id: str, product_id: str = "") -> dict[str, object]:
         data = self._fetch_tenant_data(client_id)
-        stock = self._stock_by_product(data["txns"])
+        stock_by_variant = self._stock_by_variant(data["txns"])
+        products_by_id = {product.product_id: product for product in data["products"]}
         rows = []
         target = product_id.strip()
-        for product in data["products"]:
-            if target and product.product_id != target:
+        for variant in data["variants"]:
+            if target and variant.parent_product_id != target:
                 continue
+            parent = products_by_id.get(variant.parent_product_id)
             rows.append(
                 {
-                    "product_id": product.product_id,
-                    "product_name": product.product_name,
-                    "available_qty": stock.get(product.product_id, 0.0),
+                    "product_id": variant.parent_product_id,
+                    "product_name": parent.product_name if parent else variant.parent_product_id,
+                    "variant_id": variant.variant_id,
+                    "variant_name": variant.variant_name,
+                    "available_qty": stock_by_variant.get(variant.variant_id, 0.0),
                 }
             )
-        return {"product_id": target or None, "count": len(rows), "items": rows[:50]}
+        rows.sort(key=lambda row: (str(row["product_id"]), str(row["variant_name"])))
+        product_rollup = self._product_stock_rollup(
+            products=[p for p in data["products"] if not target or p.product_id == target],
+            variants=[v for v in data["variants"] if not target or v.parent_product_id == target],
+            stock_by_variant=stock_by_variant,
+        )
+        return {"product_id": target or None, "count": len(rows), "items": rows[:50], "product_rollup": product_rollup[:50]}
 
     def low_stock_context(self, *, client_id: str, threshold: int | None = None) -> dict[str, object]:
         data = self._fetch_tenant_data(client_id)
-        stock = self._stock_by_product(data["txns"])
+        stock_by_variant = self._stock_by_variant(data["txns"])
+        products_by_id = {product.product_id: product for product in data["products"]}
         effective_threshold = 5 if threshold is None else max(0, threshold)
         items = []
-        for product in data["products"]:
-            qty = stock.get(product.product_id, 0.0)
+        for variant in data["variants"]:
+            if (variant.is_active or "true") != "true":
+                continue
+            qty = stock_by_variant.get(variant.variant_id, 0.0)
             if qty <= effective_threshold:
-                items.append({"product_id": product.product_id, "product_name": product.product_name, "available_qty": qty})
+                parent = products_by_id.get(variant.parent_product_id)
+                items.append(
+                    {
+                        "product_id": variant.parent_product_id,
+                        "product_name": parent.product_name if parent else variant.parent_product_id,
+                        "variant_id": variant.variant_id,
+                        "variant_name": variant.variant_name,
+                        "available_qty": qty,
+                    }
+                )
         items.sort(key=lambda row: row["available_qty"])
         return {"threshold": effective_threshold, "count": len(items), "items": items[:50]}
 
