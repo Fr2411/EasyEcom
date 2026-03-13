@@ -36,18 +36,24 @@ class DummyAiContextService:
 
     def stock_context(self, *, client_id: str, product_id: str):
         if client_id != "tenant-a":
-            return {"product_id": product_id or None, "count": 0, "items": []}
+            return {"product_id": product_id or None, "count": 0, "items": [], "product_rollup": []}
         return {
             "product_id": product_id or None,
-            "count": 1,
-            "items": [{"product_id": "prd-1", "product_name": "Blue Tee", "available_qty": 8.0}],
+            "count": 2,
+            "items": [
+                {"product_id": "prd-1", "product_name": "Blue Tee", "variant_id": "var-1-s", "variant_name": "Blue Tee / S", "available_qty": 0.0},
+                {"product_id": "prd-1", "product_name": "Blue Tee", "variant_id": "var-1-m", "variant_name": "Blue Tee / M", "available_qty": 8.0},
+            ],
+            "product_rollup": [{"product_id": "prd-1", "product_name": "Blue Tee", "available_qty": 8.0}],
         }
 
     def low_stock_context(self, *, client_id: str, threshold: int | None):
         return {
             "threshold": 5 if threshold is None else threshold,
             "count": 0 if client_id != "tenant-a" else 1,
-            "items": [] if client_id != "tenant-a" else [{"product_id": "prd-2", "product_name": "Cap", "available_qty": 2.0}],
+            "items": []
+            if client_id != "tenant-a"
+            else [{"product_id": "prd-1", "product_name": "Blue Tee", "variant_id": "var-1-s", "variant_name": "Blue Tee / S", "available_qty": 0.0}],
         }
 
     def sales_context(self, *, client_id: str, days: int):
@@ -120,6 +126,17 @@ def test_ai_context_tenant_scope_lookup_and_empty_behavior() -> None:
     low_stock = client.get("/ai/context/low-stock?threshold=3")
     assert low_stock.status_code == 200
     assert low_stock.json()["threshold"] == 3
+    assert low_stock.json()["items"][0]["variant_id"] == "var-1-s"
+
+    stock = client.get("/ai/context/stock")
+    assert stock.status_code == 200
+    body = stock.json()
+    assert body["count"] == 2
+    assert {item["variant_id"] for item in body["items"]} == {"var-1-s", "var-1-m"}
+    by_variant = {item["variant_id"]: item["available_qty"] for item in body["items"]}
+    assert by_variant["var-1-s"] == 0.0
+    assert by_variant["var-1-m"] == 8.0
+    assert body["product_rollup"][0]["available_qty"] == 8.0
 
     hook = client.post("/ai/hooks/inbound-inquiry", json={"message": "stock availability", "customer_ref": "cus-1"})
     assert hook.status_code == 200
