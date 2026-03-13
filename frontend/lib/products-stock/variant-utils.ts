@@ -2,11 +2,22 @@ import type { Variant, VariantGenerationInput } from '@/types/products-stock';
 
 const DEFAULT_DISCOUNT = 10;
 
-const parseCsvValues = (value: string): string[] =>
+const parseCsvValues = (value: string): string[] => {
+  const deduped = new Map<string, string>();
+
   value
     .split(',')
     .map((part) => part.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .forEach((part) => {
+      const normalizedKey = part.toLowerCase();
+      if (!deduped.has(normalizedKey)) {
+        deduped.set(normalizedKey, part);
+      }
+    });
+
+  return Array.from(deduped.values());
+};
 
 export function variantIdentityKey(variant: Variant): string {
   return [variant.size, variant.color, variant.other].map((v) => v.trim().toLowerCase()).join('|');
