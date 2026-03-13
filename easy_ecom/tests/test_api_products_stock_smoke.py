@@ -41,6 +41,8 @@ class DummyCatalogStock:
         return sorted(set(rows["category"].tolist()))
 
     def save_workspace(self, **kwargs):
+        if "default_selling_price" in kwargs or "max_discount_pct" in kwargs:
+            raise AssertionError("Parent pricing fields must not be passed into save_workspace")
         client_id = kwargs["client_id"]
         selected = kwargs.get("selected_product_id", "")
         name = kwargs["typed_product_name"]
@@ -172,6 +174,54 @@ def test_blank_identity_rejected():
     assert response.status_code == 422 or response.status_code == 400
     app.dependency_overrides.clear()
 
+
+
+def test_inventory_save_contract_persists_new_and_existing_variants_without_parent_price_dependency():
+    container = DummyContainer()
+    client = _client(container)
+
+    create = client.post('/products-stock/save', json={
+        "mode": "new",
+        "identity": {"productName": "Combo Tee", "supplier": "Nova", "category": "Apparel", "description": "", "features": []},
+        "variants": [
+            {"id": "", "size": "S", "color": "Red", "other": "", "qty": 0, "cost": 0, "defaultSellingPrice": 20, "maxDiscountPct": 10},
+            {"id": "", "size": "S", "color": "Blue", "other": "", "qty": 0, "cost": 0, "defaultSellingPrice": 20, "maxDiscountPct": 10},
+            {"id": "", "size": "M", "color": "Red", "other": "", "qty": 0, "cost": 0, "defaultSellingPrice": 22, "maxDiscountPct": 12},
+            {"id": "", "size": "M", "color": "Blue", "other": "", "qty": 0, "cost": 0, "defaultSellingPrice": 22, "maxDiscountPct": 12},
+        ],
+    })
+    assert create.status_code == 200
+
+    first_snapshot = client.get('/products-stock/snapshot')
+    assert first_snapshot.status_code == 200
+    first_body = first_snapshot.json()
+    assert len(first_body["products"]) == 1
+    assert len(first_body["products"][0]["variants"]) == 4
+
+    product_id = first_body["products"][0]["id"]
+    update = client.post('/products-stock/save', json={
+        "mode": "existing",
+        "selectedProductId": product_id,
+        "identity": {"productName": "Combo Tee", "supplier": "Nova", "category": "Apparel", "description": "", "features": []},
+        "variants": [
+            {"id": "", "size": "S", "color": "Red", "other": "", "qty": 0, "cost": 0, "defaultSellingPrice": 20, "maxDiscountPct": 10},
+            {"id": "", "size": "S", "color": "Blue", "other": "", "qty": 0, "cost": 0, "defaultSellingPrice": 20, "maxDiscountPct": 10},
+            {"id": "", "size": "M", "color": "Red", "other": "", "qty": 0, "cost": 0, "defaultSellingPrice": 22, "maxDiscountPct": 12},
+            {"id": "", "size": "M", "color": "Blue", "other": "", "qty": 0, "cost": 0, "defaultSellingPrice": 22, "maxDiscountPct": 12},
+            {"id": "", "size": "L", "color": "Black", "other": "", "qty": 0, "cost": 0, "defaultSellingPrice": 24, "maxDiscountPct": 15},
+        ],
+    })
+    assert update.status_code == 200
+
+    second_snapshot = client.get('/products-stock/snapshot')
+    assert second_snapshot.status_code == 200
+    second_body = second_snapshot.json()
+    assert len(second_body["products"]) == 1
+    assert len(second_body["products"][0]["variants"]) == 5
+    keys = {(row["size"], row["color"], row["other"]) for row in second_body["products"][0]["variants"]}
+    assert ("L", "Black", "") in keys
+
+    app.dependency_overrides.clear()
 
 def test_existing_product_update_path_uses_selected_product_id():
     container = DummyContainer()

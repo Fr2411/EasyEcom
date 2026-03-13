@@ -121,8 +121,6 @@ class CatalogStockService:
         sizes_csv: str,
         colors_csv: str,
         others_csv: str,
-        default_selling_price: float | None = None,
-        max_discount_pct: float | None = None,
     ) -> list[VariantWorkspaceEntry]:
         sizes = self.product_service.normalize_options(sizes_csv) or [""]
         colors = self.product_service.normalize_options(colors_csv) or [""]
@@ -159,8 +157,6 @@ class CatalogStockService:
         category: str,
         description: str,
         features_text: str,
-        default_selling_price: float | None = None,
-        max_discount_pct: float | None = None,
         variant_entries: list[VariantWorkspaceEntry],
         selected_product_id: str = "",
     ) -> tuple[str, list[str], int]:
@@ -256,7 +252,7 @@ class CatalogStockService:
         lot_ids: list[str] = []
         upserts = 0
         for row in normalized_entries:
-            variant_id = existing_by_identity.get(row.identity_key(), "")
+            variant_id = row.variant_id or existing_by_identity.get(row.identity_key(), "")
             persisted, _ = self.product_service.upsert_variant(
                 client_id=client_id,
                 parent_product_id=product_id,
@@ -270,6 +266,7 @@ class CatalogStockService:
             variant_id = str(persisted.get("variant_id", "")).strip()
             if not variant_id:
                 raise ValueError("Failed to persist variant identity")
+            existing_by_identity[row.identity_key()] = variant_id
             if row.qty > 0:
                 if row.unit_cost <= 0:
                     raise ValueError("Stock rows with quantity must include a positive unit cost")

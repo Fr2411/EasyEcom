@@ -8,7 +8,7 @@ import { ProductIdentityForm } from '@/components/products-stock/product-identit
 import { SaveSummary } from '@/components/products-stock/save-summary';
 import { VariantGenerator } from '@/components/products-stock/variant-generator';
 import { VariantGrid } from '@/components/products-stock/variant-grid';
-import { createEmptyVariant, generateVariantsFromInputs, summarizeVariants } from '@/lib/products-stock/variant-utils';
+import { createEmptyVariant, generateVariantsFromInputs, hasIdentity, summarizeVariants, variantIdentityKey } from '@/lib/products-stock/variant-utils';
 import type { InventoryItem, InventoryMovement } from '@/types/inventory';
 import type { ProductIdentity, ProductRecord, Variant, VariantMode } from '@/types/products-stock';
 
@@ -59,6 +59,7 @@ export function InventoryWorkspace() {
   const [suppliers, setSuppliers] = useState<string[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [mode, setMode] = useState<VariantMode>('new');
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [identity, setIdentity] = useState<ProductIdentity>(EMPTY_IDENTITY);
   const [variants, setVariants] = useState<Variant[]>([]);
   const [sameCostEnabled, setSameCostEnabled] = useState(false);
@@ -134,6 +135,7 @@ export function InventoryWorkspace() {
     const existing = products.find((product) => product.id === productId);
     if (!existing) return;
     setMode('existing');
+    setSelectedProductId(productId);
     setIdentity(existing.identity);
     setVariants(existing.variants);
     setCatalogMessage(undefined);
@@ -141,6 +143,7 @@ export function InventoryWorkspace() {
 
   const startNewProduct = (typedName: string) => {
     setMode('new');
+    setSelectedProductId(null);
     setIdentity({ ...EMPTY_IDENTITY, productName: typedName });
     setVariants([]);
     setCatalogMessage(undefined);
@@ -148,6 +151,7 @@ export function InventoryWorkspace() {
 
   const resetCatalog = () => {
     setMode('new');
+    setSelectedProductId(null);
     setIdentity(EMPTY_IDENTITY);
     setVariants([]);
     setCatalogMessage(undefined);
@@ -170,6 +174,35 @@ export function InventoryWorkspace() {
   const validateCatalog = (): string | undefined => {
     if (!identity.productName.trim()) return 'Product name is required.';
     if (variants.length === 0) return 'At least one variant is required.';
+
+    const seen = new Set<string>();
+    for (let index = 0; index < variants.length; index += 1) {
+      const variant = variants[index];
+      const row = index + 1;
+      const hasBusinessValues =
+        Number(variant.qty) !== 0 ||
+        Number(variant.cost) !== 0 ||
+        Number(variant.defaultSellingPrice) !== 0 ||
+        Number(variant.maxDiscountPct) !== 0;
+
+      if (!hasIdentity(variant)) {
+        if (hasBusinessValues) {
+          return `Variant row ${row} includes qty/cost/price/discount but has no identity. Fill size, color, or other.`;
+        }
+        return `Variant row ${row} is blank. Fill size, color, or other.`;
+      }
+
+      const key = variantIdentityKey(variant);
+      if (seen.has(key)) {
+        return 'Duplicate variant identity found. Size/Color/Other must be unique.';
+      }
+      seen.add(key);
+    }
+
+    if (mode === 'existing' && !selectedProductId) {
+      return 'Select an existing product before saving updates.';
+    }
+
     return undefined;
   };
 
@@ -183,7 +216,12 @@ export function InventoryWorkspace() {
     try {
       setSaving(true);
       setCatalogMessage(undefined);
-      await saveProductStock({ mode, identity, variants });
+      await saveProductStock({
+        mode,
+        identity,
+        variants,
+        selectedProductId: mode === 'existing' ? selectedProductId ?? undefined : undefined,
+      });
       setCatalogMessage('Product and stock saved successfully.');
       await Promise.all([loadCatalog(), loadInventory(query)]);
     } catch (err) {
