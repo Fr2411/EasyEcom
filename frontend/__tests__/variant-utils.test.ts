@@ -29,6 +29,29 @@ describe('generateVariantsFromInputs', () => {
     expect(rows.map((row) => row.other)).toEqual(['', '']);
   });
 
+
+
+  test('deduplicates repeated size values ignoring spacing and casing while preserving first display casing', () => {
+    const rows = generateVariantsFromInputs({
+      size: 'S, s , S',
+      color: '',
+      other: ''
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.size).toBe('S');
+  });
+
+  test('deduplicates each input dimension before building cross-product combinations', () => {
+    const rows = generateVariantsFromInputs({
+      size: 'S, s',
+      color: 'Black, black ,BLACK',
+      other: 'Cotton, cotton'
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(rows.map((row) => [row.size, row.color, row.other])).toEqual([['S', 'Black', 'Cotton']]);
+  });
   test('generates full cross-product when both size and color are provided', () => {
     const rows = generateVariantsFromInputs({
       size: 'S,M',
