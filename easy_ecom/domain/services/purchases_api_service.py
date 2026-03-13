@@ -92,6 +92,7 @@ class PurchasesApiService:
                     "product_id": str(item["product_id"]),
                     "label": f"{item['product_name']} / {item['variant_name']} / {item['sku']}",
                     "current_stock": float(item["available_qty"]),
+                    "default_purchase_price": float(item["default_purchase_price"]),
                     "sku": str(item["sku"]),
                     "barcode": str(item["barcode"]),
                 }

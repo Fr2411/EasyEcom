@@ -27,6 +27,7 @@ class VariantWorkspaceEntry:
     other: str = ""
     qty: float = 0.0
     unit_cost: float = 0.0
+    default_purchase_price: float = 0.0
     default_selling_price: float = 0.0
     max_discount_pct: float = 10.0
     lot_reference: str = ""
@@ -163,6 +164,7 @@ class CatalogStockService:
         selected_product_id: str = "",
         operation: str = "auto",
         post_stock: bool = True,
+        archive_variant_ids: list[str] | None = None,
     ) -> tuple[str, list[str], int]:
         product_name = typed_product_name.strip()
         if not product_name:
@@ -171,6 +173,11 @@ class CatalogStockService:
             raise ValueError("At least one variant is required")
 
         normalized_entries = self._prevalidate_entries(variant_entries, post_stock=post_stock)
+        normalized_archive_variant_ids = [
+            str(variant_id).strip()
+            for variant_id in (archive_variant_ids or [])
+            if str(variant_id).strip()
+        ]
 
         supports_postgres_txn = self._supports_postgres_transaction()
         products_snapshot = None
@@ -291,6 +298,7 @@ class CatalogStockService:
                     normalized_entries=normalized_entries,
                     existing_by_identity=existing_by_identity,
                     post_stock=post_stock,
+                    archive_variant_ids=normalized_archive_variant_ids,
                 )
 
             return self._save_workspace_staged_csv(
@@ -301,6 +309,7 @@ class CatalogStockService:
                 normalized_entries=normalized_entries,
                 existing_by_identity=existing_by_identity,
                 post_stock=post_stock,
+                archive_variant_ids=normalized_archive_variant_ids,
             )
         except Exception:
             if not supports_postgres_txn:
@@ -332,6 +341,10 @@ class CatalogStockService:
                 other=str(entry.other or "").strip().title(),
                 qty=self._to_valid_number(entry.qty, f"Variant row {index} qty"),
                 unit_cost=self._to_valid_number(entry.unit_cost, f"Variant row {index} unit_cost"),
+                default_purchase_price=self._to_valid_number(
+                    entry.default_purchase_price,
+                    f"Variant row {index} default_purchase_price",
+                ),
                 default_selling_price=self._to_valid_number(entry.default_selling_price, f"Variant row {index} default_selling_price"),
                 max_discount_pct=self._to_valid_number(entry.max_discount_pct, f"Variant row {index} max_discount_pct"),
                 lot_reference=str(entry.lot_reference or "").strip(),
@@ -349,6 +362,8 @@ class CatalogStockService:
                 raise ValueError(f"Variant row {index} qty must be >= 0")
             if row.unit_cost < 0:
                 raise ValueError(f"Variant row {index} unit_cost must be >= 0")
+            if row.default_purchase_price < 0:
+                raise ValueError(f"Variant row {index} default_purchase_price must be >= 0")
             if row.default_selling_price < 0:
                 raise ValueError(f"Variant row {index} default_selling_price must be >= 0")
             if row.max_discount_pct < 0 or row.max_discount_pct > 100:
@@ -389,11 +404,11 @@ class CatalogStockService:
         normalized_entries: list[VariantWorkspaceEntry],
         existing_by_identity: dict[str, str],
         post_stock: bool,
+        archive_variant_ids: list[str],
     ) -> tuple[str, list[str], int]:
         if self.product_service.variants_repo is None:
             raise ValueError("Variant repository not configured")
         lot_ids: list[str] = []
-        kept_variant_ids: list[str] = []
         for row in normalized_entries:
             variant_id = row.variant_id or existing_by_identity.get(row.identity_key(), "")
             persisted, _ = self.product_service.upsert_variant(
@@ -403,6 +418,7 @@ class CatalogStockService:
                 size=row.size,
                 color=row.color,
                 other=row.other,
+                default_purchase_price=row.default_purchase_price,
                 default_selling_price=row.default_selling_price,
                 max_discount_pct=row.max_discount_pct,
             )
@@ -410,7 +426,6 @@ class CatalogStockService:
             if not variant_id:
                 raise ValueError("Failed to persist variant identity")
             existing_by_identity[row.identity_key()] = variant_id
-            kept_variant_ids.append(variant_id)
             if post_stock and row.qty > 0:
                 lot_ids.append(
                     self.inventory_service.add_stock(
@@ -427,10 +442,10 @@ class CatalogStockService:
                         user_id=user_id,
                     )
                 )
-        self._archive_missing_variants_csv(
+        self._archive_variants_csv(
             client_id=client_id,
             product_id=product_id,
-            keep_variant_ids=kept_variant_ids,
+            archive_variant_ids=archive_variant_ids,
         )
         return product_id, lot_ids, len(normalized_entries)
 
@@ -444,6 +459,7 @@ class CatalogStockService:
         normalized_entries: list[VariantWorkspaceEntry],
         existing_by_identity: dict[str, str],
         post_stock: bool,
+        archive_variant_ids: list[str],
     ) -> tuple[str, list[str], int]:
         from easy_ecom.data.repos.postgres.catalog_stock_repo import CatalogStockPostgresRepo
 
@@ -462,15 +478,16 @@ class CatalogStockService:
             entries=normalized_entries,
             existing_by_identity=existing_by_identity,
             post_stock=post_stock,
+            archive_variant_ids=archive_variant_ids,
         )
         return product_id, lot_ids, len(normalized_entries)
 
-    def _archive_missing_variants_csv(
+    def _archive_variants_csv(
         self,
         *,
         client_id: str,
         product_id: str,
-        keep_variant_ids: list[str],
+        archive_variant_ids: list[str],
     ) -> None:
         if self.product_service.variants_repo is None:
             return
@@ -483,15 +500,16 @@ class CatalogStockService:
         ].index
         if len(scoped) == 0:
             return
-        keep = {
+        archive = {
             str(variant_id).strip()
-            for variant_id in keep_variant_ids
+            for variant_id in archive_variant_ids
             if str(variant_id).strip()
         }
+        if not archive:
+            return
         for idx in scoped:
-            variants.loc[idx, "is_active"] = (
-                "true" if str(variants.loc[idx, "variant_id"]).strip() in keep else "false"
-            )
+            if str(variants.loc[idx, "variant_id"]).strip() in archive:
+                variants.loc[idx, "is_active"] = "false"
         self.product_service.variants_repo.save(variants)
 
     @staticmethod

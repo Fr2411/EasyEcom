@@ -28,7 +28,7 @@ This removes a direct cross-tenant leakage path (`/dashboard/summary?client_id=.
 
 ### 3) Runtime backend selection hardened
 
-- Runtime table store now honors `storage_backend=csv` and does not try to initialize/connect Postgres when CSV backend is selected.
+- Historical note: runtime previously honored a CSV fallback path; the active runtime is now Postgres-only.
 - This keeps test/staging behavior predictable and prevents accidental DB access in CSV-mode API flows.
 
 ### 4) API/auth/tenant tests expanded

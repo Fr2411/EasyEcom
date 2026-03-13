@@ -5,7 +5,7 @@ EasyEcom is a multi-tenant commerce platform with:
 - **Canonical backend:** FastAPI app in `easy_ecom/api` (AWS App Runner)
 - **Canonical data/auth source:** AWS RDS PostgreSQL
 
-Legacy Streamlit pages under `easy_ecom/app/` are retained only for controlled transition and are **not part of production runtime**.
+Historical Streamlit and CSV migration artifacts live under `archive/legacy/` and are **not part of production runtime**.
 
 ## Runtime architecture (single source of truth)
 
@@ -13,7 +13,7 @@ Legacy Streamlit pages under `easy_ecom/app/` are retained only for controlled t
 2. FastAPI services use repository adapters backed by PostgreSQL tables.
 3. Users, roles, inventory, products, customers, sales, finance, sequences, and audit all run through PostgreSQL at runtime.
 4. Tenant/client onboarding now enforces unique `client_id` generation with collision retry protection, so new clients cannot be created with reused IDs even if an ID generator repeats.
-5. CSV assets are migration/bootstrap tooling only (`easy_ecom/scripts/*import*`, migration scripts).
+5. Archived CSV migration assets remain for historical reference only and are not part of the active runtime.
 
 
 ## Agent governance and decision boundaries
@@ -191,7 +191,7 @@ These changes preserve the existing tenant/user model while eliminating accident
 Phase 2 backend outcomes:
 - Canonical FastAPI router now intentionally mounts all implemented business routers (`dashboard`, `products`, `products-stock`, `inventory`, `sales`) in addition to health/auth/session.
 - Dashboard tenant access is locked to authenticated session `client_id` (query-string tenant override is ignored).
-- Runtime storage selection now honors `STORAGE_BACKEND=csv` for local/test runs without forcing Postgres initialization.
+- Runtime now uses the Postgres/RDS path exclusively.
 
 
 
@@ -274,9 +274,8 @@ See `docs/phase15_human_reviewed_ai_workflow.md` for endpoint and state-model de
 
 ## Migration and legacy
 
-- CSV files in `easy_ecom/data_files/` are no longer a production persistence path.
-- Keep migration scripts for one-time import and reconciliation.
-- Streamlit UI is deprecated and excluded from production startup.
+- Active runtime no longer uses CSV working files or the deprecated Streamlit UI.
+- Historical migration scripts and planning artifacts are archived under `archive/legacy/` and `docs/archive/`.
 
 ## Local RDS Access (DBeaver / psql)
 
@@ -332,7 +331,7 @@ This update intentionally focuses on design language and maintainability (shared
 
 - Catalog save now executes in **two phases** for stronger consistency: it first pre-validates every variant row (identity presence, duplicate identity, qty/cost constraints, numeric sanity checks) before any write is attempted.
 - Persistence is now treated as a **single unit of work**: all variant upserts are completed before inventory posting starts, and any downstream row failure aborts/rolls back the entire save to prevent partial writes.
-- PostgreSQL mode uses a transaction-capable repository path for atomic variant + inventory writes; CSV mode uses safe snapshot/restore fallback so failures still return a single failure outcome without partial persisted changes.
+- PostgreSQL now provides the single transaction-capable runtime path for atomic variant + inventory writes.
 - Variant naming is now normalized so stored `variant_name` always starts with the parent product name (for example `Premium Tee | Size:M | Color:Black`).
 - Product creation from the catalog workspace no longer auto-inserts an extra default variant before user-defined variant rows are processed, preventing unintended duplicate/default rows.
 - Catalog save now writes opening stock for **each** variant row with positive `qty` and `cost` values (not only the first row), ensuring variant-level inventory transactions align with the full payload entered in UI.
@@ -454,8 +453,8 @@ Do not build new features on deprecated structures.
 If UI widgets show placeholders/empty values despite data in RDS, verify this exact chain end-to-end:
 
 1. **Backend storage mode must be Postgres in production**
-   - Set `STORAGE_BACKEND=postgres` and provide a valid `DATABASE_URL` (or full `POSTGRES_*` values).
-   - If backend runs with CSV mode, several API modules intentionally return `501` because MVP endpoints are Postgres-only.
+   - Provide a valid `DATABASE_URL` (or full `POSTGRES_*` values).
+   - The runtime is Postgres-only; there is no CSV fallback path anymore.
 
 2. **Frontend API base URL must point to the FastAPI origin**
    - Set `NEXT_PUBLIC_API_BASE_URL` to your deployed API URL (for example `https://api.yourdomain.com`).

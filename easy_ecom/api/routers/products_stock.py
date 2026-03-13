@@ -31,6 +31,7 @@ def _to_workspace_entry(variant: VariantRecord, supplier: str) -> VariantWorkspa
         other=str(variant.other or '').strip(),
         qty=float(variant.qty),
         unit_cost=float(variant.cost),
+        default_purchase_price=float(variant.defaultPurchasePrice),
         default_selling_price=float(variant.defaultSellingPrice),
         max_discount_pct=float(variant.maxDiscountPct),
         supplier=supplier,
@@ -106,6 +107,7 @@ def products_stock_snapshot(
                     other=str(variant.get("other", "") or ""),
                     qty=qty,
                     cost=cost,
+                    defaultPurchasePrice=float(variant.get("default_purchase_price", 0) or 0),
                     defaultSellingPrice=float(variant.get("default_selling_price", 0) or 0),
                     maxDiscountPct=float(variant.get("max_discount_pct", 0) or 0),
                 )
@@ -152,6 +154,7 @@ def save_products_stock(
             selected_product_id=payload.selectedProductId or "",
             operation="update" if payload.mode == "existing" else "create",
             post_stock=True,
+            archive_variant_ids=payload.archiveVariantIds,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

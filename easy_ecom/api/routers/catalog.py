@@ -57,6 +57,7 @@ def _catalog_product_record(
             size=str(variant.get("size", "") or ""),
             color=str(variant.get("color", "") or ""),
             other=str(variant.get("other", "") or ""),
+            defaultPurchasePrice=float(variant.get("default_purchase_price", 0) or 0),
             defaultSellingPrice=float(variant.get("default_selling_price", 0) or 0),
             maxDiscountPct=float(variant.get("max_discount_pct", 0) or 0),
         )
@@ -84,6 +85,7 @@ def _to_workspace_entry(variant: CatalogVariantRecord) -> VariantWorkspaceEntry:
         other=str(variant.other or "").strip(),
         qty=0.0,
         unit_cost=0.0,
+        default_purchase_price=float(variant.defaultPurchasePrice),
         default_selling_price=float(variant.defaultSellingPrice),
         max_discount_pct=float(variant.maxDiscountPct),
     )
@@ -139,9 +141,11 @@ def create_catalog_product(
             variant_entries=[_to_workspace_entry(variant) for variant in payload.variants],
             operation="create",
             post_stock=False,
+            archive_variant_ids=payload.archiveVariantIds,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        status_code = 409 if "Duplicate product name" in str(exc) else 400
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
     return CatalogSaveResponse(product_id=product_id, variant_count=variant_count)
 
 
@@ -166,7 +170,9 @@ def update_catalog_product(
             selected_product_id=product_id,
             operation="update",
             post_stock=False,
+            archive_variant_ids=payload.archiveVariantIds,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        status_code = 409 if "Duplicate product name" in str(exc) else 400
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
     return CatalogSaveResponse(product_id=saved_product_id, variant_count=variant_count)

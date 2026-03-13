@@ -4,7 +4,7 @@
 - **Frontend:** `frontend/` (Next.js) handles user workflows, form UX, and API consumption.
 - **Backend:** `easy_ecom/api` and domain/data layers handle validation, authorization, orchestration, and persistence.
 - **Database:** PostgreSQL is the runtime source of truth for auth, catalog, inventory ledger, transactions, and reporting.
-- **Legacy Streamlit:** retained only for controlled transition, not canonical runtime.
+- **Legacy artifacts:** historical Streamlit and CSV migration code are archived and not part of the active source tree/runtime.
 
 ## Data Flow
 1. Frontend sends authenticated, tenant-context API requests.

@@ -89,6 +89,7 @@ class ProductVariantsPostgresRepo(PostgresRepo):
         "other",
         "sku_code",
         "barcode",
+        "default_purchase_price",
         "default_selling_price",
         "max_discount_pct",
         "is_active",

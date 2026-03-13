@@ -9,7 +9,6 @@ from easy_ecom.core.config import settings
 from easy_ecom.core.rbac import can_access_page
 from easy_ecom.core.session import SessionSigner
 from easy_ecom.data.repos.csv.audit_repo import AuditRepo
-from easy_ecom.data.repos.csv.auth_repo import CsvAuthRepo
 from easy_ecom.data.repos.csv.clients_repo import ClientsRepo
 from easy_ecom.data.repos.csv.customers_repo import CustomersRepo
 from easy_ecom.data.repos.csv.finance_repo import LedgerRepo
@@ -24,7 +23,6 @@ from easy_ecom.data.repos.csv.sales_repo import (
     ShipmentsRepo,
 )
 from easy_ecom.data.repos.csv.sequences_repo import SequencesRepo
-from easy_ecom.data.repos.csv.users_repo import RolesRepo, UserRolesRepo, UsersRepo
 from easy_ecom.data.repos.postgres.auth_repo import PostgresAuthRepo
 from easy_ecom.data.repos.postgres.customers_repo import CustomersPostgresRepo
 from easy_ecom.data.repos.postgres.products_stock_repo import (
@@ -32,8 +30,8 @@ from easy_ecom.data.repos.postgres.products_stock_repo import (
     ProductsPostgresRepo,
     ProductVariantsPostgresRepo,
 )
-from easy_ecom.data.store.postgres_db import build_postgres_engine, build_session_factory
-from easy_ecom.data.store.runtime import build_runtime_store
+from easy_ecom.data.store.postgres_db import build_session_factory
+from easy_ecom.data.store.runtime import build_runtime_engine, build_runtime_store
 from easy_ecom.data.store.schema import TABLE_SCHEMAS
 from easy_ecom.domain.models.auth import AuthenticatedUser
 from easy_ecom.domain.services.auth_service import AuthService
@@ -56,7 +54,6 @@ from easy_ecom.domain.services.ai_context_service import AiContextService
 from easy_ecom.domain.services.integrations_service import IntegrationsService
 from easy_ecom.domain.services.ai_review_service import AiReviewService
 from easy_ecom.domain.services.automation_service import AutomationService
-from easy_ecom.domain.services.user_service import UserService
 
 
 @dataclass
@@ -77,32 +74,17 @@ class SessionUserPayload:
 
 class ServiceContainer:
     def __init__(self) -> None:
-        self.store = build_runtime_store(settings)
+        engine = build_runtime_engine(settings)
+        session_factory = build_session_factory(engine)
+        self.store = build_runtime_store(settings, engine=engine)
         for table, columns in TABLE_SCHEMAS.items():
             self.store.ensure_table(table, columns)
 
-        users_repo = UsersRepo(self.store)
-        user_roles_repo = UserRolesRepo(self.store)
-
-        self.users = UserService(users_repo, RolesRepo(self.store), user_roles_repo)
         self.sequence = SequenceService(SequencesRepo(self.store))
-
-        if settings.storage_backend == "csv":
-            self.auth = AuthService(CsvAuthRepo(users_repo, user_roles_repo))
-            session_factory = None
-        else:
-            engine = build_postgres_engine(settings)
-            session_factory = build_session_factory(engine)
-            self.auth = AuthService(PostgresAuthRepo(session_factory))
-
-        if session_factory is None:
-            products_repo = ProductsRepo(self.store)
-            variants_repo = ProductVariantsRepo(self.store)
-            inventory_repo = InventoryTxnRepo(self.store)
-        else:
-            products_repo = ProductsPostgresRepo(session_factory)
-            variants_repo = ProductVariantsPostgresRepo(session_factory)
-            inventory_repo = InventoryTxnPostgresRepo(session_factory)
+        self.auth = AuthService(PostgresAuthRepo(session_factory))
+        products_repo = ProductsPostgresRepo(session_factory)
+        variants_repo = ProductVariantsPostgresRepo(session_factory)
+        inventory_repo = InventoryTxnPostgresRepo(session_factory)
         self.products = ProductService(products_repo, variants_repo)
         self.inventory = InventoryService(
             inventory_repo,
@@ -110,7 +92,7 @@ class ServiceContainer:
             products_repo=products_repo,
             variants_repo=variants_repo,
         )
-        self.stock_ledger = StockLedgerService(session_factory) if session_factory is not None else None
+        self.stock_ledger = StockLedgerService(session_factory)
         self.catalog_stock = CatalogStockService(self.products, self.inventory)
         self.dashboard = DashboardService(
             inventory_repo,
@@ -134,21 +116,26 @@ class ServiceContainer:
         self.integrations = None
         self.ai_review = None
         self.automation = None
-        if session_factory is not None:
-            self.customers = CustomerService(CustomersPostgresRepo(session_factory))
-            self.sales_mvp = SalesApiService(session_factory)
-            self.finance_mvp = FinanceApiService(session_factory)
-            self.returns_mvp = ReturnsApiService(session_factory)
-            self.admin = AdminApiService(session_factory)
-            self.settings_mvp = SettingsApiService(session_factory)
-            self.purchases_mvp = PurchasesApiService(session_factory)
-            self.reports_mvp = ReportsApiService(session_factory)
-            self.ai_context = AiContextService(session_factory)
-            self.integrations = IntegrationsService(session_factory, ai_context_service=self.ai_context)
-            self.ai_review = AiReviewService(session_factory, ai_context_service=self.ai_context, integrations_service=self.integrations)
-            self.automation = AutomationService(session_factory, ai_review_service=self.ai_review, integrations_service=self.integrations)
-        else:
-            self.customers = CustomerService(CustomersRepo(self.store))
+        self.customers = CustomerService(CustomersPostgresRepo(session_factory))
+        self.sales_mvp = SalesApiService(session_factory)
+        self.finance_mvp = FinanceApiService(session_factory)
+        self.returns_mvp = ReturnsApiService(session_factory)
+        self.admin = AdminApiService(session_factory)
+        self.settings_mvp = SettingsApiService(session_factory)
+        self.purchases_mvp = PurchasesApiService(session_factory)
+        self.reports_mvp = ReportsApiService(session_factory)
+        self.ai_context = AiContextService(session_factory)
+        self.integrations = IntegrationsService(session_factory, ai_context_service=self.ai_context)
+        self.ai_review = AiReviewService(
+            session_factory,
+            ai_context_service=self.ai_context,
+            integrations_service=self.integrations,
+        )
+        self.automation = AutomationService(
+            session_factory,
+            ai_review_service=self.ai_review,
+            integrations_service=self.integrations,
+        )
 
         self.sales = SalesService(
             SalesOrdersRepo(self.store),

@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 from fastapi.testclient import TestClient
 
@@ -129,7 +129,7 @@ def test_inbound_verification_and_outbound_prepare() -> None:
 
     body = {"provider_event_id": "evt-1", "sender_external_id": "wa-123", "message_text": "Need stock"}
     body_bytes = json.dumps(body).encode()
-    timestamp = str(int(datetime.now(UTC).timestamp()))
+    timestamp = str(int(datetime.now(timezone.utc).timestamp()))
     signature = hmac.new(b'secret123', f'{timestamp}.'.encode() + body_bytes, hashlib.sha256).hexdigest()
 
     bad_sig = client.post('/integrations/inbound/webhook', json=body, headers={"x-channel-id": "chl-a1", "x-channel-timestamp": timestamp, "x-channel-signature": "bad"})

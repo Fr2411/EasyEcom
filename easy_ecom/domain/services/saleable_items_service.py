@@ -90,6 +90,7 @@ class SaleableItemsService:
                     "variant_name": variant.variant_name,
                     "variant_display_name": variant.variant_name,
                     "available_qty": float(available),
+                    "default_purchase_price": self._to_float(variant.default_purchase_price),
                     "selling_price": self._to_float(variant.default_selling_price),
                     "default_selling_price": self._to_float(variant.default_selling_price),
                     "is_active": str(variant.is_active).lower() == "true",

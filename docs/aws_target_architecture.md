@@ -7,7 +7,7 @@
 - **Auth/users/roles:** PostgreSQL tables (`users`, `user_roles`, `roles`)
 - **Secrets/config:** Amplify/App Runner environment variables and AWS secret flow
 - **CSV:** migration tooling only, not runtime persistence
-- **Streamlit:** not in runtime path
+- **Legacy Streamlit/CSV code:** archived, not in runtime path
 
 ## Runtime flow
 1. Amplify-hosted frontend calls API URL from `NEXT_PUBLIC_API_BASE_URL`.
@@ -29,5 +29,5 @@
 - `frontend/amplify.yml` is maintained as a secondary copy for frontend-scoped CI use; root `amplify.yml` remains canonical for repo-root Amplify integration.
 
 ## Transition notes
-- Streamlit code remains present but is intentionally disconnected from production startup.
+- Historical Streamlit and CSV migration artifacts are archived outside the active runtime paths.
 - Super-admin env credentials are bootstrap-only seeding knobs for `init_data.py`.

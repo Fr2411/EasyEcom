@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from pathlib import Path
 import os
 
 from dotenv import load_dotenv
@@ -33,9 +32,6 @@ def _to_csv(value: str | None, default: tuple[str, ...]) -> tuple[str, ...]:
 
 @dataclass(frozen=True)
 class Settings:
-    data_dir: Path = field(
-        default_factory=lambda: Path(os.getenv("DATA_DIR", "easy_ecom/data_files"))
-    )
     app_title: str = field(default_factory=lambda: os.getenv("APP_TITLE", "Easy_Ecom"))
     allow_backorder: bool = field(
         default_factory=lambda: _to_bool(os.getenv("ALLOW_BACKORDER"), False)
@@ -44,9 +40,6 @@ class Settings:
     super_admin_password: str = field(default_factory=lambda: os.getenv("SUPER_ADMIN_PASSWORD", ""))
     create_default_client: bool = field(
         default_factory=lambda: _to_bool(os.getenv("CREATE_DEFAULT_CLIENT"), False)
-    )
-    storage_backend: str = field(
-        default_factory=lambda: os.getenv("STORAGE_BACKEND", "csv").strip().lower()
     )
     database_url: str | None = field(
         default_factory=lambda: (os.getenv("DATABASE_URL", "").strip() or None)

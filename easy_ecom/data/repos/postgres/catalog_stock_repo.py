@@ -29,10 +29,14 @@ class CatalogStockPostgresRepo:
         entries: list[VariantWorkspaceEntry],
         existing_by_identity: dict[str, str],
         post_stock: bool = True,
-        archive_missing: bool = True,
+        archive_variant_ids: list[str] | None = None,
     ) -> list[str]:
         lot_ids: list[str] = []
-        kept_variant_ids: list[str] = []
+        scoped_archive_variant_ids = [
+            str(variant_id).strip()
+            for variant_id in (archive_variant_ids or [])
+            if str(variant_id).strip()
+        ]
         with self.session_factory.begin() as session:
             for entry in entries:
                 variant = self._upsert_variant(
@@ -45,7 +49,6 @@ class CatalogStockPostgresRepo:
                 )
                 variant_id = str(variant.variant_id)
                 existing_by_identity[entry.identity_key()] = variant_id
-                kept_variant_ids.append(variant_id)
                 if not post_stock or entry.qty <= 0:
                     continue
                 lot_ids.append(
@@ -76,12 +79,12 @@ class CatalogStockPostgresRepo:
                         source_id=entry.lot_reference or f"catalog-stock:{product_id}",
                     )
                 )
-            if archive_missing:
-                self._archive_missing_variants(
+            if scoped_archive_variant_ids:
+                self._archive_variants(
                     session=session,
                     client_id=client_id,
                     product_id=product_id,
-                    keep_variant_ids=kept_variant_ids,
+                    archive_variant_ids=scoped_archive_variant_ids,
                 )
         return lot_ids
 
@@ -130,6 +133,7 @@ class CatalogStockPostgresRepo:
                 color=entry.color,
                 other=entry.other,
                 sku_code=f"SKU-{new_uuid()[:8].upper()}",
+                default_purchase_price=str(entry.default_purchase_price),
                 default_selling_price=str(entry.default_selling_price),
                 max_discount_pct=str(entry.max_discount_pct),
                 is_active="true",
@@ -141,6 +145,7 @@ class CatalogStockPostgresRepo:
             variant.color = entry.color
             variant.other = entry.other
             variant.variant_name = variant_name
+            variant.default_purchase_price = str(entry.default_purchase_price)
             variant.default_selling_price = str(entry.default_selling_price)
             variant.max_discount_pct = str(entry.max_discount_pct)
             variant.is_active = "true"
@@ -159,12 +164,12 @@ class CatalogStockPostgresRepo:
         return f"{product_name} | {suffix}" if product_name else suffix
 
     @staticmethod
-    def _archive_missing_variants(
+    def _archive_variants(
         *,
         session: Session,
         client_id: str,
         product_id: str,
-        keep_variant_ids: list[str],
+        archive_variant_ids: list[str],
     ) -> None:
         rows = session.execute(
             select(ProductVariantModel).where(
@@ -172,9 +177,11 @@ class CatalogStockPostgresRepo:
                 ProductVariantModel.parent_product_id == product_id,
             )
         ).scalars().all()
-        keep = set(str(variant_id) for variant_id in keep_variant_ids if str(variant_id).strip())
+        archive = set(
+            str(variant_id)
+            for variant_id in archive_variant_ids
+            if str(variant_id).strip()
+        )
         for row in rows:
-            if str(row.variant_id) in keep:
-                row.is_active = "true"
-            else:
+            if str(row.variant_id) in archive:
                 row.is_active = "false"

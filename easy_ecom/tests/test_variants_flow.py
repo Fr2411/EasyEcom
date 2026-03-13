@@ -6,20 +6,16 @@ from easy_ecom.data.repos.csv.product_variants_repo import ProductVariantsRepo
 from easy_ecom.data.repos.csv.products_repo import ProductsRepo
 from easy_ecom.data.repos.csv.sales_repo import InvoicesRepo, PaymentsRepo, SalesOrderItemsRepo, SalesOrdersRepo, ShipmentsRepo
 from easy_ecom.data.repos.csv.sequences_repo import SequencesRepo
-from easy_ecom.data.store.csv_store import CsvStore
-from easy_ecom.data.store.schema import TABLE_SCHEMAS
 from easy_ecom.domain.models.product import ProductCreate
 from easy_ecom.domain.services.finance_service import FinanceService
 from easy_ecom.domain.services.inventory_service import InventoryService, SequenceService
 from easy_ecom.domain.services.product_service import ProductService
 from easy_ecom.domain.services.sales_service import SalesService
+from easy_ecom.tests.support.sqlite_runtime import build_sqlite_runtime
 
 
 def setup_store(tmp_path: Path):
-    store = CsvStore(tmp_path)
-    for t, c in TABLE_SCHEMAS.items():
-        store.ensure_table(t, c)
-    return store
+    return build_sqlite_runtime(tmp_path, "variants.db").store
 
 
 def test_variant_generation_combinations(tmp_path: Path):

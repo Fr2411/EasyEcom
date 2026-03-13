@@ -42,15 +42,20 @@ describe('SalesPage', () => {
 
   test('creates sale and shows totals', async () => {
     getSalesMock.mockResolvedValue({ items: [] });
-    getSalesFormOptionsMock
-      .mockResolvedValueOnce({
-        customers: [{ customer_id: 'cust-a', full_name: 'Alice', phone: '01700', email: 'a@x.com' }],
-        products: [{ product_id: 'prd-1', label: 'T-Shirt', default_unit_price: 100, available_qty: 10 }],
-      })
-      .mockResolvedValueOnce({
-        customers: [{ customer_id: 'cust-a', full_name: 'Alice', phone: '01700', email: 'a@x.com' }],
-        products: [{ product_id: 'prd-1', label: 'T-Shirt', default_unit_price: 100, available_qty: 10 }],
-      });
+    getSalesFormOptionsMock.mockResolvedValue({
+      customers: [{ customer_id: 'cust-a', full_name: 'Alice', phone: '01700', email: 'a@x.com' }],
+      products: [{
+        variant_id: 'var-1',
+        product_id: 'prd-1',
+        sku: 'TS-RED-M',
+        barcode: '',
+        product_name: 'T-Shirt',
+        variant_name: 'Red / M',
+        label: 'T-Shirt / Red / M',
+        default_unit_price: 100,
+        available_qty: 10,
+      }],
+    });
     createSaleMock.mockResolvedValue({ sale_id: 'sale-new' });
 
     render(<SalesPage />);
@@ -60,7 +65,7 @@ describe('SalesPage', () => {
     fireEvent.blur(screen.getByPlaceholderText('Enter phone number'));
 
     const selects = screen.getAllByRole('combobox');
-    fireEvent.change(selects[0], { target: { value: 'prd-1' } });
+    fireEvent.change(selects[0], { target: { value: 'var-1' } });
     fireEvent.change(screen.getByLabelText('Quantity 1'), { target: { value: '2' } });
 
     await waitFor(() => expect(screen.getByText('Subtotal: 200.00')).toBeTruthy());
@@ -72,7 +77,17 @@ describe('SalesPage', () => {
     getSalesMock.mockResolvedValue({ items: [] });
     getSalesFormOptionsMock.mockResolvedValue({
       customers: [],
-      products: [{ product_id: 'prd-1', label: 'T-Shirt', default_unit_price: 100, available_qty: 10 }],
+      products: [{
+        variant_id: 'var-1',
+        product_id: 'prd-1',
+        sku: 'TS-RED-M',
+        barcode: '',
+        product_name: 'T-Shirt',
+        variant_name: 'Red / M',
+        label: 'T-Shirt / Red / M',
+        default_unit_price: 100,
+        available_qty: 10,
+      }],
     });
     createCustomerMock.mockResolvedValue({ customer: { customer_id: 'new-c', full_name: 'Bob', phone: '01800', email: '' } });
     createSaleMock.mockResolvedValue({ sale_id: 'sale-new' });
@@ -82,7 +97,7 @@ describe('SalesPage', () => {
 
     fireEvent.change(screen.getByPlaceholderText('Enter phone number'), { target: { value: '01800' } });
     fireEvent.change(screen.getByPlaceholderText('Auto-filled for existing customer'), { target: { value: 'Bob' } });
-    fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'prd-1' } });
+    fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'var-1' } });
     fireEvent.click(screen.getByRole('button', { name: 'Submit Sale' }));
 
     await waitFor(() => expect(createCustomerMock).toHaveBeenCalled());
