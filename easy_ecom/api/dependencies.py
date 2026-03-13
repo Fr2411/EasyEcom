@@ -8,52 +8,11 @@ from fastapi import Cookie, Depends, HTTPException
 from easy_ecom.core.config import settings
 from easy_ecom.core.rbac import can_access_page
 from easy_ecom.core.session import SessionSigner
-from easy_ecom.data.repos.csv.audit_repo import AuditRepo
-from easy_ecom.data.repos.csv.clients_repo import ClientsRepo
-from easy_ecom.data.repos.csv.customers_repo import CustomersRepo
-from easy_ecom.data.repos.csv.finance_repo import LedgerRepo
-from easy_ecom.data.repos.csv.inventory_repo import InventoryTxnRepo
-from easy_ecom.data.repos.csv.product_variants_repo import ProductVariantsRepo
-from easy_ecom.data.repos.csv.products_repo import ProductsRepo
-from easy_ecom.data.repos.csv.sales_repo import (
-    InvoicesRepo,
-    PaymentsRepo,
-    SalesOrderItemsRepo,
-    SalesOrdersRepo,
-    ShipmentsRepo,
-)
-from easy_ecom.data.repos.csv.sequences_repo import SequencesRepo
 from easy_ecom.data.repos.postgres.auth_repo import PostgresAuthRepo
-from easy_ecom.data.repos.postgres.customers_repo import CustomersPostgresRepo
-from easy_ecom.data.repos.postgres.products_stock_repo import (
-    InventoryTxnPostgresRepo,
-    ProductsPostgresRepo,
-    ProductVariantsPostgresRepo,
-)
 from easy_ecom.data.store.postgres_db import build_session_factory
-from easy_ecom.data.store.runtime import build_runtime_engine, build_runtime_store
-from easy_ecom.data.store.schema import TABLE_SCHEMAS
+from easy_ecom.data.store.runtime import build_runtime_engine
 from easy_ecom.domain.models.auth import AuthenticatedUser
 from easy_ecom.domain.services.auth_service import AuthService
-from easy_ecom.domain.services.admin_api_service import AdminApiService
-from easy_ecom.domain.services.catalog_stock_service import CatalogStockService
-from easy_ecom.domain.services.dashboard_service import DashboardService
-from easy_ecom.domain.services.finance_service import FinanceService
-from easy_ecom.domain.services.finance_api_service import FinanceApiService
-from easy_ecom.domain.services.inventory_service import InventoryService, SequenceService
-from easy_ecom.domain.services.product_service import ProductService
-from easy_ecom.domain.services.sales_service import SalesService
-from easy_ecom.domain.services.sales_api_service import SalesApiService
-from easy_ecom.domain.services.returns_api_service import ReturnsApiService
-from easy_ecom.domain.services.customer_service import CustomerService
-from easy_ecom.domain.services.settings_api_service import SettingsApiService
-from easy_ecom.domain.services.purchases_api_service import PurchasesApiService
-from easy_ecom.domain.services.reports_api_service import ReportsApiService
-from easy_ecom.domain.services.stock_ledger_service import StockLedgerService
-from easy_ecom.domain.services.ai_context_service import AiContextService
-from easy_ecom.domain.services.integrations_service import IntegrationsService
-from easy_ecom.domain.services.ai_review_service import AiReviewService
-from easy_ecom.domain.services.automation_service import AutomationService
 
 
 @dataclass
@@ -76,81 +35,7 @@ class ServiceContainer:
     def __init__(self) -> None:
         engine = build_runtime_engine(settings)
         session_factory = build_session_factory(engine)
-        self.store = build_runtime_store(settings, engine=engine)
-        for table, columns in TABLE_SCHEMAS.items():
-            self.store.ensure_table(table, columns)
-
-        self.sequence = SequenceService(SequencesRepo(self.store))
         self.auth = AuthService(PostgresAuthRepo(session_factory))
-        products_repo = ProductsPostgresRepo(session_factory)
-        variants_repo = ProductVariantsPostgresRepo(session_factory)
-        inventory_repo = InventoryTxnPostgresRepo(session_factory)
-        self.products = ProductService(products_repo, variants_repo)
-        self.inventory = InventoryService(
-            inventory_repo,
-            self.sequence,
-            products_repo=products_repo,
-            variants_repo=variants_repo,
-        )
-        self.stock_ledger = StockLedgerService(session_factory)
-        self.catalog_stock = CatalogStockService(self.products, self.inventory)
-        self.dashboard = DashboardService(
-            inventory_repo,
-            LedgerRepo(self.store),
-            SalesOrdersRepo(self.store),
-            InvoicesRepo(self.store),
-            SalesOrderItemsRepo(self.store),
-            products_repo,
-            variants_repo,
-            ClientsRepo(self.store),
-            PaymentsRepo(self.store),
-        )
-        self.sales_mvp = None
-        self.finance_mvp = None
-        self.returns_mvp = None
-        self.admin = None
-        self.settings_mvp = None
-        self.purchases_mvp = None
-        self.reports_mvp = None
-        self.ai_context = None
-        self.integrations = None
-        self.ai_review = None
-        self.automation = None
-        self.customers = CustomerService(CustomersPostgresRepo(session_factory))
-        self.sales_mvp = SalesApiService(session_factory)
-        self.finance_mvp = FinanceApiService(session_factory)
-        self.returns_mvp = ReturnsApiService(session_factory)
-        self.admin = AdminApiService(session_factory)
-        self.settings_mvp = SettingsApiService(session_factory)
-        self.purchases_mvp = PurchasesApiService(session_factory)
-        self.reports_mvp = ReportsApiService(session_factory)
-        self.ai_context = AiContextService(session_factory)
-        self.integrations = IntegrationsService(session_factory, ai_context_service=self.ai_context)
-        self.ai_review = AiReviewService(
-            session_factory,
-            ai_context_service=self.ai_context,
-            integrations_service=self.integrations,
-        )
-        self.automation = AutomationService(
-            session_factory,
-            ai_review_service=self.ai_review,
-            integrations_service=self.integrations,
-        )
-
-        self.sales = SalesService(
-            SalesOrdersRepo(self.store),
-            SalesOrderItemsRepo(self.store),
-            InvoicesRepo(self.store),
-            ShipmentsRepo(self.store),
-            PaymentsRepo(self.store),
-            self.inventory,
-            self.sequence,
-            FinanceService(LedgerRepo(self.store), inventory_repo),
-            products_repo,
-            CustomersRepo(self.store),
-            AuditRepo(self.store),
-            variants_repo,
-        )
 
 
 def _signer() -> SessionSigner:

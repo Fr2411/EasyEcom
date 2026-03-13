@@ -4,6 +4,7 @@ __pycache__/
 *.lock
 easy_ecom/data_files/*.csv
 archive/local-data/
+backups/
 frontend/node_modules/
 frontend/.next/
 frontend/tsconfig.tsbuildinfo

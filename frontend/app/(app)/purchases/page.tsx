@@ -1,10 +1,10 @@
 import { PageShell } from '@/components/ui/page-shell';
-import { PurchasesWorkspace } from '@/components/purchases/purchases-workspace';
+import { ResetPlaceholder } from '@/components/ui/reset-placeholder';
 
 export default function PurchasesPage() {
   return (
     <PageShell title="Purchases" description="Record stock-in purchases with tenant-safe inventory and finance impact.">
-      <PurchasesWorkspace />
+      <ResetPlaceholder moduleName="Purchases" />
     </PageShell>
   );
 }

@@ -218,6 +218,24 @@ button:disabled {
 .page-shell-header p { margin: 0.35rem 0 0; color: var(--text-muted); }
 .page-shell-body { min-height: 240px; padding: 1rem 1.1rem; }
 
+.placeholder-card {
+  max-width: 760px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, #fbfefe 0%, #f4faf9 100%);
+  padding: 1.15rem;
+}
+
+.placeholder-card h3 {
+  margin: 0.35rem 0 0.6rem;
+}
+
+.placeholder-card p {
+  margin: 0.45rem 0 0;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
 .dashboard-v2 { display: grid; gap: 1rem; }
 .kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.75rem; }
 

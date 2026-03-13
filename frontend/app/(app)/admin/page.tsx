@@ -1,10 +1,10 @@
 import { PageShell } from '@/components/ui/page-shell';
-import { AdminWorkspace } from '@/components/admin/admin-workspace';
+import { ResetPlaceholder } from '@/components/ui/reset-placeholder';
 
 export default function AdminPage() {
   return (
     <PageShell title="Admin & Roles" description="Manage tenant users, roles, and account activation safely.">
-      <AdminWorkspace />
+      <ResetPlaceholder moduleName="Admin" />
     </PageShell>
   );
 }

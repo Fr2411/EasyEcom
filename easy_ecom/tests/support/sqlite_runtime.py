@@ -10,7 +10,6 @@ from easy_ecom.data.store.postgres import init_postgres_schema
 from easy_ecom.data.store.postgres_db import build_postgres_engine, build_session_factory
 from easy_ecom.data.store.postgres_models import UserModel, UserRoleModel
 from easy_ecom.data.store.postgres_table_store import PostgresTableStore
-from easy_ecom.data.store.schema import TABLE_SCHEMAS
 
 
 @dataclass(frozen=True)
@@ -26,8 +25,6 @@ def build_sqlite_runtime(tmp_path: Path, filename: str = "test.db") -> SqliteRun
     init_postgres_schema(engine)
 
     store = PostgresTableStore(engine)
-    for table_name, columns in TABLE_SCHEMAS.items():
-        store.ensure_table(table_name, columns)
 
     return SqliteRuntime(
         settings=settings,
