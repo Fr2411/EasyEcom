@@ -49,7 +49,7 @@ describe('products-stock api mapping', () => {
     expect(snapshot.products[0].variants[0].rowId).toBeTruthy();
   });
 
-  test('maps save payload variants to variant_id and deterministic variant_name', async () => {
+  test('maps save payload variants to id', async () => {
     apiClientMock.mockResolvedValue({ success: true });
 
     await saveProductStock({
@@ -93,8 +93,8 @@ describe('products-stock api mapping', () => {
 
     expect(body.mode).toBe('new');
     expect(body.variants).toEqual([
-      expect.objectContaining({ variant_id: 'v-existing', variant_name: 'M / Black / Cotton' }),
-      expect.objectContaining({ variant_id: 'v-manual', variant_name: 'Blue' }),
+      expect.objectContaining({ id: 'v-existing', size: 'M', color: 'Black', other: 'Cotton' }),
+      expect.objectContaining({ id: 'v-manual', color: 'Blue' }),
     ]);
   });
 });
