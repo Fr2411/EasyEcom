@@ -39,6 +39,14 @@ cp .env.example .env.local
 npm run dev
 ```
 
+If you want the local frontend to use the live AWS backend instead of a local API, set:
+```bash
+cd frontend
+echo 'NEXT_PUBLIC_API_BASE_URL=https://api.easy-ecom.online' > .env.local
+```
+
+If you want full local development, keep `.env.local` pointed at `http://localhost:8000` and run the FastAPI server locally first.
+
 ## Database foundation assets
 - Typed runtime models live in `easy_ecom/data/store/postgres_models.py`
 - Versioned SQL migrations live in `easy_ecom/migrations/versions/`

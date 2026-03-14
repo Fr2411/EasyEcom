@@ -15,6 +15,8 @@ import {
   updateAdminUser,
 } from '@/lib/api/admin';
 import { useAuth } from '@/components/auth/auth-provider';
+import { ApiError, ApiNetworkError } from '@/lib/api/client';
+import { getPublicEnv } from '@/lib/env';
 import { isSuperAdmin } from '@/lib/rbac';
 import type {
   AdminAuditItem,
@@ -92,6 +94,24 @@ function buildInviteBundle(title: string, users: AdminUser[]) {
   };
 }
 
+function adminErrorMessage(error: unknown, fallback: string) {
+  const { apiBaseUrl } = getPublicEnv();
+
+  if (error instanceof ApiError && error.status === 404) {
+    return `The connected API (${apiBaseUrl}) does not have the admin onboarding routes yet. If you are developing locally, restart the backend on the latest code or point the frontend to https://api.easy-ecom.online.`;
+  }
+
+  if (error instanceof ApiNetworkError) {
+    if (apiBaseUrl.includes('localhost')) {
+      return `The admin panel is trying to reach ${apiBaseUrl}. Start the local API server or change NEXT_PUBLIC_API_BASE_URL to https://api.easy-ecom.online.`;
+    }
+
+    return `The admin panel could not reach ${apiBaseUrl}. Check that the API is running and that this browser origin is allowed by CORS.`;
+  }
+
+  return error instanceof Error ? error.message : fallback;
+}
+
 export function AdminWorkspace() {
   const { user, loading } = useAuth();
   const [clients, setClients] = useState<AdminClient[]>([]);
@@ -164,7 +184,7 @@ export function AdminWorkspace() {
         setSelectedClientId(clientResponse.items[0].client_id);
       }
     } catch (error) {
-      setWorkspaceError(error instanceof Error ? error.message : 'Unable to load the admin workspace.');
+      setWorkspaceError(adminErrorMessage(error, 'Unable to load the admin workspace.'));
     } finally {
       setWorkspaceLoading(false);
     }
@@ -211,7 +231,7 @@ export function AdminWorkspace() {
     try {
       await loadClientDirectory(search);
     } catch (error) {
-      setWorkspaceError(error instanceof Error ? error.message : 'Unable to refresh clients.');
+      setWorkspaceError(adminErrorMessage(error, 'Unable to refresh clients.'));
     }
   }
 
@@ -233,7 +253,7 @@ export function AdminWorkspace() {
       await loadWorkspace();
       setSelectedClientId(response.client.client_id);
     } catch (error) {
-      setWorkspaceError(error instanceof Error ? error.message : 'Unable to onboard the client.');
+      setWorkspaceError(adminErrorMessage(error, 'Unable to onboard the client.'));
     } finally {
       setBusyLabel(null);
     }
@@ -271,7 +291,7 @@ export function AdminWorkspace() {
       setClients((items) => items.map((item) => (item.client_id === updated.client_id ? updated : item)));
       setSuccessMessage(`Client ${updated.business_name} was updated.`);
     } catch (error) {
-      setWorkspaceError(error instanceof Error ? error.message : 'Unable to save the client profile.');
+      setWorkspaceError(adminErrorMessage(error, 'Unable to save the client profile.'));
     } finally {
       setBusyLabel(null);
     }
@@ -300,7 +320,7 @@ export function AdminWorkspace() {
       setNewUserForm(EMPTY_NEW_USER);
       setSuccessMessage(`User ${created.name} was added under ${selectedClient.business_name}.`);
     } catch (error) {
-      setWorkspaceError(error instanceof Error ? error.message : 'Unable to create the user.');
+      setWorkspaceError(adminErrorMessage(error, 'Unable to create the user.'));
     } finally {
       setBusyLabel(null);
     }
@@ -327,7 +347,7 @@ export function AdminWorkspace() {
       }));
       setSuccessMessage(`User ${updated.name} was updated.`);
     } catch (error) {
-      setWorkspaceError(error instanceof Error ? error.message : 'Unable to update the user.');
+      setWorkspaceError(adminErrorMessage(error, 'Unable to update the user.'));
     } finally {
       setBusyLabel(null);
     }
@@ -342,7 +362,7 @@ export function AdminWorkspace() {
       setCredentialBundle(buildInviteBundle(`Setup link for ${updated.name}`, [updated]));
       setSuccessMessage(`A fresh invitation was issued for ${updated.name}.`);
     } catch (error) {
-      setWorkspaceError(error instanceof Error ? error.message : 'Unable to issue the invitation.');
+      setWorkspaceError(adminErrorMessage(error, 'Unable to issue the invitation.'));
     } finally {
       setBusyLabel(null);
     }
@@ -366,7 +386,7 @@ export function AdminWorkspace() {
       }
       setSuccessMessage(`A password reset link was issued for ${updated.name}.`);
     } catch (error) {
-      setWorkspaceError(error instanceof Error ? error.message : 'Unable to issue the password reset.');
+      setWorkspaceError(adminErrorMessage(error, 'Unable to issue the password reset.'));
     } finally {
       setBusyLabel(null);
     }

@@ -19,10 +19,11 @@ export class ApiNetworkError extends Error {
 
 export async function apiClient<T>(path: string, init?: RequestInit): Promise<T> {
   const { apiBaseUrl } = getPublicEnv();
+  const url = `${apiBaseUrl}${path}`;
 
   let response: Response;
   try {
-    response = await fetch(`${apiBaseUrl}${path}`, {
+    response = await fetch(url, {
       ...init,
       credentials: 'include',
       cache: 'no-store',
@@ -33,7 +34,7 @@ export async function apiClient<T>(path: string, init?: RequestInit): Promise<T>
     });
   } catch (error) {
     throw new ApiNetworkError(
-      error instanceof Error ? error.message : 'Network request failed',
+      error instanceof Error ? `${error.message} (${url})` : `Network request failed (${url})`,
     );
   }
 
@@ -51,7 +52,10 @@ export async function apiClient<T>(path: string, init?: RequestInit): Promise<T>
     } else {
       message = (await response.text()) || message;
     }
-    throw new ApiError(response.status, message || `API request failed (${response.status})`);
+    throw new ApiError(
+      response.status,
+      `${message || `API request failed (${response.status})`} (${url})`,
+    );
   }
 
   if (response.status === 204) {

@@ -688,6 +688,9 @@ class AdminService:
                     )
                 )
 
+            # Flush the tenant shell first so audit rows can safely reference the new client_id.
+            session.flush()
+
             self._log_audit(
                 session,
                 client_id=client_id,
