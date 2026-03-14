@@ -157,21 +157,14 @@ def issue_invitation(
     user: AuthenticatedUser = Depends(get_authenticated_user),
     container: ServiceContainer = Depends(get_container),
 ) -> InvitationIssueResponse:
-    if "SUPER_ADMIN" not in user.roles and "CLIENT_OWNER" not in user.roles and "CLIENT_MANAGER" not in user.roles:
+    if "SUPER_ADMIN" not in user.roles:
         raise ApiException(
             status_code=403,
             code="ACCESS_DENIED",
-            message="Only authorized admins can issue invitations",
+            message="Only super admins can issue invitations",
         )
 
     target_client_id = payload.client_id.strip()
-    if "SUPER_ADMIN" not in user.roles and target_client_id != user.client_id:
-        raise ApiException(
-            status_code=403,
-            code="ACCESS_DENIED",
-            message="You can only invite users inside your own tenant",
-        )
-
     issued = container.auth.issue_invitation(
         client_id=target_client_id,
         email=payload.email.strip().lower(),

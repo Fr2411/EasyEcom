@@ -189,7 +189,7 @@ def test_issue_invitation_and_accept(monkeypatch, tmp_path: Path):
         json={
             "client_id": CLIENT_ID,
             "email": "teammate@example.com",
-            "role_code": "CLIENT_MANAGER",
+            "role_code": "CLIENT_STAFF",
         },
     )
     assert invite_response.status_code == 200

@@ -2,22 +2,63 @@ from __future__ import annotations
 
 from typing import Iterable
 
-PAGE_PERMISSIONS: dict[str, set[str]] = {
-    "Login": {"SUPER_ADMIN", "CLIENT_OWNER", "CLIENT_MANAGER", "CLIENT_EMPLOYEE", "FINANCE_ONLY"},
-    "Dashboard": {"SUPER_ADMIN", "CLIENT_OWNER", "CLIENT_MANAGER", "CLIENT_EMPLOYEE", "FINANCE_ONLY"},
-    "Catalog": {"SUPER_ADMIN", "CLIENT_OWNER", "CLIENT_MANAGER", "CLIENT_EMPLOYEE"},
-    "Inventory": {"SUPER_ADMIN", "CLIENT_OWNER", "CLIENT_MANAGER", "CLIENT_EMPLOYEE"},
-    "Purchases": {"SUPER_ADMIN", "CLIENT_OWNER", "CLIENT_MANAGER", "CLIENT_EMPLOYEE"},
-    "Sales": {"SUPER_ADMIN", "CLIENT_OWNER", "CLIENT_MANAGER", "CLIENT_EMPLOYEE"},
-    "Customers": {"SUPER_ADMIN", "CLIENT_OWNER", "CLIENT_MANAGER", "CLIENT_EMPLOYEE"},
-    "Finance": {"SUPER_ADMIN", "CLIENT_OWNER", "FINANCE_ONLY"},
-    "Returns": {"SUPER_ADMIN", "CLIENT_OWNER", "CLIENT_MANAGER", "CLIENT_EMPLOYEE", "FINANCE_ONLY"},
-    "Admin": {"SUPER_ADMIN", "CLIENT_OWNER", "CLIENT_MANAGER"},
-    "Settings": {"SUPER_ADMIN", "CLIENT_OWNER", "CLIENT_MANAGER", "FINANCE_ONLY", "CLIENT_EMPLOYEE"},
-    "Reports": {"SUPER_ADMIN", "CLIENT_OWNER", "CLIENT_MANAGER", "FINANCE_ONLY"},
+ROLE_PAGE_ACCESS: dict[str, tuple[str, ...]] = {
+    "SUPER_ADMIN": (
+        "Login",
+        "Dashboard",
+        "Catalog",
+        "Inventory",
+        "Purchases",
+        "Sales",
+        "Customers",
+        "Finance",
+        "Returns",
+        "Reports",
+        "Admin",
+        "Settings",
+    ),
+    "CLIENT_OWNER": (
+        "Login",
+        "Dashboard",
+        "Catalog",
+        "Inventory",
+        "Purchases",
+        "Sales",
+        "Customers",
+        "Finance",
+        "Returns",
+        "Reports",
+        "Settings",
+    ),
+    "CLIENT_STAFF": (
+        "Login",
+        "Dashboard",
+        "Catalog",
+        "Inventory",
+        "Purchases",
+        "Sales",
+        "Customers",
+        "Returns",
+        "Settings",
+    ),
+    "FINANCE_STAFF": (
+        "Login",
+        "Dashboard",
+        "Finance",
+        "Returns",
+        "Reports",
+        "Settings",
+    ),
 }
 
-ADMIN_MANAGE_USERS_ROLES = {"SUPER_ADMIN", "CLIENT_OWNER", "CLIENT_MANAGER"}
+PAGE_PERMISSIONS: dict[str, set[str]] = {}
+for role_code, pages in ROLE_PAGE_ACCESS.items():
+    for page in pages:
+        PAGE_PERMISSIONS.setdefault(page, set()).add(role_code)
+
+SYSTEM_ROLE_CODES = {"SUPER_ADMIN"}
+TENANT_ROLE_CODES = {"CLIENT_OWNER", "CLIENT_STAFF", "FINANCE_STAFF"}
+ADMIN_MANAGE_USERS_ROLES = {"SUPER_ADMIN"}
 
 
 def has_any_role(user_roles: Iterable[str], allowed_roles: set[str]) -> bool:
@@ -31,3 +72,7 @@ def can_access_page(user_roles: Iterable[str], page_name: str) -> bool:
 
 def can_access_finance(user_roles: Iterable[str]) -> bool:
     return can_access_page(user_roles, "Finance")
+
+
+def pages_for_role(role_code: str) -> tuple[str, ...]:
+    return ROLE_PAGE_ACCESS.get(role_code, tuple())

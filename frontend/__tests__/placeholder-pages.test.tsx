@@ -1,6 +1,5 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import AdminPage from '@/app/(app)/admin/page';
 import AiReviewPage from '@/app/(app)/ai-review/page';
 import AutomationPage from '@/app/(app)/automation/page';
 import CatalogPage from '@/app/(app)/catalog/page';
@@ -27,7 +26,6 @@ const cases = [
   ['Finance', FinancePage],
   ['Returns', ReturnsPage],
   ['Purchases', PurchasesPage],
-  ['Admin & Roles', AdminPage],
   ['Integrations & Channels', IntegrationsPage],
   ['AI Review Inbox', AiReviewPage],
   ['Automation', AutomationPage],

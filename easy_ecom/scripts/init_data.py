@@ -7,6 +7,7 @@ from sqlalchemy import select
 from easy_ecom.core.config import settings
 from easy_ecom.core.ids import new_uuid
 from easy_ecom.core.security import hash_password
+from easy_ecom.core.slugs import slugify_identifier
 from easy_ecom.data.store.migrations import apply_sql_migrations
 from easy_ecom.data.store.postgres import init_postgres_schema
 from easy_ecom.data.store.postgres_db import build_postgres_engine, build_session_factory
@@ -43,6 +44,7 @@ def main() -> None:
                     client_id=settings.global_client_id,
                     slug=settings.global_client_slug,
                     business_name="EasyEcom Global",
+                    contact_name="EasyEcom",
                     owner_name="EasyEcom",
                     email=settings.super_admin_email.strip().lower(),
                     currency_code="USD",
@@ -106,6 +108,11 @@ def main() -> None:
                 session.add(
                     UserModel(
                         user_id=admin_id,
+                        user_code=slugify_identifier(
+                            f"{settings.global_client_slug}-super-admin-super-admin",
+                            max_length=160,
+                            default="super-admin",
+                        ),
                         client_id=settings.global_client_id,
                         name="Super Admin",
                         email=admin_email,
@@ -128,6 +135,7 @@ def main() -> None:
                         client_id=client_id,
                         slug=default_slug,
                         business_name="Default Client",
+                        contact_name="Owner",
                         owner_name="Owner",
                         email="owner@example.com",
                         currency_code="USD",

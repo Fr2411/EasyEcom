@@ -1,17 +1,23 @@
+'use client';
+
 import { NAV_ITEMS } from '@/types/navigation';
 import { NavItem } from '@/components/ui/nav-item';
 import { SidebarLogoutButton } from '@/components/layout/sidebar-logout-button';
 import { EasyEcomLogo } from '@/components/branding/easy-ecom-logo';
-
-const groupedNavigation = NAV_ITEMS.reduce<Record<string, typeof NAV_ITEMS>>((acc, item) => {
-  if (!acc[item.group]) {
-    acc[item.group] = [];
-  }
-  acc[item.group].push(item);
-  return acc;
-}, {});
+import { useAuth } from '@/components/auth/auth-provider';
+import { canAccessPage } from '@/lib/rbac';
 
 export function Sidebar() {
+  const { user } = useAuth();
+  const visibleItems = NAV_ITEMS.filter((item) => canAccessPage(user?.roles, item.label));
+  const groupedNavigation = visibleItems.reduce<Record<string, typeof NAV_ITEMS>>((acc, item) => {
+    if (!acc[item.group]) {
+      acc[item.group] = [];
+    }
+    acc[item.group].push(item);
+    return acc;
+  }, {});
+
   return (
     <aside className="sidebar" aria-label="Primary">
       <div className="brand-block">

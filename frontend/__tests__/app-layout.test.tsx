@@ -9,6 +9,12 @@ vi.mock('@/components/auth/auth-route-guard', () => ({
   )
 }));
 
+vi.mock('@/components/auth/auth-provider', () => ({
+  useAuth: () => ({
+    user: { roles: ['SUPER_ADMIN'] },
+  }),
+}));
+
 vi.mock('@/components/ui/nav-item', () => ({
   NavItem: ({ item }: { item: { label: string; href: string } }) => <a href={item.href}>{item.label}</a>
 }));
@@ -35,6 +41,7 @@ describe('AppLayout', () => {
     expect(screen.getByRole('img', { name: 'Easy-Ecom' })).toBeTruthy();
     expect(screen.getByText('Operations Workspace')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Customers' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Admin' })).toBeTruthy();
     expect(screen.queryByText('Integrations')).toBeNull();
     expect(screen.getByRole('button', { name: 'Log out' })).toBeTruthy();
     expect(screen.getByText('Dashboard body content')).toBeTruthy();

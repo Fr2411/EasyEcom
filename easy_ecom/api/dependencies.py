@@ -14,6 +14,7 @@ from easy_ecom.data.repos.postgres.auth_repo import PostgresAuthRepo
 from easy_ecom.data.store.postgres_db import build_session_factory
 from easy_ecom.data.store.runtime import build_runtime_engine
 from easy_ecom.domain.models.auth import AuthenticatedUser
+from easy_ecom.domain.services.admin_service import AdminService
 from easy_ecom.domain.services.auth_service import AuthService
 from easy_ecom.domain.services.overview_service import OverviewService
 
@@ -32,6 +33,7 @@ class ServiceContainer:
         engine = build_runtime_engine(settings)
         session_factory = build_session_factory(engine)
         self.auth = AuthService(PostgresAuthRepo(session_factory))
+        self.admin = AdminService(session_factory)
         self.overview = OverviewService(session_factory)
 
 
