@@ -836,6 +836,12 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
   background: #fff;
 }
 
+.workspace-field-note {
+  margin-top: 0.25rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
 .workspace-two-column {
   display: grid;
   gap: 1rem;
@@ -847,6 +853,23 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
   border-radius: var(--radius-md);
   background: #fff;
   padding: 0.9rem;
+}
+
+.variant-editor.is-archived {
+  border-color: #f0d2b4;
+  background: #fffaf3;
+}
+
+.variant-editor-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  margin-bottom: 0.9rem;
+}
+
+.variant-editor-header strong {
+  display: block;
 }
 
 .status-pill {

@@ -392,3 +392,157 @@ def test_sales_rejects_oversell_and_returns_restock_inventory(monkeypatch, tmp_p
     eligible_after_return = client.get(f"/returns/orders/{order['sales_order_id']}/eligible-lines")
     assert eligible_after_return.status_code == 200
     assert eligible_after_return.json()["lines"][0]["eligible_quantity"] == "1.000"
+
+
+def test_catalog_generates_sku_and_preserves_saved_variant_sku(monkeypatch, tmp_path: Path):
+    runtime = _setup_runtime(tmp_path, monkeypatch)
+    client = _login_client(runtime)
+
+    create_response = client.post(
+        "/catalog/products",
+        json={
+            "identity": {
+                "product_name": "Trail Runner",
+                "supplier": "Default Supplier",
+                "category": "Footwear",
+                "sku_root": "TRAIL",
+                "default_selling_price": "75",
+                "min_selling_price": "65",
+            },
+            "variants": [
+                {
+                    "size": "42",
+                    "color": "Black",
+                    "default_purchase_price": "40",
+                    "default_selling_price": "75",
+                    "min_selling_price": "65",
+                    "reorder_level": "1",
+                }
+            ],
+        },
+    )
+    assert create_response.status_code == 200
+    product = create_response.json()["product"]
+    variant = product["variants"][0]
+    assert variant["sku"] == "TRAIL-42-BLACK"
+
+    update_response = client.put(
+        f"/catalog/products/{product['product_id']}",
+        json={
+            "product_id": product["product_id"],
+            "identity": {
+                "product_name": "Trail Runner",
+                "supplier": "Default Supplier",
+                "category": "Footwear",
+                "sku_root": "TRAIL",
+                "default_selling_price": "75",
+                "min_selling_price": "65",
+            },
+            "variants": [
+                {
+                    "variant_id": variant["variant_id"],
+                    "size": "42",
+                    "color": "Navy",
+                    "default_purchase_price": "40",
+                    "default_selling_price": "75",
+                    "min_selling_price": "65",
+                    "reorder_level": "1",
+                    "status": "active",
+                }
+            ],
+        },
+    )
+    assert update_response.status_code == 200
+    updated_variant = update_response.json()["product"]["variants"][0]
+    assert updated_variant["sku"] == "TRAIL-42-BLACK"
+    assert updated_variant["label"] == "Trail Runner / 42 / Navy"
+
+
+def test_sales_search_uses_effective_price_and_rejects_below_minimum(monkeypatch, tmp_path: Path):
+    runtime = _setup_runtime(tmp_path, monkeypatch)
+    priced = _seed_variant(
+        runtime,
+        product_name="Trail Runner",
+        sku="TRAIL-42-BLK",
+        size="42",
+        color="Black",
+        stock_qty=Decimal("6"),
+    )
+    with runtime.session_factory() as session:
+        priced_variant = session.execute(
+            select(ProductVariantModel).where(ProductVariantModel.variant_id == priced["variant_id"])
+        ).scalar_one()
+        priced_variant.price_amount = None
+        priced_variant.min_price_amount = None
+
+        unpriced_product = ProductModel(
+            product_id=new_uuid(),
+            client_id=CLIENT_ID,
+            name="Mystery Runner",
+            slug="mystery-runner",
+            sku_root="MYST",
+            status="active",
+        )
+        unpriced_variant = ProductVariantModel(
+            variant_id=new_uuid(),
+            client_id=CLIENT_ID,
+            product_id=unpriced_product.product_id,
+            title="41 / Grey",
+            sku="MYST-41-GREY",
+            barcode="BC-MYST-41-GREY",
+            option_values_json={"size": "41", "color": "Grey", "other": ""},
+            status="active",
+            reorder_level=Decimal("1"),
+        )
+        session.add_all([unpriced_product, unpriced_variant])
+        session.flush()
+        session.add(
+            InventoryLedgerModel(
+                entry_id=new_uuid(),
+                client_id=CLIENT_ID,
+                variant_id=unpriced_variant.variant_id,
+                location_id=LOCATION_ID,
+                movement_type="stock_received",
+                reference_type="seed",
+                reference_id=new_uuid(),
+                reference_line_id=None,
+                quantity_delta=Decimal("3"),
+                unit_cost_amount=Decimal("25"),
+                unit_price_amount=None,
+                reason="Seed stock",
+                created_by_user_id=USER_ID,
+            )
+        )
+        session.commit()
+
+    client = _login_client(runtime)
+
+    search_response = client.get("/sales/variants/search", params={"q": "Runner"})
+    assert search_response.status_code == 200
+    search_items = search_response.json()["items"]
+    assert len(search_items) == 1
+    assert search_items[0]["variant_id"] == priced["variant_id"]
+    assert Decimal(search_items[0]["unit_price"]) == Decimal("75")
+    assert Decimal(search_items[0]["min_price"]) == Decimal("65")
+
+    below_min_response = client.post(
+        "/sales/orders",
+        json={
+            "customer": {
+                "name": "Walker Min",
+                "phone": "+971559999999",
+                "email": "walker-min@example.com",
+            },
+            "lines": [
+                {
+                    "variant_id": priced["variant_id"],
+                    "quantity": "1",
+                    "unit_price": "75",
+                    "discount_amount": "11",
+                }
+            ],
+            "action": "confirm",
+        },
+    )
+    assert below_min_response.status_code == 400
+    assert below_min_response.json()["error"]["code"] == "MIN_PRICE_VIOLATION"

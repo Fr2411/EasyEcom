@@ -3,7 +3,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class LocationSummaryResponse(BaseModel):
@@ -38,9 +38,13 @@ class CatalogVariantResponse(BaseModel):
     barcode: str
     status: str
     options: VariantDescriptorResponse
-    unit_cost: Decimal
-    unit_price: Decimal
-    min_price: Decimal
+    unit_cost: Decimal | None
+    unit_price: Decimal | None
+    min_price: Decimal | None
+    effective_unit_price: Decimal | None
+    effective_min_price: Decimal | None
+    is_price_inherited: bool
+    is_min_price_inherited: bool
     reorder_level: Decimal
     on_hand: Decimal
     reserved: Decimal
@@ -56,9 +60,9 @@ class CatalogProductResponse(BaseModel):
     category: str
     description: str
     sku_root: str
-    default_price: Decimal
-    min_price: Decimal
-    max_discount_percent: Decimal
+    default_price: Decimal | None
+    min_price: Decimal | None
+    max_discount_percent: Decimal | None
     variants: list[CatalogVariantResponse]
 
 
@@ -80,24 +84,52 @@ class ProductIdentityInput(BaseModel):
     description: str = ""
     image_url: str = ""
     sku_root: str = ""
-    default_selling_price: Decimal = Decimal("0")
-    min_selling_price: Decimal = Decimal("0")
-    max_discount_percent: Decimal = Decimal("0")
+    default_selling_price: Decimal | None = None
+    min_selling_price: Decimal | None = None
+    max_discount_percent: Decimal | None = None
     status: str = "active"
+
+    @field_validator("default_selling_price", "min_selling_price", "max_discount_percent", mode="before")
+    @classmethod
+    def blank_decimal_to_none(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
 
 class CatalogVariantInput(BaseModel):
     variant_id: str | None = None
-    sku: str = Field(min_length=1, max_length=128)
+    sku: str | None = Field(default=None, max_length=128)
     barcode: str = ""
     size: str = ""
     color: str = ""
     other: str = ""
-    default_purchase_price: Decimal = Decimal("0")
-    default_selling_price: Decimal = Decimal("0")
-    min_selling_price: Decimal = Decimal("0")
+    default_purchase_price: Decimal | None = None
+    default_selling_price: Decimal | None = None
+    min_selling_price: Decimal | None = None
     reorder_level: Decimal = Decimal("0")
     status: str = "active"
+
+    @field_validator("sku", mode="before")
+    @classmethod
+    def blank_sku_to_none(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    @field_validator("default_purchase_price", "default_selling_price", "min_selling_price", mode="before")
+    @classmethod
+    def blank_variant_decimal_to_none(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    @field_validator("reorder_level", mode="before")
+    @classmethod
+    def blank_reorder_level_to_zero(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip():
+            return Decimal("0")
+        return value
 
 
 class CatalogUpsertRequest(BaseModel):
@@ -121,8 +153,8 @@ class InventoryStockRowResponse(BaseModel):
     category: str
     location_id: str
     location_name: str
-    unit_cost: Decimal
-    unit_price: Decimal
+    unit_cost: Decimal | None
+    unit_price: Decimal | None
     reorder_level: Decimal
     on_hand: Decimal
     reserved: Decimal
@@ -189,6 +221,7 @@ class SaleLookupVariantResponse(BaseModel):
     barcode: str
     available_to_sell: Decimal
     unit_price: Decimal
+    min_price: Decimal | None
 
 
 class SaleVariantLookupResponse(BaseModel):
@@ -198,8 +231,15 @@ class SaleVariantLookupResponse(BaseModel):
 class SalesOrderLineInput(BaseModel):
     variant_id: str
     quantity: Decimal = Field(gt=Decimal("0"))
-    unit_price: Decimal = Decimal("0")
+    unit_price: Decimal | None = None
     discount_amount: Decimal = Decimal("0")
+
+    @field_validator("unit_price", mode="before")
+    @classmethod
+    def blank_unit_price_to_none(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
 
 class SalesOrderLineResponse(BaseModel):

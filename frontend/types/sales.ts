@@ -14,6 +14,7 @@ export type SaleLookupVariant = {
   barcode: string;
   available_to_sell: string;
   unit_price: string;
+  min_price: string | null;
 };
 
 export type SalesOrderLine = {

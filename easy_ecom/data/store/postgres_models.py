@@ -210,9 +210,9 @@ class ProductModel(TenantMixin, TimestampMixin, Base):
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
     image_url: Mapped[str] = mapped_column(String(512), nullable=False, default="")
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="draft", index=True)
-    default_price_amount: Mapped[Decimal] = mapped_column(Amount, nullable=False, default=Decimal("0"))
-    min_price_amount: Mapped[Decimal] = mapped_column(Amount, nullable=False, default=Decimal("0"))
-    max_discount_percent: Mapped[Decimal] = mapped_column(Percent, nullable=False, default=Decimal("0"))
+    default_price_amount: Mapped[Decimal | None] = mapped_column(Amount)
+    min_price_amount: Mapped[Decimal | None] = mapped_column(Amount)
+    max_discount_percent: Mapped[Decimal | None] = mapped_column(Percent)
 
 
 class ProductVariantModel(TenantMixin, TimestampMixin, Base):
@@ -230,9 +230,9 @@ class ProductVariantModel(TenantMixin, TimestampMixin, Base):
     barcode: Mapped[str] = mapped_column(String(128), nullable=False, default="")
     option_values_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="active", index=True)
-    cost_amount: Mapped[Decimal] = mapped_column(Amount, nullable=False, default=Decimal("0"))
-    price_amount: Mapped[Decimal] = mapped_column(Amount, nullable=False, default=Decimal("0"))
-    min_price_amount: Mapped[Decimal] = mapped_column(Amount, nullable=False, default=Decimal("0"))
+    cost_amount: Mapped[Decimal | None] = mapped_column(Amount)
+    price_amount: Mapped[Decimal | None] = mapped_column(Amount)
+    min_price_amount: Mapped[Decimal | None] = mapped_column(Amount)
     reorder_level: Mapped[Decimal] = mapped_column(Quantity, nullable=False, default=Decimal("0"))
 
 
