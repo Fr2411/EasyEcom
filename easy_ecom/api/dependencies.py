@@ -16,6 +16,12 @@ from easy_ecom.data.store.runtime import build_runtime_engine
 from easy_ecom.domain.models.auth import AuthenticatedUser
 from easy_ecom.domain.services.admin_service import AdminService
 from easy_ecom.domain.services.auth_service import AuthService
+from easy_ecom.domain.services.commerce_service import (
+    CatalogService,
+    InventoryService,
+    ReturnsService,
+    SalesService,
+)
 from easy_ecom.domain.services.overview_service import OverviewService
 
 
@@ -36,6 +42,10 @@ class ServiceContainer:
         self.auth = AuthService(PostgresAuthRepo(session_factory))
         self.admin = AdminService(session_factory)
         self.overview = OverviewService(session_factory)
+        self.catalog = CatalogService(session_factory)
+        self.inventory = InventoryService(session_factory)
+        self.sales = SalesService(session_factory)
+        self.returns = ReturnsService(session_factory)
 
 
 def _signer() -> SessionSigner:

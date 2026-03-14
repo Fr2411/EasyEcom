@@ -7,12 +7,12 @@ import { NAV_ITEMS } from '@/types/navigation';
 
 const DEFAULT_TITLE = 'Operations Workspace';
 
-type SearchScope = 'sales' | 'inventory' | 'customers';
+type SearchScope = 'sales' | 'inventory' | 'returns';
 
 const SEARCH_SCOPE_ROUTES: Record<SearchScope, string> = {
   sales: '/sales',
   inventory: '/inventory',
-  customers: '/customers',
+  returns: '/returns',
 };
 
 export function TopHeader() {
@@ -47,13 +47,13 @@ export function TopHeader() {
         >
           <option value="sales">Orders</option>
           <option value="inventory">SKUs</option>
-          <option value="customers">Customers</option>
+          <option value="returns">Returns</option>
         </select>
         <input
           type="search"
           aria-label="Search query"
           className="header-search-input"
-          placeholder="Search orders, SKUs, customers..."
+          placeholder="Search orders, SKUs, returns..."
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />

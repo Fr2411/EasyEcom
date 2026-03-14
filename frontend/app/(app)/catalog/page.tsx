@@ -1,10 +1,10 @@
 import { PageShell } from '@/components/ui/page-shell';
-import { ResetPlaceholder } from '@/components/ui/reset-placeholder';
+import { CatalogWorkspace } from '@/components/commerce/catalog-workspace';
 
 export default function CatalogPage() {
   return (
-    <PageShell title="Catalog" description="Catalog content has been cleared so we can rebuild products and variants from scratch.">
-      <ResetPlaceholder moduleName="Catalog" />
+    <PageShell title="Catalog" description="Manage parent products and saleable variants with stock-aware search.">
+      <CatalogWorkspace />
     </PageShell>
   );
 }

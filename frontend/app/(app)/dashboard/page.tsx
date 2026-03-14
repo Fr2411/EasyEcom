@@ -9,7 +9,7 @@ export default function DashboardPage() {
     >
       <FoundationLaunchpad
         title="Pilot rebuild command center"
-        subtitle="The dashboard is now focused on the modules that belong in the first product-ready release: catalog, inventory, purchases, sales, customers, finance, returns, reports, admin, and settings."
+        subtitle="The dashboard is now focused on the first product-ready release: catalog, inventory, sales, returns, finance, reports, admin, and settings."
       />
     </PageShell>
   );

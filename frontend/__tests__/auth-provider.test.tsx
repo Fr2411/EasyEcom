@@ -22,11 +22,14 @@ function AuthConsumer() {
 describe('AuthProvider bootstrap states', () => {
   test('renders children through the auth context provider', async () => {
     vi.mocked(getCurrentUser).mockResolvedValueOnce({
-      id: 'user-1',
+      user_id: 'user-1',
       email: 'user@example.com',
       name: 'User',
-      clientId: 'client-1',
-      roles: ['admin']
+      role: 'SUPER_ADMIN',
+      client_id: 'client-1',
+      roles: ['SUPER_ADMIN'],
+      allowed_pages: ['Home', 'Dashboard'],
+      is_authenticated: true,
     });
 
     render(
