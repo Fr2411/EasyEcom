@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState, useTransition } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { ApiError } from '@/lib/api/client';
 import { getCatalogWorkspace, saveCatalogProduct } from '@/lib/api/commerce';
 import type {
   CatalogProduct,
@@ -10,7 +11,7 @@ import type {
   ProductIdentityInput,
   VariantOptions,
 } from '@/types/catalog';
-import { WorkspaceEmpty, WorkspaceNotice, WorkspacePanel, WorkspaceTabs } from '@/components/commerce/workspace-primitives';
+import { WorkspaceEmpty, WorkspaceNotice, WorkspacePanel, WorkspaceTabs, WorkspaceToast } from '@/components/commerce/workspace-primitives';
 import { formatMoney, formatPercent, formatQuantity, numberFromString } from '@/lib/commerce-format';
 
 
@@ -87,6 +88,21 @@ function signatureForValues(size: string, color: string, other: string) {
 
 function signatureForVariant(variant: CatalogVariantInput | VariantCombo) {
   return signatureForValues(variant.size, variant.color, variant.other);
+}
+
+
+function isUntouchedDefaultVariant(variant: CatalogVariantInput) {
+  return !variant.variant_id
+    && !variant.size.trim()
+    && !variant.color.trim()
+    && !variant.other.trim()
+    && !variant.sku.trim()
+    && !variant.barcode.trim()
+    && !variant.default_purchase_price.trim()
+    && !variant.default_selling_price.trim()
+    && !variant.min_selling_price.trim()
+    && !variant.reorder_level.trim()
+    && variant.status === 'active';
 }
 
 
@@ -252,7 +268,14 @@ export function CatalogWorkspace() {
   const [generator, setGenerator] = useState<VariantGeneratorState>({ ...EMPTY_GENERATOR });
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [saveToast, setSaveToast] = useState('');
   const [isPending, startTransition] = useTransition();
+
+  useEffect(() => {
+    if (!saveToast) return undefined;
+    const timeoutId = window.setTimeout(() => setSaveToast(''), 2800);
+    return () => window.clearTimeout(timeoutId);
+  }, [saveToast]);
 
   const loadWorkspace = (query = '') => {
     startTransition(async () => {
@@ -261,6 +284,11 @@ export function CatalogWorkspace() {
         setWorkspace(payload);
         setError('');
       } catch (loadError) {
+        if (loadError instanceof ApiError && loadError.status === 404) {
+          setWorkspace(null);
+          setError('Catalog workspace is not available on the connected API yet. Deploy the latest backend to load and list saved products.');
+          return;
+        }
         setError(loadError instanceof Error ? loadError.message : 'Unable to load catalog workspace.');
       }
     });
@@ -304,7 +332,11 @@ export function CatalogWorkspace() {
 
   const applyGenerator = (mode: 'merge' | 'reset') => {
     setForm((current) => {
-      const baseline = mode === 'reset' ? savedVariants.map(cloneVariant) : current.variants.map(cloneVariant);
+      const rawBaseline = mode === 'reset' ? savedVariants.map(cloneVariant) : current.variants.map(cloneVariant);
+      const hasRealGeneratedVariants = generatedCombos.some((combo) => Boolean(combo.size || combo.color || combo.other));
+      const baseline = hasRealGeneratedVariants
+        ? rawBaseline.filter((variant) => !isUntouchedDefaultVariant(variant))
+        : rawBaseline;
       const indexed = new Map(baseline.map((variant) => [signatureForVariant(variant), variant]));
       const next = [...baseline];
       generatedCombos.forEach((combo) => {
@@ -353,21 +385,21 @@ export function CatalogWorkspace() {
     setNotice('');
     setError('');
     try {
-      const response = await saveCatalogProduct(form);
-      const payload = productToPayload(response.product);
-      setForm(payload);
-      setSavedVariants(payload.variants.map(cloneVariant));
-      setGenerator(generatorFromProduct(response.product));
-      setNotice(form.product_id ? 'Product updated.' : 'Product created.');
-      setActiveTab('products');
-      await loadWorkspace(queryInput.trim());
+      await saveCatalogProduct(form);
+      setSaveToast(form.product_id ? 'Product updated successfully.' : 'Product saved successfully.');
+      setNewProductForm();
     } catch (saveError) {
+      if (saveError instanceof ApiError && saveError.status === 404) {
+        setError('Catalog save is not available on the connected API yet. Deploy the latest backend before trying to save products.');
+        return;
+      }
       setError(saveError instanceof Error ? saveError.message : 'Unable to save product.');
     }
   };
 
   return (
     <div className="workspace-stack">
+      {saveToast ? <WorkspaceToast message={saveToast} onClose={() => setSaveToast('')} /> : null}
       <WorkspaceTabs
         tabs={[
           { id: 'products', label: 'Products' },

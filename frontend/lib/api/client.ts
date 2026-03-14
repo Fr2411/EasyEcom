@@ -48,7 +48,9 @@ export async function apiClient<T>(path: string, init?: RequestInit): Promise<T>
       message =
         typeof payload?.error?.message === 'string'
           ? payload.error.message
-          : JSON.stringify(payload);
+          : typeof payload?.detail === 'string'
+            ? payload.detail
+            : JSON.stringify(payload);
     } else {
       message = (await response.text()) || message;
     }

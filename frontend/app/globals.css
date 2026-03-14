@@ -829,6 +829,31 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
   background: #fff5f5;
 }
 
+.workspace-toast {
+  position: fixed;
+  top: 1.2rem;
+  right: 1.2rem;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  max-width: min(420px, calc(100vw - 2rem));
+  padding: 0.85rem 0.95rem;
+  border-radius: var(--radius-md);
+  border: 1px solid #b7e3c8;
+  background: #f1fbf4;
+  box-shadow: var(--shadow-md);
+}
+
+.workspace-toast.error {
+  border-color: #f0c3c3;
+  background: #fff5f5;
+}
+
+.workspace-toast button {
+  white-space: nowrap;
+}
+
 .workspace-empty {
   border: 1px dashed var(--border-strong);
   border-radius: var(--radius-md);
