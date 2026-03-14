@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import delete, func, or_, select
@@ -11,8 +11,8 @@ from sqlalchemy.orm import Session, sessionmaker
 from easy_ecom.core.config import settings
 from easy_ecom.core.errors import ApiException
 from easy_ecom.core.ids import new_uuid
-from easy_ecom.core.rbac import ROLE_PAGE_ACCESS, TENANT_ROLE_CODES, pages_for_role
-from easy_ecom.core.security import hash_token, new_token
+from easy_ecom.core.rbac import TENANT_ROLE_CODES, pages_for_role
+from easy_ecom.core.security import hash_password
 from easy_ecom.core.time_utils import now_utc
 from easy_ecom.data.repos.postgres.code_factory import generate_unique_client_code, generate_unique_user_code
 from easy_ecom.data.store.postgres_models import (
@@ -20,9 +20,7 @@ from easy_ecom.data.store.postgres_models import (
     ClientModel,
     ClientSettingsModel,
     LocationModel,
-    PasswordResetTokenModel,
     RoleModel,
-    UserInvitationModel,
     UserModel,
     UserRoleModel,
 )
@@ -96,13 +94,6 @@ class AdminUserRecord:
     is_active: bool
     created_at: datetime
     last_login_at: datetime | None
-    invitation_status: str
-    invitation_issued_at: datetime | None
-    invitation_expires_at: datetime | None
-    password_reset_issued_at: datetime | None
-    invitation_token: str | None = None
-    password_reset_token: str | None = None
-    password_reset_expires_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -110,14 +101,6 @@ class AdminOnboardResult:
     client: AdminClientRecord
     users: list[AdminUserRecord]
     warnings: list[str]
-
-
-@dataclass(frozen=True)
-class PendingToken:
-    token_id: str
-    plain_token: str
-    expires_at: datetime
-    issued_at: datetime
 
 
 class AdminService:
@@ -182,7 +165,7 @@ class AdminService:
             changed_fields: list[str] = []
             updated_at = now_utc()
 
-            def _set_attr(target, field_name: str, next_value: str | None) -> None:
+            def _set_attr(target: Any, field_name: str, next_value: str | None) -> None:
                 if next_value is None:
                     return
                 value = next_value.strip()
@@ -272,10 +255,12 @@ class AdminService:
         name: str,
         email: str,
         role_code: str,
+        password: str,
     ) -> AdminUserRecord:
         normalized_role = self._require_tenant_role(role_code)
         normalized_email = self._normalize_email(email)
         normalized_name = self._normalize_name(name)
+        validated_password = self._validate_password(password)
 
         with self._session_factory() as session:
             client = self._get_client(session, client_id)
@@ -287,7 +272,7 @@ class AdminService:
                 name=normalized_name,
                 email=normalized_email,
                 role_code=normalized_role,
-                invited_by_user_id=actor.user_id,
+                password=validated_password,
             )
 
             self._log_audit(
@@ -304,11 +289,11 @@ class AdminService:
                 session,
                 client_id=client.client_id,
                 actor_user_id=actor.user_id,
-                entity_type="invitation",
+                entity_type="user",
                 entity_id=user_record.user_id,
-                action="invitation_issued",
+                action="password_set_by_admin",
                 request_id=request_id,
-                metadata_json={"email": normalized_email, "role_code": normalized_role},
+                metadata_json={"email": normalized_email},
             )
             session.commit()
             return user_record
@@ -372,22 +357,22 @@ class AdminService:
                 session.commit()
 
             role_names = self._role_name_map(session)
-            client_code = client.slug
             return self._user_record_from_model(
-                session,
                 user=user,
-                client_code=client_code,
+                client_code=client.slug,
                 role_code=next_role,
                 role_names=role_names,
             )
 
-    def issue_invitation(
+    def set_user_password(
         self,
         *,
         user_id: str,
         actor: AuthenticatedUser,
         request_id: str | None,
+        password: str,
     ) -> AdminUserRecord:
+        validated_password = self._validate_password(password)
         with self._session_factory() as session:
             user = self._get_user(session, user_id)
             client = self._get_client(session, user.client_id)
@@ -399,114 +384,32 @@ class AdminService:
                     message="User is missing an assigned role",
                 )
 
-            revoked = self._revoke_pending_invitations(session, client.client_id, user.email)
-            if revoked:
-                self._log_audit(
-                    session,
-                    client_id=client.client_id,
-                    actor_user_id=actor.user_id,
-                    entity_type="invitation",
-                    entity_id=user.user_id,
-                    action="invitation_rescinded",
-                    request_id=request_id,
-                    metadata_json={"email": user.email, "revoked_count": str(revoked)},
-                )
-
-            token = self._create_invitation(
-                session,
-                client_id=client.client_id,
-                email=user.email,
-                role_code=role_code,
-                invited_by_user_id=actor.user_id,
-            )
-            user.invited_at = token.issued_at
-            user.updated_at = token.issued_at
+            activated = not user.is_active and not user.password_hash and not user.password
+            user.password = ""
+            user.password_hash = hash_password(validated_password)
+            if activated:
+                user.is_active = True
+            user.invited_at = None
+            user.updated_at = now_utc()
 
             self._log_audit(
                 session,
-                client_id=client.client_id,
+                client_id=user.client_id,
                 actor_user_id=actor.user_id,
-                entity_type="invitation",
-                entity_id=token.token_id,
-                action="invitation_issued",
+                entity_type="user",
+                entity_id=user.user_id,
+                action="password_set_by_admin",
                 request_id=request_id,
-                metadata_json={"email": user.email, "role_code": role_code},
+                metadata_json={"activated": activated},
             )
             session.commit()
 
             role_names = self._role_name_map(session)
             return self._user_record_from_model(
-                session,
                 user=user,
                 client_code=client.slug,
                 role_code=role_code,
                 role_names=role_names,
-                invitation_token=token.plain_token,
-                invitation_expires_at=token.expires_at,
-                invitation_issued_at=token.issued_at,
-                invitation_status="pending",
-            )
-
-    def issue_password_reset(
-        self,
-        *,
-        user_id: str,
-        actor: AuthenticatedUser,
-        request_id: str | None,
-    ) -> AdminUserRecord:
-        with self._session_factory() as session:
-            user = self._get_user(session, user_id)
-            client = self._get_client(session, user.client_id)
-            role_code = self._user_role_code(session, user.user_id)
-            if role_code is None:
-                raise ApiException(
-                    status_code=400,
-                    code="ROLE_NOT_FOUND",
-                    message="User is missing an assigned role",
-                )
-            if not user.is_active or not user.password_hash:
-                raise ApiException(
-                    status_code=400,
-                    code="USER_SETUP_INCOMPLETE",
-                    message="Use an invitation link until the user completes account setup",
-                )
-
-            issued_at = now_utc()
-            expires_at = issued_at + timedelta(minutes=max(settings.password_reset_ttl_minutes, 5))
-            plain_token = new_token(24)
-            reset_token_id = new_uuid()
-            session.add(
-                PasswordResetTokenModel(
-                    reset_token_id=reset_token_id,
-                    user_id=user.user_id,
-                    token_hash=hash_token(plain_token),
-                    expires_at=expires_at,
-                    created_at=issued_at,
-                    updated_at=issued_at,
-                )
-            )
-            self._log_audit(
-                session,
-                client_id=client.client_id,
-                actor_user_id=actor.user_id,
-                entity_type="password_reset",
-                entity_id=reset_token_id,
-                action="password_reset_issued",
-                request_id=request_id,
-                metadata_json={"email": user.email},
-            )
-            session.commit()
-
-            role_names = self._role_name_map(session)
-            return self._user_record_from_model(
-                session,
-                user=user,
-                client_code=client.slug,
-                role_code=role_code,
-                role_names=role_names,
-                password_reset_token=plain_token,
-                password_reset_expires_at=expires_at,
-                password_reset_issued_at=issued_at,
             )
 
     def roles(self) -> list[AdminRoleAccess]:
@@ -525,14 +428,13 @@ class AdminService:
     def audit(self, *, client_id: str | None = None, limit: int = 20) -> list[AdminAuditEntry]:
         safe_limit = max(1, min(limit, 100))
         with self._session_factory() as session:
-            stmt = select(AuditLogModel).order_by(AuditLogModel.created_at.desc()).limit(safe_limit)
+            stmt = select(AuditLogModel)
             if client_id:
                 self._get_client(session, client_id)
                 stmt = stmt.where(AuditLogModel.client_id == client_id)
             else:
                 stmt = stmt.where(AuditLogModel.client_id != settings.global_client_id)
-
-            rows = session.execute(stmt).scalars().all()
+            rows = session.execute(stmt.order_by(AuditLogModel.created_at.desc()).limit(safe_limit)).scalars().all()
             return [
                 AdminAuditEntry(
                     audit_log_id=str(row.audit_log_id),
@@ -558,6 +460,7 @@ class AdminService:
         primary_phone: str,
         owner_name: str,
         owner_email: str,
+        owner_password: str,
         address: str = "",
         website_url: str = "",
         facebook_url: str = "",
@@ -576,6 +479,7 @@ class AdminService:
         normalized_primary_phone = primary_phone.strip()
         normalized_owner_name = self._normalize_name(owner_name)
         normalized_owner_email = self._normalize_email(owner_email)
+        validated_owner_password = self._validate_password(owner_password)
         normalized_timezone = timezone.strip() if timezone and timezone.strip() else "UTC"
         normalized_currency_code = (currency_code or "USD").strip().upper() or "USD"
         normalized_currency_symbol = (currency_symbol or self._currency_symbol_for(normalized_currency_code)).strip() or normalized_currency_code
@@ -602,6 +506,7 @@ class AdminService:
                     "name": self._normalize_name(raw_user.get("name", "")),
                     "email": self._normalize_email(raw_user.get("email", "")),
                     "role_code": self._require_tenant_role(raw_user.get("role_code", "")),
+                    "password": self._validate_password(raw_user.get("password", "")),
                 }
             )
 
@@ -665,16 +570,17 @@ class AdminService:
             )
 
             created_users: list[AdminUserRecord] = []
-            owner_user = self._create_client_user(
-                session,
-                client=client,
-                name=normalized_owner_name,
-                email=normalized_owner_email,
-                role_code="CLIENT_OWNER",
-                invited_by_user_id=actor.user_id,
-                issued_at=timestamp,
+            created_users.append(
+                self._create_client_user(
+                    session,
+                    client=client,
+                    name=normalized_owner_name,
+                    email=normalized_owner_email,
+                    role_code="CLIENT_OWNER",
+                    password=validated_owner_password,
+                    created_at=timestamp,
+                )
             )
-            created_users.append(owner_user)
 
             for user_payload in normalized_additional_users:
                 created_users.append(
@@ -684,11 +590,11 @@ class AdminService:
                         name=user_payload["name"],
                         email=user_payload["email"],
                         role_code=user_payload["role_code"],
-                        invited_by_user_id=actor.user_id,
+                        password=user_payload["password"],
+                        created_at=timestamp,
                     )
                 )
 
-            # Flush the tenant shell first so audit rows can safely reference the new client_id.
             session.flush()
 
             self._log_audit(
@@ -716,11 +622,11 @@ class AdminService:
                     session,
                     client_id=client_id,
                     actor_user_id=actor.user_id,
-                    entity_type="invitation",
+                    entity_type="user",
                     entity_id=created_user.user_id,
-                    action="invitation_issued",
+                    action="password_set_by_admin",
                     request_id=request_id,
-                    metadata_json={"email": created_user.email, "role_code": created_user.role_code},
+                    metadata_json={"email": created_user.email},
                 )
             session.commit()
 
@@ -765,10 +671,10 @@ class AdminService:
         name: str,
         email: str,
         role_code: str,
-        invited_by_user_id: str,
-        issued_at: datetime | None = None,
+        password: str,
+        created_at: datetime | None = None,
     ) -> AdminUserRecord:
-        timestamp = issued_at or now_utc()
+        timestamp = created_at or now_utc()
         user_id = new_uuid()
         user_code = generate_unique_user_code(session, client.slug, role_code, name)
         session.add(
@@ -779,22 +685,14 @@ class AdminService:
                 name=name,
                 email=email,
                 password="",
-                password_hash="",
-                is_active=False,
-                invited_at=timestamp,
+                password_hash=hash_password(password),
+                is_active=True,
+                invited_at=None,
                 created_at=timestamp,
                 updated_at=timestamp,
             )
         )
         session.add(UserRoleModel(user_id=user_id, role_code=role_code))
-        token = self._create_invitation(
-            session,
-            client_id=client.client_id,
-            email=email,
-            role_code=role_code,
-            invited_by_user_id=invited_by_user_id,
-            issued_at=timestamp,
-        )
         role_names = self._role_name_map(session)
         return AdminUserRecord(
             user_id=user_id,
@@ -805,49 +703,9 @@ class AdminService:
             email=email,
             role_code=role_code,
             role_name=role_names.get(role_code, role_code),
-            is_active=False,
+            is_active=True,
             created_at=timestamp,
             last_login_at=None,
-            invitation_status="pending",
-            invitation_issued_at=token.issued_at,
-            invitation_expires_at=token.expires_at,
-            password_reset_issued_at=None,
-            invitation_token=token.plain_token,
-        )
-
-    def _create_invitation(
-        self,
-        session: Session,
-        *,
-        client_id: str,
-        email: str,
-        role_code: str,
-        invited_by_user_id: str,
-        issued_at: datetime | None = None,
-    ) -> PendingToken:
-        timestamp = issued_at or now_utc()
-        expires_at = timestamp + timedelta(hours=max(settings.invitation_ttl_hours, 1))
-        plain_token = new_token(24)
-        invitation_id = new_uuid()
-        session.add(
-            UserInvitationModel(
-                invitation_id=invitation_id,
-                client_id=client_id,
-                email=email,
-                role_code=role_code,
-                invited_by_user_id=invited_by_user_id,
-                token_hash=hash_token(plain_token),
-                expires_at=expires_at,
-                status="pending",
-                created_at=timestamp,
-                updated_at=timestamp,
-            )
-        )
-        return PendingToken(
-            token_id=invitation_id,
-            plain_token=plain_token,
-            expires_at=expires_at,
-            issued_at=timestamp,
         )
 
     def _duplicate_warnings(
@@ -917,20 +775,6 @@ class AdminService:
                 details={"emails": sorted({email for email in existing_emails})},
             )
 
-        pending_invites = session.execute(
-            select(UserInvitationModel.email).where(
-                UserInvitationModel.email.in_(normalized),
-                UserInvitationModel.status == "pending",
-            )
-        ).scalars().all()
-        if pending_invites:
-            raise ApiException(
-                status_code=409,
-                code="PENDING_INVITATION_EXISTS",
-                message="One or more user emails already have pending invitations",
-                details={"emails": sorted({email for email in pending_invites})},
-            )
-
     def _users_for_client(
         self,
         session: Session,
@@ -946,47 +790,28 @@ class AdminService:
             return []
 
         user_ids = [str(user.user_id) for user in users]
-        emails = [user.email for user in users]
         role_rows = session.execute(
             select(UserRoleModel.user_id, UserRoleModel.role_code).where(UserRoleModel.user_id.in_(user_ids))
         ).all()
         role_map = {str(user_id): str(role_code) for user_id, role_code in role_rows}
-        invitation_map = self._latest_invitation_map(session, str(client.client_id), emails)
-        reset_map = self._latest_reset_map(session, user_ids)
-
         return [
             self._user_record_from_model(
-                session,
                 user=user,
                 client_code=client.slug,
                 role_code=role_map.get(str(user.user_id), ""),
                 role_names=role_names,
-                latest_invitation=invitation_map.get(user.email),
-                latest_reset=reset_map.get(str(user.user_id)),
             )
             for user in users
         ]
 
     def _user_record_from_model(
         self,
-        session: Session,
         *,
         user: UserModel,
         client_code: str,
         role_code: str,
         role_names: dict[str, str],
-        latest_invitation: UserInvitationModel | None = None,
-        latest_reset: PasswordResetTokenModel | None = None,
-        invitation_token: str | None = None,
-        invitation_status: str | None = None,
-        invitation_issued_at: datetime | None = None,
-        invitation_expires_at: datetime | None = None,
-        password_reset_token: str | None = None,
-        password_reset_issued_at: datetime | None = None,
-        password_reset_expires_at: datetime | None = None,
     ) -> AdminUserRecord:
-        invitation = latest_invitation or self._latest_invitation_map(session, str(user.client_id), [user.email]).get(user.email)
-        reset = latest_reset or self._latest_reset_map(session, [str(user.user_id)]).get(str(user.user_id))
         return AdminUserRecord(
             user_id=str(user.user_id),
             user_code=user.user_code,
@@ -999,71 +824,7 @@ class AdminService:
             is_active=bool(user.is_active),
             created_at=user.created_at,
             last_login_at=user.last_login_at,
-            invitation_status=invitation_status or (invitation.status if invitation else "none"),
-            invitation_issued_at=invitation_issued_at or (invitation.created_at if invitation else None),
-            invitation_expires_at=invitation_expires_at or (invitation.expires_at if invitation else None),
-            password_reset_issued_at=password_reset_issued_at or (reset.created_at if reset else None),
-            invitation_token=invitation_token,
-            password_reset_token=password_reset_token,
-            password_reset_expires_at=password_reset_expires_at or (reset.expires_at if reset else None),
         )
-
-    def _latest_invitation_map(
-        self,
-        session: Session,
-        client_id: str,
-        emails: list[str],
-    ) -> dict[str, UserInvitationModel]:
-        if not emails:
-            return {}
-        rows = session.execute(
-            select(UserInvitationModel)
-            .where(
-                UserInvitationModel.client_id == client_id,
-                UserInvitationModel.email.in_(emails),
-            )
-            .order_by(UserInvitationModel.created_at.desc())
-        ).scalars().all()
-        latest: dict[str, UserInvitationModel] = {}
-        for row in rows:
-            if row.email not in latest:
-                latest[row.email] = row
-        return latest
-
-    def _latest_reset_map(
-        self,
-        session: Session,
-        user_ids: list[str],
-    ) -> dict[str, PasswordResetTokenModel]:
-        if not user_ids:
-            return {}
-        rows = session.execute(
-            select(PasswordResetTokenModel)
-            .where(PasswordResetTokenModel.user_id.in_(user_ids))
-            .order_by(PasswordResetTokenModel.created_at.desc())
-        ).scalars().all()
-        latest: dict[str, PasswordResetTokenModel] = {}
-        for row in rows:
-            key = str(row.user_id)
-            if key not in latest:
-                latest[key] = row
-        return latest
-
-    def _revoke_pending_invitations(self, session: Session, client_id: str, email: str) -> int:
-        rows = session.execute(
-            select(UserInvitationModel).where(
-                UserInvitationModel.client_id == client_id,
-                UserInvitationModel.email == email,
-                UserInvitationModel.status == "pending",
-            )
-        ).scalars().all()
-        if not rows:
-            return 0
-        timestamp = now_utc()
-        for row in rows:
-            row.status = "revoked"
-            row.updated_at = timestamp
-        return len(rows)
 
     def _ensure_another_owner_exists(self, session: Session, client_id: str, *, exclude_user_id: str) -> None:
         count = session.execute(
@@ -1155,6 +916,15 @@ class AdminService:
                 message="Name must contain at least two characters",
             )
         return normalized
+
+    def _validate_password(self, password: str) -> str:
+        if len(password) < 6:
+            raise ApiException(
+                status_code=400,
+                code="PASSWORD_TOO_SHORT",
+                message="Password must contain at least six characters",
+            )
+        return password
 
     def _currency_symbol_for(self, currency_code: str) -> str:
         return _CURRENCY_SYMBOLS.get(currency_code.upper(), currency_code.upper())

@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 from easy_ecom.api import dependencies as deps
 from easy_ecom.api.main import create_app
-from easy_ecom.core.security import hash_password
+from easy_ecom.core.security import hash_password, verify_password
 from easy_ecom.tests.support.sqlite_runtime import build_sqlite_runtime, seed_auth_user
 
 SUPER_ADMIN_ID = "11111111-1111-1111-1111-111111111111"
@@ -53,7 +53,7 @@ def test_admin_routes_require_super_admin(monkeypatch, tmp_path: Path):
     assert response.status_code == 403
 
 
-def test_onboard_client_creates_tenant_shell(monkeypatch, tmp_path: Path):
+def test_onboard_client_creates_active_tenant_shell(monkeypatch, tmp_path: Path):
     runtime = _setup_runtime(tmp_path)
     client = _login_super_admin(runtime, monkeypatch)
 
@@ -66,9 +66,15 @@ def test_onboard_client_creates_tenant_shell(monkeypatch, tmp_path: Path):
             "primary_phone": "+9715000000",
             "owner_name": "Owner One",
             "owner_email": "owner@acme.test",
+            "owner_password": "owner-secret",
             "default_location_name": "Main Warehouse",
             "additional_users": [
-                {"name": "Finance User", "email": "finance@acme.test", "role_code": "FINANCE_STAFF"},
+                {
+                    "name": "Finance User",
+                    "email": "finance@acme.test",
+                    "role_code": "FINANCE_STAFF",
+                    "password": "finance-secret",
+                },
             ],
         },
     )
@@ -78,8 +84,8 @@ def test_onboard_client_creates_tenant_shell(monkeypatch, tmp_path: Path):
     assert payload["client"]["client_code"] == "acme-store"
     assert payload["client"]["contact_name"] == "Asha Contact"
     assert len(payload["users"]) == 2
-    assert payload["users"][0]["invitation_token"]
-    assert payload["users"][1]["invitation_token"]
+    assert payload["users"][0]["is_active"] is True
+    assert payload["users"][1]["is_active"] is True
 
     clients = runtime.store.read("clients.csv")
     settings_rows = runtime.store.read("client_settings.csv")
@@ -97,11 +103,26 @@ def test_onboard_client_creates_tenant_shell(monkeypatch, tmp_path: Path):
     onboarded_users = users[users["client_id"] == onboarded_client_id]
     assert len(onboarded_users) == 2
     assert all(str(code) for code in onboarded_users["user_code"].tolist())
+    assert all(str(value) in {"True", "1"} for value in onboarded_users["is_active"].tolist())
+    assert all(str(value).startswith("$2") for value in onboarded_users["password_hash"].tolist())
     assert len(roles[roles["user_id"].isin(onboarded_users["user_id"])]) == 2
-    assert len(audit[audit["client_id"] == onboarded_client_id]) >= 3
+    assert "client_created" in set(audit[audit["client_id"] == onboarded_client_id]["action"].tolist())
+    assert "password_set_by_admin" in set(audit[audit["client_id"] == onboarded_client_id]["action"].tolist())
+
+    owner_login = client.post(
+        "/auth/login",
+        json={"email": "owner@acme.test", "password": "owner-secret"},
+    )
+    assert owner_login.status_code == 200
+
+    finance_login = client.post(
+        "/auth/login",
+        json={"email": "finance@acme.test", "password": "finance-secret"},
+    )
+    assert finance_login.status_code == 200
 
 
-def test_accept_invitation_activates_precreated_user(monkeypatch, tmp_path: Path):
+def test_super_admin_can_add_user_with_direct_password(monkeypatch, tmp_path: Path):
     runtime = _setup_runtime(tmp_path)
     client = _login_super_admin(runtime, monkeypatch)
 
@@ -114,36 +135,34 @@ def test_accept_invitation_activates_precreated_user(monkeypatch, tmp_path: Path
             "primary_phone": "+9715111111",
             "owner_name": "Beacon Owner",
             "owner_email": "owner@beacon.test",
+            "owner_password": "owner-secret",
             "additional_users": [],
         },
     )
     assert onboard_response.status_code == 200
-    owner = onboard_response.json()["users"][0]
+    beacon_client_id = onboard_response.json()["client"]["client_id"]
 
-    accept_response = client.post(
-        "/auth/accept-invitation",
+    create_response = client.post(
+        f"/admin/clients/{beacon_client_id}/users",
         json={
-            "token": owner["invitation_token"],
-            "name": "Beacon Owner",
-            "password": "owner-secret",
+            "name": "Warehouse Staff",
+            "email": "warehouse@beacon.test",
+            "role_code": "CLIENT_STAFF",
+            "password": "warehouse-secret",
         },
     )
-    assert accept_response.status_code == 200
-    assert accept_response.json()["email"] == "owner@beacon.test"
+    assert create_response.status_code == 200
+    created = create_response.json()
+    assert created["is_active"] is True
 
     login_response = client.post(
         "/auth/login",
-        json={"email": "owner@beacon.test", "password": "owner-secret"},
+        json={"email": "warehouse@beacon.test", "password": "warehouse-secret"},
     )
     assert login_response.status_code == 200
 
-    users = runtime.store.read("users.csv")
-    owner_rows = users[users["email"] == "owner@beacon.test"]
-    assert len(owner_rows) == 1
-    assert str(owner_rows.iloc[0]["is_active"]) in {"True", "1"}
 
-
-def test_super_admin_can_issue_password_reset_for_active_user(monkeypatch, tmp_path: Path):
+def test_super_admin_can_set_password_for_existing_user(monkeypatch, tmp_path: Path):
     runtime = _setup_runtime(tmp_path)
     client = _login_super_admin(runtime, monkeypatch)
 
@@ -156,37 +175,25 @@ def test_super_admin_can_issue_password_reset_for_active_user(monkeypatch, tmp_p
             "primary_phone": "+9715222222",
             "owner_name": "Canvas Owner",
             "owner_email": "owner@canvas.test",
+            "owner_password": "owner-secret",
             "additional_users": [],
         },
     )
+    assert onboard_response.status_code == 200
     owner = onboard_response.json()["users"][0]
 
-    accept_response = client.post(
-        "/auth/accept-invitation",
-        json={
-            "token": owner["invitation_token"],
-            "name": "Canvas Owner",
-            "password": "owner-secret",
-        },
+    reset_response = client.post(
+        f"/admin/users/{owner['user_id']}/set-password",
+        json={"password": "owner-secret-2"},
     )
-    assert accept_response.status_code == 200
-
-    super_admin_login = client.post("/auth/login", json={"email": "admin@example.com", "password": "secret"})
-    assert super_admin_login.status_code == 200
-
-    reset_response = client.post(f"/admin/users/{owner['user_id']}/issue-password-reset")
     assert reset_response.status_code == 200
-    reset_token = reset_response.json()["password_reset_token"]
-    assert reset_token
-
-    confirm_response = client.post(
-        "/auth/reset-password",
-        json={"token": reset_token, "new_password": "owner-secret-2"},
-    )
-    assert confirm_response.status_code == 200
 
     login_response = client.post(
         "/auth/login",
         json={"email": "owner@canvas.test", "password": "owner-secret-2"},
     )
     assert login_response.status_code == 200
+
+    users = runtime.store.read("users.csv")
+    owner_row = users[users["user_id"] == owner["user_id"]].iloc[0]
+    assert verify_password("owner-secret-2", owner_row["password_hash"])

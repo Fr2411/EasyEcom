@@ -9,6 +9,7 @@ import type {
   AdminRolesResponse,
   AdminUser,
   AdminUserCreateInput,
+  AdminUserPasswordSetInput,
   AdminUsersResponse,
   AdminUserUpdateInput,
 } from '@/types/admin';
@@ -58,15 +59,10 @@ export function updateAdminUser(userId: string, payload: AdminUserUpdateInput) {
   });
 }
 
-export function issueAdminInvitation(userId: string) {
-  return apiClient<AdminUser>(`/admin/users/${userId}/issue-invitation`, {
+export function setAdminUserPassword(userId: string, payload: AdminUserPasswordSetInput) {
+  return apiClient<AdminUser>(`/admin/users/${userId}/set-password`, {
     method: 'POST',
-  });
-}
-
-export function issueAdminPasswordReset(userId: string) {
-  return apiClient<AdminUser>(`/admin/users/${userId}/issue-password-reset`, {
-    method: 'POST',
+    body: JSON.stringify(payload),
   });
 }
 

@@ -70,13 +70,6 @@ class AdminUserResponse(BaseModel):
     is_active: bool
     created_at: str
     last_login_at: str | None = None
-    invitation_status: str
-    invitation_issued_at: str | None = None
-    invitation_expires_at: str | None = None
-    password_reset_issued_at: str | None = None
-    invitation_token: str | None = None
-    password_reset_token: str | None = None
-    password_reset_expires_at: str | None = None
 
 
 class AdminUsersResponse(BaseModel):
@@ -87,6 +80,7 @@ class AdminOnboardUserInput(BaseModel):
     name: str = Field(min_length=2, max_length=255)
     email: str
     role_code: str = Field(min_length=3, max_length=64)
+    password: str = Field(min_length=6, max_length=255)
 
 
 class AdminOnboardClientRequest(BaseModel):
@@ -96,6 +90,7 @@ class AdminOnboardClientRequest(BaseModel):
     primary_phone: str = Field(min_length=3, max_length=64)
     owner_name: str = Field(min_length=2, max_length=255)
     owner_email: str
+    owner_password: str = Field(min_length=6, max_length=255)
     address: str = ""
     website_url: str = ""
     facebook_url: str = ""
@@ -138,9 +133,14 @@ class AdminUserCreateRequest(BaseModel):
     name: str = Field(min_length=2, max_length=255)
     email: str
     role_code: str = Field(min_length=3, max_length=64)
+    password: str = Field(min_length=6, max_length=255)
 
 
 class AdminUserUpdateRequest(BaseModel):
     name: str | None = Field(default=None, min_length=2, max_length=255)
     role_code: str | None = Field(default=None, min_length=3, max_length=64)
     is_active: bool | None = None
+
+
+class AdminUserPasswordSetRequest(BaseModel):
+    password: str = Field(min_length=6, max_length=255)

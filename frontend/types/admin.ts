@@ -63,13 +63,6 @@ export type AdminUser = {
   is_active: boolean;
   created_at: string;
   last_login_at: string | null;
-  invitation_status: string;
-  invitation_issued_at: string | null;
-  invitation_expires_at: string | null;
-  password_reset_issued_at: string | null;
-  invitation_token: string | null;
-  password_reset_token: string | null;
-  password_reset_expires_at: string | null;
 };
 
 export type AdminUsersResponse = {
@@ -80,6 +73,7 @@ export type AdminOnboardUserInput = {
   name: string;
   email: string;
   role_code: string;
+  password: string;
 };
 
 export type AdminOnboardClientInput = {
@@ -89,6 +83,7 @@ export type AdminOnboardClientInput = {
   primary_phone: string;
   owner_name: string;
   owner_email: string;
+  owner_password: string;
   address: string;
   website_url: string;
   facebook_url: string;
@@ -134,10 +129,15 @@ export type AdminUserCreateInput = {
   name: string;
   email: string;
   role_code: string;
+  password: string;
 };
 
 export type AdminUserUpdateInput = {
   name?: string;
   role_code?: string;
   is_active?: boolean;
+};
+
+export type AdminUserPasswordSetInput = {
+  password: string;
 };

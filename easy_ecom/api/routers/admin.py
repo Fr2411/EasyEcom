@@ -14,6 +14,7 @@ from easy_ecom.api.schemas.admin import (
     AdminRolesResponse,
     AdminRoleAccessResponse,
     AdminUserCreateRequest,
+    AdminUserPasswordSetRequest,
     AdminUserResponse,
     AdminUsersResponse,
     AdminUserUpdateRequest,
@@ -79,15 +80,6 @@ def _serialize_user(record: AdminUserRecord) -> AdminUserResponse:
         is_active=record.is_active,
         created_at=record.created_at.isoformat(),
         last_login_at=record.last_login_at.isoformat() if record.last_login_at else None,
-        invitation_status=record.invitation_status,
-        invitation_issued_at=record.invitation_issued_at.isoformat() if record.invitation_issued_at else None,
-        invitation_expires_at=record.invitation_expires_at.isoformat() if record.invitation_expires_at else None,
-        password_reset_issued_at=record.password_reset_issued_at.isoformat() if record.password_reset_issued_at else None,
-        invitation_token=record.invitation_token,
-        password_reset_token=record.password_reset_token,
-        password_reset_expires_at=record.password_reset_expires_at.isoformat()
-        if record.password_reset_expires_at
-        else None,
     )
 
 
@@ -159,6 +151,7 @@ def onboard_client(
         primary_phone=payload.primary_phone,
         owner_name=payload.owner_name,
         owner_email=payload.owner_email,
+        owner_password=payload.owner_password,
         address=payload.address,
         website_url=payload.website_url,
         facebook_url=payload.facebook_url,
@@ -229,6 +222,7 @@ def create_client_user(
         name=payload.name,
         email=payload.email,
         role_code=payload.role_code,
+        password=payload.password,
     )
     return _serialize_user(created)
 
@@ -251,36 +245,22 @@ def update_user(
     return _serialize_user(updated)
 
 
-@router.post("/users/{user_id}/issue-invitation", response_model=AdminUserResponse)
-def issue_invitation(
+@router.post("/users/{user_id}/set-password", response_model=AdminUserResponse)
+def set_user_password(
     user_id: str,
+    payload: AdminUserPasswordSetRequest,
     request: Request,
     user: AuthenticatedUser = Depends(get_authenticated_user),
     container: ServiceContainer = Depends(get_container),
 ) -> AdminUserResponse:
     _require_super_admin(user)
-    issued = container.admin.issue_invitation(
+    updated = container.admin.set_user_password(
         user_id=user_id,
         actor=user,
         request_id=getattr(request.state, "request_id", None),
+        password=payload.password,
     )
-    return _serialize_user(issued)
-
-
-@router.post("/users/{user_id}/issue-password-reset", response_model=AdminUserResponse)
-def issue_password_reset(
-    user_id: str,
-    request: Request,
-    user: AuthenticatedUser = Depends(get_authenticated_user),
-    container: ServiceContainer = Depends(get_container),
-) -> AdminUserResponse:
-    _require_super_admin(user)
-    issued = container.admin.issue_password_reset(
-        user_id=user_id,
-        actor=user,
-        request_id=getattr(request.state, "request_id", None),
-    )
-    return _serialize_user(issued)
+    return _serialize_user(updated)
 
 
 @router.get("/roles", response_model=AdminRolesResponse)

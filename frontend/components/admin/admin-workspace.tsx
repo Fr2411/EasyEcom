@@ -1,20 +1,20 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
+
+import { useAuth } from '@/components/auth/auth-provider';
 import {
   createAdminUser,
   getAdminClient,
-  issueAdminInvitation,
-  issueAdminPasswordReset,
   listAdminAudit,
   listAdminClients,
   listAdminRoles,
   listAdminUsers,
   onboardAdminClient,
+  setAdminUserPassword,
   updateAdminClient,
   updateAdminUser,
 } from '@/lib/api/admin';
-import { useAuth } from '@/components/auth/auth-provider';
 import { ApiError, ApiNetworkError } from '@/lib/api/client';
 import { getPublicEnv } from '@/lib/env';
 import { isSuperAdmin } from '@/lib/rbac';
@@ -27,11 +27,6 @@ import type {
 } from '@/types/admin';
 
 type WizardStep = 1 | 2 | 3 | 4;
-
-type CredentialBundle = {
-  title: string;
-  lines: string[];
-};
 
 type UserDraft = {
   name: string;
@@ -46,6 +41,7 @@ const EMPTY_ONBOARD_FORM: AdminOnboardClientInput = {
   primary_phone: '',
   owner_name: '',
   owner_email: '',
+  owner_password: '',
   address: '',
   website_url: '',
   facebook_url: '',
@@ -63,6 +59,7 @@ const EMPTY_NEW_USER = {
   name: '',
   email: '',
   role_code: 'CLIENT_STAFF',
+  password: '',
 };
 
 function formatDateTime(value: string | null | undefined) {
@@ -78,27 +75,11 @@ function formatDateTime(value: string | null | undefined) {
   return date.toLocaleString();
 }
 
-function buildInviteBundle(title: string, users: AdminUser[]) {
-  return {
-    title,
-    lines: users.flatMap((user) => {
-      if (!user.invitation_token) {
-        return [];
-      }
-      return [
-        `${user.name} (${user.user_code})`,
-        `Invite token: ${user.invitation_token}`,
-        `Expires: ${formatDateTime(user.invitation_expires_at)}`,
-      ];
-    }),
-  };
-}
-
 function adminErrorMessage(error: unknown, fallback: string) {
   const { apiBaseUrl } = getPublicEnv();
 
   if (error instanceof ApiError && error.status === 404) {
-    return `The connected API (${apiBaseUrl}) does not have the admin onboarding routes yet. If you are developing locally, restart the backend on the latest code or point the frontend to https://api.easy-ecom.online.`;
+    return `The connected API (${apiBaseUrl}) does not have the current admin routes yet. If you are developing locally, restart the backend on the latest code or point the frontend to https://api.easy-ecom.online.`;
   }
 
   if (error instanceof ApiNetworkError) {
@@ -121,6 +102,7 @@ export function AdminWorkspace() {
   const [clientDraft, setClientDraft] = useState<AdminClient | null>(null);
   const [clientUsers, setClientUsers] = useState<AdminUser[]>([]);
   const [userDrafts, setUserDrafts] = useState<Record<string, UserDraft>>({});
+  const [passwordDrafts, setPasswordDrafts] = useState<Record<string, string>>({});
   const [auditItems, setAuditItems] = useState<AdminAuditItem[]>([]);
   const [search, setSearch] = useState('');
   const [workspaceLoading, setWorkspaceLoading] = useState(true);
@@ -129,7 +111,6 @@ export function AdminWorkspace() {
   const [wizardStep, setWizardStep] = useState<WizardStep>(1);
   const [onboardForm, setOnboardForm] = useState<AdminOnboardClientInput>(EMPTY_ONBOARD_FORM);
   const [newUserForm, setNewUserForm] = useState(EMPTY_NEW_USER);
-  const [credentialBundle, setCredentialBundle] = useState<CredentialBundle | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   async function loadClientDirectory(currentSearch = search) {
@@ -166,6 +147,7 @@ export function AdminWorkspace() {
         ])
       )
     );
+    setPasswordDrafts(Object.fromEntries(users.items.map((item) => [item.user_id, ''])));
   }
 
   async function loadWorkspace() {
@@ -219,9 +201,21 @@ export function AdminWorkspace() {
           onboardForm.primary_phone.trim()
       );
     }
+
     if (step === 2) {
-      return Boolean(onboardForm.owner_name.trim() && onboardForm.owner_email.trim());
+      const ownerReady = Boolean(
+        onboardForm.owner_name.trim() && onboardForm.owner_email.trim() && onboardForm.owner_password.length >= 6
+      );
+      const additionalUsersReady = onboardForm.additional_users.every(
+        (entry) =>
+          entry.name.trim() &&
+          entry.email.trim() &&
+          entry.role_code.trim() &&
+          entry.password.length >= 6
+      );
+      return ownerReady && additionalUsersReady;
     }
+
     return true;
   }
 
@@ -238,7 +232,7 @@ export function AdminWorkspace() {
   async function handleOnboardSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (wizardStep < 4) {
-      setWizardStep((current) => (Math.min(4, current + 1) as WizardStep));
+      setWizardStep((current) => Math.min(4, current + 1) as WizardStep);
       return;
     }
 
@@ -246,7 +240,6 @@ export function AdminWorkspace() {
     setBusyLabel('Onboarding client');
     try {
       const response = await onboardAdminClient(onboardForm);
-      setCredentialBundle(buildInviteBundle(`Setup links for ${response.client.business_name}`, response.users));
       setSuccessMessage(`Client ${response.client.business_name} was onboarded successfully.`);
       setOnboardForm(EMPTY_ONBOARD_FORM);
       setWizardStep(1);
@@ -316,7 +309,7 @@ export function AdminWorkspace() {
           is_active: created.is_active,
         },
       }));
-      setCredentialBundle(buildInviteBundle(`Setup link for ${created.name}`, [created]));
+      setPasswordDrafts((drafts) => ({ ...drafts, [created.user_id]: '' }));
       setNewUserForm(EMPTY_NEW_USER);
       setSuccessMessage(`User ${created.name} was added under ${selectedClient.business_name}.`);
     } catch (error) {
@@ -353,40 +346,22 @@ export function AdminWorkspace() {
     }
   }
 
-  async function handleIssueInvite(userId: string) {
-    resetMessages();
-    setBusyLabel('Issuing invitation');
-    try {
-      const updated = await issueAdminInvitation(userId);
-      setClientUsers((items) => items.map((item) => (item.user_id === updated.user_id ? updated : item)));
-      setCredentialBundle(buildInviteBundle(`Setup link for ${updated.name}`, [updated]));
-      setSuccessMessage(`A fresh invitation was issued for ${updated.name}.`);
-    } catch (error) {
-      setWorkspaceError(adminErrorMessage(error, 'Unable to issue the invitation.'));
-    } finally {
-      setBusyLabel(null);
+  async function handleSetPassword(userId: string) {
+    const password = passwordDrafts[userId] ?? '';
+    if (password.length < 6) {
+      setWorkspaceError('Enter at least 6 characters before setting a password.');
+      return;
     }
-  }
 
-  async function handleIssueReset(userId: string) {
     resetMessages();
-    setBusyLabel('Issuing password reset');
+    setBusyLabel('Saving password');
     try {
-      const updated = await issueAdminPasswordReset(userId);
+      const updated = await setAdminUserPassword(userId, { password });
       setClientUsers((items) => items.map((item) => (item.user_id === updated.user_id ? updated : item)));
-      if (updated.password_reset_token) {
-        setCredentialBundle({
-          title: `Password reset for ${updated.name}`,
-          lines: [
-            `${updated.name} (${updated.user_code})`,
-            `Reset token: ${updated.password_reset_token}`,
-            `Expires: ${formatDateTime(updated.password_reset_expires_at)}`,
-          ],
-        });
-      }
-      setSuccessMessage(`A password reset link was issued for ${updated.name}.`);
+      setPasswordDrafts((drafts) => ({ ...drafts, [userId]: '' }));
+      setSuccessMessage(`Password was updated for ${updated.name}.`);
     } catch (error) {
-      setWorkspaceError(adminErrorMessage(error, 'Unable to issue the password reset.'));
+      setWorkspaceError(adminErrorMessage(error, 'Unable to set the password.'));
     } finally {
       setBusyLabel(null);
     }
@@ -420,7 +395,7 @@ export function AdminWorkspace() {
       <div className="admin-card">
         <p className="eyebrow">Access Restricted</p>
         <h3>Super admin access is required</h3>
-        <p className="admin-muted">This workspace is reserved for global onboarding, tenant administration, and password assistance.</p>
+        <p className="admin-muted">This workspace is reserved for global onboarding and tenant administration.</p>
       </div>
     );
   }
@@ -559,6 +534,14 @@ export function AdminWorkspace() {
                       onChange={(event) => setOnboardForm({ ...onboardForm, owner_email: event.target.value })}
                     />
                   </label>
+                  <label className="field-span-2">
+                    Owner password
+                    <input
+                      type="password"
+                      value={onboardForm.owner_password}
+                      onChange={(event) => setOnboardForm({ ...onboardForm, owner_password: event.target.value })}
+                    />
+                  </label>
                 </div>
 
                 <div className="admin-inline-head">
@@ -570,7 +553,7 @@ export function AdminWorkspace() {
                         ...onboardForm,
                         additional_users: [
                           ...onboardForm.additional_users,
-                          { name: '', email: '', role_code: 'CLIENT_STAFF' },
+                          { name: '', email: '', role_code: 'CLIENT_STAFF', password: '' },
                         ],
                       })
                     }
@@ -613,6 +596,16 @@ export function AdminWorkspace() {
                         <option value="FINANCE_STAFF">Finance Staff</option>
                         <option value="CLIENT_OWNER">Client Owner</option>
                       </select>
+                      <input
+                        type="password"
+                        placeholder="Password"
+                        value={entry.password}
+                        onChange={(event) => {
+                          const next = [...onboardForm.additional_users];
+                          next[index] = { ...entry, password: event.target.value };
+                          setOnboardForm({ ...onboardForm, additional_users: next });
+                        }}
+                      />
                       <button
                         type="button"
                         onClick={() =>
@@ -732,7 +725,7 @@ export function AdminWorkspace() {
 
             <div className="save-actions">
               {wizardStep > 1 ? (
-                <button type="button" onClick={() => setWizardStep((current) => (Math.max(1, current - 1) as WizardStep))}>
+                <button type="button" onClick={() => setWizardStep((current) => Math.max(1, current - 1) as WizardStep)}>
                   Back
                 </button>
               ) : null}
@@ -920,8 +913,8 @@ export function AdminWorkspace() {
                     <th>User Code</th>
                     <th>Role</th>
                     <th>Active</th>
-                    <th>Invite</th>
                     <th>Last Login</th>
+                    <th>New Password</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -986,16 +979,30 @@ export function AdminWorkspace() {
                             <span>{draft.is_active ? 'Active' : 'Inactive'}</span>
                           </label>
                         </td>
-                        <td>
-                          <strong>{item.invitation_status}</strong>
-                          <p className="admin-muted">{formatDateTime(item.invitation_expires_at)}</p>
-                        </td>
                         <td>{formatDateTime(item.last_login_at)}</td>
+                        <td>
+                          <input
+                            type="password"
+                            placeholder="Minimum 6 chars"
+                            value={passwordDrafts[item.user_id] ?? ''}
+                            onChange={(event) =>
+                              setPasswordDrafts({
+                                ...passwordDrafts,
+                                [item.user_id]: event.target.value,
+                              })
+                            }
+                          />
+                        </td>
                         <td>
                           <div className="admin-action-row">
                             <button type="button" onClick={() => void handleSaveUser(item.user_id)}>Save</button>
-                            <button type="button" onClick={() => void handleIssueInvite(item.user_id)}>Invite</button>
-                            <button type="button" onClick={() => void handleIssueReset(item.user_id)}>Reset</button>
+                            <button
+                              type="button"
+                              disabled={(passwordDrafts[item.user_id] ?? '').length < 6}
+                              onClick={() => void handleSetPassword(item.user_id)}
+                            >
+                              Set password
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -1029,20 +1036,20 @@ export function AdminWorkspace() {
                   <option value="FINANCE_STAFF">Finance Staff</option>
                   <option value="CLIENT_OWNER">Client Owner</option>
                 </select>
-                <button type="submit">Add user</button>
+                <input
+                  type="password"
+                  placeholder="Password"
+                  value={newUserForm.password}
+                  onChange={(event) => setNewUserForm({ ...newUserForm, password: event.target.value })}
+                />
+                <button type="submit" disabled={newUserForm.password.length < 6}>
+                  Add user
+                </button>
               </div>
             </form>
           </section>
 
           <aside className="admin-stack">
-            {credentialBundle ? (
-              <section className="admin-card">
-                <p className="eyebrow">Credential Hand-off</p>
-                <h3>{credentialBundle.title}</h3>
-                <pre className="admin-token-block">{credentialBundle.lines.join('\n')}</pre>
-              </section>
-            ) : null}
-
             <section className="admin-card">
               <p className="eyebrow">Recent Audit</p>
               <h3>Change history</h3>

@@ -116,35 +116,6 @@ class UserRoleModel(Base):
     )
 
 
-class UserInvitationModel(TenantMixin, TimestampMixin, Base):
-    __tablename__ = "user_invitations"
-    __table_args__ = (
-        UniqueConstraint("token_hash", name="uq_user_invitations_token_hash"),
-    )
-
-    invitation_id: Mapped[str] = mapped_column(GUID(), primary_key=True)
-    email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
-    role_code: Mapped[str] = mapped_column(String(64), ForeignKey("roles.role_code"), nullable=False)
-    invited_by_user_id: Mapped[str] = mapped_column(GUID(), ForeignKey("users.user_id"), nullable=False)
-    token_hash: Mapped[str] = mapped_column(String(128), nullable=False)
-    expires_at: Mapped[datetime] = mapped_column(Timestamp, nullable=False)
-    accepted_at: Mapped[datetime | None] = mapped_column(Timestamp)
-    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending", index=True)
-
-
-class PasswordResetTokenModel(TimestampMixin, Base):
-    __tablename__ = "password_reset_tokens"
-    __table_args__ = (
-        UniqueConstraint("token_hash", name="uq_password_reset_tokens_token_hash"),
-    )
-
-    reset_token_id: Mapped[str] = mapped_column(GUID(), primary_key=True)
-    user_id: Mapped[str] = mapped_column(GUID(), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
-    token_hash: Mapped[str] = mapped_column(String(128), nullable=False)
-    expires_at: Mapped[datetime] = mapped_column(Timestamp, nullable=False)
-    consumed_at: Mapped[datetime | None] = mapped_column(Timestamp)
-
-
 class AuditLogModel(Base):
     __tablename__ = "audit_log"
     __table_args__ = (

@@ -154,61 +154,6 @@ def test_logout_then_me_is_unauthorized(monkeypatch, tmp_path: Path):
     assert me_response.status_code == 401
 
 
-def test_request_password_reset_and_confirm(monkeypatch, tmp_path: Path):
-    runtime = _setup_runtime(tmp_path)
-    monkeypatch.setattr(deps, "settings", runtime.settings)
-    _append_user(runtime, password_hash=hash_password("secret"))
-
-    client = TestClient(create_app())
-    request_response = client.post("/auth/request-password-reset", json={"email": "u1@example.com"})
-    assert request_response.status_code == 202
-    reset_token = request_response.json()["reset_token"]
-    assert reset_token
-
-    confirm_response = client.post(
-        "/auth/reset-password",
-        json={"token": reset_token, "new_password": "new-secret"},
-    )
-    assert confirm_response.status_code == 200
-
-    login_response = client.post("/auth/login", json={"email": "u1@example.com", "password": "new-secret"})
-    assert login_response.status_code == 200
-
-
-def test_issue_invitation_and_accept(monkeypatch, tmp_path: Path):
-    runtime = _setup_runtime(tmp_path)
-    monkeypatch.setattr(deps, "settings", runtime.settings)
-    _append_user(runtime, password_hash=hash_password("secret"))
-
-    client = TestClient(create_app())
-    login_response = client.post("/auth/login", json={"email": "u1@example.com", "password": "secret"})
-    assert login_response.status_code == 200
-
-    invite_response = client.post(
-        "/auth/issue-invitation",
-        json={
-            "client_id": CLIENT_ID,
-            "email": "teammate@example.com",
-            "role_code": "CLIENT_STAFF",
-        },
-    )
-    assert invite_response.status_code == 200
-    invitation_token = invite_response.json()["invitation_token"]
-    assert invitation_token
-
-    second_client = TestClient(create_app())
-    accept_response = second_client.post(
-        "/auth/accept-invitation",
-        json={
-            "token": invitation_token,
-            "name": "Teammate",
-            "password": "teammate-secret",
-        },
-    )
-    assert accept_response.status_code == 200
-    assert accept_response.json()["email"] == "teammate@example.com"
-
-
 def test_roles_round_trip_and_id_normalization(monkeypatch, tmp_path: Path):
     from easy_ecom.api.dependencies import get_authenticated_user
 

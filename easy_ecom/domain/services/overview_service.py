@@ -22,7 +22,6 @@ from easy_ecom.data.store.postgres_models import (
     SalesReturnModel,
     SupplierModel,
     ShipmentModel,
-    UserInvitationModel,
     UserModel,
 )
 from easy_ecom.domain.models.auth import AuthenticatedUser
@@ -182,11 +181,11 @@ class OverviewService:
         with self._session_factory() as session:
             return self._overview(
                 "admin",
-                "Admin foundations now include users, client settings, and invitation tracking.",
+                "Admin foundations now include tenant onboarding, users, and client settings.",
                 [
                     OverviewMetric(label="Clients", value=str(self._count(session, ClientModel, context))),
                     OverviewMetric(label="Users", value=str(self._count(session, UserModel, context))),
-                    OverviewMetric(label="Invitations", value=str(self._count(session, UserInvitationModel, context))),
+                    OverviewMetric(label="Locations", value=str(self._count(session, LocationModel, context))),
                 ],
             )
 
