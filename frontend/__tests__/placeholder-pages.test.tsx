@@ -1,5 +1,5 @@
 import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import AdminPage from '@/app/(app)/admin/page';
 import AiReviewPage from '@/app/(app)/ai-review/page';
 import AutomationPage from '@/app/(app)/automation/page';
@@ -10,7 +10,6 @@ import FinancePage from '@/app/(app)/finance/page';
 import IntegrationsPage from '@/app/(app)/integrations/page';
 import InventoryPage from '@/app/(app)/inventory/page';
 import HomePage from '@/app/(app)/page';
-import ProductsStockPage from '@/app/(app)/products-stock/page';
 import PurchasesPage from '@/app/(app)/purchases/page';
 import ReportsPage from '@/app/(app)/reports/page';
 import ReturnsPage from '@/app/(app)/returns/page';
@@ -24,7 +23,6 @@ const cases = [
   ['Catalog', CatalogPage],
   ['Customers', CustomersPage],
   ['Inventory', InventoryPage],
-  ['Products & Stock', ProductsStockPage],
   ['Sales', SalesPage],
   ['Finance', FinancePage],
   ['Returns', ReturnsPage],
@@ -44,7 +42,23 @@ describe('Placeholder business pages', () => {
   test.each(cases)('%s renders the reset placeholder', (_title, PageComponent) => {
     render(<PageComponent />);
 
-    expect(screen.getAllByText('Reset In Progress').length).toBeGreaterThan(0);
-    expect(screen.getByText(/intentionally blank right now/i)).toBeTruthy();
+    expect(
+      screen.queryByText('Reset In Progress') ?? screen.queryByText(/rebuild foundation/i)
+    ).toBeTruthy();
+  });
+
+  test('legacy products-stock route redirects to catalog', async () => {
+    vi.resetModules();
+    const redirectMock = vi.fn();
+    vi.doMock('next/navigation', () => ({
+      redirect: redirectMock,
+    }));
+
+    const module = await import('@/app/(app)/products-stock/page');
+    module.default();
+
+    expect(redirectMock).toHaveBeenCalledWith('/catalog');
+    vi.doUnmock('next/navigation');
+    vi.resetModules();
   });
 });

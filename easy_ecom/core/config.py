@@ -32,14 +32,36 @@ def _to_csv(value: str | None, default: tuple[str, ...]) -> tuple[str, ...]:
 
 @dataclass(frozen=True)
 class Settings:
+    app_env: str = field(default_factory=lambda: os.getenv("APP_ENV", "development").strip().lower())
     app_title: str = field(default_factory=lambda: os.getenv("APP_TITLE", "Easy_Ecom"))
     allow_backorder: bool = field(
         default_factory=lambda: _to_bool(os.getenv("ALLOW_BACKORDER"), False)
+    )
+    auto_create_schema: bool = field(
+        default_factory=lambda: _to_bool(os.getenv("AUTO_CREATE_SCHEMA"), False)
     )
     super_admin_email: str = field(default_factory=lambda: os.getenv("SUPER_ADMIN_EMAIL", ""))
     super_admin_password: str = field(default_factory=lambda: os.getenv("SUPER_ADMIN_PASSWORD", ""))
     create_default_client: bool = field(
         default_factory=lambda: _to_bool(os.getenv("CREATE_DEFAULT_CLIENT"), False)
+    )
+    global_client_id: str = field(
+        default_factory=lambda: os.getenv(
+            "GLOBAL_CLIENT_ID",
+            "00000000-0000-0000-0000-000000000000",
+        ).strip()
+    )
+    global_client_slug: str = field(
+        default_factory=lambda: os.getenv("GLOBAL_CLIENT_SLUG", "global").strip().lower()
+    )
+    request_id_header: str = field(
+        default_factory=lambda: os.getenv("REQUEST_ID_HEADER", "X-Request-Id").strip()
+    )
+    password_reset_ttl_minutes: int = field(
+        default_factory=lambda: _to_int(os.getenv("PASSWORD_RESET_TTL_MINUTES"), 60)
+    )
+    invitation_ttl_hours: int = field(
+        default_factory=lambda: _to_int(os.getenv("INVITATION_TTL_HOURS"), 72)
     )
     database_url: str | None = field(
         default_factory=lambda: (os.getenv("DATABASE_URL", "").strip() or None)
@@ -90,6 +112,14 @@ class Settings:
             f"postgresql+psycopg://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
         )
+
+    @property
+    def is_sqlite(self) -> bool:
+        return self.postgres_dsn.startswith("sqlite")
+
+    @property
+    def should_auto_create_schema(self) -> bool:
+        return self.auto_create_schema or self.is_sqlite
 
 
 settings = Settings()

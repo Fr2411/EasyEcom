@@ -14,7 +14,7 @@ export function PageShell({
           <h2>{title}</h2>
           <p>{description}</p>
         </div>
-        <span className="page-shell-chip">Business View</span>
+        <span className="page-shell-chip">Pilot Workspace</span>
       </header>
       <div className="page-shell-body">{children}</div>
     </section>

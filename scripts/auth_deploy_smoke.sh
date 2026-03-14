@@ -5,7 +5,7 @@ API_BASE_URL="${API_BASE_URL:-${1:-}}"
 SESSION_COOKIE="${SESSION_COOKIE:-}"
 
 if [[ -z "${API_BASE_URL}" ]]; then
-  echo "Usage: API_BASE_URL=https://api.example.com scripts/catalog_deploy_smoke.sh"
+  echo "Usage: API_BASE_URL=https://api.example.com scripts/auth_deploy_smoke.sh"
   echo "Optional: SESSION_COOKIE='session=...'"
   exit 1
 fi
@@ -48,9 +48,9 @@ run_check() {
   fi
 }
 
-echo "[catalog-smoke] API base: ${api_url}"
+echo "[auth-smoke] API base: ${api_url}"
 run_check "health" "/health" "false"
 run_check "auth-me" "/auth/me" "true"
-run_check "catalog-products" "/catalog/products" "true"
+run_check "session-me" "/session/me" "true"
 
-echo "[catalog-smoke] completed"
+echo "[auth-smoke] completed"

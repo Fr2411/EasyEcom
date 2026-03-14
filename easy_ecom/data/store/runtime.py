@@ -9,7 +9,8 @@ from easy_ecom.data.store.tabular_store import TabularStore
 
 def build_runtime_engine(settings: Settings) -> Engine:
     engine = build_postgres_engine(settings)
-    init_postgres_schema(engine)
+    if settings.should_auto_create_schema:
+        init_postgres_schema(engine)
     return engine
 
 

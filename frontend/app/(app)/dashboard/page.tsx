@@ -1,13 +1,16 @@
+import { FoundationLaunchpad } from '@/components/dashboard/foundation-launchpad';
 import { PageShell } from '@/components/ui/page-shell';
-import { ResetPlaceholder } from '@/components/ui/reset-placeholder';
 
 export default function DashboardPage() {
   return (
     <PageShell
       title="Dashboard"
-      description="You are signed in to a clean foundation workspace while the new application logic is rebuilt."
+      description="You are signed in to the pilot-ready operations foundation while the detailed workflows are rebuilt module by module."
     >
-      <ResetPlaceholder moduleName="Dashboard" />
+      <FoundationLaunchpad
+        title="Pilot rebuild command center"
+        subtitle="The dashboard is now focused on the modules that belong in the first product-ready release: catalog, inventory, purchases, sales, customers, finance, returns, reports, admin, and settings."
+      />
     </PageShell>
   );
 }
