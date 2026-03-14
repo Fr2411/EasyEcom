@@ -1,15 +1,24 @@
-export function numberFromString(value: string) {
+export function numberFromString(value: string | null | undefined) {
+  if (value === null || value === undefined || value === '') return 0;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
 
-export function formatMoney(value: string | number) {
+export function formatMoney(value: string | number | null | undefined) {
+  if (value === null || value === undefined || value === '') return 'Not set';
   return numberFromString(String(value)).toFixed(2);
 }
 
 
-export function formatQuantity(value: string | number) {
+export function formatPercent(value: string | number | null | undefined) {
+  if (value === null || value === undefined || value === '') return 'Not set';
+  return `${numberFromString(String(value)).toFixed(2)}%`;
+}
+
+
+export function formatQuantity(value: string | number | null | undefined) {
+  if (value === null || value === undefined || value === '') return '0.000';
   return numberFromString(String(value)).toFixed(3);
 }
 

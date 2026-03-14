@@ -33,6 +33,7 @@ from easy_ecom.domain.models.auth import AuthenticatedUser
 
 
 ZERO = Decimal("0")
+MONEY_QUANTUM = Decimal("0.01")
 
 
 def normalize_email(value: str) -> str:
@@ -48,6 +49,14 @@ def as_decimal(value: Any) -> Decimal:
         return value
     if value is None:
         return ZERO
+    return Decimal(str(value))
+
+
+def as_optional_decimal(value: Any) -> Decimal | None:
+    if value is None:
+        return None
+    if isinstance(value, str) and not value.strip():
+        return None
     return Decimal(str(value))
 
 
@@ -70,6 +79,36 @@ def build_variant_label(product_name: str, title: str) -> str:
 
 def build_product_slug(name: str) -> str:
     return slugify_identifier(name, max_length=128, default="product")
+
+
+def build_sku_base(value: str) -> str:
+    token = slugify_identifier(value.strip(), max_length=64, default="")
+    return token.upper()
+
+
+def build_sku_token(value: str) -> str:
+    token = slugify_identifier(value.strip(), max_length=24, default="")
+    return token.upper()
+
+
+def build_sku_candidate(product_name: str, sku_root: str, size: str, color: str, other: str) -> str:
+    base = build_sku_base(sku_root or product_name)
+    parts = [base]
+    for part in (size, color, other):
+        token = build_sku_token(part)
+        if token:
+            parts.append(token)
+    normalized = [part for part in parts if part]
+    return "-".join(normalized) if normalized else new_uuid()[:8].upper()
+
+
+def derive_discount_percent(default_price: Decimal | None, min_price: Decimal | None) -> Decimal | None:
+    if default_price is None or min_price is None or default_price <= ZERO:
+        return None
+    discount = ((default_price - min_price) / default_price) * Decimal("100")
+    if discount < ZERO:
+        return ZERO
+    return discount.quantize(MONEY_QUANTUM)
 
 
 def _new_number(prefix: str) -> str:
@@ -223,6 +262,112 @@ class CommerceBaseService:
         active = next(item for item in locations if item["location_id"] == context.active_location_id)
         return locations, active
 
+    def _effective_variant_price(self, product: ProductModel, variant: ProductVariantModel) -> Decimal | None:
+        return as_optional_decimal(variant.price_amount) if variant.price_amount is not None else as_optional_decimal(product.default_price_amount)
+
+    def _effective_variant_min_price(self, product: ProductModel, variant: ProductVariantModel) -> Decimal | None:
+        return as_optional_decimal(variant.min_price_amount) if variant.min_price_amount is not None else as_optional_decimal(product.min_price_amount)
+
+    def _normalize_product_pricing(self, identity: dict[str, Any]) -> tuple[Decimal | None, Decimal | None, Decimal | None]:
+        default_price = as_optional_decimal(identity.get("default_selling_price"))
+        min_price = as_optional_decimal(identity.get("min_selling_price"))
+        legacy_discount = as_optional_decimal(identity.get("max_discount_percent"))
+
+        if default_price is not None:
+            _require(default_price >= ZERO, message="Default selling price cannot be negative")
+        if min_price is not None:
+            _require(min_price >= ZERO, message="Minimum selling price cannot be negative")
+        if legacy_discount is not None:
+            _require(legacy_discount >= ZERO, message="Max discount percent cannot be negative")
+
+        if legacy_discount is not None and default_price is None:
+            raise ApiException(
+                status_code=400,
+                code="INVALID_PRICING",
+                message="Max discount percent requires a default selling price",
+            )
+        if legacy_discount is not None and min_price is None and default_price is not None:
+            min_price = (default_price * (Decimal("100") - legacy_discount) / Decimal("100")).quantize(MONEY_QUANTUM)
+        if default_price is not None and min_price is not None:
+            _require(min_price <= default_price, message="Minimum selling price cannot exceed default selling price")
+        derived_discount = derive_discount_percent(default_price, min_price)
+        if legacy_discount is not None and derived_discount is not None:
+            delta = abs(legacy_discount - derived_discount)
+            _require(delta <= MONEY_QUANTUM, message="Minimum price conflicts with max discount percent")
+        return default_price, min_price, derived_discount
+
+    def _normalize_variant_pricing(
+        self,
+        variant_payload: dict[str, Any],
+    ) -> tuple[Decimal | None, Decimal | None, Decimal | None]:
+        cost = as_optional_decimal(variant_payload.get("default_purchase_price"))
+        price = as_optional_decimal(variant_payload.get("default_selling_price"))
+        min_price = as_optional_decimal(variant_payload.get("min_selling_price"))
+        if cost is not None:
+            _require(cost >= ZERO, message="Default purchase cost cannot be negative")
+        if price is not None:
+            _require(price >= ZERO, message="Default selling price cannot be negative")
+        if min_price is not None:
+            _require(min_price >= ZERO, message="Minimum selling price cannot be negative")
+        if price is not None and min_price is not None:
+            _require(min_price <= price, message="Variant minimum selling price cannot exceed variant price")
+        return cost, price, min_price
+
+    def _generate_unique_sku(
+        self,
+        session: Session,
+        client_id: str,
+        *,
+        product_name: str,
+        sku_root: str,
+        size: str,
+        color: str,
+        other: str,
+        exclude_variant_id: str | None = None,
+    ) -> str:
+        base_sku = build_sku_candidate(product_name, sku_root, size, color, other)
+        candidate = base_sku
+        suffix = 2
+        while True:
+            existing = session.execute(
+                select(ProductVariantModel).where(
+                    ProductVariantModel.client_id == client_id,
+                    ProductVariantModel.sku == candidate,
+                )
+            ).scalar_one_or_none()
+            if existing is None or str(existing.variant_id) == exclude_variant_id:
+                return candidate
+            candidate = f"{base_sku}-{suffix}"
+            suffix += 1
+
+    def _variant_has_stock(self, session: Session, client_id: str, variant_id: str) -> bool:
+        stock = session.execute(
+            select(func.coalesce(func.sum(InventoryLedgerModel.quantity_delta), ZERO)).where(
+                InventoryLedgerModel.client_id == client_id,
+                InventoryLedgerModel.variant_id == variant_id,
+            )
+        ).scalar_one()
+        reserved = session.execute(
+            select(
+                func.coalesce(
+                    func.sum(
+                        SalesOrderItemModel.quantity
+                        - SalesOrderItemModel.quantity_fulfilled
+                        - SalesOrderItemModel.quantity_cancelled
+                    ),
+                    ZERO,
+                )
+            )
+            .join(SalesOrderModel, SalesOrderModel.sales_order_id == SalesOrderItemModel.sales_order_id)
+            .where(
+                SalesOrderItemModel.client_id == client_id,
+                SalesOrderItemModel.variant_id == variant_id,
+                SalesOrderModel.client_id == client_id,
+                SalesOrderModel.status == "confirmed",
+            )
+        ).scalar_one()
+        return as_decimal(stock) > ZERO or as_decimal(reserved) > ZERO
+
     def _ensure_category(self, session: Session, client_id: str, name: str) -> str | None:
         trimmed = name.strip()
         if not trimmed:
@@ -273,6 +418,10 @@ class CommerceBaseService:
         size = option_value(variant.option_values_json, "size")
         color = option_value(variant.option_values_json, "color")
         other = option_value(variant.option_values_json, "other")
+        explicit_price = as_optional_decimal(variant.price_amount)
+        explicit_min_price = as_optional_decimal(variant.min_price_amount)
+        effective_price = self._effective_variant_price(product, variant)
+        effective_min_price = self._effective_variant_min_price(product, variant)
         return {
             "variant_id": str(variant.variant_id),
             "product_id": str(product.product_id),
@@ -287,9 +436,13 @@ class CommerceBaseService:
                 "color": color,
                 "other": other,
             },
-            "unit_cost": as_decimal(variant.cost_amount),
-            "unit_price": as_decimal(variant.price_amount),
-            "min_price": as_decimal(variant.min_price_amount),
+            "unit_cost": as_optional_decimal(variant.cost_amount),
+            "unit_price": explicit_price,
+            "min_price": explicit_min_price,
+            "effective_unit_price": effective_price,
+            "effective_min_price": effective_min_price,
+            "is_price_inherited": explicit_price is None and effective_price is not None,
+            "is_min_price_inherited": explicit_min_price is None and effective_min_price is not None,
             "reorder_level": as_decimal(variant.reorder_level),
             "on_hand": on_hand,
             "reserved": reserved,
@@ -449,9 +602,12 @@ class CatalogService(CommerceBaseService):
             "category": category.name if category else "",
             "description": product.description,
             "sku_root": product.sku_root,
-            "default_price": as_decimal(product.default_price_amount),
-            "min_price": as_decimal(product.min_price_amount),
-            "max_discount_percent": as_decimal(product.max_discount_percent),
+            "default_price": as_optional_decimal(product.default_price_amount),
+            "min_price": as_optional_decimal(product.min_price_amount),
+            "max_discount_percent": derive_discount_percent(
+                as_optional_decimal(product.default_price_amount),
+                as_optional_decimal(product.min_price_amount),
+            ),
             "variants": [],
         }
         for _product, variant, _supplier, _category in rows:
@@ -500,9 +656,12 @@ class CatalogService(CommerceBaseService):
                         "category": category.name if category else "",
                         "description": product.description,
                         "sku_root": product.sku_root,
-                        "default_price": as_decimal(product.default_price_amount),
-                        "min_price": as_decimal(product.min_price_amount),
-                        "max_discount_percent": as_decimal(product.max_discount_percent),
+                        "default_price": as_optional_decimal(product.default_price_amount),
+                        "min_price": as_optional_decimal(product.min_price_amount),
+                        "max_discount_percent": derive_discount_percent(
+                            as_optional_decimal(product.default_price_amount),
+                            as_optional_decimal(product.min_price_amount),
+                        ),
                         "variants": [],
                     }
                 products[product_key]["variants"].append(
@@ -547,6 +706,7 @@ class CatalogService(CommerceBaseService):
         _require_page(user, "Catalog")
         _require(bool(variants), message="At least one variant is required")
         with self._session_factory() as session:
+            default_price, min_price, derived_discount = self._normalize_product_pricing(identity)
             supplier_id = self._ensure_supplier(session, user.client_id, str(identity.get("supplier", "")))
             category_id = self._ensure_category(session, user.client_id, str(identity.get("category", "")))
 
@@ -576,21 +736,27 @@ class CatalogService(CommerceBaseService):
             product.description = str(identity.get("description", "")).strip()
             product.image_url = str(identity.get("image_url", "")).strip()
             product.status = str(identity.get("status", "active")).strip() or "active"
-            product.default_price_amount = as_decimal(identity.get("default_selling_price"))
-            product.min_price_amount = as_decimal(identity.get("min_selling_price"))
-            product.max_discount_percent = as_decimal(identity.get("max_discount_percent"))
+            product.default_price_amount = default_price
+            product.min_price_amount = min_price
+            product.max_discount_percent = derived_discount
             session.flush()
 
+            option_signatures: set[tuple[str, str, str]] = set()
             for variant_payload in variants:
-                sku = str(variant_payload["sku"]).strip()
-                _require(bool(sku), message="Variant SKU is required")
-                existing = session.execute(
-                    select(ProductVariantModel).where(
-                        ProductVariantModel.client_id == user.client_id,
-                        ProductVariantModel.sku == sku,
-                    )
-                ).scalar_one_or_none()
+                size = str(variant_payload.get("size", "")).strip()
+                color = str(variant_payload.get("color", "")).strip()
+                other = str(variant_payload.get("other", "")).strip()
+                signature = (size.lower(), color.lower(), other.lower())
+                _require(signature not in option_signatures, message="Duplicate variant option combination")
+                option_signatures.add(signature)
+
                 requested_variant_id = variant_payload.get("variant_id")
+                requested_sku = str(variant_payload.get("sku", "") or "").strip()
+                current_status = str(variant_payload.get("status", "active")).strip() or "active"
+                cost_amount, price_amount, variant_min_price = self._normalize_variant_pricing(variant_payload)
+
+                variant = None
+                existing = None
                 if requested_variant_id:
                     variant = session.execute(
                         select(ProductVariantModel).where(
@@ -599,29 +765,65 @@ class CatalogService(CommerceBaseService):
                         )
                     ).scalar_one_or_none()
                     _require(variant is not None, message="Variant not found", code="VARIANT_NOT_FOUND", status_code=404)
-                else:
-                    variant = existing if existing and str(existing.product_id) == str(product.product_id) else None
-                    if variant is None:
-                        variant = ProductVariantModel(
-                            variant_id=new_uuid(),
-                            client_id=user.client_id,
-                            product_id=product.product_id,
+                elif requested_sku:
+                    existing = session.execute(
+                        select(ProductVariantModel).where(
+                            ProductVariantModel.client_id == user.client_id,
+                            ProductVariantModel.sku == requested_sku,
                         )
-                        session.add(variant)
-                if existing is not None and str(existing.variant_id) != str(variant.variant_id):
-                    raise ApiException(status_code=400, code="DUPLICATE_SKU", message="Variant SKU already exists")
-                size = str(variant_payload.get("size", "")).strip()
-                color = str(variant_payload.get("color", "")).strip()
-                other = str(variant_payload.get("other", "")).strip()
+                    ).scalar_one_or_none()
+                    if existing is not None and str(existing.product_id) == str(product.product_id):
+                        variant = existing
+
+                if variant is None:
+                    variant = ProductVariantModel(
+                        variant_id=new_uuid(),
+                        client_id=user.client_id,
+                        product_id=product.product_id,
+                    )
+                    session.add(variant)
+
+                if requested_sku and (not requested_variant_id or requested_sku != str(variant.sku)):
+                    duplicate = session.execute(
+                        select(ProductVariantModel).where(
+                            ProductVariantModel.client_id == user.client_id,
+                            ProductVariantModel.sku == requested_sku,
+                        )
+                    ).scalar_one_or_none()
+                    if duplicate is not None and str(duplicate.variant_id) != str(variant.variant_id):
+                        raise ApiException(status_code=400, code="DUPLICATE_SKU", message="Variant SKU already exists")
+
+                if current_status == "archived" and variant.variant_id and self._variant_has_stock(session, user.client_id, str(variant.variant_id)):
+                    raise ApiException(
+                        status_code=400,
+                        code="VARIANT_STOCK_EXISTS",
+                        message="Variants with stock or reservations cannot be archived",
+                    )
+
                 variant.product_id = product.product_id
                 variant.title = build_variant_title(size, color, other)
-                variant.sku = sku
+                if requested_variant_id and variant.sku:
+                    final_sku = str(variant.sku)
+                elif requested_sku:
+                    final_sku = requested_sku
+                else:
+                    final_sku = self._generate_unique_sku(
+                        session,
+                        user.client_id,
+                        product_name=product.name,
+                        sku_root=product.sku_root,
+                        size=size,
+                        color=color,
+                        other=other,
+                        exclude_variant_id=str(variant.variant_id),
+                    )
+                variant.sku = final_sku
                 variant.barcode = str(variant_payload.get("barcode", "")).strip()
                 variant.option_values_json = {"size": size, "color": color, "other": other}
-                variant.status = str(variant_payload.get("status", "active")).strip() or "active"
-                variant.cost_amount = as_decimal(variant_payload.get("default_purchase_price"))
-                variant.price_amount = as_decimal(variant_payload.get("default_selling_price"))
-                variant.min_price_amount = as_decimal(variant_payload.get("min_selling_price"))
+                variant.status = current_status
+                variant.cost_amount = cost_amount
+                variant.price_amount = price_amount
+                variant.min_price_amount = variant_min_price
                 variant.reorder_level = as_decimal(variant_payload.get("reorder_level"))
 
             session.commit()
@@ -654,6 +856,7 @@ class InventoryService(CommerceBaseService):
                 if available <= ZERO:
                     continue
                 threshold = as_decimal(variant.reorder_level) if as_decimal(variant.reorder_level) > ZERO else default_threshold
+                effective_price = self._effective_variant_price(product, variant)
                 row = {
                     "variant_id": str(variant.variant_id),
                     "product_id": str(product.product_id),
@@ -665,8 +868,8 @@ class InventoryService(CommerceBaseService):
                     "category": category.name if category else "",
                     "location_id": location_context.active_location_id,
                     "location_name": location_context.active_location_name,
-                    "unit_cost": as_decimal(variant.cost_amount),
-                    "unit_price": as_decimal(variant.price_amount),
+                    "unit_cost": as_optional_decimal(variant.cost_amount),
+                    "unit_price": effective_price,
                     "reorder_level": as_decimal(variant.reorder_level),
                     "on_hand": on_hand,
                     "reserved": reserved,
@@ -698,6 +901,7 @@ class InventoryService(CommerceBaseService):
     ) -> dict[str, Any]:
         _require_page(user, "Inventory")
         with self._session_factory() as session:
+            default_price, min_price, derived_discount = self._normalize_product_pricing(identity)
             location_context = self._location_context(session, user.client_id, location_id)
             supplier_id = self._ensure_supplier(session, user.client_id, str(identity.get("supplier", "")))
             category_id = self._ensure_category(session, user.client_id, str(identity.get("category", "")))
@@ -755,12 +959,13 @@ class InventoryService(CommerceBaseService):
             product.description = str(identity.get("description", "")).strip()
             product.image_url = str(identity.get("image_url", "")).strip()
             product.status = "active"
-            product.default_price_amount = as_decimal(identity.get("default_selling_price"))
-            product.min_price_amount = as_decimal(identity.get("min_selling_price"))
-            product.max_discount_percent = as_decimal(identity.get("max_discount_percent"))
+            product.default_price_amount = default_price
+            product.min_price_amount = min_price
+            product.max_discount_percent = derived_discount
             session.flush()
 
             variant = None
+            requested_sku = str(variant_payload.get("sku", "") or "").strip()
             if requested_variant_id:
                 variant = session.execute(
                     select(ProductVariantModel).where(
@@ -770,13 +975,13 @@ class InventoryService(CommerceBaseService):
                 ).scalar_one_or_none()
                 _require(variant is not None, message="Variant not found", code="VARIANT_NOT_FOUND", status_code=404)
             else:
-                sku = str(variant_payload["sku"]).strip()
-                variant = session.execute(
-                    select(ProductVariantModel).where(
-                        ProductVariantModel.client_id == user.client_id,
-                        ProductVariantModel.sku == sku,
-                    )
-                ).scalar_one_or_none()
+                if requested_sku:
+                    variant = session.execute(
+                        select(ProductVariantModel).where(
+                            ProductVariantModel.client_id == user.client_id,
+                            ProductVariantModel.sku == requested_sku,
+                        )
+                    ).scalar_one_or_none()
                 if variant is None:
                     variant = ProductVariantModel(
                         variant_id=new_uuid(),
@@ -794,17 +999,36 @@ class InventoryService(CommerceBaseService):
             size = str(variant_payload.get("size", "")).strip()
             color = str(variant_payload.get("color", "")).strip()
             other = str(variant_payload.get("other", "")).strip()
+            cost_amount, price_amount, variant_min_price = self._normalize_variant_pricing(variant_payload)
+            receipt_cost = cost_amount if cost_amount is not None else as_optional_decimal(variant.cost_amount)
+            _require(receipt_cost is not None, message="Purchase cost is required to receive stock")
             variant.product_id = product.product_id
             variant.title = build_variant_title(size, color, other)
-            variant.sku = str(variant_payload["sku"]).strip()
+            if requested_variant_id and variant.sku:
+                final_sku = str(variant.sku)
+            elif requested_sku:
+                final_sku = requested_sku
+            else:
+                final_sku = self._generate_unique_sku(
+                    session,
+                    user.client_id,
+                    product_name=product.name,
+                    sku_root=product.sku_root,
+                    size=size,
+                    color=color,
+                    other=other,
+                    exclude_variant_id=str(variant.variant_id),
+                )
+            variant.sku = final_sku
             variant.barcode = str(variant_payload.get("barcode", "")).strip()
             variant.option_values_json = {"size": size, "color": color, "other": other}
             variant.status = "active"
-            variant.cost_amount = as_decimal(variant_payload.get("default_purchase_price"))
-            variant.price_amount = as_decimal(variant_payload.get("default_selling_price"))
-            variant.min_price_amount = as_decimal(variant_payload.get("min_selling_price"))
+            variant.cost_amount = receipt_cost
+            variant.price_amount = price_amount
+            variant.min_price_amount = variant_min_price
             variant.reorder_level = as_decimal(variant_payload.get("reorder_level"))
             session.flush()
+            effective_price = self._effective_variant_price(product, variant)
 
             settings = self._client_settings(session, user.client_id)
             prefix = settings.purchase_prefix if settings else "PO"
@@ -819,8 +1043,8 @@ class InventoryService(CommerceBaseService):
                 received_at=now_utc(),
                 notes=notes.strip(),
                 created_by_user_id=user.user_id,
-                subtotal_amount=quantity * as_decimal(variant.cost_amount),
-                total_amount=quantity * as_decimal(variant.cost_amount),
+                subtotal_amount=quantity * receipt_cost,
+                total_amount=quantity * receipt_cost,
             )
             session.add(purchase)
             session.flush()
@@ -832,8 +1056,8 @@ class InventoryService(CommerceBaseService):
                 variant_id=variant.variant_id,
                 quantity=quantity,
                 received_quantity=quantity,
-                unit_cost_amount=as_decimal(variant.cost_amount),
-                line_total_amount=quantity * as_decimal(variant.cost_amount),
+                unit_cost_amount=receipt_cost,
+                line_total_amount=quantity * receipt_cost,
                 notes=notes.strip(),
             )
             session.add(purchase_item)
@@ -848,8 +1072,8 @@ class InventoryService(CommerceBaseService):
                     reference_id=str(purchase.purchase_id),
                     reference_line_id=str(purchase_item.purchase_item_id),
                     quantity_delta=quantity,
-                    unit_cost_amount=as_decimal(variant.cost_amount),
-                    unit_price_amount=as_decimal(variant.price_amount),
+                    unit_cost_amount=receipt_cost,
+                    unit_price_amount=effective_price,
                     reason=notes.strip() or "Stock received",
                     created_by_user_id=user.user_id,
                 )
@@ -900,6 +1124,7 @@ class InventoryService(CommerceBaseService):
                     message="Adjustment would take available stock below zero",
                     code="INSUFFICIENT_STOCK",
                 )
+            effective_price = self._effective_variant_price(product, variant)
             session.add(
                 InventoryLedgerModel(
                     entry_id=new_uuid(),
@@ -911,8 +1136,8 @@ class InventoryService(CommerceBaseService):
                     reference_id=new_uuid(),
                     reference_line_id=None,
                     quantity_delta=quantity_delta,
-                    unit_cost_amount=as_decimal(variant.cost_amount),
-                    unit_price_amount=as_decimal(variant.price_amount),
+                    unit_cost_amount=as_optional_decimal(variant.cost_amount),
+                    unit_price_amount=effective_price,
                     reason=f"{reason.strip()}: {notes.strip()}".strip(": "),
                     created_by_user_id=user.user_id,
                 )
@@ -934,8 +1159,8 @@ class InventoryService(CommerceBaseService):
                 "category": category.name if category else "",
                 "location_id": location_context.active_location_id,
                 "location_name": location_context.active_location_name,
-                "unit_cost": as_decimal(variant.cost_amount),
-                "unit_price": as_decimal(variant.price_amount),
+                "unit_cost": as_optional_decimal(variant.cost_amount),
+                "unit_price": effective_price,
                 "reorder_level": threshold,
                 "on_hand": refreshed_on_hand,
                 "reserved": refreshed_reserved,
@@ -993,6 +1218,9 @@ class SalesService(CommerceBaseService):
                 available = on_hand_map.get(str(variant.variant_id), ZERO) - reserved_map.get(str(variant.variant_id), ZERO)
                 if available <= ZERO:
                     continue
+                effective_price = self._effective_variant_price(product, variant)
+                if effective_price is None or effective_price <= ZERO:
+                    continue
                 items.append(
                     {
                         "variant_id": str(variant.variant_id),
@@ -1002,7 +1230,8 @@ class SalesService(CommerceBaseService):
                         "sku": variant.sku,
                         "barcode": variant.barcode,
                         "available_to_sell": available,
-                        "unit_price": as_decimal(variant.price_amount),
+                        "unit_price": effective_price,
+                        "min_price": self._effective_variant_min_price(product, variant),
                     }
                 )
             return items
@@ -1187,17 +1416,26 @@ class SalesService(CommerceBaseService):
         subtotal = ZERO
         total_discount = ZERO
         for line in lines:
-            variant = session.execute(
-                select(ProductVariantModel).where(
+            row = session.execute(
+                select(ProductVariantModel, ProductModel)
+                .join(ProductModel, ProductModel.product_id == ProductVariantModel.product_id)
+                .where(
                     ProductVariantModel.client_id == user.client_id,
                     ProductVariantModel.variant_id == line["variant_id"],
                     ProductVariantModel.status == "active",
                 )
-            ).scalar_one_or_none()
-            _require(variant is not None, message="Variant not found", code="VARIANT_NOT_FOUND", status_code=404)
+            ).first()
+            _require(row is not None, message="Variant not found", code="VARIANT_NOT_FOUND", status_code=404)
+            variant, product = row
             quantity = as_decimal(line["quantity"])
             discount_amount = as_decimal(line.get("discount_amount"))
-            unit_price = as_decimal(line.get("unit_price")) or as_decimal(variant.price_amount)
+            input_unit_price = as_optional_decimal(line.get("unit_price"))
+            unit_price = input_unit_price if input_unit_price is not None else self._effective_variant_price(product, variant)
+            _require(
+                unit_price is not None and unit_price > ZERO,
+                message="Variant must have a selling price before it can be sold",
+                code="PRICE_REQUIRED",
+            )
             line_total = quantity * unit_price - discount_amount
             _require(line_total >= ZERO, message="Line total cannot be negative")
             subtotal += quantity * unit_price
@@ -1220,6 +1458,7 @@ class SalesService(CommerceBaseService):
         order.discount_amount = total_discount
         order.total_amount = subtotal - total_discount
         session.flush()
+        self._validate_order_pricing(session, user, order)
 
         if action in {"confirm", "confirm_and_fulfill"}:
             order.status = "confirmed"
@@ -1228,6 +1467,32 @@ class SalesService(CommerceBaseService):
         if action == "confirm_and_fulfill":
             self._fulfill_order(session, user, order)
         return order
+
+    def _validate_order_pricing(self, session: Session, user: AuthenticatedUser, order: SalesOrderModel) -> None:
+        for item, variant, product in session.execute(
+            select(SalesOrderItemModel, ProductVariantModel, ProductModel)
+            .join(ProductVariantModel, ProductVariantModel.variant_id == SalesOrderItemModel.variant_id)
+            .join(ProductModel, ProductModel.product_id == ProductVariantModel.product_id)
+            .where(
+                SalesOrderItemModel.client_id == user.client_id,
+                SalesOrderItemModel.sales_order_id == order.sales_order_id,
+            )
+        ).all():
+            quantity = as_decimal(item.quantity)
+            line_total = as_decimal(item.line_total_amount)
+            effective_price = self._effective_variant_price(product, variant)
+            _require(
+                effective_price is not None and effective_price > ZERO,
+                message="Variant must have a selling price before it can be sold",
+                code="PRICE_REQUIRED",
+            )
+            min_price = self._effective_variant_min_price(product, variant)
+            if min_price is not None:
+                _require(
+                    line_total >= quantity * min_price,
+                    message="Line price is below the minimum selling price",
+                    code="MIN_PRICE_VIOLATION",
+                )
 
     def _validate_available_stock(self, session: Session, user: AuthenticatedUser, order: SalesOrderModel) -> None:
         on_hand_map, _reserved_map = self._stock_maps(session, user.client_id, str(order.location_id))
@@ -1295,7 +1560,7 @@ class SalesService(CommerceBaseService):
                     reference_id=str(order.sales_order_id),
                     reference_line_id=str(item.sales_order_item_id),
                     quantity_delta=-remaining,
-                    unit_cost_amount=as_decimal(variant.cost_amount),
+                    unit_cost_amount=as_optional_decimal(variant.cost_amount),
                     unit_price_amount=as_decimal(item.unit_price_amount),
                     reason="Order fulfilled",
                     created_by_user_id=user.user_id,
@@ -1389,6 +1654,7 @@ class SalesService(CommerceBaseService):
             ).scalar_one_or_none()
             _require(order is not None, message="Order not found", code="ORDER_NOT_FOUND", status_code=404)
             _require(order.status == "draft", message="Only draft orders can be confirmed")
+            self._validate_order_pricing(session, user, order)
             self._validate_available_stock(session, user, order)
             order.status = "confirmed"
             order.confirmed_at = now_utc()
@@ -1660,7 +1926,7 @@ class ReturnsService(CommerceBaseService):
                             reference_id=str(return_record.sales_return_id),
                             reference_line_id=str(return_item.sales_return_item_id),
                             quantity_delta=restock_quantity,
-                            unit_cost_amount=as_decimal(variant.cost_amount),
+                            unit_cost_amount=as_optional_decimal(variant.cost_amount),
                             unit_price_amount=as_decimal(return_item.unit_refund_amount),
                             reason=str(line.get("reason", "")).strip() or "Return restocked",
                             created_by_user_id=user.user_id,

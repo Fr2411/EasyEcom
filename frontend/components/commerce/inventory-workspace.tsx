@@ -11,6 +11,10 @@ import { formatMoney, formatQuantity } from '@/lib/commerce-format';
 
 type InventoryTab = 'stock' | 'receive' | 'adjust' | 'low-stock';
 
+function valueOrEmpty(value: string | null | undefined) {
+  return value ?? '';
+}
+
 const EMPTY_RECEIVE: ReceiveStockPayload = {
   mode: 'new_product',
   quantity: '1',
@@ -23,9 +27,9 @@ const EMPTY_RECEIVE: ReceiveStockPayload = {
     description: '',
     image_url: '',
     sku_root: '',
-    default_selling_price: '0',
-    min_selling_price: '0',
-    max_discount_percent: '0',
+    default_selling_price: '',
+    min_selling_price: '',
+    max_discount_percent: '',
     status: 'active',
   },
   variant: {
@@ -34,10 +38,10 @@ const EMPTY_RECEIVE: ReceiveStockPayload = {
     size: '',
     color: '',
     other: '',
-    default_purchase_price: '0',
-    default_selling_price: '0',
-    min_selling_price: '0',
-    reorder_level: '0',
+    default_purchase_price: '',
+    default_selling_price: '',
+    min_selling_price: '',
+    reorder_level: '',
     status: 'active',
   },
 };
@@ -64,9 +68,9 @@ function productToReceive(product: CatalogProduct): ReceiveStockPayload {
       description: product.description,
       image_url: '',
       sku_root: product.sku_root,
-      default_selling_price: product.default_price,
-      min_selling_price: product.min_price,
-      max_discount_percent: product.max_discount_percent,
+      default_selling_price: valueOrEmpty(product.default_price),
+      min_selling_price: valueOrEmpty(product.min_price),
+      max_discount_percent: valueOrEmpty(product.max_discount_percent),
       status: product.status,
     },
     variant: {
@@ -76,10 +80,10 @@ function productToReceive(product: CatalogProduct): ReceiveStockPayload {
       size: primaryVariant?.options.size ?? '',
       color: primaryVariant?.options.color ?? '',
       other: primaryVariant?.options.other ?? '',
-      default_purchase_price: primaryVariant?.unit_cost ?? '0',
-      default_selling_price: primaryVariant?.unit_price ?? '0',
-      min_selling_price: primaryVariant?.min_price ?? '0',
-      reorder_level: primaryVariant?.reorder_level ?? '0',
+      default_purchase_price: valueOrEmpty(primaryVariant?.unit_cost),
+      default_selling_price: valueOrEmpty(primaryVariant?.unit_price),
+      min_selling_price: valueOrEmpty(primaryVariant?.min_price),
+      reorder_level: primaryVariant?.reorder_level ?? '',
       status: primaryVariant?.status ?? 'active',
     },
   };
@@ -244,8 +248,8 @@ export function InventoryWorkspace() {
                                 variant_id: item.variant_id,
                                 sku: item.sku,
                                 barcode: item.barcode,
-                                default_purchase_price: item.unit_cost,
-                                default_selling_price: item.unit_price,
+                                default_purchase_price: valueOrEmpty(item.unit_cost),
+                                default_selling_price: valueOrEmpty(item.unit_price),
                                 reorder_level: item.reorder_level,
                               },
                             }));

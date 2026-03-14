@@ -26,9 +26,13 @@ export type CatalogVariant = {
   barcode: string;
   status: string;
   options: VariantOptions;
-  unit_cost: string;
-  unit_price: string;
-  min_price: string;
+  unit_cost: string | null;
+  unit_price: string | null;
+  min_price: string | null;
+  effective_unit_price: string | null;
+  effective_min_price: string | null;
+  is_price_inherited: boolean;
+  is_min_price_inherited: boolean;
   reorder_level: string;
   on_hand: string;
   reserved: string;
@@ -44,9 +48,9 @@ export type CatalogProduct = {
   category: string;
   description: string;
   sku_root: string;
-  default_price: string;
-  min_price: string;
-  max_discount_percent: string;
+  default_price: string | null;
+  min_price: string | null;
+  max_discount_percent: string | null;
   variants: CatalogVariant[];
 };
 
@@ -70,7 +74,7 @@ export type ProductIdentityInput = {
   sku_root: string;
   default_selling_price: string;
   min_selling_price: string;
-  max_discount_percent: string;
+  max_discount_percent?: string;
   status: string;
 };
 

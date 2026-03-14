@@ -30,6 +30,7 @@ type DraftCustomer = {
 type DraftLine = SalesOrderLineInput & {
   label: string;
   sku: string;
+  min_price: string | null;
 };
 
 const EMPTY_CUSTOMER: DraftCustomer = {
@@ -148,6 +149,26 @@ export function SalesWorkspace() {
   const submitOrder = async (action: SalesOrderPayload['action']) => {
     setNotice('');
     setError('');
+    const invalidLine = draftLines.find((line) => {
+      const quantity = Number(line.quantity || '0');
+      const unitPrice = Number(line.unit_price || '0');
+      const discount = Number(line.discount_amount || '0');
+      if (!Number.isFinite(quantity) || !Number.isFinite(unitPrice) || quantity <= 0 || unitPrice <= 0) {
+        return true;
+      }
+      if (!line.min_price) {
+        return false;
+      }
+      const minPrice = Number(line.min_price);
+      if (!Number.isFinite(minPrice) || minPrice <= 0) {
+        return false;
+      }
+      return quantity * unitPrice - discount < quantity * minPrice;
+    });
+    if (invalidLine) {
+      setError(`Line price for ${invalidLine.label} is below its minimum selling price.`);
+      return;
+    }
     try {
       const response = await saveSalesOrder(buildOrderPayload(customer, draftLines, notes, action));
       setSelectedOrder(response.order);
@@ -340,7 +361,10 @@ export function SalesWorkspace() {
                         <div className="commerce-card-header">
                           <div>
                             <h4>{variant.label}</h4>
-                            <p>{variant.sku} · Available {formatQuantity(variant.available_to_sell)}</p>
+                            <p>
+                              {variant.sku} · Available {formatQuantity(variant.available_to_sell)} ·
+                              {' '}Price {formatMoney(variant.unit_price)} · Min {formatMoney(variant.min_price)}
+                            </p>
                           </div>
                           <button
                             type="button"
@@ -363,6 +387,7 @@ export function SalesWorkspace() {
                                     variant_id: variant.variant_id,
                                     label: variant.label,
                                     sku: variant.sku,
+                                    min_price: variant.min_price,
                                     quantity: '1',
                                     unit_price: variant.unit_price,
                                     discount_amount: '0',
@@ -442,7 +467,10 @@ export function SalesWorkspace() {
                               }
                             />
                           </td>
-                          <td>{formatMoney(Number(line.quantity) * Number(line.unit_price) - Number(line.discount_amount || '0'))}</td>
+                          <td>
+                            <div>{formatMoney(Number(line.quantity) * Number(line.unit_price) - Number(line.discount_amount || '0'))}</div>
+                            {line.min_price ? <div className="workspace-field-note">Min {formatMoney(line.min_price)}</div> : null}
+                          </td>
                           <td>
                             <button
                               type="button"

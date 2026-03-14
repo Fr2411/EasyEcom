@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useState, useTransition } from 'react';
+import { FormEvent, useEffect, useMemo, useState, useTransition } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { getCatalogWorkspace, saveCatalogProduct } from '@/lib/api/commerce';
 import type {
@@ -11,10 +11,26 @@ import type {
   VariantOptions,
 } from '@/types/catalog';
 import { WorkspaceEmpty, WorkspaceNotice, WorkspacePanel, WorkspaceTabs } from '@/components/commerce/workspace-primitives';
-import { formatMoney, formatQuantity } from '@/lib/commerce-format';
+import { formatMoney, formatPercent, formatQuantity, numberFromString } from '@/lib/commerce-format';
 
 
 type CatalogTab = 'products' | 'edit';
+
+type VariantGeneratorState = {
+  size_values: string;
+  color_values: string;
+  other_values: string;
+  default_purchase_price: string;
+  default_selling_price: string;
+  min_selling_price: string;
+  reorder_level: string;
+};
+
+type VariantCombo = {
+  size: string;
+  color: string;
+  other: string;
+};
 
 const EMPTY_IDENTITY: ProductIdentityInput = {
   product_name: '',
@@ -24,9 +40,9 @@ const EMPTY_IDENTITY: ProductIdentityInput = {
   description: '',
   image_url: '',
   sku_root: '',
-  default_selling_price: '0',
-  min_selling_price: '0',
-  max_discount_percent: '0',
+  default_selling_price: '',
+  min_selling_price: '',
+  max_discount_percent: '',
   status: 'active',
 };
 
@@ -36,12 +52,109 @@ const EMPTY_VARIANT: CatalogVariantInput = {
   size: '',
   color: '',
   other: '',
-  default_purchase_price: '0',
-  default_selling_price: '0',
-  min_selling_price: '0',
-  reorder_level: '0',
+  default_purchase_price: '',
+  default_selling_price: '',
+  min_selling_price: '',
+  reorder_level: '',
   status: 'active',
 };
+
+const EMPTY_GENERATOR: VariantGeneratorState = {
+  size_values: '',
+  color_values: '',
+  other_values: '',
+  default_purchase_price: '',
+  default_selling_price: '',
+  min_selling_price: '',
+  reorder_level: '',
+};
+
+
+function valueOrEmpty(value: string | null | undefined) {
+  return value ?? '';
+}
+
+
+function firstFilled(values: Array<string | null | undefined>) {
+  return values.find((value) => Boolean(value && value.trim())) ?? '';
+}
+
+
+function signatureForValues(size: string, color: string, other: string) {
+  return [size.trim().toLowerCase(), color.trim().toLowerCase(), other.trim().toLowerCase()].join('|');
+}
+
+
+function signatureForVariant(variant: CatalogVariantInput | VariantCombo) {
+  return signatureForValues(variant.size, variant.color, variant.other);
+}
+
+
+function parseCsvValues(value: string) {
+  const seen = new Set<string>();
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => {
+      if (!item) return false;
+      const key = item.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+
+function buildCombinations(generator: VariantGeneratorState): VariantCombo[] {
+  const sizes = parseCsvValues(generator.size_values);
+  const colors = parseCsvValues(generator.color_values);
+  const others = parseCsvValues(generator.other_values);
+  const sizeAxis = sizes.length ? sizes : [''];
+  const colorAxis = colors.length ? colors : [''];
+  const otherAxis = others.length ? others : [''];
+  const combinations: VariantCombo[] = [];
+
+  sizeAxis.forEach((size) => {
+    colorAxis.forEach((color) => {
+      otherAxis.forEach((other) => {
+        combinations.push({ size, color, other });
+      });
+    });
+  });
+
+  return combinations.length ? combinations : [{ size: '', color: '', other: '' }];
+}
+
+
+function normalizeSkuBase(value: string) {
+  return value
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-+/g, '-');
+}
+
+
+function buildSkuPreview(productName: string, skuRoot: string, variant: VariantCombo | CatalogVariantInput) {
+  const persisted = 'variant_id' in variant && variant.variant_id ? variant.sku?.trim() ?? '' : '';
+  if (persisted) return persisted;
+
+  const base = normalizeSkuBase(skuRoot || productName || 'PRODUCT');
+  const tokens = [variant.size, variant.color, variant.other]
+    .map((value) => normalizeSkuBase(value))
+    .filter(Boolean);
+  return [base, ...tokens].filter(Boolean).join('-') || 'SKU GENERATED ON SAVE';
+}
+
+
+function calculateDerivedDiscount(defaultPrice: string, minPrice: string) {
+  const defaultValue = numberFromString(defaultPrice);
+  const minValue = numberFromString(minPrice);
+  if (!defaultPrice.trim() || !minPrice.trim() || defaultValue <= 0) return '';
+  const percent = ((defaultValue - minValue) / defaultValue) * 100;
+  return Number.isFinite(percent) && percent >= 0 ? percent.toFixed(2) : '';
+}
 
 
 function variantToInput(options: VariantOptions, variant: CatalogProduct['variants'][number]): CatalogVariantInput {
@@ -52,9 +165,9 @@ function variantToInput(options: VariantOptions, variant: CatalogProduct['varian
     size: options.size,
     color: options.color,
     other: options.other,
-    default_purchase_price: variant.unit_cost,
-    default_selling_price: variant.unit_price,
-    min_selling_price: variant.min_price,
+    default_purchase_price: valueOrEmpty(variant.unit_cost),
+    default_selling_price: valueOrEmpty(variant.unit_price),
+    min_selling_price: valueOrEmpty(variant.min_price),
     reorder_level: variant.reorder_level,
     status: variant.status,
   };
@@ -72,13 +185,56 @@ function productToPayload(product: CatalogProduct): CatalogUpsertPayload {
       description: product.description,
       image_url: '',
       sku_root: product.sku_root,
-      default_selling_price: product.default_price,
-      min_selling_price: product.min_price,
-      max_discount_percent: product.max_discount_percent,
+      default_selling_price: valueOrEmpty(product.default_price),
+      min_selling_price: valueOrEmpty(product.min_price),
+      max_discount_percent: valueOrEmpty(product.max_discount_percent),
       status: product.status,
     },
     variants: product.variants.map((variant) => variantToInput(variant.options, variant)),
   };
+}
+
+
+function generatorFromProduct(product: CatalogProduct): VariantGeneratorState {
+  const payload = productToPayload(product);
+  return {
+    size_values: Array.from(new Set(payload.variants.map((variant) => variant.size).filter(Boolean))).join(', '),
+    color_values: Array.from(new Set(payload.variants.map((variant) => variant.color).filter(Boolean))).join(', '),
+    other_values: Array.from(new Set(payload.variants.map((variant) => variant.other).filter(Boolean))).join(', '),
+    default_purchase_price: firstFilled(payload.variants.map((variant) => variant.default_purchase_price)),
+    default_selling_price: firstFilled([
+      ...payload.variants.map((variant) => variant.default_selling_price),
+      payload.identity.default_selling_price,
+    ]),
+    min_selling_price: firstFilled([
+      ...payload.variants.map((variant) => variant.min_selling_price),
+      payload.identity.min_selling_price,
+    ]),
+    reorder_level: firstFilled(payload.variants.map((variant) => variant.reorder_level)),
+  };
+}
+
+
+function newVariantFromCombo(
+  combo: VariantCombo,
+  generator: VariantGeneratorState,
+  identity: ProductIdentityInput
+): CatalogVariantInput {
+  return {
+    ...EMPTY_VARIANT,
+    size: combo.size,
+    color: combo.color,
+    other: combo.other,
+    default_purchase_price: generator.default_purchase_price,
+    default_selling_price: generator.default_selling_price || identity.default_selling_price,
+    min_selling_price: generator.min_selling_price || identity.min_selling_price,
+    reorder_level: generator.reorder_level,
+  };
+}
+
+
+function cloneVariant(variant: CatalogVariantInput): CatalogVariantInput {
+  return { ...variant };
 }
 
 
@@ -92,6 +248,8 @@ export function CatalogWorkspace() {
     identity: EMPTY_IDENTITY,
     variants: [{ ...EMPTY_VARIANT }],
   });
+  const [savedVariants, setSavedVariants] = useState<CatalogVariantInput[]>([]);
+  const [generator, setGenerator] = useState<VariantGeneratorState>({ ...EMPTY_GENERATOR });
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [isPending, startTransition] = useTransition();
@@ -119,10 +277,75 @@ export function CatalogWorkspace() {
     loadWorkspace(queryInput.trim());
   };
 
+  const setNewProductForm = () => {
+    setForm({
+      identity: { ...EMPTY_IDENTITY },
+      variants: [{ ...EMPTY_VARIANT }],
+    });
+    setSavedVariants([]);
+    setGenerator({ ...EMPTY_GENERATOR });
+    setNotice('');
+    setError('');
+    setActiveTab('edit');
+  };
+
   const onProductEdit = (product: CatalogProduct) => {
-    setForm(productToPayload(product));
+    const payload = productToPayload(product);
+    setForm(payload);
+    setSavedVariants(payload.variants.map(cloneVariant));
+    setGenerator(generatorFromProduct(product));
     setActiveTab('edit');
     setNotice('');
+    setError('');
+  };
+
+  const generatedCombos = useMemo(() => buildCombinations(generator), [generator]);
+  const derivedDiscount = calculateDerivedDiscount(form.identity.default_selling_price, form.identity.min_selling_price);
+
+  const applyGenerator = (mode: 'merge' | 'reset') => {
+    setForm((current) => {
+      const baseline = mode === 'reset' ? savedVariants.map(cloneVariant) : current.variants.map(cloneVariant);
+      const indexed = new Map(baseline.map((variant) => [signatureForVariant(variant), variant]));
+      const next = [...baseline];
+      generatedCombos.forEach((combo) => {
+        const signature = signatureForVariant(combo);
+        if (!indexed.has(signature)) {
+          const created = newVariantFromCombo(combo, generator, current.identity);
+          indexed.set(signature, created);
+          next.push(created);
+        }
+      });
+      return {
+        ...current,
+        variants: next.length ? next : [{ ...EMPTY_VARIANT }],
+      };
+    });
+    setNotice(mode === 'reset' ? 'Variants reset from generator.' : 'Generator merged new variants into the editor.');
+  };
+
+  const applyDefaultsToVariants = (scope: 'empty' | 'all') => {
+    setForm((current) => ({
+      ...current,
+      variants: current.variants.map((variant) => {
+        if (variant.status === 'archived') return variant;
+        const next = { ...variant };
+        const shouldWrite = (currentValue: string) => scope === 'all' || !currentValue.trim();
+        if (generator.default_purchase_price.trim() && shouldWrite(next.default_purchase_price)) {
+          next.default_purchase_price = generator.default_purchase_price;
+        }
+        if (generator.default_selling_price.trim() && shouldWrite(next.default_selling_price)) {
+          next.default_selling_price = generator.default_selling_price;
+        }
+        if (generator.min_selling_price.trim() && shouldWrite(next.min_selling_price)) {
+          next.min_selling_price = generator.min_selling_price;
+        }
+        if (generator.reorder_level.trim() && shouldWrite(next.reorder_level)) {
+          next.reorder_level = generator.reorder_level;
+        }
+        return next;
+      }),
+    }));
+    setNotice(scope === 'all' ? 'Variant defaults applied to all rows.' : 'Variant defaults filled only empty rows.');
   };
 
   const onSave = async (event: FormEvent<HTMLFormElement>) => {
@@ -130,13 +353,12 @@ export function CatalogWorkspace() {
     setNotice('');
     setError('');
     try {
-      const payload = {
-        ...form,
-        variants: form.variants.filter((variant) => variant.sku.trim()),
-      };
-      const response = await saveCatalogProduct(payload);
-      setForm(productToPayload(response.product));
-      setNotice(payload.product_id ? 'Product updated.' : 'Product created.');
+      const response = await saveCatalogProduct(form);
+      const payload = productToPayload(response.product);
+      setForm(payload);
+      setSavedVariants(payload.variants.map(cloneVariant));
+      setGenerator(generatorFromProduct(response.product));
+      setNotice(form.product_id ? 'Product updated.' : 'Product created.');
       setActiveTab('products');
       await loadWorkspace(queryInput.trim());
     } catch (saveError) {
@@ -159,15 +381,20 @@ export function CatalogWorkspace() {
         title="Variant-first catalog"
         description="Search and manage products as parent records with saleable child variants."
         actions={
-          <form className="workspace-search" onSubmit={onSearch}>
-            <input
-              type="search"
-              value={queryInput}
-              placeholder="Search by product, variant, SKU, barcode"
-              onChange={(event) => setQueryInput(event.target.value)}
-            />
-            <button type="submit">Search</button>
-          </form>
+          <div className="workspace-inline-actions">
+            <form className="workspace-search" onSubmit={onSearch}>
+              <input
+                type="search"
+                value={queryInput}
+                placeholder="Search by product, variant, SKU, barcode"
+                onChange={(event) => setQueryInput(event.target.value)}
+              />
+              <button type="submit">Search</button>
+            </form>
+            <button type="button" onClick={setNewProductForm}>
+              New blank product
+            </button>
+          </div>
         }
       >
         {notice ? <WorkspaceNotice tone="success">{notice}</WorkspaceNotice> : null}
@@ -188,9 +415,10 @@ export function CatalogWorkspace() {
                     <button type="button" onClick={() => onProductEdit(product)}>Edit product</button>
                   </div>
                   <div className="commerce-card-meta">
-                    <span>SKU Root: {product.sku_root || 'Not set'}</span>
-                    <span>Base Price: {formatMoney(product.default_price)}</span>
-                    <span>Variants: {product.variants.length}</span>
+                    <span>SKU Base: {product.sku_root || 'Generated from product name'}</span>
+                    <span>Template Price: {formatMoney(product.default_price)}</span>
+                    <span>Min Price: {formatMoney(product.min_price)}</span>
+                    <span>Equivalent Max Discount: {formatPercent(product.max_discount_percent)}</span>
                   </div>
                   <div className="table-scroll">
                     <table className="workspace-table">
@@ -201,6 +429,7 @@ export function CatalogWorkspace() {
                           <th>Available</th>
                           <th>Reserved</th>
                           <th>Price</th>
+                          <th>Min Price</th>
                           <th>Reorder</th>
                         </tr>
                       </thead>
@@ -211,7 +440,14 @@ export function CatalogWorkspace() {
                             <td>{variant.sku}</td>
                             <td>{formatQuantity(variant.available_to_sell)}</td>
                             <td>{formatQuantity(variant.reserved)}</td>
-                            <td>{formatMoney(variant.unit_price)}</td>
+                            <td>
+                              {formatMoney(variant.effective_unit_price)}
+                              {variant.is_price_inherited ? <div className="workspace-field-note">Inherited from product</div> : null}
+                            </td>
+                            <td>
+                              {formatMoney(variant.effective_min_price)}
+                              {variant.is_min_price_inherited ? <div className="workspace-field-note">Inherited from product</div> : null}
+                            </td>
                             <td>{formatQuantity(variant.reorder_level)}</td>
                           </tr>
                         ))}
@@ -229,127 +465,239 @@ export function CatalogWorkspace() {
           )
         ) : (
           <form className="workspace-form" onSubmit={onSave}>
-            <div className="workspace-form-grid">
+            <div className="workspace-subsection">
+              <div className="workspace-subsection-header">
+                <div>
+                  <h4>Basic Info</h4>
+                  <p>Shared product identity and code generation inputs.</p>
+                </div>
+              </div>
+              <div className="workspace-form-grid">
+                <label>
+                  Product name
+                  <input
+                    value={form.identity.product_name}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        identity: { ...current.identity, product_name: event.target.value },
+                      }))
+                    }
+                    required
+                  />
+                </label>
+                <label>
+                  Supplier
+                  <input
+                    list="catalog-suppliers"
+                    value={form.identity.supplier}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        identity: { ...current.identity, supplier: event.target.value },
+                      }))
+                    }
+                  />
+                </label>
+                <label>
+                  Category
+                  <input
+                    list="catalog-categories"
+                    value={form.identity.category}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        identity: { ...current.identity, category: event.target.value },
+                      }))
+                    }
+                  />
+                </label>
+                <label>
+                  Brand
+                  <input
+                    value={form.identity.brand}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        identity: { ...current.identity, brand: event.target.value },
+                      }))
+                    }
+                  />
+                </label>
+                <label className="field-span-2">
+                  SKU Base
+                  <input
+                    value={form.identity.sku_root}
+                    placeholder="Leave blank to generate from product name"
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        identity: { ...current.identity, sku_root: event.target.value },
+                      }))
+                    }
+                  />
+                </label>
+              </div>
               <label>
-                Product name
-                <input
-                  value={form.identity.product_name}
+                Description
+                <textarea
+                  rows={3}
+                  value={form.identity.description}
                   onChange={(event) =>
                     setForm((current) => ({
                       ...current,
-                      identity: { ...current.identity, product_name: event.target.value },
-                    }))
-                  }
-                  required
-                />
-              </label>
-              <label>
-                Supplier
-                <input
-                  list="catalog-suppliers"
-                  value={form.identity.supplier}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      identity: { ...current.identity, supplier: event.target.value },
-                    }))
-                  }
-                />
-              </label>
-              <label>
-                Category
-                <input
-                  list="catalog-categories"
-                  value={form.identity.category}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      identity: { ...current.identity, category: event.target.value },
-                    }))
-                  }
-                />
-              </label>
-              <label>
-                Brand
-                <input
-                  value={form.identity.brand}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      identity: { ...current.identity, brand: event.target.value },
-                    }))
-                  }
-                />
-              </label>
-              <label>
-                SKU root
-                <input
-                  value={form.identity.sku_root}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      identity: { ...current.identity, sku_root: event.target.value },
-                    }))
-                  }
-                />
-              </label>
-              <label>
-                Default price
-                <input
-                  value={form.identity.default_selling_price}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      identity: { ...current.identity, default_selling_price: event.target.value },
-                    }))
-                  }
-                />
-              </label>
-              <label>
-                Minimum price
-                <input
-                  value={form.identity.min_selling_price}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      identity: { ...current.identity, min_selling_price: event.target.value },
-                    }))
-                  }
-                />
-              </label>
-              <label>
-                Max discount %
-                <input
-                  value={form.identity.max_discount_percent}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      identity: { ...current.identity, max_discount_percent: event.target.value },
+                      identity: { ...current.identity, description: event.target.value },
                     }))
                   }
                 />
               </label>
             </div>
 
-            <label>
-              Description
-              <textarea
-                rows={3}
-                value={form.identity.description}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    identity: { ...current.identity, description: event.target.value },
-                  }))
-                }
-              />
-            </label>
+            <div className="workspace-subsection">
+              <div className="workspace-subsection-header">
+                <div>
+                  <h4>Pricing Rules</h4>
+                  <p>Product-level price rules are optional templates for new variants.</p>
+                </div>
+              </div>
+              <div className="workspace-form-grid compact">
+                <label>
+                  Default selling price
+                  <input
+                    inputMode="decimal"
+                    value={form.identity.default_selling_price}
+                    placeholder="Optional template"
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        identity: { ...current.identity, default_selling_price: event.target.value },
+                      }))
+                    }
+                  />
+                </label>
+                <label>
+                  Minimum selling price
+                  <input
+                    inputMode="decimal"
+                    value={form.identity.min_selling_price}
+                    placeholder="Optional floor"
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        identity: { ...current.identity, min_selling_price: event.target.value },
+                      }))
+                    }
+                  />
+                </label>
+                <label>
+                  Equivalent max discount
+                  <input value={derivedDiscount ? `${derivedDiscount}%` : 'Not set'} readOnly />
+                </label>
+              </div>
+            </div>
+
+            <div className="workspace-subsection">
+              <div className="workspace-subsection-header">
+                <div>
+                  <h4>Variant Generator</h4>
+                  <p>Generate combinations from comma-separated values, then review and edit the rows below.</p>
+                </div>
+                <div className="workspace-inline-actions">
+                  <button type="button" onClick={() => applyGenerator('merge')}>Generate / Regenerate</button>
+                  <button type="button" onClick={() => applyGenerator('reset')}>Reset from generator</button>
+                </div>
+              </div>
+              <div className="workspace-form-grid">
+                <label>
+                  Sizes
+                  <input
+                    value={generator.size_values}
+                    placeholder="40, 41, 42"
+                    onChange={(event) => setGenerator((current) => ({ ...current, size_values: event.target.value }))}
+                  />
+                </label>
+                <label>
+                  Colors
+                  <input
+                    value={generator.color_values}
+                    placeholder="Black, White"
+                    onChange={(event) => setGenerator((current) => ({ ...current, color_values: event.target.value }))}
+                  />
+                </label>
+                <label>
+                  Other
+                  <input
+                    value={generator.other_values}
+                    placeholder="Mesh, Leather"
+                    onChange={(event) => setGenerator((current) => ({ ...current, other_values: event.target.value }))}
+                  />
+                </label>
+              </div>
+              <div className="commerce-card-meta">
+                <span>Preview combinations: {generatedCombos.length}</span>
+                <span>Saved variants: {savedVariants.length}</span>
+                <span>Rows in editor: {form.variants.length}</span>
+              </div>
+            </div>
+
+            <div className="workspace-subsection">
+              <div className="workspace-subsection-header">
+                <div>
+                  <h4>Variant Defaults</h4>
+                  <p>Use shared defaults when many variants have the same cost, price, minimum price, or reorder level.</p>
+                </div>
+                <div className="workspace-inline-actions">
+                  <button type="button" onClick={() => applyDefaultsToVariants('empty')}>Apply to empty rows</button>
+                  <button type="button" onClick={() => applyDefaultsToVariants('all')}>Apply to all rows</button>
+                </div>
+              </div>
+              <div className="workspace-form-grid compact">
+                <label>
+                  Default purchase cost
+                  <input
+                    inputMode="decimal"
+                    value={generator.default_purchase_price}
+                    onChange={(event) =>
+                      setGenerator((current) => ({ ...current, default_purchase_price: event.target.value }))
+                    }
+                  />
+                </label>
+                <label>
+                  Default selling price
+                  <input
+                    inputMode="decimal"
+                    value={generator.default_selling_price}
+                    onChange={(event) =>
+                      setGenerator((current) => ({ ...current, default_selling_price: event.target.value }))
+                    }
+                  />
+                </label>
+                <label>
+                  Minimum selling price
+                  <input
+                    inputMode="decimal"
+                    value={generator.min_selling_price}
+                    onChange={(event) =>
+                      setGenerator((current) => ({ ...current, min_selling_price: event.target.value }))
+                    }
+                  />
+                </label>
+                <label>
+                  Reorder level
+                  <input
+                    inputMode="decimal"
+                    value={generator.reorder_level}
+                    onChange={(event) => setGenerator((current) => ({ ...current, reorder_level: event.target.value }))}
+                  />
+                </label>
+              </div>
+            </div>
 
             <div className="workspace-subsection">
               <div className="workspace-subsection-header">
                 <div>
                   <h4>Variants</h4>
-                  <p>Every saleable option must have its own variant row and SKU.</p>
+                  <p>Each row is still fully editable before save. Existing variants keep their SKU stable after first save.</p>
                 </div>
                 <button
                   type="button"
@@ -360,164 +708,189 @@ export function CatalogWorkspace() {
                     }))
                   }
                 >
-                  Add variant
+                  Add manual row
                 </button>
               </div>
 
               <div className="workspace-stack">
-                {form.variants.map((variant, index) => (
-                  <div key={`${variant.variant_id ?? 'new'}-${index}`} className="variant-editor">
-                    <div className="workspace-form-grid compact">
-                      <label>
-                        Size
-                        <input
-                          value={variant.size}
-                          onChange={(event) =>
-                            setForm((current) => ({
-                              ...current,
-                              variants: current.variants.map((item, itemIndex) =>
-                                itemIndex === index ? { ...item, size: event.target.value } : item
-                              ),
-                            }))
-                          }
-                        />
-                      </label>
-                      <label>
-                        Color
-                        <input
-                          value={variant.color}
-                          onChange={(event) =>
-                            setForm((current) => ({
-                              ...current,
-                              variants: current.variants.map((item, itemIndex) =>
-                                itemIndex === index ? { ...item, color: event.target.value } : item
-                              ),
-                            }))
-                          }
-                        />
-                      </label>
-                      <label>
-                        Other
-                        <input
-                          value={variant.other}
-                          onChange={(event) =>
-                            setForm((current) => ({
-                              ...current,
-                              variants: current.variants.map((item, itemIndex) =>
-                                itemIndex === index ? { ...item, other: event.target.value } : item
-                              ),
-                            }))
-                          }
-                        />
-                      </label>
-                      <label>
-                        SKU
-                        <input
-                          value={variant.sku}
-                          onChange={(event) =>
-                            setForm((current) => ({
-                              ...current,
-                              variants: current.variants.map((item, itemIndex) =>
-                                itemIndex === index ? { ...item, sku: event.target.value } : item
-                              ),
-                            }))
-                          }
-                          required
-                        />
-                      </label>
-                      <label>
-                        Barcode
-                        <input
-                          value={variant.barcode}
-                          onChange={(event) =>
-                            setForm((current) => ({
-                              ...current,
-                              variants: current.variants.map((item, itemIndex) =>
-                                itemIndex === index ? { ...item, barcode: event.target.value } : item
-                              ),
-                            }))
-                          }
-                        />
-                      </label>
-                      <label>
-                        Cost
-                        <input
-                          value={variant.default_purchase_price}
-                          onChange={(event) =>
-                            setForm((current) => ({
-                              ...current,
-                              variants: current.variants.map((item, itemIndex) =>
-                                itemIndex === index
-                                  ? { ...item, default_purchase_price: event.target.value }
-                                  : item
-                              ),
-                            }))
-                          }
-                        />
-                      </label>
-                      <label>
-                        Price
-                        <input
-                          value={variant.default_selling_price}
-                          onChange={(event) =>
-                            setForm((current) => ({
-                              ...current,
-                              variants: current.variants.map((item, itemIndex) =>
-                                itemIndex === index
-                                  ? { ...item, default_selling_price: event.target.value }
-                                  : item
-                              ),
-                            }))
-                          }
-                        />
-                      </label>
-                      <label>
-                        Min price
-                        <input
-                          value={variant.min_selling_price}
-                          onChange={(event) =>
-                            setForm((current) => ({
-                              ...current,
-                              variants: current.variants.map((item, itemIndex) =>
-                                itemIndex === index ? { ...item, min_selling_price: event.target.value } : item
-                              ),
-                            }))
-                          }
-                        />
-                      </label>
-                      <label>
-                        Reorder level
-                        <input
-                          value={variant.reorder_level}
-                          onChange={(event) =>
-                            setForm((current) => ({
-                              ...current,
-                              variants: current.variants.map((item, itemIndex) =>
-                                itemIndex === index ? { ...item, reorder_level: event.target.value } : item
-                              ),
-                            }))
-                          }
-                        />
-                      </label>
+                {form.variants.map((variant, index) => {
+                  const isSavedVariant = Boolean(variant.variant_id);
+                  const skuPreview = buildSkuPreview(form.identity.product_name, form.identity.sku_root, variant);
+                  return (
+                    <div key={`${variant.variant_id ?? 'new'}-${index}`} className={`variant-editor ${variant.status === 'archived' ? 'is-archived' : ''}`}>
+                      <div className="variant-editor-header">
+                        <div>
+                          <strong>{variant.size || variant.color || variant.other ? [variant.size, variant.color, variant.other].filter(Boolean).join(' / ') : 'Default variant'}</strong>
+                          <p className="workspace-field-note">
+                            {isSavedVariant ? 'Saved variant' : 'New variant'} · {variant.status === 'archived' ? 'Archived' : 'Active'}
+                          </p>
+                        </div>
+                        <div className="workspace-inline-actions">
+                          {isSavedVariant ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setForm((current) => ({
+                                  ...current,
+                                  variants: current.variants.map((item, itemIndex) =>
+                                    itemIndex === index
+                                      ? { ...item, status: item.status === 'archived' ? 'active' : 'archived' }
+                                      : item
+                                  ),
+                                }))
+                              }
+                            >
+                              {variant.status === 'archived' ? 'Restore' : 'Archive'}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setForm((current) => ({
+                                  ...current,
+                                  variants: current.variants.filter((_, itemIndex) => itemIndex !== index),
+                                }))
+                              }
+                            >
+                              Remove
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="workspace-form-grid compact">
+                        <label>
+                          Size
+                          <input
+                            value={variant.size}
+                            onChange={(event) =>
+                              setForm((current) => ({
+                                ...current,
+                                variants: current.variants.map((item, itemIndex) =>
+                                  itemIndex === index ? { ...item, size: event.target.value } : item
+                                ),
+                              }))
+                            }
+                          />
+                        </label>
+                        <label>
+                          Color
+                          <input
+                            value={variant.color}
+                            onChange={(event) =>
+                              setForm((current) => ({
+                                ...current,
+                                variants: current.variants.map((item, itemIndex) =>
+                                  itemIndex === index ? { ...item, color: event.target.value } : item
+                                ),
+                              }))
+                            }
+                          />
+                        </label>
+                        <label>
+                          Other
+                          <input
+                            value={variant.other}
+                            onChange={(event) =>
+                              setForm((current) => ({
+                                ...current,
+                                variants: current.variants.map((item, itemIndex) =>
+                                  itemIndex === index ? { ...item, other: event.target.value } : item
+                                ),
+                              }))
+                            }
+                          />
+                        </label>
+                        <label>
+                          SKU Preview
+                          <input value={skuPreview} readOnly />
+                        </label>
+                        <label>
+                          Barcode
+                          <input
+                            value={variant.barcode}
+                            onChange={(event) =>
+                              setForm((current) => ({
+                                ...current,
+                                variants: current.variants.map((item, itemIndex) =>
+                                  itemIndex === index ? { ...item, barcode: event.target.value } : item
+                                ),
+                              }))
+                            }
+                          />
+                        </label>
+                        <label>
+                          Cost
+                          <input
+                            inputMode="decimal"
+                            value={variant.default_purchase_price}
+                            onChange={(event) =>
+                              setForm((current) => ({
+                                ...current,
+                                variants: current.variants.map((item, itemIndex) =>
+                                  itemIndex === index ? { ...item, default_purchase_price: event.target.value } : item
+                                ),
+                              }))
+                            }
+                          />
+                        </label>
+                        <label>
+                          Price
+                          <input
+                            inputMode="decimal"
+                            value={variant.default_selling_price}
+                            placeholder={form.identity.default_selling_price ? `Inherit ${form.identity.default_selling_price}` : 'Optional override'}
+                            onChange={(event) =>
+                              setForm((current) => ({
+                                ...current,
+                                variants: current.variants.map((item, itemIndex) =>
+                                  itemIndex === index ? { ...item, default_selling_price: event.target.value } : item
+                                ),
+                              }))
+                            }
+                          />
+                        </label>
+                        <label>
+                          Minimum price
+                          <input
+                            inputMode="decimal"
+                            value={variant.min_selling_price}
+                            placeholder={form.identity.min_selling_price ? `Inherit ${form.identity.min_selling_price}` : 'Optional override'}
+                            onChange={(event) =>
+                              setForm((current) => ({
+                                ...current,
+                                variants: current.variants.map((item, itemIndex) =>
+                                  itemIndex === index ? { ...item, min_selling_price: event.target.value } : item
+                                ),
+                              }))
+                            }
+                          />
+                        </label>
+                        <label>
+                          Reorder level
+                          <input
+                            inputMode="decimal"
+                            value={variant.reorder_level}
+                            onChange={(event) =>
+                              setForm((current) => ({
+                                ...current,
+                                variants: current.variants.map((item, itemIndex) =>
+                                  itemIndex === index ? { ...item, reorder_level: event.target.value } : item
+                                ),
+                              }))
+                            }
+                          />
+                        </label>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
             <div className="workspace-actions">
               <button type="submit">{form.product_id ? 'Update product' : 'Create product'}</button>
-              <button
-                type="button"
-                onClick={() =>
-                  setForm({
-                    identity: { ...EMPTY_IDENTITY },
-                    variants: [{ ...EMPTY_VARIANT }],
-                  })
-                }
-              >
-                Reset
-              </button>
+              <button type="button" onClick={setNewProductForm}>Reset form</button>
             </div>
 
             <datalist id="catalog-suppliers">

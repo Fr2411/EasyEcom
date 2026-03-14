@@ -16,8 +16,8 @@ export type InventoryStockRow = {
   category: string;
   location_id: string;
   location_name: string;
-  unit_cost: string;
-  unit_price: string;
+  unit_cost: string | null;
+  unit_price: string | null;
   reorder_level: string;
   on_hand: string;
   reserved: string;
