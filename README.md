@@ -12,7 +12,7 @@ EasyEcom is now in the first product-rebuild phase: the shared platform foundati
 ## What is rebuilt in this foundation pass
 - Versioned SQL migrations replace runtime-only schema drift for PostgreSQL
 - Typed core and business tables now exist in the SQLAlchemy model layer
-- Shared request ID middleware, structured API errors, invitation flow, and password-reset flow are restored
+- Shared request ID middleware, structured API errors, and super-admin tenant onboarding are restored
 - Pilot information architecture is refined, and the legacy `/products-stock` route redirects to `/catalog`
 
 ## What remains on purpose
@@ -57,6 +57,15 @@ If you want full local development, keep `.env.local` pointed at `http://localho
 - Frontend connectivity remains through Amplify config in `amplify.yml`
 - Backend connectivity remains through the existing startup entrypoint in `startup.sh`
 - Existing EC2 deployment helper is preserved in `scripts/deploy_prod.sh`
+
+## Super Admin Password Flow
+
+User setup and password recovery are handled directly by super admin from the admin panel.
+
+Behavior:
+- New client users are created with an admin-entered password
+- If a user forgets the password, super admin can set a new one from `/admin`
+- Passwords are stored only as hashes; admins never read them back from the system
 
 ## AWS shortcuts
 
