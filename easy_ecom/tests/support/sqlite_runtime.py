@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import event, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from easy_ecom.core.config import Settings
@@ -26,6 +26,13 @@ class SqliteRuntime:
 def build_sqlite_runtime(tmp_path: Path, filename: str = "test.db") -> SqliteRuntime:
     settings = Settings(database_url=f"sqlite+pysqlite:///{tmp_path / filename}")
     engine = build_postgres_engine(settings)
+    if engine.dialect.name == "sqlite":
+        @event.listens_for(engine, "connect")
+        def _enable_sqlite_foreign_keys(dbapi_connection, connection_record) -> None:  # type: ignore[no-untyped-def]
+            del connection_record
+            cursor = dbapi_connection.cursor()
+            cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.close()
     init_postgres_schema(engine)
 
     store = PostgresTableStore(engine)
