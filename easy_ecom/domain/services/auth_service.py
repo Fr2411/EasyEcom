@@ -48,9 +48,23 @@ class IssuedToken:
 class AuthRepoProtocol:
     def get_user_by_email(self, email: str) -> AuthUserRecord | None: ...
 
+    def get_user_by_client_email(self, client_id: str, email: str) -> AuthUserRecord | None: ...
+
     def get_roles_for_user(self, user_id: str) -> list[str]: ...
 
     def update_password_hash(self, user_id: str, password_hash: str) -> None: ...
+
+    def activate_invited_user(
+        self,
+        *,
+        client_id: str,
+        email: str,
+        name: str,
+        password_hash: str,
+        invited_at: datetime,
+    ) -> AuthenticatedUser | None: ...
+
+    def ensure_user_role(self, user_id: str, role_code: str) -> None: ...
 
     def touch_last_login(self, user_id: str, logged_in_at: datetime) -> None: ...
 
@@ -173,13 +187,28 @@ class AuthService:
         ):
             return None
 
-        user = self.repo.create_user(
-            client_id=record.client_id,
-            name=name.strip(),
-            email=record.email,
-            password_hash=hash_password(password),
-            role_code=record.role_code,
-            invited_at=now_utc(),
-        )
-        self.repo.mark_invitation_accepted(record.invitation_id, now_utc())
+        accepted_at = now_utc()
+        password_hash = hash_password(password)
+        existing_user = self.repo.get_user_by_client_email(record.client_id, record.email)
+        if existing_user is None:
+            user = self.repo.create_user(
+                client_id=record.client_id,
+                name=name.strip(),
+                email=record.email,
+                password_hash=password_hash,
+                role_code=record.role_code,
+                invited_at=accepted_at,
+            )
+        else:
+            self.repo.ensure_user_role(existing_user.user_id, record.role_code)
+            user = self.repo.activate_invited_user(
+                client_id=record.client_id,
+                email=record.email,
+                name=name.strip(),
+                password_hash=password_hash,
+                invited_at=accepted_at,
+            )
+            if user is None:
+                return None
+        self.repo.mark_invitation_accepted(record.invitation_id, accepted_at)
         return user

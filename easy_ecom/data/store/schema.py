@@ -3,9 +3,8 @@ from __future__ import annotations
 ROLES_SEED = [
     {"role_code": "SUPER_ADMIN", "role_name": "Super Admin", "description": "Global system administrator"},
     {"role_code": "CLIENT_OWNER", "role_name": "Client Owner", "description": "Full client access"},
-    {"role_code": "CLIENT_MANAGER", "role_name": "Client Manager", "description": "Operations management"},
-    {"role_code": "CLIENT_EMPLOYEE", "role_name": "Client Employee", "description": "Operational access"},
-    {"role_code": "FINANCE_ONLY", "role_name": "Finance Only", "description": "Finance team access"},
+    {"role_code": "CLIENT_STAFF", "role_name": "Client Staff", "description": "Operations access across core workflows"},
+    {"role_code": "FINANCE_STAFF", "role_name": "Finance Staff", "description": "Finance and reporting access"},
 ]
 
 CORE_MODULES = [

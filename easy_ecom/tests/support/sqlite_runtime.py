@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from easy_ecom.core.config import Settings
 from easy_ecom.core.ids import new_uuid
+from easy_ecom.core.slugs import slugify_identifier
 from easy_ecom.data.store.postgres import init_postgres_schema
 from easy_ecom.data.store.postgres_db import build_postgres_engine, build_session_factory
 from easy_ecom.data.store.postgres_models import ClientModel, RoleModel, UserModel, UserRoleModel
@@ -65,6 +66,7 @@ def seed_auth_user(
                     client_id=client_id,
                     slug=f"client-{client_id.split('-')[0]}",
                     business_name="Client One",
+                    contact_name="Owner",
                     owner_name="Owner",
                     email="owner@example.com",
                     currency_code="USD",
@@ -83,6 +85,11 @@ def seed_auth_user(
         session.add(
             UserModel(
                 user_id=user_id,
+                user_code=slugify_identifier(
+                    f"client-{client_id.split('-')[0]}-{role_code}-{name}",
+                    max_length=160,
+                    default="user",
+                ),
                 client_id=client_id,
                 name=name,
                 email=email.lower(),

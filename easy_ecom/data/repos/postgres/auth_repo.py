@@ -7,7 +7,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from easy_ecom.core.ids import new_uuid
+from easy_ecom.data.repos.postgres.code_factory import generate_unique_user_code
 from easy_ecom.data.store.postgres_models import (
+    ClientModel,
     PasswordResetTokenModel,
     UserInvitationModel,
     UserModel,
@@ -32,6 +34,17 @@ class PostgresAuthRepo:
     def __init__(self, session_factory: sessionmaker[Session]):
         self._session_factory = session_factory
 
+    def _record_from_model(self, record: UserModel) -> AuthUserRecord:
+        return PostgresUserRecord(
+            user_id=str(record.user_id),
+            client_id=str(record.client_id),
+            name=record.name,
+            email=record.email,
+            password=record.password or "",
+            password_hash=(record.password_hash or ""),
+            is_active=bool(record.is_active),
+        )
+
     def get_user_by_email(self, email: str) -> AuthUserRecord | None:
         with self._session_factory() as session:
             record = session.execute(
@@ -39,15 +52,19 @@ class PostgresAuthRepo:
             ).scalar_one_or_none()
             if record is None:
                 return None
-            return PostgresUserRecord(
-                user_id=str(record.user_id),
-                client_id=str(record.client_id),
-                name=record.name,
-                email=record.email,
-                password=record.password or "",
-                password_hash=(record.password_hash or ""),
-                is_active=bool(record.is_active),
-            )
+            return self._record_from_model(record)
+
+    def get_user_by_client_email(self, client_id: str, email: str) -> AuthUserRecord | None:
+        with self._session_factory() as session:
+            record = session.execute(
+                select(UserModel).where(
+                    UserModel.client_id == client_id,
+                    UserModel.email == email.lower().strip(),
+                )
+            ).scalar_one_or_none()
+            if record is None:
+                return None
+            return self._record_from_model(record)
 
     def get_roles_for_user(self, user_id: str) -> list[str]:
         with self._session_factory() as session:
@@ -66,6 +83,55 @@ class PostgresAuthRepo:
             user.password_hash = password_hash
             user.password = ""
             session.commit()
+
+    def activate_invited_user(
+        self,
+        *,
+        client_id: str,
+        email: str,
+        name: str,
+        password_hash: str,
+        invited_at: datetime,
+    ) -> AuthenticatedUser | None:
+        normalized_email = email.lower().strip()
+        with self._session_factory() as session:
+            user = session.execute(
+                select(UserModel).where(
+                    UserModel.client_id == client_id,
+                    UserModel.email == normalized_email,
+                )
+            ).scalar_one_or_none()
+            if user is None:
+                return None
+            user.name = name
+            user.password_hash = password_hash
+            user.password = ""
+            user.is_active = True
+            user.invited_at = invited_at
+            session.commit()
+
+            roles = session.execute(
+                select(UserRoleModel.role_code).where(UserRoleModel.user_id == user.user_id)
+            ).all()
+            return AuthenticatedUser(
+                user_id=str(user.user_id),
+                client_id=str(user.client_id),
+                name=user.name,
+                email=user.email,
+                roles=[str(row[0]) for row in roles],
+            )
+
+    def ensure_user_role(self, user_id: str, role_code: str) -> None:
+        with self._session_factory() as session:
+            existing = session.execute(
+                select(UserRoleModel).where(
+                    UserRoleModel.user_id == user_id,
+                    UserRoleModel.role_code == role_code,
+                )
+            ).scalar_one_or_none()
+            if existing is None:
+                session.add(UserRoleModel(user_id=user_id, role_code=role_code))
+                session.commit()
 
     def touch_last_login(self, user_id: str, logged_in_at: datetime) -> None:
         with self._session_factory() as session:
@@ -184,9 +250,15 @@ class PostgresAuthRepo:
         user_id = new_uuid()
         normalized_email = email.lower().strip()
         with self._session_factory() as session:
+            client = session.execute(
+                select(ClientModel).where(ClientModel.client_id == client_id)
+            ).scalar_one_or_none()
+            client_code = client.slug if client is not None else "client"
+            user_code = generate_unique_user_code(session, client_code, role_code, name)
             session.add(
                 UserModel(
                     user_id=user_id,
+                    user_code=user_code,
                     client_id=client_id,
                     name=name,
                     email=normalized_email,

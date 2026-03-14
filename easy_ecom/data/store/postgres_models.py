@@ -46,6 +46,7 @@ class ClientModel(TimestampMixin, Base):
     client_id: Mapped[str] = mapped_column(GUID(), primary_key=True)
     slug: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
     business_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    contact_name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     owner_name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     phone: Mapped[str] = mapped_column(String(64), nullable=False, default="")
     email: Mapped[str] = mapped_column(String(255), nullable=False, default="", index=True)
@@ -86,9 +87,11 @@ class UserModel(TenantMixin, TimestampMixin, Base):
     __tablename__ = "users"
     __table_args__ = (
         UniqueConstraint("email", name="uq_users_email"),
+        UniqueConstraint("user_code", name="uq_users_user_code"),
     )
 
     user_id: Mapped[str] = mapped_column(GUID(), primary_key=True)
+    user_code: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     password: Mapped[str] = mapped_column(Text, nullable=False, default="")

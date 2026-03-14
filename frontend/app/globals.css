@@ -457,10 +457,53 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
 .integrations-layout,
 .ai-review-layout { display: grid; gap: 0.8rem; }
 .admin-layout { grid-template-columns: 2fr 1fr; }
+.admin-workspace,
+.admin-stack { display: grid; gap: 0.8rem; }
+.admin-grid-shell { display: grid; gap: 0.8rem; grid-template-columns: 1.5fr 1fr 1fr; align-items: start; }
 .admin-role-list { display: grid; gap: 0.2rem; }
 .admin-role-list label,
 .admin-checkbox { display: flex !important; gap: 0.35rem; align-items: center; }
 .admin-form { display: grid; gap: 0.55rem; }
+.admin-table-wrap { overflow-x: auto; }
+.admin-row-active { background: var(--primary-soft); }
+.admin-success { color: var(--success); margin: 0; }
+.admin-divider { height: 1px; background: var(--border); margin: 0.4rem 0; }
+.admin-inline-head { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; }
+.admin-inline-head h4 { margin: 0; }
+.admin-inline-grid { display: grid; gap: 0.5rem; grid-template-columns: 1.1fr 1.1fr 0.8fr auto; align-items: end; }
+.admin-role-matrix { display: grid; gap: 0.65rem; }
+.admin-role-card { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.7rem; background: #fff; }
+.admin-role-card h4 { margin: 0 0 0.25rem; }
+.admin-role-page-list,
+.admin-match-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.3rem; }
+.admin-role-page-list li,
+.admin-match-list li { border-top: 1px solid var(--border); padding-top: 0.3rem; }
+.admin-token-block {
+  margin: 0;
+  white-space: pre-wrap;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: #f6fbfb;
+  padding: 0.75rem;
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+.admin-action-row { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.14rem 0.5rem;
+  border: 1px solid var(--border);
+  background: #fff;
+  text-transform: capitalize;
+  font-size: 0.75rem;
+}
+.status-pill-active {
+  border-color: #95d5b7;
+  background: #ecfdf3;
+  color: #166534;
+}
 
 .settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.65rem; }
 .settings-grid textarea { min-height: 90px; }
@@ -555,6 +598,7 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
   .sale-line-row,
   .inventory-grid,
   .inventory-toolbar,
+  .admin-grid-shell,
   .admin-layout,
   .settings-grid,
   .reports-grid,

@@ -41,7 +41,16 @@ export async function apiClient<T>(path: string, init?: RequestInit): Promise<T>
   const isJson = contentType.includes('application/json');
 
   if (!response.ok) {
-    const message = isJson ? JSON.stringify(await response.json()) : await response.text();
+    let message = `API request failed (${response.status})`;
+    if (isJson) {
+      const payload = await response.json();
+      message =
+        typeof payload?.error?.message === 'string'
+          ? payload.error.message
+          : JSON.stringify(payload);
+    } else {
+      message = (await response.text()) || message;
+    }
     throw new ApiError(response.status, message || `API request failed (${response.status})`);
   }
 
