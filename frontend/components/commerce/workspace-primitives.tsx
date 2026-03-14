@@ -65,6 +65,24 @@ export function WorkspaceNotice({
 }
 
 
+export function WorkspaceToast({
+  tone = 'success',
+  message,
+  onClose,
+}: {
+  tone?: 'success' | 'error';
+  message: string;
+  onClose: () => void;
+}) {
+  return (
+    <div className={`workspace-toast ${tone}`} role="status" aria-live="polite">
+      <span>{message}</span>
+      <button type="button" onClick={onClose} aria-label="Close message">Close</button>
+    </div>
+  );
+}
+
+
 export function WorkspaceEmpty({
   title,
   message,
