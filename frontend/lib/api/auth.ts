@@ -7,6 +7,7 @@ export type SessionUser = {
   role: string;
   client_id: string | null;
   roles: string[];
+  allowed_pages: string[];
   is_authenticated: boolean;
 };
 

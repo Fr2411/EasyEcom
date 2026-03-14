@@ -7,11 +7,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from easy_ecom.data.store.postgres_models import (
+    UserPageAccessOverrideModel,
     UserModel,
     UserRoleModel,
 )
-from easy_ecom.domain.models.auth import AuthenticatedUser
-from easy_ecom.domain.services.auth_service import AuthUserRecord
+from easy_ecom.domain.services.auth_service import AuthPageOverrideRecord, AuthUserRecord
 
 
 @dataclass(frozen=True)
@@ -55,6 +55,18 @@ class PostgresAuthRepo:
                 select(UserRoleModel.role_code).where(UserRoleModel.user_id == user_id)
             ).all()
             return [str(row[0]) for row in rows]
+
+    def get_page_access_overrides(self, user_id: str) -> list[AuthPageOverrideRecord]:
+        with self._session_factory() as session:
+            rows = session.execute(
+                select(UserPageAccessOverrideModel.page_code, UserPageAccessOverrideModel.is_allowed).where(
+                    UserPageAccessOverrideModel.user_id == user_id
+                )
+            ).all()
+            return [
+                AuthPageOverrideRecord(page_code=str(page_code), is_allowed=bool(is_allowed))
+                for page_code, is_allowed in rows
+            ]
 
     def update_password_hash(self, user_id: str, password_hash: str) -> None:
         with self._session_factory() as session:

@@ -52,6 +52,9 @@ def test_admin_routes_require_super_admin(monkeypatch, tmp_path: Path):
     response = client.get("/admin/clients")
     assert response.status_code == 403
 
+    access_response = client.get("/admin/users/33333333-3333-3333-3333-333333333333/access")
+    assert access_response.status_code == 403
+
 
 def test_onboard_client_creates_active_tenant_shell(monkeypatch, tmp_path: Path):
     runtime = _setup_runtime(tmp_path)
@@ -114,6 +117,7 @@ def test_onboard_client_creates_active_tenant_shell(monkeypatch, tmp_path: Path)
         json={"email": "owner@acme.test", "password": "owner-secret"},
     )
     assert owner_login.status_code == 200
+    assert "Dashboard" in owner_login.json()["allowed_pages"]
 
     finance_login = client.post(
         "/auth/login",
@@ -197,3 +201,94 @@ def test_super_admin_can_set_password_for_existing_user(monkeypatch, tmp_path: P
     users = runtime.store.read("users.csv")
     owner_row = users[users["user_id"] == owner["user_id"]].iloc[0]
     assert verify_password("owner-secret-2", owner_row["password_hash"])
+
+
+def test_super_admin_can_override_user_access_and_backend_enforces_it(monkeypatch, tmp_path: Path):
+    runtime = _setup_runtime(tmp_path)
+    client = _login_super_admin(runtime, monkeypatch)
+
+    onboard_response = client.post(
+        "/admin/clients/onboard",
+        json={
+            "business_name": "Delta Ops",
+            "contact_name": "Delta Contact",
+            "primary_email": "contact@delta.test",
+            "primary_phone": "+9715333333",
+            "owner_name": "Delta Owner",
+            "owner_email": "owner@delta.test",
+            "owner_password": "owner-secret",
+            "additional_users": [
+                {
+                    "name": "Delta Staff",
+                    "email": "staff@delta.test",
+                    "role_code": "CLIENT_STAFF",
+                    "password": "staff-secret",
+                }
+            ],
+        },
+    )
+    assert onboard_response.status_code == 200
+    staff = next(item for item in onboard_response.json()["users"] if item["email"] == "staff@delta.test")
+
+    access_response = client.get(f"/admin/users/{staff['user_id']}/access")
+    assert access_response.status_code == 200
+    assert "CATALOG" in access_response.json()["default_pages"]
+    assert "FINANCE" not in access_response.json()["default_pages"]
+
+    update_response = client.put(
+        f"/admin/users/{staff['user_id']}/access",
+        json={
+            "overrides": [
+                {"page_code": "CATALOG", "is_allowed": False},
+                {"page_code": "FINANCE", "is_allowed": True},
+            ]
+        },
+    )
+    assert update_response.status_code == 200
+    updated_access = update_response.json()
+    assert "CATALOG" not in updated_access["effective_pages"]
+    assert "FINANCE" in updated_access["effective_pages"]
+
+    staff_client = TestClient(create_app())
+    login_response = staff_client.post(
+        "/auth/login",
+        json={"email": "staff@delta.test", "password": "staff-secret"},
+    )
+    assert login_response.status_code == 200
+    assert "Catalog" not in login_response.json()["allowed_pages"]
+    assert "Finance" in login_response.json()["allowed_pages"]
+
+    catalog_response = staff_client.get("/catalog/overview")
+    assert catalog_response.status_code == 403
+    finance_response = staff_client.get("/finance/overview")
+    assert finance_response.status_code == 200
+
+    audit = runtime.store.read("audit_log.csv")
+    assert "user_access_updated" in set(audit["action"].tolist())
+
+
+def test_admin_access_cannot_be_granted_via_override(monkeypatch, tmp_path: Path):
+    runtime = _setup_runtime(tmp_path)
+    client = _login_super_admin(runtime, monkeypatch)
+
+    onboard_response = client.post(
+        "/admin/clients/onboard",
+        json={
+            "business_name": "Echo Supply",
+            "contact_name": "Echo Contact",
+            "primary_email": "contact@echo.test",
+            "primary_phone": "+9715444444",
+            "owner_name": "Echo Owner",
+            "owner_email": "owner@echo.test",
+            "owner_password": "owner-secret",
+            "additional_users": [],
+        },
+    )
+    assert onboard_response.status_code == 200
+    owner = onboard_response.json()["users"][0]
+
+    update_response = client.put(
+        f"/admin/users/{owner['user_id']}/access",
+        json={"overrides": [{"page_code": "ADMIN", "is_allowed": True}]},
+    )
+    assert update_response.status_code == 400

@@ -7,7 +7,7 @@ from fastapi import Cookie, Depends
 
 from easy_ecom.core.config import settings
 from easy_ecom.core.errors import ApiException
-from easy_ecom.core.rbac import can_access_page
+from easy_ecom.core.rbac import can_access_page, default_page_names_for_roles
 from easy_ecom.core.session import SessionSigner
 from easy_ecom.core.tenancy import TenantContext
 from easy_ecom.data.repos.postgres.auth_repo import PostgresAuthRepo
@@ -24,6 +24,7 @@ class SessionUserPayload:
     user_id: str
     client_id: str
     roles: list[str]
+    allowed_pages: list[str]
     email: str
     name: str
 
@@ -51,6 +52,7 @@ def build_session_token(user: AuthenticatedUser) -> str:
             "user_id": user.user_id,
             "client_id": user.client_id,
             "roles": user.roles,
+            "allowed_pages": user.allowed_pages,
             "email": user.email,
             "name": user.name,
         }
@@ -87,14 +89,19 @@ def _parse_session_user(token: str | None) -> SessionUserPayload:
     email = str(payload.get("email", "")).strip()
     name = str(payload.get("name", "")).strip()
     roles = _parse_roles(payload.get("roles"))
+    allowed_pages = _parse_roles(payload.get("allowed_pages")) or []
 
     if not user_id or not client_id or not email or not roles:
         raise _unauthorized()
+
+    if not allowed_pages:
+        allowed_pages = list(default_page_names_for_roles(roles))
 
     return SessionUserPayload(
         user_id=user_id,
         client_id=client_id,
         roles=roles,
+        allowed_pages=allowed_pages,
         email=email,
         name=name,
     )
@@ -108,6 +115,7 @@ def get_authenticated_user(
         user_id=session_user.user_id,
         client_id=session_user.client_id,
         roles=session_user.roles,
+        allowed_pages=session_user.allowed_pages,
         email=session_user.email,
         name=session_user.name,
     )
@@ -118,7 +126,7 @@ def get_tenant_context(user: AuthenticatedUser = Depends(get_authenticated_user)
 
 
 def require_page_access(user: AuthenticatedUser, page: str) -> None:
-    if not can_access_page(user.roles, page):
+    if not can_access_page(user.roles, page, allowed_pages=user.allowed_pages):
         raise ApiException(
             status_code=403,
             code="ACCESS_DENIED",

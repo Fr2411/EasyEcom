@@ -460,6 +460,7 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
 .admin-workspace,
 .admin-stack { display: grid; gap: 0.8rem; }
 .admin-grid-shell { display: grid; gap: 0.8rem; grid-template-columns: 1.5fr 1fr 1fr; align-items: start; }
+.admin-toolbar-actions { display: flex; gap: 0.65rem; align-items: center; flex-wrap: wrap; }
 .admin-role-list { display: grid; gap: 0.2rem; }
 .admin-role-list label,
 .admin-checkbox { display: flex !important; gap: 0.35rem; align-items: center; }
@@ -471,6 +472,7 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
 .admin-inline-head { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; }
 .admin-inline-head h4 { margin: 0; }
 .admin-inline-grid { display: grid; gap: 0.5rem; grid-template-columns: 1.1fr 1.1fr 0.8fr auto; align-items: end; }
+.admin-inline-grid-wide { grid-template-columns: 1.1fr 1.1fr 0.8fr 0.9fr auto; }
 .admin-role-matrix { display: grid; gap: 0.65rem; }
 .admin-role-card { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.7rem; background: #fff; }
 .admin-role-card h4 { margin: 0 0 0.25rem; }
@@ -489,6 +491,39 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
   line-height: 1.55;
 }
 .admin-action-row { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+.admin-inline-access {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: #fbfefe;
+  padding: 0.85rem;
+  display: grid;
+  gap: 0.8rem;
+}
+.admin-access-summary {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.admin-access-summary div {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  padding: 0.6rem;
+}
+.admin-access-summary dt { color: var(--text-muted); margin-bottom: 0.2rem; }
+.admin-access-summary dd { margin: 0; }
+.admin-access-grid { display: grid; gap: 0.5rem; }
+.admin-access-row {
+  display: grid;
+  grid-template-columns: 1fr 180px;
+  gap: 0.65rem;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  padding: 0.55rem 0.65rem;
+}
+.admin-access-row p { margin: 0.2rem 0 0; }
 .status-pill {
   display: inline-flex;
   align-items: center;
@@ -606,11 +641,17 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
   .integrations-layout,
   .ai-review-layout { grid-template-columns: 1fr; }
 
+  .admin-access-summary,
+  .admin-access-row,
+  .admin-inline-grid,
+  .admin-inline-grid-wide { grid-template-columns: 1fr; }
+
   .section-card-wide,
   .field-span-2 { grid-column: auto; }
 
   .customers-toolbar,
   .sales-toolbar,
+  .admin-toolbar-actions,
   .top-header { flex-wrap: wrap; }
 
   .easyecom-logo-sidebar {

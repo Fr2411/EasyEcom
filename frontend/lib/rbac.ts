@@ -5,7 +5,15 @@ const ROLE_PAGE_ACCESS: Record<string, string[]> = {
   FINANCE_STAFF: ['Home', 'Dashboard', 'Finance', 'Returns', 'Reports', 'Settings'],
 };
 
-export function canAccessPage(userRoles: string[] | undefined, pageLabel: string) {
+export function canAccessPage(
+  userRoles: string[] | undefined,
+  pageLabel: string,
+  allowedPages?: string[] | undefined,
+) {
+  if (allowedPages?.length) {
+    return allowedPages.includes(pageLabel);
+  }
+
   if (!userRoles?.length) {
     return false;
   }
