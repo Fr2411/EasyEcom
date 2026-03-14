@@ -76,6 +76,19 @@ class AdminUsersResponse(BaseModel):
     items: list[AdminUserResponse]
 
 
+class AdminUserAccessOverrideResponse(BaseModel):
+    page_code: str
+    is_allowed: bool
+
+
+class AdminUserAccessResponse(BaseModel):
+    user_id: str
+    role_code: str
+    default_pages: list[str]
+    effective_pages: list[str]
+    overrides: list[AdminUserAccessOverrideResponse]
+
+
 class AdminOnboardUserInput(BaseModel):
     name: str = Field(min_length=2, max_length=255)
     email: str
@@ -144,3 +157,12 @@ class AdminUserUpdateRequest(BaseModel):
 
 class AdminUserPasswordSetRequest(BaseModel):
     password: str = Field(min_length=6, max_length=255)
+
+
+class AdminUserAccessOverrideInput(BaseModel):
+    page_code: str = Field(min_length=3, max_length=64)
+    is_allowed: bool
+
+
+class AdminUserAccessUpdateRequest(BaseModel):
+    overrides: list[AdminUserAccessOverrideInput] = Field(default_factory=list)

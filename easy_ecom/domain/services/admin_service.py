@@ -11,7 +11,14 @@ from sqlalchemy.orm import Session, sessionmaker
 from easy_ecom.core.config import settings
 from easy_ecom.core.errors import ApiException
 from easy_ecom.core.ids import new_uuid
-from easy_ecom.core.rbac import TENANT_ROLE_CODES, pages_for_role
+from easy_ecom.core.rbac import (
+    OVERRIDABLE_PAGE_CODES,
+    TENANT_ROLE_CODES,
+    default_page_codes_for_roles,
+    effective_page_names,
+    page_names_from_codes,
+    pages_for_role,
+)
 from easy_ecom.core.security import hash_password
 from easy_ecom.core.time_utils import now_utc
 from easy_ecom.data.repos.postgres.code_factory import generate_unique_client_code, generate_unique_user_code
@@ -22,6 +29,7 @@ from easy_ecom.data.store.postgres_models import (
     LocationModel,
     RoleModel,
     UserModel,
+    UserPageAccessOverrideModel,
     UserRoleModel,
 )
 from easy_ecom.data.store.schema import ROLES_SEED
@@ -101,6 +109,21 @@ class AdminOnboardResult:
     client: AdminClientRecord
     users: list[AdminUserRecord]
     warnings: list[str]
+
+
+@dataclass(frozen=True)
+class AdminUserAccessOverrideRecord:
+    page_code: str
+    is_allowed: bool
+
+
+@dataclass(frozen=True)
+class AdminUserAccessRecord:
+    user_id: str
+    role_code: str
+    default_pages: tuple[str, ...]
+    effective_pages: tuple[str, ...]
+    overrides: tuple[AdminUserAccessOverrideRecord, ...]
 
 
 class AdminService:
@@ -412,6 +435,78 @@ class AdminService:
                 role_names=role_names,
             )
 
+    def get_user_access(self, user_id: str) -> AdminUserAccessRecord:
+        with self._session_factory() as session:
+            user = self._get_user(session, user_id)
+            role_code = self._user_role_code(session, user.user_id)
+            if role_code is None:
+                raise ApiException(
+                    status_code=400,
+                    code="ROLE_NOT_FOUND",
+                    message="User is missing an assigned role",
+                )
+            return self._build_user_access_record(session, user_id=str(user.user_id), role_code=role_code)
+
+    def update_user_access(
+        self,
+        *,
+        user_id: str,
+        actor: AuthenticatedUser,
+        request_id: str | None,
+        overrides: list[dict[str, Any]],
+    ) -> AdminUserAccessRecord:
+        with self._session_factory() as session:
+            user = self._get_user(session, user_id)
+            role_code = self._user_role_code(session, user.user_id)
+            if role_code is None:
+                raise ApiException(
+                    status_code=400,
+                    code="ROLE_NOT_FOUND",
+                    message="User is missing an assigned role",
+                )
+
+            next_overrides = self._normalize_access_overrides(overrides)
+            current_rows = session.execute(
+                select(UserPageAccessOverrideModel).where(UserPageAccessOverrideModel.user_id == user.user_id)
+            ).scalars().all()
+            current_map = {row.page_code: bool(row.is_allowed) for row in current_rows}
+            next_map = {item.page_code: item.is_allowed for item in next_overrides}
+
+            if current_map != next_map:
+                session.execute(
+                    delete(UserPageAccessOverrideModel).where(UserPageAccessOverrideModel.user_id == user.user_id)
+                )
+                timestamp = now_utc()
+                for item in next_overrides:
+                    session.add(
+                        UserPageAccessOverrideModel(
+                            override_id=new_uuid(),
+                            user_id=user.user_id,
+                            page_code=item.page_code,
+                            is_allowed=item.is_allowed,
+                            created_at=timestamp,
+                            updated_at=timestamp,
+                        )
+                    )
+                self._log_audit(
+                    session,
+                    client_id=user.client_id,
+                    actor_user_id=actor.user_id,
+                    entity_type="user_access",
+                    entity_id=user.user_id,
+                    action="user_access_updated",
+                    request_id=request_id,
+                    metadata_json={
+                        "overrides": [
+                            {"page_code": item.page_code, "is_allowed": item.is_allowed}
+                            for item in next_overrides
+                        ]
+                    },
+                )
+                session.commit()
+
+            return self._build_user_access_record(session, user_id=str(user.user_id), role_code=role_code)
+
     def roles(self) -> list[AdminRoleAccess]:
         role_map = {item["role_code"]: item for item in ROLES_SEED}
         ordered_codes = ["SUPER_ADMIN", "CLIENT_OWNER", "CLIENT_STAFF", "FINANCE_STAFF"]
@@ -569,8 +664,7 @@ class AdminService:
                 )
             )
 
-            created_users: list[AdminUserRecord] = []
-            created_users.append(
+            created_users: list[AdminUserRecord] = [
                 self._create_client_user(
                     session,
                     client=client,
@@ -580,7 +674,7 @@ class AdminService:
                     password=validated_owner_password,
                     created_at=timestamp,
                 )
-            )
+            ]
 
             for user_payload in normalized_additional_users:
                 created_users.append(
@@ -708,6 +802,56 @@ class AdminService:
             last_login_at=None,
         )
 
+    def _build_user_access_record(self, session: Session, *, user_id: str, role_code: str) -> AdminUserAccessRecord:
+        override_rows = session.execute(
+            select(UserPageAccessOverrideModel)
+            .where(UserPageAccessOverrideModel.user_id == user_id)
+            .order_by(UserPageAccessOverrideModel.page_code.asc())
+        ).scalars().all()
+        overrides = tuple(
+            AdminUserAccessOverrideRecord(page_code=row.page_code, is_allowed=bool(row.is_allowed))
+            for row in override_rows
+        )
+        granted_page_codes = [row.page_code for row in override_rows if row.is_allowed]
+        revoked_page_codes = [row.page_code for row in override_rows if not row.is_allowed]
+        default_pages = default_page_codes_for_roles([role_code])
+        effective_names = effective_page_names([role_code], granted_page_codes, revoked_page_codes)
+        effective_page_codes = tuple(
+            page_code
+            for page_code in OVERRIDABLE_PAGE_CODES
+            if page_names_from_codes([page_code])[0] in set(effective_names)
+        )
+        return AdminUserAccessRecord(
+            user_id=user_id,
+            role_code=role_code,
+            default_pages=default_pages,
+            effective_pages=effective_page_codes,
+            overrides=overrides,
+        )
+
+    def _normalize_access_overrides(self, overrides: list[dict[str, Any]]) -> list[AdminUserAccessOverrideRecord]:
+        normalized: list[AdminUserAccessOverrideRecord] = []
+        seen_codes: set[str] = set()
+        for raw in overrides:
+            page_code = str(raw.get("page_code", "")).strip().upper()
+            if page_code not in OVERRIDABLE_PAGE_CODES:
+                raise ApiException(
+                    status_code=400,
+                    code="INVALID_PAGE_OVERRIDE",
+                    message="Page override must target a supported core page",
+                )
+            if page_code in seen_codes:
+                raise ApiException(
+                    status_code=400,
+                    code="DUPLICATE_PAGE_OVERRIDE",
+                    message="Duplicate page overrides are not allowed in the same request",
+                )
+            seen_codes.add(page_code)
+            normalized.append(
+                AdminUserAccessOverrideRecord(page_code=page_code, is_allowed=bool(raw.get("is_allowed")))
+            )
+        return sorted(normalized, key=lambda item: item.page_code)
+
     def _duplicate_warnings(
         self,
         session: Session,
@@ -793,7 +937,7 @@ class AdminService:
         role_rows = session.execute(
             select(UserRoleModel.user_id, UserRoleModel.role_code).where(UserRoleModel.user_id.in_(user_ids))
         ).all()
-        role_map = {str(user_id): str(role_code) for user_id, role_code in role_rows}
+        role_map = {str(row_user_id): str(row_role_code) for row_user_id, row_role_code in role_rows}
         return [
             self._user_record_from_model(
                 user=user,

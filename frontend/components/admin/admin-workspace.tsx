@@ -1,19 +1,20 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, Fragment, useEffect, useState } from 'react';
 
 import { useAuth } from '@/components/auth/auth-provider';
 import {
   createAdminUser,
   getAdminClient,
+  getAdminUserAccess,
   listAdminAudit,
   listAdminClients,
-  listAdminRoles,
   listAdminUsers,
   onboardAdminClient,
   setAdminUserPassword,
   updateAdminClient,
   updateAdminUser,
+  updateAdminUserAccess,
 } from '@/lib/api/admin';
 import { ApiError, ApiNetworkError } from '@/lib/api/client';
 import { getPublicEnv } from '@/lib/env';
@@ -22,17 +23,31 @@ import type {
   AdminAuditItem,
   AdminClient,
   AdminOnboardClientInput,
-  AdminRole,
   AdminUser,
+  AdminUserAccess,
+  AdminUserAccessUpdateInput,
 } from '@/types/admin';
-
-type WizardStep = 1 | 2 | 3 | 4;
 
 type UserDraft = {
   name: string;
   role_code: string;
   is_active: boolean;
 };
+
+type AccessState = 'default' | 'allow' | 'revoke';
+
+const ACCESS_PAGE_OPTIONS = [
+  { code: 'DASHBOARD', label: 'Dashboard' },
+  { code: 'CATALOG', label: 'Catalog' },
+  { code: 'INVENTORY', label: 'Inventory' },
+  { code: 'PURCHASES', label: 'Purchases' },
+  { code: 'SALES', label: 'Sales' },
+  { code: 'CUSTOMERS', label: 'Customers' },
+  { code: 'FINANCE', label: 'Finance' },
+  { code: 'RETURNS', label: 'Returns' },
+  { code: 'REPORTS', label: 'Reports' },
+  { code: 'SETTINGS', label: 'Settings' },
+] as const;
 
 const EMPTY_ONBOARD_FORM: AdminOnboardClientInput = {
   business_name: '',
@@ -55,7 +70,7 @@ const EMPTY_ONBOARD_FORM: AdminOnboardClientInput = {
   additional_users: [],
 };
 
-const EMPTY_NEW_USER = {
+const EMPTY_TEAM_USER_FORM = {
   name: '',
   email: '',
   role_code: 'CLIENT_STAFF',
@@ -93,10 +108,38 @@ function adminErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
+function toAccessDraft(access: AdminUserAccess) {
+  const overrideMap = new Map(access.overrides.map((item) => [item.page_code, item.is_allowed]));
+  return Object.fromEntries(
+    ACCESS_PAGE_OPTIONS.map((item) => {
+      if (!overrideMap.has(item.code)) {
+        return [item.code, 'default'];
+      }
+      return [item.code, overrideMap.get(item.code) ? 'allow' : 'revoke'];
+    })
+  ) as Record<string, AccessState>;
+}
+
+function buildAccessPayload(drafts: Record<string, AccessState>): AdminUserAccessUpdateInput {
+  return {
+    overrides: Object.entries(drafts)
+      .filter(([, state]) => state !== 'default')
+      .map(([page_code, state]) => ({
+        page_code,
+        is_allowed: state === 'allow',
+      })),
+  };
+}
+
+function formatAccessCodes(pageCodes: string[]) {
+  return pageCodes
+    .map((code) => ACCESS_PAGE_OPTIONS.find((item) => item.code === code)?.label ?? code)
+    .join(', ');
+}
+
 export function AdminWorkspace() {
   const { user, loading } = useAuth();
   const [clients, setClients] = useState<AdminClient[]>([]);
-  const [roles, setRoles] = useState<AdminRole[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [selectedClient, setSelectedClient] = useState<AdminClient | null>(null);
   const [clientDraft, setClientDraft] = useState<AdminClient | null>(null);
@@ -108,18 +151,27 @@ export function AdminWorkspace() {
   const [workspaceLoading, setWorkspaceLoading] = useState(true);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [busyLabel, setBusyLabel] = useState<string | null>(null);
-  const [wizardStep, setWizardStep] = useState<WizardStep>(1);
-  const [onboardForm, setOnboardForm] = useState<AdminOnboardClientInput>(EMPTY_ONBOARD_FORM);
-  const [newUserForm, setNewUserForm] = useState(EMPTY_NEW_USER);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [creatingClient, setCreatingClient] = useState(false);
+  const [onboardForm, setOnboardForm] = useState<AdminOnboardClientInput>(EMPTY_ONBOARD_FORM);
+  const [teamUserForm, setTeamUserForm] = useState(EMPTY_TEAM_USER_FORM);
+  const [activeAccessUserId, setActiveAccessUserId] = useState<string | null>(null);
+  const [accessRecord, setAccessRecord] = useState<AdminUserAccess | null>(null);
+  const [accessDrafts, setAccessDrafts] = useState<Record<string, AccessState>>({});
+  const [accessLoading, setAccessLoading] = useState(false);
+  const [accessError, setAccessError] = useState<string | null>(null);
 
   async function loadClientDirectory(currentSearch = search) {
     const response = await listAdminClients(currentSearch);
     setClients(response.items);
-    if (!selectedClientId && response.items[0]) {
+    if (!creatingClient && !selectedClientId && response.items[0]) {
       setSelectedClientId(response.items[0].client_id);
     }
-    if (selectedClientId && !response.items.some((item) => item.client_id === selectedClientId)) {
+    if (
+      !creatingClient &&
+      selectedClientId &&
+      !response.items.some((item) => item.client_id === selectedClientId)
+    ) {
       setSelectedClientId(response.items[0]?.client_id ?? null);
     }
   }
@@ -154,15 +206,9 @@ export function AdminWorkspace() {
     setWorkspaceLoading(true);
     setWorkspaceError(null);
     try {
-      const [clientResponse, roleResponse, auditResponse] = await Promise.all([
-        listAdminClients(),
-        listAdminRoles(),
-        listAdminAudit(),
-      ]);
+      const clientResponse = await listAdminClients();
       setClients(clientResponse.items);
-      setRoles(roleResponse.items);
-      setAuditItems(auditResponse.items);
-      if (!selectedClientId && clientResponse.items[0]) {
+      if (!creatingClient && !selectedClientId && clientResponse.items[0]) {
         setSelectedClientId(clientResponse.items[0].client_id);
       }
     } catch (error) {
@@ -181,42 +227,64 @@ export function AdminWorkspace() {
   }, [loading, user]);
 
   useEffect(() => {
-    if (!selectedClientId || !isSuperAdmin(user?.roles)) {
+    if (creatingClient || !selectedClientId || !isSuperAdmin(user?.roles)) {
       return;
     }
     void loadSelectedClient(selectedClientId);
-  }, [selectedClientId, user]);
+  }, [creatingClient, selectedClientId, user]);
 
   function resetMessages() {
     setWorkspaceError(null);
     setSuccessMessage(null);
   }
 
-  function canAdvanceWizard(step: WizardStep) {
-    if (step === 1) {
-      return Boolean(
-        onboardForm.business_name.trim() &&
-          onboardForm.contact_name.trim() &&
-          onboardForm.primary_email.trim() &&
-          onboardForm.primary_phone.trim()
-      );
-    }
+  function startCreateMode() {
+    resetMessages();
+    setCreatingClient(true);
+    setSelectedClientId(null);
+    setSelectedClient(null);
+    setClientDraft(null);
+    setClientUsers([]);
+    setUserDrafts({});
+    setPasswordDrafts({});
+    setAuditItems([]);
+    setOnboardForm(EMPTY_ONBOARD_FORM);
+    setTeamUserForm(EMPTY_TEAM_USER_FORM);
+    setActiveAccessUserId(null);
+    setAccessRecord(null);
+    setAccessDrafts({});
+    setAccessError(null);
+  }
 
-    if (step === 2) {
-      const ownerReady = Boolean(
-        onboardForm.owner_name.trim() && onboardForm.owner_email.trim() && onboardForm.owner_password.length >= 6
-      );
-      const additionalUsersReady = onboardForm.additional_users.every(
-        (entry) =>
-          entry.name.trim() &&
-          entry.email.trim() &&
-          entry.role_code.trim() &&
-          entry.password.length >= 6
-      );
-      return ownerReady && additionalUsersReady;
-    }
+  function selectExistingClient(clientId: string) {
+    resetMessages();
+    setCreatingClient(false);
+    setSelectedClientId(clientId);
+    setTeamUserForm(EMPTY_TEAM_USER_FORM);
+    setActiveAccessUserId(null);
+    setAccessRecord(null);
+    setAccessDrafts({});
+    setAccessError(null);
+  }
 
-    return true;
+  function createClientReady() {
+    const requiredDetails = Boolean(
+      onboardForm.business_name.trim() &&
+        onboardForm.contact_name.trim() &&
+        onboardForm.primary_email.trim() &&
+        onboardForm.primary_phone.trim() &&
+        onboardForm.owner_name.trim() &&
+        onboardForm.owner_email.trim() &&
+        onboardForm.owner_password.length >= 6
+    );
+    const stagedUsersReady = onboardForm.additional_users.every(
+      (entry) =>
+        entry.name.trim() &&
+        entry.email.trim() &&
+        entry.role_code.trim() &&
+        entry.password.length >= 6
+    );
+    return requiredDetails && stagedUsersReady;
   }
 
   async function handleSearchSubmit(event: FormEvent<HTMLFormElement>) {
@@ -229,20 +297,21 @@ export function AdminWorkspace() {
     }
   }
 
-  async function handleOnboardSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleCreateClient(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (wizardStep < 4) {
-      setWizardStep((current) => Math.min(4, current + 1) as WizardStep);
+    if (!createClientReady()) {
+      setWorkspaceError('Complete the required client, owner, and staged user fields before creating the tenant.');
       return;
     }
 
     resetMessages();
-    setBusyLabel('Onboarding client');
+    setBusyLabel('Creating client');
     try {
       const response = await onboardAdminClient(onboardForm);
-      setSuccessMessage(`Client ${response.client.business_name} was onboarded successfully.`);
+      setCreatingClient(false);
       setOnboardForm(EMPTY_ONBOARD_FORM);
-      setWizardStep(1);
+      setTeamUserForm(EMPTY_TEAM_USER_FORM);
+      setSuccessMessage(`Client ${response.client.business_name} was onboarded successfully.`);
       await loadWorkspace();
       setSelectedClientId(response.client.client_id);
     } catch (error) {
@@ -250,6 +319,32 @@ export function AdminWorkspace() {
     } finally {
       setBusyLabel(null);
     }
+  }
+
+  function handleStageUser() {
+    if (
+      !teamUserForm.name.trim() ||
+      !teamUserForm.email.trim() ||
+      !teamUserForm.role_code.trim() ||
+      teamUserForm.password.length < 6
+    ) {
+      setWorkspaceError('Add a name, email, role, and password before staging a tenant team user.');
+      return;
+    }
+    resetMessages();
+    setOnboardForm({
+      ...onboardForm,
+      additional_users: [
+        ...onboardForm.additional_users,
+        {
+          name: teamUserForm.name,
+          email: teamUserForm.email,
+          role_code: teamUserForm.role_code,
+          password: teamUserForm.password,
+        },
+      ],
+    });
+    setTeamUserForm(EMPTY_TEAM_USER_FORM);
   }
 
   async function handleClientSave(event: FormEvent<HTMLFormElement>) {
@@ -299,7 +394,7 @@ export function AdminWorkspace() {
     resetMessages();
     setBusyLabel('Adding user');
     try {
-      const created = await createAdminUser(selectedClient.client_id, newUserForm);
+      const created = await createAdminUser(selectedClient.client_id, teamUserForm);
       setClientUsers((items) => [created, ...items]);
       setUserDrafts((drafts) => ({
         ...drafts,
@@ -310,7 +405,7 @@ export function AdminWorkspace() {
         },
       }));
       setPasswordDrafts((drafts) => ({ ...drafts, [created.user_id]: '' }));
-      setNewUserForm(EMPTY_NEW_USER);
+      setTeamUserForm(EMPTY_TEAM_USER_FORM);
       setSuccessMessage(`User ${created.name} was added under ${selectedClient.business_name}.`);
     } catch (error) {
       setWorkspaceError(adminErrorMessage(error, 'Unable to create the user.'));
@@ -339,6 +434,9 @@ export function AdminWorkspace() {
         },
       }));
       setSuccessMessage(`User ${updated.name} was updated.`);
+      if (activeAccessUserId === userId) {
+        void openAccessDetails(userId);
+      }
     } catch (error) {
       setWorkspaceError(adminErrorMessage(error, 'Unable to update the user.'));
     } finally {
@@ -367,6 +465,48 @@ export function AdminWorkspace() {
     }
   }
 
+  async function openAccessDetails(userId: string) {
+    if (activeAccessUserId === userId) {
+      setActiveAccessUserId(null);
+      setAccessRecord(null);
+      setAccessDrafts({});
+      setAccessError(null);
+      return;
+    }
+
+    resetMessages();
+    setAccessLoading(true);
+    setActiveAccessUserId(userId);
+    setAccessError(null);
+    try {
+      const access = await getAdminUserAccess(userId);
+      setAccessRecord(access);
+      setAccessDrafts(toAccessDraft(access));
+    } catch (error) {
+      setAccessRecord(null);
+      setAccessDrafts({});
+      setAccessError(adminErrorMessage(error, 'Unable to load access details.'));
+    } finally {
+      setAccessLoading(false);
+    }
+  }
+
+  async function handleSaveAccess(userId: string) {
+    resetMessages();
+    setAccessLoading(true);
+    setAccessError(null);
+    try {
+      const updated = await updateAdminUserAccess(userId, buildAccessPayload(accessDrafts));
+      setAccessRecord(updated);
+      setAccessDrafts(toAccessDraft(updated));
+      setSuccessMessage('User access details were updated.');
+    } catch (error) {
+      setAccessError(adminErrorMessage(error, 'Unable to save access details.'));
+    } finally {
+      setAccessLoading(false);
+    }
+  }
+
   const potentialMatches = clients.filter((client) => {
     const businessMatch =
       onboardForm.business_name.trim() &&
@@ -385,7 +525,7 @@ export function AdminWorkspace() {
       <div className="admin-card">
         <p className="eyebrow">Super Admin</p>
         <h3>Loading control panel</h3>
-        <p className="admin-muted">Pulling clients, roles, users, and audit activity from the live auth foundation.</p>
+        <p className="admin-muted">Pulling clients, users, and audit activity from the live auth foundation.</p>
       </div>
     );
   }
@@ -406,13 +546,13 @@ export function AdminWorkspace() {
       {successMessage ? <p className="admin-success">{successMessage}</p> : null}
       {busyLabel ? <p className="admin-muted">{busyLabel}…</p> : null}
 
-      <div className="admin-grid-shell">
-        <section className="admin-card">
-          <div className="admin-header-row">
-            <div>
-              <p className="eyebrow">Client Directory</p>
-              <h3>Tenant list</h3>
-            </div>
+      <section className="admin-card">
+        <div className="admin-header-row">
+          <div>
+            <p className="eyebrow">Client Directory</p>
+            <h3>Tenant list</h3>
+          </div>
+          <div className="admin-toolbar-actions">
             <form className="customers-toolbar" onSubmit={handleSearchSubmit}>
               <input
                 type="search"
@@ -423,66 +563,71 @@ export function AdminWorkspace() {
               />
               <button type="submit">Search</button>
             </form>
+            <button type="button" onClick={startCreateMode}>
+              New Client
+            </button>
           </div>
-          <div className="admin-table-wrap">
-            <table className="admin-table">
-              <thead>
-                <tr>
-                  <th>Business</th>
-                  <th>Client Code</th>
-                  <th>Contact</th>
-                  <th>Status</th>
-                  <th>Owner</th>
-                  <th>Created</th>
+        </div>
+        <div className="admin-table-wrap">
+          <table className="admin-table">
+            <thead>
+              <tr>
+                <th>Business</th>
+                <th>Client Code</th>
+                <th>Contact</th>
+                <th>Status</th>
+                <th>Owner</th>
+                <th>Created</th>
+              </tr>
+            </thead>
+            <tbody>
+              {clients.map((client) => (
+                <tr
+                  key={client.client_id}
+                  className={!creatingClient && selectedClientId === client.client_id ? 'admin-row-active' : undefined}
+                  onClick={() => selectExistingClient(client.client_id)}
+                >
+                  <td>
+                    <strong>{client.business_name}</strong>
+                    <p className="admin-muted">{client.email}</p>
+                  </td>
+                  <td>{client.client_code}</td>
+                  <td>{client.contact_name}</td>
+                  <td>
+                    <span className={client.status === 'active' ? 'status-pill status-pill-active' : 'status-pill'}>
+                      {client.status}
+                    </span>
+                  </td>
+                  <td>{client.owner_name}</td>
+                  <td>{formatDateTime(client.created_at)}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {clients.map((client) => (
-                  <tr
-                    key={client.client_id}
-                    className={selectedClientId === client.client_id ? 'admin-row-active' : undefined}
-                    onClick={() => setSelectedClientId(client.client_id)}
-                  >
-                    <td>
-                      <strong>{client.business_name}</strong>
-                      <p className="admin-muted">{client.email}</p>
-                    </td>
-                    <td>{client.client_code}</td>
-                    <td>{client.contact_name}</td>
-                    <td>
-                      <span className={client.status === 'active' ? 'status-pill status-pill-active' : 'status-pill'}>
-                        {client.status}
-                      </span>
-                    </td>
-                    <td>{client.owner_name}</td>
-                    <td>{formatDateTime(client.created_at)}</td>
-                  </tr>
-                ))}
-                {!clients.length ? (
-                  <tr>
-                    <td colSpan={6}>
-                      <div className="reports-deferred">
-                        <h4>No clients found</h4>
-                        <p>Onboard the first client from the wizard to open the tenant workspace.</p>
-                      </div>
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-        </section>
+              ))}
+              {!clients.length ? (
+                <tr>
+                  <td colSpan={6}>
+                    <div className="reports-deferred">
+                      <h4>No clients found</h4>
+                      <p>Click New Client to open the onboarding workspace.</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
-        <section className="admin-card">
-          <div className="admin-header-row">
-            <div>
-              <p className="eyebrow">Onboarding Wizard</p>
-              <h3>New client account</h3>
+      {creatingClient ? (
+        <div className="admin-layout">
+          <section className="admin-card">
+            <div className="admin-header-row">
+              <div>
+                <p className="eyebrow">Client Details</p>
+                <h3>New client workspace</h3>
+              </div>
+              <span className="page-shell-chip">Create Mode</span>
             </div>
-            <span className="page-shell-chip">Step {wizardStep} / 4</span>
-          </div>
-          <form className="admin-form" onSubmit={handleOnboardSubmit}>
-            {wizardStep === 1 ? (
+            <form className="admin-form" onSubmit={handleCreateClient}>
               <div className="settings-grid">
                 <label>
                   Business name
@@ -513,123 +658,41 @@ export function AdminWorkspace() {
                     onChange={(event) => setOnboardForm({ ...onboardForm, primary_phone: event.target.value })}
                   />
                 </label>
-              </div>
-            ) : null}
-
-            {wizardStep === 2 ? (
-              <div className="admin-stack">
-                <div className="settings-grid">
-                  <label>
-                    Owner name
-                    <input
-                      value={onboardForm.owner_name}
-                      onChange={(event) => setOnboardForm({ ...onboardForm, owner_name: event.target.value })}
-                    />
-                  </label>
-                  <label>
-                    Owner email
-                    <input
-                      type="email"
-                      value={onboardForm.owner_email}
-                      onChange={(event) => setOnboardForm({ ...onboardForm, owner_email: event.target.value })}
-                    />
-                  </label>
-                  <label className="field-span-2">
-                    Owner password
-                    <input
-                      type="password"
-                      value={onboardForm.owner_password}
-                      onChange={(event) => setOnboardForm({ ...onboardForm, owner_password: event.target.value })}
-                    />
-                  </label>
-                </div>
-
-                <div className="admin-inline-head">
-                  <h4>Additional users</h4>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setOnboardForm({
-                        ...onboardForm,
-                        additional_users: [
-                          ...onboardForm.additional_users,
-                          { name: '', email: '', role_code: 'CLIENT_STAFF', password: '' },
-                        ],
-                      })
-                    }
-                  >
-                    + Add user
-                  </button>
-                </div>
-
-                <div className="admin-stack">
-                  {onboardForm.additional_users.map((entry, index) => (
-                    <div key={`${index}-${entry.email}`} className="admin-inline-grid">
-                      <input
-                        placeholder="Full name"
-                        value={entry.name}
-                        onChange={(event) => {
-                          const next = [...onboardForm.additional_users];
-                          next[index] = { ...entry, name: event.target.value };
-                          setOnboardForm({ ...onboardForm, additional_users: next });
-                        }}
-                      />
-                      <input
-                        type="email"
-                        placeholder="Email"
-                        value={entry.email}
-                        onChange={(event) => {
-                          const next = [...onboardForm.additional_users];
-                          next[index] = { ...entry, email: event.target.value };
-                          setOnboardForm({ ...onboardForm, additional_users: next });
-                        }}
-                      />
-                      <select
-                        value={entry.role_code}
-                        onChange={(event) => {
-                          const next = [...onboardForm.additional_users];
-                          next[index] = { ...entry, role_code: event.target.value };
-                          setOnboardForm({ ...onboardForm, additional_users: next });
-                        }}
-                      >
-                        <option value="CLIENT_STAFF">Client Staff</option>
-                        <option value="FINANCE_STAFF">Finance Staff</option>
-                        <option value="CLIENT_OWNER">Client Owner</option>
-                      </select>
-                      <input
-                        type="password"
-                        placeholder="Password"
-                        value={entry.password}
-                        onChange={(event) => {
-                          const next = [...onboardForm.additional_users];
-                          next[index] = { ...entry, password: event.target.value };
-                          setOnboardForm({ ...onboardForm, additional_users: next });
-                        }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setOnboardForm({
-                            ...onboardForm,
-                            additional_users: onboardForm.additional_users.filter((_, itemIndex) => itemIndex !== index),
-                          })
-                        }
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
-            {wizardStep === 3 ? (
-              <div className="settings-grid">
+                <label>
+                  Owner name
+                  <input
+                    value={onboardForm.owner_name}
+                    onChange={(event) => setOnboardForm({ ...onboardForm, owner_name: event.target.value })}
+                  />
+                </label>
+                <label>
+                  Owner email
+                  <input
+                    type="email"
+                    value={onboardForm.owner_email}
+                    onChange={(event) => setOnboardForm({ ...onboardForm, owner_email: event.target.value })}
+                  />
+                </label>
+                <label className="field-span-2">
+                  Owner password
+                  <input
+                    type="password"
+                    value={onboardForm.owner_password}
+                    onChange={(event) => setOnboardForm({ ...onboardForm, owner_password: event.target.value })}
+                  />
+                </label>
                 <label>
                   Website
                   <input
                     value={onboardForm.website_url}
                     onChange={(event) => setOnboardForm({ ...onboardForm, website_url: event.target.value })}
+                  />
+                </label>
+                <label>
+                  WhatsApp
+                  <input
+                    value={onboardForm.whatsapp_number}
+                    onChange={(event) => setOnboardForm({ ...onboardForm, whatsapp_number: event.target.value })}
                   />
                 </label>
                 <label>
@@ -647,17 +710,17 @@ export function AdminWorkspace() {
                   />
                 </label>
                 <label>
-                  WhatsApp
-                  <input
-                    value={onboardForm.whatsapp_number}
-                    onChange={(event) => setOnboardForm({ ...onboardForm, whatsapp_number: event.target.value })}
-                  />
-                </label>
-                <label>
                   Timezone
                   <input
                     value={onboardForm.timezone}
                     onChange={(event) => setOnboardForm({ ...onboardForm, timezone: event.target.value })}
+                  />
+                </label>
+                <label>
+                  Default warehouse
+                  <input
+                    value={onboardForm.default_location_name}
+                    onChange={(event) => setOnboardForm({ ...onboardForm, default_location_name: event.target.value })}
                   />
                 </label>
                 <label>
@@ -672,13 +735,6 @@ export function AdminWorkspace() {
                   <input
                     value={onboardForm.currency_symbol}
                     onChange={(event) => setOnboardForm({ ...onboardForm, currency_symbol: event.target.value })}
-                  />
-                </label>
-                <label>
-                  Default warehouse
-                  <input
-                    value={onboardForm.default_location_name}
-                    onChange={(event) => setOnboardForm({ ...onboardForm, default_location_name: event.target.value })}
                   />
                 </label>
                 <label className="field-span-2">
@@ -696,74 +752,131 @@ export function AdminWorkspace() {
                   />
                 </label>
               </div>
-            ) : null}
 
-            {wizardStep === 4 ? (
-              <div className="admin-stack">
-                <div className="settings-context">
-                  <div><dt>Business</dt><dd>{onboardForm.business_name || 'Not provided'}</dd></div>
-                  <div><dt>Client code</dt><dd>Generated from the business name on submit</dd></div>
-                  <div><dt>Primary contact</dt><dd>{onboardForm.contact_name} / {onboardForm.primary_email}</dd></div>
-                  <div><dt>Owner</dt><dd>{onboardForm.owner_name} / {onboardForm.owner_email}</dd></div>
-                  <div><dt>Extra users</dt><dd>{onboardForm.additional_users.length}</dd></div>
-                  <div><dt>Warehouse</dt><dd>{onboardForm.default_location_name || 'Main Warehouse'}</dd></div>
+              <div className="admin-divider" />
+
+              <div className="admin-header-row">
+                <div>
+                  <p className="eyebrow">Tenant Team</p>
+                  <h3>Stage users before creation</h3>
                 </div>
-                {potentialMatches.length ? (
-                  <div className="reports-deferred">
-                    <h4>Potential duplicate clients</h4>
-                    <ul className="admin-match-list">
-                      {potentialMatches.map((client) => (
-                        <li key={client.client_id}>
-                          <strong>{client.business_name}</strong> <span>{client.client_code}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
               </div>
-            ) : null}
+              <div className="admin-table-wrap">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Email</th>
+                      <th>Role</th>
+                      <th>Password</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {onboardForm.additional_users.map((entry, index) => (
+                      <tr key={`${entry.email}-${index}`}>
+                        <td>{entry.name}</td>
+                        <td>{entry.email}</td>
+                        <td>{entry.role_code}</td>
+                        <td>Saved</td>
+                        <td>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setOnboardForm({
+                                ...onboardForm,
+                                additional_users: onboardForm.additional_users.filter((_, itemIndex) => itemIndex !== index),
+                              })
+                            }
+                          >
+                            Remove
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {!onboardForm.additional_users.length ? (
+                      <tr>
+                        <td colSpan={5}>
+                          <p className="admin-muted">No extra users staged yet. The owner account is created from the form above.</p>
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
 
-            <div className="save-actions">
-              {wizardStep > 1 ? (
-                <button type="button" onClick={() => setWizardStep((current) => Math.max(1, current - 1) as WizardStep)}>
-                  Back
+              <div className="admin-inline-head">
+                <h4>Add staged user</h4>
+              </div>
+              <div className="admin-inline-grid admin-inline-grid-wide">
+                <input
+                  placeholder="Full name"
+                  value={teamUserForm.name}
+                  onChange={(event) => setTeamUserForm({ ...teamUserForm, name: event.target.value })}
+                />
+                <input
+                  type="email"
+                  placeholder="Email"
+                  value={teamUserForm.email}
+                  onChange={(event) => setTeamUserForm({ ...teamUserForm, email: event.target.value })}
+                />
+                <select
+                  value={teamUserForm.role_code}
+                  onChange={(event) => setTeamUserForm({ ...teamUserForm, role_code: event.target.value })}
+                >
+                  <option value="CLIENT_STAFF">Client Staff</option>
+                  <option value="FINANCE_STAFF">Finance Staff</option>
+                  <option value="CLIENT_OWNER">Client Owner</option>
+                </select>
+                <input
+                  type="password"
+                  placeholder="Password"
+                  value={teamUserForm.password}
+                  onChange={(event) => setTeamUserForm({ ...teamUserForm, password: event.target.value })}
+                />
+                <button type="button" onClick={handleStageUser}>
+                  Add to team
                 </button>
-              ) : null}
-              {wizardStep < 4 ? (
-                <button type="submit" disabled={!canAdvanceWizard(wizardStep)}>
-                  Next
-                </button>
-              ) : (
-                <button type="submit">Create client</button>
-              )}
-            </div>
-          </form>
-        </section>
+              </div>
 
-        <section className="admin-card">
-          <div className="admin-header-row">
-            <div>
-              <p className="eyebrow">Access Matrix</p>
-              <h3>Preset roles</h3>
-            </div>
-          </div>
-          <div className="admin-role-matrix">
-            {roles.map((role) => (
-              <article key={role.role_code} className="admin-role-card">
-                <h4>{role.role_name}</h4>
-                <p className="admin-muted">{role.description}</p>
-                <ul className="admin-role-page-list">
-                  {role.allowed_pages.map((page) => (
-                    <li key={page}>{page}</li>
+              <div className="save-actions">
+                <button type="submit" disabled={!createClientReady()}>
+                  Create client
+                </button>
+              </div>
+            </form>
+          </section>
+
+          <aside className="admin-stack">
+            <section className="admin-card">
+              <p className="eyebrow">Create Summary</p>
+              <h3>Tenant shell preview</h3>
+              <div className="settings-context">
+                <div><dt>Business</dt><dd>{onboardForm.business_name || 'Not provided'}</dd></div>
+                <div><dt>Owner</dt><dd>{onboardForm.owner_name || 'Not provided'}</dd></div>
+                <div><dt>Team users</dt><dd>{onboardForm.additional_users.length}</dd></div>
+                <div><dt>Warehouse</dt><dd>{onboardForm.default_location_name || 'Main Warehouse'}</dd></div>
+              </div>
+            </section>
+
+            <section className="admin-card">
+              <p className="eyebrow">Duplicate Check</p>
+              <h3>Potential matches</h3>
+              {potentialMatches.length ? (
+                <ul className="admin-match-list">
+                  {potentialMatches.map((client) => (
+                    <li key={client.client_id}>
+                      <strong>{client.business_name}</strong> <span>{client.client_code}</span>
+                    </li>
                   ))}
                 </ul>
-              </article>
-            ))}
-          </div>
-        </section>
-      </div>
-
-      {selectedClient && clientDraft ? (
+              ) : (
+                <p className="admin-muted">No close client match detected from the current business name, email, or website.</p>
+              )}
+            </section>
+          </aside>
+        </div>
+      ) : selectedClient && clientDraft ? (
         <div className="admin-layout">
           <section className="admin-card">
             <div className="admin-header-row">
@@ -901,8 +1014,8 @@ export function AdminWorkspace() {
 
             <div className="admin-header-row">
               <div>
-                <p className="eyebrow">User Management</p>
-                <h3>Tenant team</h3>
+                <p className="eyebrow">Tenant Team</p>
+                <h3>User management</h3>
               </div>
             </div>
             <div className="admin-table-wrap">
@@ -926,86 +1039,154 @@ export function AdminWorkspace() {
                       is_active: item.is_active,
                     };
                     return (
-                      <tr key={item.user_id}>
-                        <td>
-                          <input
-                            value={draft.name}
-                            onChange={(event) =>
-                              setUserDrafts({
-                                ...userDrafts,
-                                [item.user_id]: {
-                                  ...draft,
-                                  name: event.target.value,
-                                },
-                              })
-                            }
-                          />
-                          <p className="admin-muted">{item.email}</p>
-                        </td>
-                        <td>{item.user_code}</td>
-                        <td>
-                          <select
-                            value={draft.role_code}
-                            onChange={(event) =>
-                              setUserDrafts({
-                                ...userDrafts,
-                                [item.user_id]: {
-                                  ...draft,
-                                  role_code: event.target.value,
-                                },
-                              })
-                            }
-                          >
-                            <option value="CLIENT_OWNER">Client Owner</option>
-                            <option value="CLIENT_STAFF">Client Staff</option>
-                            <option value="FINANCE_STAFF">Finance Staff</option>
-                          </select>
-                        </td>
-                        <td>
-                          <label className="admin-checkbox">
+                      <Fragment key={item.user_id}>
+                        <tr>
+                          <td>
                             <input
-                              type="checkbox"
-                              checked={draft.is_active}
+                              value={draft.name}
                               onChange={(event) =>
                                 setUserDrafts({
                                   ...userDrafts,
                                   [item.user_id]: {
                                     ...draft,
-                                    is_active: event.target.checked,
+                                    name: event.target.value,
                                   },
                                 })
                               }
                             />
-                            <span>{draft.is_active ? 'Active' : 'Inactive'}</span>
-                          </label>
-                        </td>
-                        <td>{formatDateTime(item.last_login_at)}</td>
-                        <td>
-                          <input
-                            type="password"
-                            placeholder="Minimum 6 chars"
-                            value={passwordDrafts[item.user_id] ?? ''}
-                            onChange={(event) =>
-                              setPasswordDrafts({
-                                ...passwordDrafts,
-                                [item.user_id]: event.target.value,
-                              })
-                            }
-                          />
-                        </td>
-                        <td>
-                          <div className="admin-action-row">
-                            <button type="button" onClick={() => void handleSaveUser(item.user_id)}>Save</button>
-                            <button
-                              type="button"
-                              disabled={(passwordDrafts[item.user_id] ?? '').length < 6}
-                              onClick={() => void handleSetPassword(item.user_id)}
+                            <p className="admin-muted">{item.email}</p>
+                          </td>
+                          <td>{item.user_code}</td>
+                          <td>
+                            <select
+                              value={draft.role_code}
+                              onChange={(event) =>
+                                setUserDrafts({
+                                  ...userDrafts,
+                                  [item.user_id]: {
+                                    ...draft,
+                                    role_code: event.target.value,
+                                  },
+                                })
+                              }
                             >
-                              Set password
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
+                              <option value="CLIENT_OWNER">Client Owner</option>
+                              <option value="CLIENT_STAFF">Client Staff</option>
+                              <option value="FINANCE_STAFF">Finance Staff</option>
+                            </select>
+                          </td>
+                          <td>
+                            <label className="admin-checkbox">
+                              <input
+                                type="checkbox"
+                                checked={draft.is_active}
+                                onChange={(event) =>
+                                  setUserDrafts({
+                                    ...userDrafts,
+                                    [item.user_id]: {
+                                      ...draft,
+                                      is_active: event.target.checked,
+                                    },
+                                  })
+                                }
+                              />
+                              <span>{draft.is_active ? 'Active' : 'Inactive'}</span>
+                            </label>
+                          </td>
+                          <td>{formatDateTime(item.last_login_at)}</td>
+                          <td>
+                            <input
+                              type="password"
+                              placeholder="Minimum 6 chars"
+                              value={passwordDrafts[item.user_id] ?? ''}
+                              onChange={(event) =>
+                                setPasswordDrafts({
+                                  ...passwordDrafts,
+                                  [item.user_id]: event.target.value,
+                                })
+                              }
+                            />
+                          </td>
+                          <td>
+                            <div className="admin-action-row">
+                              <button type="button" onClick={() => void handleSaveUser(item.user_id)}>Save</button>
+                              <button
+                                type="button"
+                                disabled={(passwordDrafts[item.user_id] ?? '').length < 6}
+                                onClick={() => void handleSetPassword(item.user_id)}
+                              >
+                                Set password
+                              </button>
+                              <button type="button" onClick={() => void openAccessDetails(item.user_id)}>
+                                {activeAccessUserId === item.user_id ? 'Close Access' : 'Access Details'}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                        {activeAccessUserId === item.user_id ? (
+                          <tr key={`${item.user_id}-access`}>
+                            <td colSpan={7}>
+                              <div className="admin-inline-access">
+                                <div className="admin-inline-head">
+                                  <h4>Access details for {item.name}</h4>
+                                  <span className="page-shell-chip">{item.role_name}</span>
+                                </div>
+                                {accessError ? <p className="admin-error">{accessError}</p> : null}
+                                {accessLoading ? (
+                                  <p className="admin-muted">Loading access details…</p>
+                                ) : accessRecord ? (
+                                  <>
+                                    <div className="admin-access-summary">
+                                      <div>
+                                        <dt>Default pages</dt>
+                                        <dd>{formatAccessCodes(accessRecord.default_pages) || 'None'}</dd>
+                                      </div>
+                                      <div>
+                                        <dt>Effective pages</dt>
+                                        <dd>{formatAccessCodes(accessRecord.effective_pages) || 'None'}</dd>
+                                      </div>
+                                    </div>
+                                    <div className="admin-access-grid">
+                                      {ACCESS_PAGE_OPTIONS.map((option) => {
+                                        const defaultOn = accessRecord.default_pages.includes(option.code);
+                                        const state = accessDrafts[option.code] ?? 'default';
+                                        return (
+                                          <div key={option.code} className="admin-access-row">
+                                            <div>
+                                              <strong>{option.label}</strong>
+                                              <p className="admin-muted">
+                                                Default: {defaultOn ? 'Allowed' : 'Blocked'}
+                                              </p>
+                                            </div>
+                                            <select
+                                              value={state}
+                                              onChange={(event) =>
+                                                setAccessDrafts({
+                                                  ...accessDrafts,
+                                                  [option.code]: event.target.value as AccessState,
+                                                })
+                                              }
+                                            >
+                                              <option value="default">Use default</option>
+                                              <option value="allow">Allow</option>
+                                              <option value="revoke">Revoke</option>
+                                            </select>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                    <div className="save-actions">
+                                      <button type="button" onClick={() => void handleSaveAccess(item.user_id)}>
+                                        Save access
+                                      </button>
+                                    </div>
+                                  </>
+                                ) : null}
+                              </div>
+                            </td>
+                          </tr>
+                        ) : null}
+                      </Fragment>
                     );
                   })}
                 </tbody>
@@ -1016,21 +1197,21 @@ export function AdminWorkspace() {
               <div className="admin-inline-head">
                 <h4>Add another user</h4>
               </div>
-              <div className="admin-inline-grid">
+              <div className="admin-inline-grid admin-inline-grid-wide">
                 <input
                   placeholder="Full name"
-                  value={newUserForm.name}
-                  onChange={(event) => setNewUserForm({ ...newUserForm, name: event.target.value })}
+                  value={teamUserForm.name}
+                  onChange={(event) => setTeamUserForm({ ...teamUserForm, name: event.target.value })}
                 />
                 <input
                   type="email"
                   placeholder="Email"
-                  value={newUserForm.email}
-                  onChange={(event) => setNewUserForm({ ...newUserForm, email: event.target.value })}
+                  value={teamUserForm.email}
+                  onChange={(event) => setTeamUserForm({ ...teamUserForm, email: event.target.value })}
                 />
                 <select
-                  value={newUserForm.role_code}
-                  onChange={(event) => setNewUserForm({ ...newUserForm, role_code: event.target.value })}
+                  value={teamUserForm.role_code}
+                  onChange={(event) => setTeamUserForm({ ...teamUserForm, role_code: event.target.value })}
                 >
                   <option value="CLIENT_STAFF">Client Staff</option>
                   <option value="FINANCE_STAFF">Finance Staff</option>
@@ -1039,10 +1220,10 @@ export function AdminWorkspace() {
                 <input
                   type="password"
                   placeholder="Password"
-                  value={newUserForm.password}
-                  onChange={(event) => setNewUserForm({ ...newUserForm, password: event.target.value })}
+                  value={teamUserForm.password}
+                  onChange={(event) => setTeamUserForm({ ...teamUserForm, password: event.target.value })}
                 />
-                <button type="submit" disabled={newUserForm.password.length < 6}>
+                <button type="submit" disabled={teamUserForm.password.length < 6}>
                   Add user
                 </button>
               </div>
@@ -1071,7 +1252,13 @@ export function AdminWorkspace() {
             </section>
           </aside>
         </div>
-      ) : null}
+      ) : (
+        <section className="admin-card">
+          <p className="eyebrow">Workspace Ready</p>
+          <h3>Select a tenant or create a new one</h3>
+          <p className="admin-muted">Choose an existing tenant from the list to edit the client and team, or click New Client to open the create workspace.</p>
+        </section>
+      )}
     </div>
   );
 }

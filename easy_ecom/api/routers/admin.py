@@ -13,6 +13,9 @@ from easy_ecom.api.schemas.admin import (
     AdminOnboardResponse,
     AdminRolesResponse,
     AdminRoleAccessResponse,
+    AdminUserAccessOverrideResponse,
+    AdminUserAccessResponse,
+    AdminUserAccessUpdateRequest,
     AdminUserCreateRequest,
     AdminUserPasswordSetRequest,
     AdminUserResponse,
@@ -27,6 +30,8 @@ from easy_ecom.domain.services.admin_service import (
     AdminClientRecord,
     AdminOnboardResult,
     AdminRoleAccess,
+    AdminUserAccessRecord,
+    AdminUserAccessOverrideRecord,
     AdminUserRecord,
 )
 
@@ -89,6 +94,20 @@ def _serialize_role(record: AdminRoleAccess) -> AdminRoleAccessResponse:
         role_name=record.role_name,
         description=record.description,
         allowed_pages=list(record.allowed_pages),
+    )
+
+
+def _serialize_user_access_override(record: AdminUserAccessOverrideRecord) -> AdminUserAccessOverrideResponse:
+    return AdminUserAccessOverrideResponse(page_code=record.page_code, is_allowed=record.is_allowed)
+
+
+def _serialize_user_access(record: AdminUserAccessRecord) -> AdminUserAccessResponse:
+    return AdminUserAccessResponse(
+        user_id=record.user_id,
+        role_code=record.role_code,
+        default_pages=list(record.default_pages),
+        effective_pages=list(record.effective_pages),
+        overrides=[_serialize_user_access_override(item) for item in record.overrides],
     )
 
 
@@ -261,6 +280,34 @@ def set_user_password(
         password=payload.password,
     )
     return _serialize_user(updated)
+
+
+@router.get("/users/{user_id}/access", response_model=AdminUserAccessResponse)
+def get_user_access(
+    user_id: str,
+    user: AuthenticatedUser = Depends(get_authenticated_user),
+    container: ServiceContainer = Depends(get_container),
+) -> AdminUserAccessResponse:
+    _require_super_admin(user)
+    return _serialize_user_access(container.admin.get_user_access(user_id))
+
+
+@router.put("/users/{user_id}/access", response_model=AdminUserAccessResponse)
+def update_user_access(
+    user_id: str,
+    payload: AdminUserAccessUpdateRequest,
+    request: Request,
+    user: AuthenticatedUser = Depends(get_authenticated_user),
+    container: ServiceContainer = Depends(get_container),
+) -> AdminUserAccessResponse:
+    _require_super_admin(user)
+    updated = container.admin.update_user_access(
+        user_id=user_id,
+        actor=user,
+        request_id=getattr(request.state, "request_id", None),
+        overrides=[item.model_dump() for item in payload.overrides],
+    )
+    return _serialize_user_access(updated)
 
 
 @router.get("/roles", response_model=AdminRolesResponse)

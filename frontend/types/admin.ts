@@ -69,6 +69,19 @@ export type AdminUsersResponse = {
   items: AdminUser[];
 };
 
+export type AdminUserAccessOverride = {
+  page_code: string;
+  is_allowed: boolean;
+};
+
+export type AdminUserAccess = {
+  user_id: string;
+  role_code: string;
+  default_pages: string[];
+  effective_pages: string[];
+  overrides: AdminUserAccessOverride[];
+};
+
 export type AdminOnboardUserInput = {
   name: string;
   email: string;
@@ -140,4 +153,8 @@ export type AdminUserUpdateInput = {
 
 export type AdminUserPasswordSetInput = {
   password: string;
+};
+
+export type AdminUserAccessUpdateInput = {
+  overrides: AdminUserAccessOverride[];
 };

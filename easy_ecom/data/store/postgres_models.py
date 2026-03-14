@@ -116,6 +116,23 @@ class UserRoleModel(Base):
     )
 
 
+class UserPageAccessOverrideModel(TimestampMixin, Base):
+    __tablename__ = "user_page_access_overrides"
+    __table_args__ = (
+        UniqueConstraint("user_id", "page_code", name="uq_user_page_access_overrides_user_page"),
+    )
+
+    override_id: Mapped[str] = mapped_column(GUID(), primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        GUID(),
+        ForeignKey("users.user_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    page_code: Mapped[str] = mapped_column(String(64), nullable=False)
+    is_allowed: Mapped[bool] = mapped_column(Boolean, nullable=False)
+
+
 class AuditLogModel(Base):
     __tablename__ = "audit_log"
     __table_args__ = (

@@ -10,6 +10,7 @@ class AuthenticatedUser:
     name: str
     email: str
     roles: list[str]
+    allowed_pages: list[str]
 
     @property
     def roles_csv(self) -> str:

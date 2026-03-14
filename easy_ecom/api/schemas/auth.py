@@ -10,6 +10,7 @@ class LoginResponse(BaseModel):
     user_id: str
     client_id: str
     roles: str
+    allowed_pages: list[str]
     name: str
     email: str
 
@@ -21,4 +22,5 @@ class CurrentUserResponse(BaseModel):
     role: str
     client_id: str
     roles: list[str]
+    allowed_pages: list[str]
     is_authenticated: bool

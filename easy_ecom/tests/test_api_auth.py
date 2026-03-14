@@ -36,6 +36,7 @@ def test_valid_login(monkeypatch, tmp_path: Path):
 
     assert response.status_code == 200
     assert response.cookies.get("easy_ecom_session")
+    assert "Dashboard" in response.json()["allowed_pages"]
 
 
 def test_invalid_password(monkeypatch, tmp_path: Path):
@@ -113,6 +114,20 @@ def test_login_then_me_returns_authenticated_user(monkeypatch, tmp_path: Path):
         "role": "SUPER_ADMIN",
         "client_id": CLIENT_ID,
         "roles": ["SUPER_ADMIN"],
+        "allowed_pages": [
+            "Home",
+            "Dashboard",
+            "Catalog",
+            "Inventory",
+            "Purchases",
+            "Sales",
+            "Customers",
+            "Finance",
+            "Returns",
+            "Reports",
+            "Admin",
+            "Settings",
+        ],
         "is_authenticated": True,
     }
 

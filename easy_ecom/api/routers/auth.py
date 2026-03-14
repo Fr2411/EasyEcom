@@ -42,6 +42,7 @@ def login(payload: LoginRequest, response: Response, container: ServiceContainer
         user_id=user.user_id,
         client_id=user.client_id,
         roles=user.roles_csv,
+        allowed_pages=user.allowed_pages,
         name=user.name,
         email=user.email,
     )
@@ -66,5 +67,6 @@ def me(user: AuthenticatedUser = Depends(get_authenticated_user)) -> CurrentUser
         role=user.roles[0],
         client_id=user.client_id,
         roles=user.roles,
+        allowed_pages=user.allowed_pages,
         is_authenticated=True,
     )

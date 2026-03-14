@@ -7,6 +7,8 @@ import type {
   AdminOnboardClientInput,
   AdminOnboardResponse,
   AdminRolesResponse,
+  AdminUserAccess,
+  AdminUserAccessUpdateInput,
   AdminUser,
   AdminUserCreateInput,
   AdminUserPasswordSetInput,
@@ -62,6 +64,17 @@ export function updateAdminUser(userId: string, payload: AdminUserUpdateInput) {
 export function setAdminUserPassword(userId: string, payload: AdminUserPasswordSetInput) {
   return apiClient<AdminUser>(`/admin/users/${userId}/set-password`, {
     method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getAdminUserAccess(userId: string) {
+  return apiClient<AdminUserAccess>(`/admin/users/${userId}/access`);
+}
+
+export function updateAdminUserAccess(userId: string, payload: AdminUserAccessUpdateInput) {
+  return apiClient<AdminUserAccess>(`/admin/users/${userId}/access`, {
+    method: 'PUT',
     body: JSON.stringify(payload),
   });
 }
