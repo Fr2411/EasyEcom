@@ -1,49 +1,58 @@
-export type InventoryItem = {
-  item_id: string;
-  item_name: string;
-  parent_product_id: string;
-  parent_product_name: string;
-  item_type: 'product' | 'variant' | 'unmapped';
-  availability_status: 'in_stock' | 'incoming' | 'low_stock' | 'out_of_stock' | 'unmapped';
-  on_hand_qty: number;
-  incoming_qty: number;
-  reserved_qty: number;
-  sellable_qty: number;
-  avg_unit_cost: number;
-  stock_value: number;
-  lot_count: number;
+import type {
+  CatalogVariant,
+  CatalogVariantInput,
+  ProductIdentityInput,
+  WorkspaceLocation,
+} from '@/types/catalog';
+
+export type InventoryStockRow = {
+  variant_id: string;
+  product_id: string;
+  product_name: string;
+  label: string;
+  sku: string;
+  barcode: string;
+  supplier: string;
+  category: string;
+  location_id: string;
+  location_name: string;
+  unit_cost: string;
+  unit_price: string;
+  reorder_level: string;
+  on_hand: string;
+  reserved: string;
+  available_to_sell: string;
   low_stock: boolean;
-  actionable: boolean;
 };
 
-export type InventoryMovement = {
-  txn_id: string;
-  timestamp: string;
-  item_id: string;
-  item_name: string;
-  parent_product_id: string;
-  parent_product_name: string;
-  movement_type: string;
-  qty_delta: number;
-  source_type: string;
-  source_id: string;
-  note: string;
-  lot_id: string;
-  resulting_balance: number | null;
+export type InventoryWorkspace = {
+  query: string;
+  has_multiple_locations: boolean;
+  active_location: WorkspaceLocation;
+  locations: WorkspaceLocation[];
+  stock_items: InventoryStockRow[];
+  low_stock_items: InventoryStockRow[];
 };
 
-export type InventoryDetail = {
-  item: InventoryItem;
-  recent_movements: InventoryMovement[];
+export type ReceiveStockPayload = {
+  mode: 'existing_variant' | 'existing_product_new_variant' | 'new_product';
+  location_id?: string;
+  quantity: string;
+  notes: string;
+  identity: ProductIdentityInput;
+  variant: CatalogVariantInput;
+};
+
+export type ReceiveStockResponse = {
+  purchase_id: string;
+  purchase_number: string;
+  variant: CatalogVariant;
 };
 
 export type InventoryAdjustmentPayload = {
-  item_id: string;
-  adjustment_type: 'stock_in' | 'stock_out' | 'correction';
-  quantity?: number;
-  quantity_delta?: number;
-  unit_cost?: number;
+  location_id?: string;
+  variant_id: string;
+  quantity_delta: string;
   reason: string;
-  note: string;
-  reference: string;
+  notes: string;
 };

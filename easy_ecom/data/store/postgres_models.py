@@ -197,6 +197,7 @@ class ProductModel(TenantMixin, TimestampMixin, Base):
     __tablename__ = "products"
     __table_args__ = (
         UniqueConstraint("client_id", "slug", name="uq_products_client_slug"),
+        Index("ix_products_client_name", "client_id", "name"),
     )
 
     product_id: Mapped[str] = mapped_column(GUID(), primary_key=True)
@@ -218,6 +219,8 @@ class ProductVariantModel(TenantMixin, TimestampMixin, Base):
     __tablename__ = "product_variants"
     __table_args__ = (
         UniqueConstraint("client_id", "sku", name="uq_product_variants_client_sku"),
+        Index("ix_product_variants_client_title", "client_id", "title"),
+        Index("ix_product_variants_client_barcode", "client_id", "barcode"),
     )
 
     variant_id: Mapped[str] = mapped_column(GUID(), primary_key=True)
@@ -292,13 +295,17 @@ class CustomerModel(TenantMixin, TimestampMixin, Base):
     __tablename__ = "customers"
     __table_args__ = (
         UniqueConstraint("client_id", "code", name="uq_customers_client_code"),
+        Index("ix_customers_client_phone_normalized", "client_id", "phone_normalized"),
+        Index("ix_customers_client_email_normalized", "client_id", "email_normalized"),
     )
 
     customer_id: Mapped[str] = mapped_column(GUID(), primary_key=True)
     code: Mapped[str] = mapped_column(String(64), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     email: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    email_normalized: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     phone: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    phone_normalized: Mapped[str] = mapped_column(String(64), nullable=False, default="")
     whatsapp_number: Mapped[str] = mapped_column(String(64), nullable=False, default="")
     address: Mapped[str] = mapped_column(Text, nullable=False, default="")
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="active", index=True)
@@ -335,6 +342,8 @@ class SalesOrderItemModel(TenantMixin, Base):
     sales_order_id: Mapped[str] = mapped_column(GUID(), ForeignKey("sales_orders.sales_order_id", ondelete="CASCADE"), nullable=False, index=True)
     variant_id: Mapped[str] = mapped_column(GUID(), ForeignKey("product_variants.variant_id"), nullable=False)
     quantity: Mapped[Decimal] = mapped_column(Quantity, nullable=False, default=Decimal("0"))
+    quantity_fulfilled: Mapped[Decimal] = mapped_column(Quantity, nullable=False, default=Decimal("0"))
+    quantity_cancelled: Mapped[Decimal] = mapped_column(Quantity, nullable=False, default=Decimal("0"))
     unit_price_amount: Mapped[Decimal] = mapped_column(Amount, nullable=False, default=Decimal("0"))
     discount_amount: Mapped[Decimal] = mapped_column(Amount, nullable=False, default=Decimal("0"))
     line_total_amount: Mapped[Decimal] = mapped_column(Amount, nullable=False, default=Decimal("0"))

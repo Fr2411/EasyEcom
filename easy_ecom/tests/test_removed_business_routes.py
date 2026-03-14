@@ -43,7 +43,7 @@ def test_removed_legacy_business_paths_still_return_missing(monkeypatch, tmp_pat
     client = _client_with_auth(tmp_path, monkeypatch)
 
     for path in [
-        "/catalog/products",
+        "/catalog/archive",
         "/products/search",
         "/products-stock/snapshot",
         "/sales/create",

@@ -1,72 +1,75 @@
-export type ReturnSummary = {
-  return_id: string;
-  return_no: string;
-  sale_id: string;
-  sale_no: string;
-  customer_id: string;
+export type ReturnLookupOrder = {
+  sales_order_id: string;
+  order_number: string;
   customer_name: string;
-  reason: string;
-  return_total: number;
-  created_at: string;
-};
-
-export type ReturnableSale = {
-  sale_id: string;
-  sale_no: string;
-  customer_id: string;
-  customer_name: string;
-  sale_date: string;
-  total: number;
+  customer_phone: string;
+  customer_email: string;
+  ordered_at: string | null;
+  total_amount: string;
   status: string;
+  shipment_status: string;
 };
 
-export type ReturnableSaleLine = {
-  sale_item_id: string;
-  product_id: string;
+export type ReturnEligibleLine = {
+  sales_order_item_id: string;
+  variant_id: string;
   product_name: string;
-  sold_qty: number;
-  already_returned_qty: number;
-  eligible_qty: number;
-  unit_price: number;
+  label: string;
+  quantity: string;
+  quantity_fulfilled: string;
+  quantity_returned: string;
+  eligible_quantity: string;
+  unit_price: string;
 };
 
-export type ReturnableSaleDetail = {
-  sale_id: string;
-  sale_no: string;
-  customer_id: string;
+export type ReturnEligibleLines = {
+  sales_order_id: string;
+  order_number: string;
   customer_name: string;
-  sale_date: string;
-  lines: ReturnableSaleLine[];
+  customer_phone: string;
+  lines: ReturnEligibleLine[];
+};
+
+export type ReturnLine = {
+  sales_return_item_id: string;
+  sales_order_item_id: string | null;
+  variant_id: string;
+  product_name: string;
+  label: string;
+  quantity: string;
+  restock_quantity: string;
+  disposition: string;
+  unit_refund_amount: string;
+  line_total: string;
+};
+
+export type ReturnRecord = {
+  sales_return_id: string;
+  return_number: string;
+  sales_order_id: string | null;
+  order_number: string;
+  customer_name: string;
+  customer_phone: string;
+  status: string;
+  refund_status: string;
+  notes: string;
+  subtotal_amount: string;
+  refund_amount: string;
+  requested_at: string | null;
+  received_at: string | null;
+  lines: ReturnLine[];
 };
 
 export type ReturnCreatePayload = {
-  sale_id: string;
-  reason: string;
-  note: string;
-  lines: { sale_item_id: string; qty: number; reason: string; condition_status?: string }[];
-};
-
-export type ReturnDetail = {
-  return_id: string;
-  return_no: string;
-  sale_id: string;
-  sale_no: string;
-  customer_id: string;
-  customer_name: string;
-  reason: string;
-  note: string;
-  return_total: number;
-  created_at: string;
-  lines: {
-    return_item_id: string;
-    sale_item_id: string;
-    product_id: string;
-    product_name: string;
-    sold_qty: number;
-    return_qty: number;
-    unit_price: number;
-    line_total: number;
+  sales_order_id: string;
+  notes: string;
+  refund_status: string;
+  lines: Array<{
+    sales_order_item_id: string;
+    quantity: string;
+    restock_quantity: string;
+    disposition: string;
+    unit_refund_amount: string;
     reason: string;
-    condition_status: string;
-  }[];
+  }>;
 };

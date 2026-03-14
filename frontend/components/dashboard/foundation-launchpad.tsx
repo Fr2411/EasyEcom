@@ -9,22 +9,12 @@ const MODULES = [
   {
     href: '/inventory',
     title: 'Inventory',
-    summary: 'Variant-level stock will be rebuilt from the immutable ledger and warehouse locations.',
-  },
-  {
-    href: '/purchases',
-    title: 'Purchases',
-    summary: 'Inbound stock and supplier buying flows will use dedicated procurement records.',
+    summary: 'Available stock, receive stock, adjustments, and low-stock work now share one inventory command center.',
   },
   {
     href: '/sales',
     title: 'Sales',
-    summary: 'Orders, shipments, and payment states will return as explicit lifecycle commands.',
-  },
-  {
-    href: '/customers',
-    title: 'Customers',
-    summary: 'Tenant-safe customer records will support CRM and sales linkage.',
+    summary: 'Order lifecycle, hidden customer lookup by phone or email, and full stock reservation rules live here.',
   },
   {
     href: '/finance',
