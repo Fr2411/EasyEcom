@@ -3,23 +3,19 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from fastapi import Cookie, Depends, HTTPException
+from fastapi import Cookie, Depends
 
 from easy_ecom.core.config import settings
+from easy_ecom.core.errors import ApiException
 from easy_ecom.core.rbac import can_access_page
 from easy_ecom.core.session import SessionSigner
+from easy_ecom.core.tenancy import TenantContext
 from easy_ecom.data.repos.postgres.auth_repo import PostgresAuthRepo
 from easy_ecom.data.store.postgres_db import build_session_factory
 from easy_ecom.data.store.runtime import build_runtime_engine
 from easy_ecom.domain.models.auth import AuthenticatedUser
 from easy_ecom.domain.services.auth_service import AuthService
-
-
-@dataclass
-class RequestUser:
-    user_id: str
-    client_id: str
-    roles: list[str]
+from easy_ecom.domain.services.overview_service import OverviewService
 
 
 @dataclass(frozen=True)
@@ -36,6 +32,7 @@ class ServiceContainer:
         engine = build_runtime_engine(settings)
         session_factory = build_session_factory(engine)
         self.auth = AuthService(PostgresAuthRepo(session_factory))
+        self.overview = OverviewService(session_factory)
 
 
 def _signer() -> SessionSigner:
@@ -58,8 +55,12 @@ def build_session_token(user: AuthenticatedUser) -> str:
     )
 
 
-def _unauthorized() -> HTTPException:
-    return HTTPException(status_code=401, detail="Unauthorized")
+def _unauthorized() -> ApiException:
+    return ApiException(
+        status_code=401,
+        code="UNAUTHORIZED",
+        message="Unauthorized",
+    )
 
 
 def _parse_roles(raw_roles: Any) -> list[str] | None:
@@ -97,17 +98,6 @@ def _parse_session_user(token: str | None) -> SessionUserPayload:
     )
 
 
-def get_current_user(
-    session_token: str | None = Cookie(default=None, alias=settings.session_cookie_name),
-) -> RequestUser:
-    session_user = _parse_session_user(session_token)
-    return RequestUser(
-        user_id=session_user.user_id,
-        client_id=session_user.client_id,
-        roles=session_user.roles,
-    )
-
-
 def get_authenticated_user(
     session_token: str | None = Cookie(default=None, alias=settings.session_cookie_name),
 ) -> AuthenticatedUser:
@@ -121,6 +111,14 @@ def get_authenticated_user(
     )
 
 
-def require_page_access(user: RequestUser, page: str) -> None:
+def get_tenant_context(user: AuthenticatedUser = Depends(get_authenticated_user)) -> TenantContext:
+    return TenantContext(user_id=user.user_id, client_id=user.client_id, roles=tuple(user.roles))
+
+
+def require_page_access(user: AuthenticatedUser, page: str) -> None:
     if not can_access_page(user.roles, page):
-        raise HTTPException(status_code=403, detail=f"Access denied for {page}")
+        raise ApiException(
+            status_code=403,
+            code="ACCESS_DENIED",
+            message=f"Access denied for {page}",
+        )

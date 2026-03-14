@@ -27,13 +27,11 @@ export const NAV_ITEMS: NavigationItem[] = [
   { href: '/reports', label: 'Reports', group: 'Overview', icon: 'reports' },
   { href: '/catalog', label: 'Catalog', group: 'Commerce', icon: 'catalog' },
   { href: '/inventory', label: 'Inventory', group: 'Commerce', icon: 'inventory' },
+  { href: '/purchases', label: 'Purchases', group: 'Commerce', icon: 'purchases' },
   { href: '/sales', label: 'Sales', group: 'Commerce', icon: 'sales' },
+  { href: '/customers', label: 'Customers', group: 'Commerce', icon: 'customers' },
   { href: '/finance', label: 'Finance', group: 'Operations', icon: 'finance' },
   { href: '/returns', label: 'Returns', group: 'Operations', icon: 'returns' },
-  { href: '/purchases', label: 'Purchases', group: 'Operations', icon: 'purchases' },
   { href: '/admin', label: 'Admin', group: 'System', icon: 'admin' },
-  { href: '/integrations', label: 'Integrations', group: 'System', icon: 'integrations' },
-  { href: '/ai-review', label: 'AI Review', group: 'System', icon: 'ai' },
-  { href: '/automation', label: 'Automation', group: 'System', icon: 'automation' },
   { href: '/settings', label: 'Settings', group: 'System', icon: 'settings' }
 ];

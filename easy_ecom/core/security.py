@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import bcrypt
+import hashlib
+import secrets
 
 from easy_ecom.core.config import settings
 
@@ -21,3 +23,11 @@ def verify_password(password: str, password_hash: str) -> bool:
         return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
     except ValueError:
         return False
+
+
+def new_token(length: int = 32) -> str:
+    return secrets.token_urlsafe(length)
+
+
+def hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()

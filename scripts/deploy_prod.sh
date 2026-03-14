@@ -6,8 +6,8 @@ EC2_USER="ec2-user"
 SSH_KEY="$HOME/Downloads/EasyEcomKey.pem"
 
 echo "[deploy] Backend production deploy script"
-echo "[deploy] Reminder: use this for backend and/or database schema changes only."
-echo "[deploy] Frontend changes deploy separately via Amplify after merge to main."
+echo "[deploy] This deploys the rebuilt backend foundation currently running on EC2."
+echo "[deploy] Frontend changes deploy separately via Amplify."
 echo "[deploy] Connecting to EC2 and running deploy steps..."
 
 ssh -T \
@@ -33,8 +33,11 @@ source "$VENV_DIR/bin/activate"
 echo "[remote] Installing dependencies"
 pip install -e .
 
-echo "[remote] Running database migrations"
-alembic upgrade head
+echo "[remote] Applying versioned database migrations"
+python3 -m easy_ecom.scripts.migrate
+
+echo "[remote] Seeding baseline data if needed"
+python3 -m easy_ecom.scripts.init_data
 
 echo "[remote] Restarting backend service"
 sudo systemctl restart "$SERVICE_NAME"
