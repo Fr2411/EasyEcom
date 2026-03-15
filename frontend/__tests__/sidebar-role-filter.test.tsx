@@ -51,4 +51,19 @@ describe('Sidebar role filtering', () => {
     expect(screen.getByRole('link', { name: 'Finance' })).toBeTruthy();
     expect(screen.queryByRole('link', { name: 'Catalog' })).toBeNull();
   });
+
+  test('keeps catalog hidden from normal tenant navigation even for owners', () => {
+    useAuthMock.mockReturnValue({
+      user: {
+        roles: ['CLIENT_OWNER'],
+        allowed_pages: ['Home', 'Dashboard', 'Catalog', 'Inventory', 'Sales', 'Settings'],
+      },
+      clearAuth: vi.fn(),
+    });
+
+    render(<Sidebar />);
+
+    expect(screen.getByRole('link', { name: 'Inventory' })).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Catalog' })).toBeNull();
+  });
 });

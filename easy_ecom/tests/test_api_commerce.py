@@ -18,6 +18,8 @@ from easy_ecom.data.store.postgres_models import (
     LocationModel,
     ProductModel,
     ProductVariantModel,
+    PurchaseItemModel,
+    PurchaseModel,
     SupplierModel,
 )
 from easy_ecom.tests.support.sqlite_runtime import build_sqlite_runtime, seed_auth_user
@@ -209,6 +211,172 @@ def test_catalog_and_inventory_show_only_in_stock_variants(monkeypatch, tmp_path
     assert len(inventory_payload["stock_items"]) == 1
     assert inventory_payload["stock_items"][0]["variant_id"] == in_stock["variant_id"]
     assert inventory_payload["stock_items"][0]["available_to_sell"] == "5.000"
+
+
+def test_inventory_intake_lookup_returns_exact_variant_and_product_matches(monkeypatch, tmp_path: Path):
+    runtime = _setup_runtime(tmp_path, monkeypatch)
+    seeded = _seed_variant(
+        runtime,
+        product_name="Trail Runner",
+        sku="TRAIL-42-BLK",
+        size="42",
+        color="Black",
+        stock_qty=Decimal("0"),
+    )
+    _seed_variant(
+        runtime,
+        product_name="City Runner",
+        sku="CITY-41-WHT",
+        size="41",
+        color="White",
+        stock_qty=Decimal("0"),
+    )
+    client = _login_client(runtime)
+
+    exact_response = client.get("/inventory/intake/lookup", params={"q": "TRAIL-42-BLK"})
+    assert exact_response.status_code == 200
+    exact_payload = exact_response.json()
+    assert len(exact_payload["exact_variants"]) == 1
+    assert exact_payload["exact_variants"][0]["match_reason"] == "sku"
+    assert exact_payload["exact_variants"][0]["variant"]["variant_id"] == seeded["variant_id"]
+    assert exact_payload["exact_variants"][0]["product"]["product_id"] == seeded["product_id"]
+
+    product_response = client.get("/inventory/intake/lookup", params={"q": "Runner"})
+    assert product_response.status_code == 200
+    product_payload = product_response.json()
+    assert product_payload["exact_variants"] == []
+    assert len(product_payload["product_matches"]) == 2
+    assert product_payload["suggested_new_product"]["product_name"] == "Runner"
+
+
+def test_inventory_receipt_can_create_product_and_multiple_variant_lines(monkeypatch, tmp_path: Path):
+    runtime = _setup_runtime(tmp_path, monkeypatch)
+    client = _login_client(runtime)
+
+    response = client.post(
+        "/inventory/receipts",
+        json={
+            "action": "receive_stock",
+            "notes": "New shipment arrived",
+            "identity": {
+                "product_name": "Canvas Sneaker",
+                "supplier": "Fresh Supplier",
+                "category": "Footwear",
+                "sku_root": "CNVS",
+                "default_selling_price": "65",
+                "min_selling_price": "55",
+            },
+            "lines": [
+                {
+                    "size": "41",
+                    "color": "Black",
+                    "quantity": "5",
+                    "default_purchase_price": "28",
+                    "default_selling_price": "65",
+                    "min_selling_price": "55",
+                    "reorder_level": "2",
+                },
+                {
+                    "size": "42",
+                    "color": "Black",
+                    "quantity": "3",
+                    "default_purchase_price": "29",
+                    "default_selling_price": "67",
+                    "min_selling_price": "56",
+                    "reorder_level": "2",
+                },
+            ],
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["action"] == "receive_stock"
+    assert payload["purchase_id"]
+    assert len(payload["lines"]) == 2
+    assert {line["variant"]["sku"] for line in payload["lines"]} == {"CNVS-41-BLACK", "CNVS-42-BLACK"}
+
+    with runtime.session_factory() as session:
+        purchases = session.execute(select(PurchaseModel).where(PurchaseModel.client_id == CLIENT_ID)).scalars().all()
+        assert len(purchases) == 1
+        purchase_items = session.execute(select(PurchaseItemModel).where(PurchaseItemModel.client_id == CLIENT_ID)).scalars().all()
+        assert len(purchase_items) == 2
+        ledger_entries = session.execute(
+            select(InventoryLedgerModel).where(
+                InventoryLedgerModel.client_id == CLIENT_ID,
+                InventoryLedgerModel.reference_type == "purchase",
+            )
+        ).scalars().all()
+        assert len(ledger_entries) == 2
+
+    inventory_response = client.get("/inventory/workspace")
+    assert inventory_response.status_code == 200
+    stock_items = inventory_response.json()["stock_items"]
+    assert len(stock_items) == 2
+    assert {item["available_to_sell"] for item in stock_items} == {"5.000", "3.000"}
+
+
+def test_inventory_template_save_adds_new_variant_without_stock_or_purchase(monkeypatch, tmp_path: Path):
+    runtime = _setup_runtime(tmp_path, monkeypatch)
+    seeded = _seed_variant(
+        runtime,
+        product_name="Trail Runner",
+        sku="TRAIL-42-BLK",
+        size="42",
+        color="Black",
+        stock_qty=Decimal("4"),
+    )
+    client = _login_client(runtime)
+
+    response = client.post(
+        "/inventory/receipts",
+        json={
+            "action": "save_template_only",
+            "notes": "Preparing next size run",
+            "identity": {
+                "product_id": seeded["product_id"],
+                "product_name": "Trail Runner Edited",
+                "supplier": "Changed Supplier",
+                "category": "Footwear",
+                "sku_root": "TRAIL",
+            },
+            "lines": [
+                {
+                    "size": "43",
+                    "color": "Black",
+                    "default_purchase_price": "41",
+                    "default_selling_price": "76",
+                    "min_selling_price": "66",
+                    "reorder_level": "1",
+                }
+            ],
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["action"] == "save_template_only"
+    assert payload["purchase_id"] is None
+    assert len(payload["lines"]) == 1
+    assert payload["lines"][0]["quantity_received"] == "0"
+    assert payload["lines"][0]["variant"]["sku"] == "TRAIL-43-BLACK"
+
+    with runtime.session_factory() as session:
+        product = session.execute(select(ProductModel).where(ProductModel.product_id == seeded["product_id"])).scalar_one()
+        assert product.name == "Trail Runner"
+        purchases = session.execute(select(PurchaseModel).where(PurchaseModel.client_id == CLIENT_ID)).scalars().all()
+        assert purchases == []
+        new_variant = session.execute(
+            select(ProductVariantModel).where(
+                ProductVariantModel.client_id == CLIENT_ID,
+                ProductVariantModel.sku == "TRAIL-43-BLACK",
+            )
+        ).scalar_one()
+        ledger_total = session.execute(
+            select(InventoryLedgerModel).where(
+                InventoryLedgerModel.client_id == CLIENT_ID,
+                InventoryLedgerModel.variant_id == new_variant.variant_id,
+            )
+        ).scalars().all()
+        assert ledger_total == []
 
 
 def test_sales_customer_lookup_dedupe_reservation_and_fulfillment(monkeypatch, tmp_path: Path):

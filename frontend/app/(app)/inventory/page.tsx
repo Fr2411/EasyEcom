@@ -3,7 +3,7 @@ import { InventoryWorkspace } from '@/components/commerce/inventory-workspace';
 
 export default function InventoryPage() {
   return (
-    <PageShell title="Inventory" description="Track available stock, receive new inventory, and keep every movement auditable.">
+    <PageShell title="Inventory" description="Find or create products from Receive Stock, track availability, and keep every movement auditable.">
       <InventoryWorkspace />
     </PageShell>
   );

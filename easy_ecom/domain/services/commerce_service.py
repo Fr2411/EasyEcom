@@ -102,6 +102,14 @@ def build_sku_candidate(product_name: str, sku_root: str, size: str, color: str,
     return "-".join(normalized) if normalized else new_uuid()[:8].upper()
 
 
+def normalize_lookup_text(value: str) -> str:
+    return " ".join(value.strip().lower().split())
+
+
+def build_variant_signature(size: str, color: str, other: str) -> str:
+    return "|".join(normalize_lookup_text(part) for part in (size, color, other))
+
+
 def derive_discount_percent(default_price: Decimal | None, min_price: Decimal | None) -> Decimal | None:
     if default_price is None or min_price is None or default_price <= ZERO:
         return None
@@ -449,6 +457,55 @@ class CommerceBaseService:
             "available_to_sell": on_hand - reserved,
         }
 
+    def _product_payload_from_rows(
+        self,
+        rows: list[tuple[ProductModel, ProductVariantModel, SupplierModel | None, CategoryModel | None]],
+        on_hand_map: dict[str, Decimal],
+        reserved_map: dict[str, Decimal],
+    ) -> dict[str, Any]:
+        _require(bool(rows), message="Product not found", code="PRODUCT_NOT_FOUND", status_code=404)
+        product, _variant, supplier, category = rows[0]
+        payload = {
+            "product_id": str(product.product_id),
+            "name": product.name,
+            "brand": product.brand,
+            "status": product.status,
+            "supplier": supplier.name if supplier else "",
+            "category": category.name if category else "",
+            "description": product.description,
+            "sku_root": product.sku_root,
+            "default_price": as_optional_decimal(product.default_price_amount),
+            "min_price": as_optional_decimal(product.min_price_amount),
+            "max_discount_percent": derive_discount_percent(
+                as_optional_decimal(product.default_price_amount),
+                as_optional_decimal(product.min_price_amount),
+            ),
+            "variants": [],
+        }
+        for current_product, variant, _supplier, _category in rows:
+            payload["variants"].append(
+                self._variant_payload(
+                    current_product,
+                    variant,
+                    on_hand_map.get(str(variant.variant_id), ZERO),
+                    reserved_map.get(str(variant.variant_id), ZERO),
+                )
+            )
+        return payload
+
+    def _product_payload(
+        self,
+        session: Session,
+        client_id: str,
+        product_id: str,
+        location_id: str,
+    ) -> dict[str, Any]:
+        on_hand_map, reserved_map = self._stock_maps(session, client_id, location_id)
+        rows = session.execute(
+            self._base_variant_stmt(client_id).where(ProductModel.product_id == product_id)
+        ).all()
+        return self._product_payload_from_rows(rows, on_hand_map, reserved_map)
+
     def _sales_order_payload(self, session: Session, order: SalesOrderModel) -> dict[str, Any]:
         customer = None
         if order.customer_id:
@@ -580,47 +637,6 @@ class CommerceBaseService:
 
 
 class CatalogService(CommerceBaseService):
-    def _product_payload(
-        self,
-        session: Session,
-        client_id: str,
-        product_id: str,
-        location_id: str,
-    ) -> dict[str, Any]:
-        on_hand_map, reserved_map = self._stock_maps(session, client_id, location_id)
-        rows = session.execute(
-            self._base_variant_stmt(client_id).where(ProductModel.product_id == product_id)
-        ).all()
-        _require(bool(rows), message="Product not found", code="PRODUCT_NOT_FOUND", status_code=404)
-        product, _variant, supplier, category = rows[0]
-        payload = {
-            "product_id": str(product.product_id),
-            "name": product.name,
-            "brand": product.brand,
-            "status": product.status,
-            "supplier": supplier.name if supplier else "",
-            "category": category.name if category else "",
-            "description": product.description,
-            "sku_root": product.sku_root,
-            "default_price": as_optional_decimal(product.default_price_amount),
-            "min_price": as_optional_decimal(product.min_price_amount),
-            "max_discount_percent": derive_discount_percent(
-                as_optional_decimal(product.default_price_amount),
-                as_optional_decimal(product.min_price_amount),
-            ),
-            "variants": [],
-        }
-        for _product, variant, _supplier, _category in rows:
-            payload["variants"].append(
-                self._variant_payload(
-                    product,
-                    variant,
-                    on_hand_map.get(str(variant.variant_id), ZERO),
-                    reserved_map.get(str(variant.variant_id), ZERO),
-                )
-            )
-        return payload
-
     def workspace(
         self,
         user: AuthenticatedUser,
@@ -889,69 +905,170 @@ class InventoryService(CommerceBaseService):
                 "low_stock_items": low_stock,
             }
 
-    def receive_stock(
+    def intake_lookup(
         self,
         user: AuthenticatedUser,
         *,
-        location_id: str | None,
-        quantity: Decimal,
-        notes: str,
-        identity: dict[str, Any],
-        variant_payload: dict[str, Any],
+        query: str = "",
+        location_id: str | None = None,
     ) -> dict[str, Any]:
         _require_page(user, "Inventory")
+        trimmed = query.strip()
+        if not trimmed:
+            return {
+                "query": "",
+                "exact_variants": [],
+                "product_matches": [],
+                "suggested_new_product": None,
+            }
+
         with self._session_factory() as session:
-            default_price, min_price, derived_discount = self._normalize_product_pricing(identity)
             location_context = self._location_context(session, user.client_id, location_id)
-            supplier_id = self._ensure_supplier(session, user.client_id, str(identity.get("supplier", "")))
-            category_id = self._ensure_category(session, user.client_id, str(identity.get("category", "")))
+            rows = session.execute(self._apply_variant_search(self._base_variant_stmt(user.client_id), trimmed)).all()
+            on_hand_map, reserved_map = self._stock_maps(session, user.client_id, location_context.active_location_id)
+            product_payloads: dict[str, dict[str, Any]] = {}
+            exact_variants: list[dict[str, Any]] = []
+            exact_product_ids: set[str] = set()
+            broad_product_ids: list[str] = []
+            broad_product_seen: set[str] = set()
+            normalized_query = normalize_lookup_text(trimmed)
+            raw_query = trimmed.lower()
 
-            product = None
-            requested_product_id = identity.get("product_id")
-            requested_variant_id = variant_payload.get("variant_id")
+            for product, variant, supplier, category in rows:
+                if product.status != "active" or variant.status != "active":
+                    continue
+                product_id = str(product.product_id)
+                if product_id not in product_payloads:
+                    product_rows = session.execute(
+                        self._base_variant_stmt(user.client_id).where(ProductModel.product_id == product.product_id)
+                    ).all()
+                    product_payloads[product_id] = self._product_payload_from_rows(product_rows, on_hand_map, reserved_map)
+                if product_id not in broad_product_seen:
+                    broad_product_ids.append(product_id)
+                    broad_product_seen.add(product_id)
 
-            if requested_product_id:
-                product = session.execute(
-                    select(ProductModel).where(
-                        ProductModel.client_id == user.client_id,
-                        ProductModel.product_id == requested_product_id,
-                    )
-                ).scalar_one_or_none()
+                match_reason = None
+                if variant.sku.lower() == raw_query:
+                    match_reason = "sku"
+                elif variant.barcode and variant.barcode.lower() == raw_query:
+                    match_reason = "barcode"
+                elif normalize_lookup_text(build_variant_label(product.name, variant.title)) == normalized_query:
+                    match_reason = "product_variant"
+                if match_reason is None:
+                    continue
 
-            if product is None:
-                sku_root = str(identity.get("sku_root", "")).strip()
-                if requested_variant_id:
-                    variant = session.execute(
-                        select(ProductVariantModel).where(
-                            ProductVariantModel.client_id == user.client_id,
-                            ProductVariantModel.variant_id == requested_variant_id,
-                        )
-                    ).scalar_one_or_none()
-                    _require(variant is not None, message="Variant not found", code="VARIANT_NOT_FOUND", status_code=404)
-                    product = session.execute(
-                        select(ProductModel).where(
-                            ProductModel.client_id == user.client_id,
-                            ProductModel.product_id == variant.product_id,
-                        )
-                    ).scalar_one()
-                elif sku_root:
-                    product = session.execute(
-                        select(ProductModel).where(
-                            ProductModel.client_id == user.client_id,
-                            ProductModel.sku_root == sku_root,
-                        )
-                    ).scalar_one_or_none()
-
-            if product is None:
-                product = ProductModel(
-                    product_id=new_uuid(),
-                    client_id=user.client_id,
-                    slug=build_product_slug(str(identity["product_name"])),
+                payload = product_payloads[product_id]
+                matched_variant = next(
+                    item for item in payload["variants"] if item["variant_id"] == str(variant.variant_id)
                 )
-                session.add(product)
+                exact_variants.append(
+                    {
+                        "match_reason": match_reason,
+                        "product": payload,
+                        "variant": matched_variant,
+                    }
+                )
+                exact_product_ids.add(product_id)
 
-            product.category_id = category_id
-            product.supplier_id = supplier_id
+            reason_priority = {"barcode": 0, "sku": 1, "product_variant": 2}
+            exact_variants.sort(
+                key=lambda item: (
+                    reason_priority.get(str(item["match_reason"]), 99),
+                    str(item["product"]["name"]).lower(),
+                    str(item["variant"]["label"]).lower(),
+                )
+            )
+
+            return {
+                "query": trimmed,
+                "exact_variants": exact_variants,
+                "product_matches": [
+                    product_payloads[product_id]
+                    for product_id in broad_product_ids
+                    if product_id not in exact_product_ids
+                ],
+                "suggested_new_product": {
+                    "product_name": trimmed,
+                    "sku_root": build_sku_base(trimmed),
+                },
+            }
+
+    def _can_save_template_only(self, user: AuthenticatedUser) -> bool:
+        return "SUPER_ADMIN" in user.roles or "CLIENT_OWNER" in user.roles
+
+    def _resolve_receive_product(
+        self,
+        session: Session,
+        user: AuthenticatedUser,
+        identity: dict[str, Any],
+        lines: list[dict[str, Any]],
+    ) -> ProductModel | None:
+        requested_product_id = str(identity.get("product_id", "") or "").strip()
+        if requested_product_id:
+            product = session.execute(
+                select(ProductModel).where(
+                    ProductModel.client_id == user.client_id,
+                    ProductModel.product_id == requested_product_id,
+                )
+            ).scalar_one_or_none()
+            _require(product is not None, message="Product not found", code="PRODUCT_NOT_FOUND", status_code=404)
+            return product
+
+        for line in lines:
+            requested_variant_id = str(line.get("variant_id", "") or "").strip()
+            if not requested_variant_id:
+                continue
+            variant = session.execute(
+                select(ProductVariantModel).where(
+                    ProductVariantModel.client_id == user.client_id,
+                    ProductVariantModel.variant_id == requested_variant_id,
+                )
+            ).scalar_one_or_none()
+            _require(variant is not None, message="Variant not found", code="VARIANT_NOT_FOUND", status_code=404)
+            return session.execute(
+                select(ProductModel).where(
+                    ProductModel.client_id == user.client_id,
+                    ProductModel.product_id == variant.product_id,
+                )
+            ).scalar_one()
+
+        sku_root = str(identity.get("sku_root", "") or "").strip()
+        if sku_root:
+            return session.execute(
+                select(ProductModel).where(
+                    ProductModel.client_id == user.client_id,
+                    ProductModel.sku_root == sku_root,
+                )
+            ).scalar_one_or_none()
+        return None
+
+    def _apply_receive_product_identity(
+        self,
+        session: Session,
+        user: AuthenticatedUser,
+        *,
+        product: ProductModel | None,
+        identity: dict[str, Any],
+        update_matched_product_details: bool,
+    ) -> tuple[ProductModel, str | None, bool]:
+        default_price, min_price, derived_discount = self._normalize_product_pricing(identity)
+        requested_supplier_id = self._ensure_supplier(session, user.client_id, str(identity.get("supplier", "")))
+        requested_category_id = self._ensure_category(session, user.client_id, str(identity.get("category", "")))
+        is_new_product = product is None
+
+        if product is None:
+            product = ProductModel(
+                product_id=new_uuid(),
+                client_id=user.client_id,
+                slug=build_product_slug(str(identity["product_name"])),
+            )
+            session.add(product)
+
+        purchase_supplier_id = requested_supplier_id or product.supplier_id
+
+        if is_new_product or update_matched_product_details:
+            product.category_id = requested_category_id
+            product.supplier_id = purchase_supplier_id
             product.name = str(identity["product_name"]).strip()
             product.slug = build_product_slug(product.name)
             product.sku_root = str(identity.get("sku_root", "")).strip()
@@ -962,80 +1079,198 @@ class InventoryService(CommerceBaseService):
             product.default_price_amount = default_price
             product.min_price_amount = min_price
             product.max_discount_percent = derived_discount
-            session.flush()
+        session.flush()
+        return product, purchase_supplier_id, is_new_product
 
-            variant = None
-            requested_sku = str(variant_payload.get("sku", "") or "").strip()
-            if requested_variant_id:
-                variant = session.execute(
+    def _prepare_receive_variant(
+        self,
+        session: Session,
+        user: AuthenticatedUser,
+        *,
+        product: ProductModel,
+        line: dict[str, Any],
+        variants_by_id: dict[str, ProductVariantModel],
+        variants_by_sku: dict[str, ProductVariantModel],
+        variants_by_signature: dict[str, ProductVariantModel],
+        update_matched_product_details: bool,
+    ) -> tuple[ProductVariantModel, Decimal | None, Decimal, bool]:
+        requested_variant_id = str(line.get("variant_id", "") or "").strip()
+        requested_sku = str(line.get("sku", "") or "").strip()
+        size = str(line.get("size", "")).strip()
+        color = str(line.get("color", "")).strip()
+        other = str(line.get("other", "")).strip()
+        signature = build_variant_signature(size, color, other)
+        quantity = as_decimal(line.get("quantity"))
+        cost_amount, price_amount, variant_min_price = self._normalize_variant_pricing(line)
+
+        variant = None
+        is_new_variant = False
+        if requested_variant_id:
+            variant = variants_by_id.get(requested_variant_id)
+            _require(variant is not None, message="Variant not found", code="VARIANT_NOT_FOUND", status_code=404)
+        elif requested_sku and requested_sku in variants_by_sku:
+            variant = variants_by_sku[requested_sku]
+        elif signature and signature in variants_by_signature:
+            variant = variants_by_signature[signature]
+
+        if variant is not None:
+            _require(
+                str(variant.product_id) == str(product.product_id),
+                message="Variant belongs to a different product",
+                code="DUPLICATE_SKU",
+            )
+            receipt_cost = cost_amount if cost_amount is not None else as_optional_decimal(variant.cost_amount)
+            if update_matched_product_details and price_amount is not None:
+                variant.price_amount = price_amount
+            if update_matched_product_details and variant_min_price is not None:
+                variant.min_price_amount = variant_min_price
+            if update_matched_product_details and line.get("reorder_level") not in ("", None):
+                variant.reorder_level = as_decimal(line.get("reorder_level"))
+            session.flush()
+            return variant, receipt_cost, quantity, False
+
+        variant = ProductVariantModel(
+            variant_id=new_uuid(),
+            client_id=user.client_id,
+            product_id=product.product_id,
+        )
+        session.add(variant)
+        variant.title = build_variant_title(size, color, other)
+        final_sku = requested_sku or self._generate_unique_sku(
+            session,
+            user.client_id,
+            product_name=product.name,
+            sku_root=product.sku_root,
+            size=size,
+            color=color,
+            other=other,
+            exclude_variant_id=str(variant.variant_id),
+        )
+        if requested_sku and requested_sku in variants_by_sku:
+            raise ApiException(status_code=400, code="DUPLICATE_SKU", message="Variant SKU already exists")
+        variant.sku = final_sku
+        variant.barcode = str(line.get("barcode", "")).strip()
+        variant.option_values_json = {"size": size, "color": color, "other": other}
+        variant.status = "active"
+        variant.cost_amount = cost_amount
+        variant.price_amount = price_amount
+        variant.min_price_amount = variant_min_price
+        variant.reorder_level = as_decimal(line.get("reorder_level"))
+        session.flush()
+        variants_by_id[str(variant.variant_id)] = variant
+        variants_by_sku[str(variant.sku)] = variant
+        variants_by_signature[signature] = variant
+        is_new_variant = True
+        return variant, cost_amount, quantity, is_new_variant
+
+    def receive_stock(
+        self,
+        user: AuthenticatedUser,
+        *,
+        action: str,
+        location_id: str | None,
+        notes: str,
+        update_matched_product_details: bool,
+        identity: dict[str, Any],
+        lines: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        _require_page(user, "Inventory")
+        if action == "save_template_only":
+            _require(
+                self._can_save_template_only(user),
+                message="Only owners or super admins can save catalog templates without stock",
+                code="ACCESS_DENIED",
+                status_code=403,
+            )
+        with self._session_factory() as session:
+            location_context = self._location_context(session, user.client_id, location_id)
+            product = self._resolve_receive_product(session, user, identity, lines)
+            product, purchase_supplier_id, is_new_product = self._apply_receive_product_identity(
+                session,
+                user,
+                product=product,
+                identity=identity,
+                update_matched_product_details=update_matched_product_details,
+            )
+
+            existing_variants = list(
+                session.execute(
                     select(ProductVariantModel).where(
                         ProductVariantModel.client_id == user.client_id,
-                        ProductVariantModel.variant_id == requested_variant_id,
+                        ProductVariantModel.product_id == product.product_id,
                     )
-                ).scalar_one_or_none()
-                _require(variant is not None, message="Variant not found", code="VARIANT_NOT_FOUND", status_code=404)
-            else:
-                if requested_sku:
-                    variant = session.execute(
-                        select(ProductVariantModel).where(
-                            ProductVariantModel.client_id == user.client_id,
-                            ProductVariantModel.sku == requested_sku,
-                        )
-                    ).scalar_one_or_none()
-                if variant is None:
-                    variant = ProductVariantModel(
-                        variant_id=new_uuid(),
-                        client_id=user.client_id,
-                        product_id=product.product_id,
-                    )
-                    session.add(variant)
-                else:
-                    _require(
-                        str(variant.product_id) == str(product.product_id),
-                        message="SKU already belongs to a different product",
-                        code="DUPLICATE_SKU",
-                    )
+                ).scalars()
+            )
+            variants_by_id = {str(item.variant_id): item for item in existing_variants}
+            variants_by_sku = {str(item.sku): item for item in existing_variants}
+            variants_by_signature = {
+                build_variant_signature(
+                    option_value(item.option_values_json, "size"),
+                    option_value(item.option_values_json, "color"),
+                    option_value(item.option_values_json, "other"),
+                ): item
+                for item in existing_variants
+            }
 
-            size = str(variant_payload.get("size", "")).strip()
-            color = str(variant_payload.get("color", "")).strip()
-            other = str(variant_payload.get("other", "")).strip()
-            cost_amount, price_amount, variant_min_price = self._normalize_variant_pricing(variant_payload)
-            receipt_cost = cost_amount if cost_amount is not None else as_optional_decimal(variant.cost_amount)
-            _require(receipt_cost is not None, message="Purchase cost is required to receive stock")
-            variant.product_id = product.product_id
-            variant.title = build_variant_title(size, color, other)
-            if requested_variant_id and variant.sku:
-                final_sku = str(variant.sku)
-            elif requested_sku:
-                final_sku = requested_sku
-            else:
-                final_sku = self._generate_unique_sku(
+            prepared_lines: list[tuple[ProductVariantModel, Decimal | None, Decimal, bool]] = []
+            seen_variant_ids: set[str] = set()
+            for line in lines:
+                variant, receipt_cost, quantity, is_new_variant = self._prepare_receive_variant(
+                    session,
+                    user,
+                    product=product,
+                    line=line,
+                    variants_by_id=variants_by_id,
+                    variants_by_sku=variants_by_sku,
+                    variants_by_signature=variants_by_signature,
+                    update_matched_product_details=update_matched_product_details,
+                )
+                variant_key = str(variant.variant_id)
+                _require(
+                    variant_key not in seen_variant_ids,
+                    message="Each receipt line must target a unique variant",
+                    code="DUPLICATE_VARIANT_LINE",
+                )
+                if action == "receive_stock":
+                    _require(receipt_cost is not None, message="Purchase cost is required to receive stock")
+                seen_variant_ids.add(variant_key)
+                prepared_lines.append((variant, receipt_cost, quantity, is_new_variant))
+
+            if action == "save_template_only":
+                _require(
+                    is_new_product or any(is_new_variant for _variant, _cost, _quantity, is_new_variant in prepared_lines),
+                    message="Template save requires a new product or at least one new variant",
+                    code="NOTHING_TO_SAVE",
+                )
+                session.commit()
+                product_payload = self._product_payload(
                     session,
                     user.client_id,
-                    product_name=product.name,
-                    sku_root=product.sku_root,
-                    size=size,
-                    color=color,
-                    other=other,
-                    exclude_variant_id=str(variant.variant_id),
+                    str(product.product_id),
+                    location_context.active_location_id,
                 )
-            variant.sku = final_sku
-            variant.barcode = str(variant_payload.get("barcode", "")).strip()
-            variant.option_values_json = {"size": size, "color": color, "other": other}
-            variant.status = "active"
-            variant.cost_amount = receipt_cost
-            variant.price_amount = price_amount
-            variant.min_price_amount = variant_min_price
-            variant.reorder_level = as_decimal(variant_payload.get("reorder_level"))
-            session.flush()
-            effective_price = self._effective_variant_price(product, variant)
+                variant_map = {item["variant_id"]: item for item in product_payload["variants"]}
+                return {
+                    "action": action,
+                    "purchase_id": None,
+                    "purchase_number": None,
+                    "product": product_payload,
+                    "lines": [
+                        {
+                            "quantity_received": ZERO,
+                            "variant": variant_map[str(variant.variant_id)],
+                        }
+                        for variant, _receipt_cost, _quantity, _is_new_variant in prepared_lines
+                    ],
+                }
 
             settings = self._client_settings(session, user.client_id)
             prefix = settings.purchase_prefix if settings else "PO"
+            subtotal = sum(quantity * as_decimal(receipt_cost) for _variant, receipt_cost, quantity, _is_new_variant in prepared_lines)
             purchase = PurchaseModel(
                 purchase_id=new_uuid(),
                 client_id=user.client_id,
-                supplier_id=supplier_id,
+                supplier_id=purchase_supplier_id,
                 location_id=location_context.active_location_id,
                 purchase_number=_new_number(prefix),
                 status="received",
@@ -1043,56 +1278,71 @@ class InventoryService(CommerceBaseService):
                 received_at=now_utc(),
                 notes=notes.strip(),
                 created_by_user_id=user.user_id,
-                subtotal_amount=quantity * receipt_cost,
-                total_amount=quantity * receipt_cost,
+                subtotal_amount=subtotal,
+                total_amount=subtotal,
             )
             session.add(purchase)
             session.flush()
 
-            purchase_item = PurchaseItemModel(
-                purchase_item_id=new_uuid(),
-                client_id=user.client_id,
-                purchase_id=purchase.purchase_id,
-                variant_id=variant.variant_id,
-                quantity=quantity,
-                received_quantity=quantity,
-                unit_cost_amount=receipt_cost,
-                line_total_amount=quantity * receipt_cost,
-                notes=notes.strip(),
-            )
-            session.add(purchase_item)
-            session.add(
-                InventoryLedgerModel(
-                    entry_id=new_uuid(),
+            response_lines: list[dict[str, Any]] = []
+            for variant, receipt_cost, quantity, _is_new_variant in prepared_lines:
+                effective_price = self._effective_variant_price(product, variant)
+                purchase_item = PurchaseItemModel(
+                    purchase_item_id=new_uuid(),
                     client_id=user.client_id,
+                    purchase_id=purchase.purchase_id,
                     variant_id=variant.variant_id,
-                    location_id=location_context.active_location_id,
-                    movement_type="stock_received",
-                    reference_type="purchase",
-                    reference_id=str(purchase.purchase_id),
-                    reference_line_id=str(purchase_item.purchase_item_id),
-                    quantity_delta=quantity,
-                    unit_cost_amount=receipt_cost,
-                    unit_price_amount=effective_price,
-                    reason=notes.strip() or "Stock received",
-                    created_by_user_id=user.user_id,
+                    quantity=quantity,
+                    received_quantity=quantity,
+                    unit_cost_amount=as_decimal(receipt_cost),
+                    line_total_amount=quantity * as_decimal(receipt_cost),
+                    notes=notes.strip(),
                 )
-            )
+                session.add(purchase_item)
+                session.add(
+                    InventoryLedgerModel(
+                        entry_id=new_uuid(),
+                        client_id=user.client_id,
+                        variant_id=variant.variant_id,
+                        location_id=location_context.active_location_id,
+                        movement_type="stock_received",
+                        reference_type="purchase",
+                        reference_id=str(purchase.purchase_id),
+                        reference_line_id=str(purchase_item.purchase_item_id),
+                        quantity_delta=quantity,
+                        unit_cost_amount=as_decimal(receipt_cost),
+                        unit_price_amount=effective_price,
+                        reason=notes.strip() or "Stock received",
+                        created_by_user_id=user.user_id,
+                    )
+                )
+                response_lines.append(
+                    {
+                        "variant_id": str(variant.variant_id),
+                        "quantity_received": quantity,
+                    }
+                )
             session.commit()
 
-            on_hand_map, reserved_map = self._stock_maps(session, user.client_id, location_context.active_location_id)
-            product = session.execute(
-                select(ProductModel).where(ProductModel.product_id == variant.product_id)
-            ).scalar_one()
+            product_payload = self._product_payload(
+                session,
+                user.client_id,
+                str(product.product_id),
+                location_context.active_location_id,
+            )
+            variant_map = {item["variant_id"]: item for item in product_payload["variants"]}
             return {
+                "action": action,
                 "purchase_id": str(purchase.purchase_id),
                 "purchase_number": purchase.purchase_number,
-                "variant": self._variant_payload(
-                    product,
-                    variant,
-                    on_hand_map.get(str(variant.variant_id), ZERO),
-                    reserved_map.get(str(variant.variant_id), ZERO),
-                ),
+                "product": product_payload,
+                "lines": [
+                    {
+                        "quantity_received": line["quantity_received"],
+                        "variant": variant_map[line["variant_id"]],
+                    }
+                    for line in response_lines
+                ],
             }
 
     def adjust_stock(

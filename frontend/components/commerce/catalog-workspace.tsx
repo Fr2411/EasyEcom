@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState, useTransition } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { ApiError } from '@/lib/api/client';
 import { getCatalogWorkspace, saveCatalogProduct } from '@/lib/api/commerce';
+import { buildSkuPreview, buildVariantCombinations, signatureForVariant, type VariantOptionValues } from '@/lib/variant-generator';
 import type {
   CatalogProduct,
   CatalogUpsertPayload,
@@ -27,11 +28,7 @@ type VariantGeneratorState = {
   reorder_level: string;
 };
 
-type VariantCombo = {
-  size: string;
-  color: string;
-  other: string;
-};
+type VariantCombo = VariantOptionValues;
 
 const EMPTY_IDENTITY: ProductIdentityInput = {
   product_name: '',
@@ -81,16 +78,6 @@ function firstFilled(values: Array<string | null | undefined>) {
 }
 
 
-function signatureForValues(size: string, color: string, other: string) {
-  return [size.trim().toLowerCase(), color.trim().toLowerCase(), other.trim().toLowerCase()].join('|');
-}
-
-
-function signatureForVariant(variant: CatalogVariantInput | VariantCombo) {
-  return signatureForValues(variant.size, variant.color, variant.other);
-}
-
-
 function isUntouchedDefaultVariant(variant: CatalogVariantInput) {
   return !variant.variant_id
     && !variant.size.trim()
@@ -103,64 +90,6 @@ function isUntouchedDefaultVariant(variant: CatalogVariantInput) {
     && !variant.min_selling_price.trim()
     && !variant.reorder_level.trim()
     && variant.status === 'active';
-}
-
-
-function parseCsvValues(value: string) {
-  const seen = new Set<string>();
-  return value
-    .split(',')
-    .map((item) => item.trim())
-    .filter((item) => {
-      if (!item) return false;
-      const key = item.toLowerCase();
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-}
-
-
-function buildCombinations(generator: VariantGeneratorState): VariantCombo[] {
-  const sizes = parseCsvValues(generator.size_values);
-  const colors = parseCsvValues(generator.color_values);
-  const others = parseCsvValues(generator.other_values);
-  const sizeAxis = sizes.length ? sizes : [''];
-  const colorAxis = colors.length ? colors : [''];
-  const otherAxis = others.length ? others : [''];
-  const combinations: VariantCombo[] = [];
-
-  sizeAxis.forEach((size) => {
-    colorAxis.forEach((color) => {
-      otherAxis.forEach((other) => {
-        combinations.push({ size, color, other });
-      });
-    });
-  });
-
-  return combinations.length ? combinations : [{ size: '', color: '', other: '' }];
-}
-
-
-function normalizeSkuBase(value: string) {
-  return value
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .replace(/-+/g, '-');
-}
-
-
-function buildSkuPreview(productName: string, skuRoot: string, variant: VariantCombo | CatalogVariantInput) {
-  const persisted = 'variant_id' in variant && variant.variant_id ? variant.sku?.trim() ?? '' : '';
-  if (persisted) return persisted;
-
-  const base = normalizeSkuBase(skuRoot || productName || 'PRODUCT');
-  const tokens = [variant.size, variant.color, variant.other]
-    .map((value) => normalizeSkuBase(value))
-    .filter(Boolean);
-  return [base, ...tokens].filter(Boolean).join('-') || 'SKU GENERATED ON SAVE';
 }
 
 
@@ -327,7 +256,7 @@ export function CatalogWorkspace() {
     setError('');
   };
 
-  const generatedCombos = useMemo(() => buildCombinations(generator), [generator]);
+  const generatedCombos = useMemo(() => buildVariantCombinations(generator), [generator]);
   const derivedDiscount = calculateDerivedDiscount(form.identity.default_selling_price, form.identity.min_selling_price);
 
   const applyGenerator = (mode: 'merge' | 'reset') => {
@@ -423,9 +352,6 @@ export function CatalogWorkspace() {
               />
               <button type="submit">Search</button>
             </form>
-            <button type="button" onClick={setNewProductForm}>
-              New blank product
-            </button>
           </div>
         }
       >

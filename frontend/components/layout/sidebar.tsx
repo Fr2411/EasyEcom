@@ -9,7 +9,12 @@ import { canAccessPage } from '@/lib/rbac';
 
 export function Sidebar() {
   const { user } = useAuth();
-  const visibleItems = NAV_ITEMS.filter((item) => canAccessPage(user?.roles, item.label, user?.allowed_pages));
+  const visibleItems = NAV_ITEMS.filter((item) => {
+    if (item.label === 'Catalog' && !user?.roles?.includes('SUPER_ADMIN')) {
+      return false;
+    }
+    return canAccessPage(user?.roles, item.label, user?.allowed_pages);
+  });
   const groupedNavigation = visibleItems.reduce<Record<string, typeof NAV_ITEMS>>((acc, item) => {
     if (!acc[item.group]) {
       acc[item.group] = [];

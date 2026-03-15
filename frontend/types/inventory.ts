@@ -1,4 +1,5 @@
 import type {
+  CatalogProduct,
   CatalogVariant,
   CatalogVariantInput,
   ProductIdentityInput,
@@ -34,19 +35,48 @@ export type InventoryWorkspace = {
   low_stock_items: InventoryStockRow[];
 };
 
-export type ReceiveStockPayload = {
-  mode: 'existing_variant' | 'existing_product_new_variant' | 'new_product';
-  location_id?: string;
+export type InventoryIntakeIdentityInput = ProductIdentityInput & {
+  product_id?: string;
+};
+
+export type ReceiveStockLineInput = CatalogVariantInput & {
   quantity: string;
+};
+
+export type InventoryIntakeExactVariantMatch = {
+  match_reason: string;
+  product: CatalogProduct;
+  variant: CatalogVariant;
+};
+
+export type InventoryIntakeLookup = {
+  query: string;
+  exact_variants: InventoryIntakeExactVariantMatch[];
+  product_matches: CatalogProduct[];
+  suggested_new_product: {
+    product_name: string;
+    sku_root: string;
+  } | null;
+};
+
+export type ReceiveStockPayload = {
+  action: 'receive_stock' | 'save_template_only';
+  location_id?: string;
   notes: string;
-  identity: ProductIdentityInput;
-  variant: CatalogVariantInput;
+  update_matched_product_details: boolean;
+  identity: InventoryIntakeIdentityInput;
+  lines: ReceiveStockLineInput[];
 };
 
 export type ReceiveStockResponse = {
-  purchase_id: string;
-  purchase_number: string;
-  variant: CatalogVariant;
+  action: 'receive_stock' | 'save_template_only';
+  purchase_id: string | null;
+  purchase_number: string | null;
+  product: CatalogProduct;
+  lines: Array<{
+    quantity_received: string;
+    variant: CatalogVariant;
+  }>;
 };
 
 export type InventoryAdjustmentPayload = {
