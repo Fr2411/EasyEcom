@@ -17,12 +17,20 @@ def _setup_runtime(tmp_path: Path):
     return build_sqlite_runtime(tmp_path, "api_auth.db")
 
 
-def _append_user(runtime, *, password: str = "", password_hash: str = "", is_active: bool = True) -> None:
+def _append_user(
+    runtime,
+    *,
+    password: str = "",
+    password_hash: str = "",
+    is_active: bool = True,
+    role_code: str = "SUPER_ADMIN",
+) -> None:
     seed_auth_user(
         runtime.session_factory,
         password=password,
         password_hash=password_hash,
         is_active=is_active,
+        role_code=role_code,
     )
 
 
@@ -141,6 +149,35 @@ def test_me_requires_cookie(monkeypatch, tmp_path: Path):
     response = client.get("/auth/me")
 
     assert response.status_code == 401
+
+
+def test_me_backfills_business_name_for_older_session_cookie(monkeypatch, tmp_path: Path):
+    runtime = _setup_runtime(tmp_path)
+    monkeypatch.setattr(deps, "settings", runtime.settings)
+    _append_user(runtime, password_hash=hash_password("secret"), role_code="CLIENT_OWNER")
+
+    client = TestClient(create_app())
+    signer = deps.SessionSigner(deps.settings.session_secret)
+    legacy_token = signer.dumps(
+        {
+            "user_id": USER_ID,
+            "client_id": CLIENT_ID,
+            "roles": ["CLIENT_OWNER"],
+            "allowed_pages": ["Dashboard", "Inventory", "Sales", "Settings"],
+            "email": "u1@example.com",
+            "name": "User One",
+        }
+    )
+    client.cookies.set("easy_ecom_session", legacy_token)
+
+    response = client.get("/auth/me")
+
+    assert response.status_code == 200
+    assert response.json()["business_name"] == "Client One"
+    refreshed_cookie = response.cookies.get("easy_ecom_session")
+    assert refreshed_cookie
+    refreshed_payload = signer.loads(refreshed_cookie)
+    assert refreshed_payload["business_name"] == "Client One"
 
 
 def test_me_rejects_corrupted_cookie(monkeypatch, tmp_path: Path):

@@ -74,6 +74,12 @@ class PostgresAuthRepo:
                 for page_code, is_allowed in rows
             ]
 
+    def get_business_name_for_client(self, client_id: str) -> str | None:
+        with self._session_factory() as session:
+            return session.execute(
+                select(ClientModel.business_name).where(ClientModel.client_id == client_id)
+            ).scalar_one_or_none()
+
     def update_password_hash(self, user_id: str, password_hash: str) -> None:
         with self._session_factory() as session:
             user = session.execute(

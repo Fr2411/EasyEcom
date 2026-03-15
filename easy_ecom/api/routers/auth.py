@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 from fastapi import APIRouter, Depends, Response
 
 from easy_ecom.api.dependencies import (
@@ -59,12 +61,29 @@ def logout(response: Response) -> dict[str, bool]:
 
 
 @router.get("/me", response_model=CurrentUserResponse)
-def me(user: AuthenticatedUser = Depends(get_authenticated_user)) -> CurrentUserResponse:
+def me(
+    response: Response,
+    user: AuthenticatedUser = Depends(get_authenticated_user),
+    container: ServiceContainer = Depends(get_container),
+) -> CurrentUserResponse:
+    business_name = user.business_name or container.auth.get_business_name_for_client(user.client_id)
+    if business_name and business_name != user.business_name:
+        token = build_session_token(replace(user, business_name=business_name))
+        response.set_cookie(
+            key=settings.session_cookie_name,
+            value=token,
+            httponly=True,
+            secure=settings.session_cookie_secure,
+            samesite=settings.session_cookie_samesite,
+            domain=settings.session_cookie_domain,
+            path="/",
+        )
+
     return CurrentUserResponse(
         user_id=user.user_id,
         email=user.email,
         name=user.name,
-        business_name=user.business_name,
+        business_name=business_name,
         role=user.roles[0],
         client_id=user.client_id,
         roles=user.roles,
