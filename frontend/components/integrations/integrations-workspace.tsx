@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState, useTransition } from 'react';
 
 import { useAuth } from '@/components/auth/auth-provider';
 import { WorkspaceNotice, WorkspacePanel } from '@/components/commerce/workspace-primitives';
+import { ApiNetworkError } from '@/lib/api/client';
 import { listAdminClients } from '@/lib/api/admin';
 import { getChannelIntegrations, getChannelLocations, saveWhatsAppMetaIntegration } from '@/lib/api/integrations';
 import { formatDateTime } from '@/lib/commerce-format';
@@ -124,6 +125,12 @@ export function IntegrationsWorkspace() {
       }
       setDraft((existing) => ({ ...existing, verify_token: '' }));
     } catch (submitError) {
+      if (submitError instanceof ApiNetworkError) {
+        setError(
+          `The API did not return a usable response while saving. Re-login once, then retry. If it still fails, check the backend deploy, CORS/session settings, and that the Sales Agent migration is applied. (${submitError.message})`
+        );
+        return;
+      }
       setError(submitError instanceof Error ? submitError.message : 'Unable to save the WhatsApp integration.');
     }
   };
@@ -224,6 +231,10 @@ export function IntegrationsWorkspace() {
                 onChange={(event) => setDraft({ ...draft, model_name: event.target.value })}
                 placeholder="gpt-5-mini"
               />
+              <small className="workspace-field-note">
+                The OpenAI API key is configured on the backend with <code>OPENAI_API_KEY</code>. This form only selects
+                the tenant model and persona.
+              </small>
             </label>
             <label>
               <span>Access token</span>
