@@ -34,6 +34,8 @@ class AuthRepoProtocol:
 
     def get_page_access_overrides(self, user_id: str) -> list[AuthPageOverrideRecord]: ...
 
+    def get_business_name_for_client(self, client_id: str) -> str | None: ...
+
     def update_password_hash(self, user_id: str, password_hash: str) -> None: ...
 
     def touch_last_login(self, user_id: str, logged_in_at: datetime) -> None: ...
@@ -42,6 +44,11 @@ class AuthRepoProtocol:
 class AuthService:
     def __init__(self, repo: AuthRepoProtocol):
         self.repo = repo
+
+    def get_business_name_for_client(self, client_id: str) -> str | None:
+        if not client_id.strip():
+            return None
+        return self.repo.get_business_name_for_client(client_id)
 
     def authenticate(self, email: str, password: str) -> AuthenticatedUser | None:
         user = self.repo.get_user_by_email(email)
