@@ -60,9 +60,47 @@ vi.mock('@/lib/api/commerce', () => ({
   createSalesReturn: vi.fn(),
 }));
 
+vi.mock('@/lib/api/dashboard', () => ({
+  getDashboardAnalytics: vi.fn(async () => ({
+    generated_at: '2026-03-15T10:00:00+00:00',
+    has_multiple_locations: false,
+    selected_location_id: null,
+    locations: [{ location_id: 'loc-1', name: 'Main', is_default: true }],
+    applied_range: {
+      range_key: 'mtd',
+      label: 'Month to date',
+      timezone: 'UTC',
+      from_date: '2026-03-01',
+      to_date: '2026-03-15',
+      previous_from_date: '2026-02-14',
+      previous_to_date: '2026-02-28',
+      bucket: 'day',
+      days: 15,
+    },
+    visibility: { can_view_financial_metrics: true },
+    kpis: [],
+    insight_cards: [],
+    charts: {
+      revenue_profit_trend: { items: [], unavailable_reason: null },
+      stock_movement_trend: [],
+      returns_trend: { items: [] },
+      product_opportunity_matrix: { items: [], unavailable_reason: null },
+    },
+    tables: {
+      stock_investment_by_product: [],
+      low_stock_variants: [],
+      top_products_by_units_sold: [],
+      top_products_by_revenue: { items: [], unavailable_reason: null },
+      top_products_by_estimated_gross_profit: { items: [], unavailable_reason: null },
+      slow_movers: [],
+      recent_activity: [],
+    },
+  })),
+}));
+
 const cases = [
   ['Home', HomePage, /the product foundation is live again/i],
-  ['Dashboard', DashboardPage, /pilot rebuild command center/i],
+  ['Dashboard', DashboardPage, /business analytics dashboard/i],
   ['Reports', ReportsPage, /reset in progress|rebuild foundation/i],
   ['Catalog', CatalogPage, /variant-first catalog/i],
   ['Customers', CustomersPage, /embedded customer records/i],

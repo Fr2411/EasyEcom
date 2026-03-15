@@ -22,6 +22,7 @@ from easy_ecom.domain.services.commerce_service import (
     ReturnsService,
     SalesService,
 )
+from easy_ecom.domain.services.dashboard_service import DashboardAnalyticsService
 from easy_ecom.domain.services.overview_service import OverviewService
 
 
@@ -42,6 +43,7 @@ class ServiceContainer:
         session_factory = build_session_factory(engine)
         self.auth = AuthService(PostgresAuthRepo(session_factory))
         self.admin = AdminService(session_factory)
+        self.dashboard = DashboardAnalyticsService(session_factory)
         self.overview = OverviewService(session_factory)
         self.catalog = CatalogService(session_factory)
         self.inventory = InventoryService(session_factory)
