@@ -660,6 +660,12 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
   margin: 0;
 }
 
+.workspace-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
 .workspace-panel-header p,
 .workspace-subsection-header p,
 .workspace-empty p,
@@ -731,6 +737,51 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
   justify-content: space-between;
   align-items: flex-start;
   gap: 1rem;
+}
+
+.workspace-hint {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #f6fbfa;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: help;
+  outline: none;
+}
+
+.workspace-hint-text {
+  position: absolute;
+  top: calc(100% + 0.55rem);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(260px, calc(100vw - 2rem));
+  padding: 0.7rem 0.8rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(18, 44, 52, 0.14);
+  background: rgba(18, 44, 52, 0.96);
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 500;
+  line-height: 1.45;
+  box-shadow: 0 14px 30px rgba(18, 44, 52, 0.18);
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  transition: opacity 0.18s ease, visibility 0.18s ease;
+  z-index: 5;
+}
+
+.workspace-hint:hover .workspace-hint-text,
+.workspace-hint:focus-visible .workspace-hint-text {
+  opacity: 1;
+  visibility: visible;
 }
 
 .workspace-card-grid {
