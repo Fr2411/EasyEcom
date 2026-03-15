@@ -3,7 +3,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class LocationSummaryResponse(BaseModel):
@@ -97,6 +97,10 @@ class ProductIdentityInput(BaseModel):
         return value
 
 
+class InventoryIntakeIdentityInput(ProductIdentityInput):
+    product_id: str | None = None
+
+
 class CatalogVariantInput(BaseModel):
     variant_id: str | None = None
     sku: str | None = Field(default=None, max_length=128)
@@ -129,6 +133,17 @@ class CatalogVariantInput(BaseModel):
     def blank_reorder_level_to_zero(cls, value: object) -> object:
         if isinstance(value, str) and not value.strip():
             return Decimal("0")
+        return value
+
+
+class ReceiveStockLineInput(CatalogVariantInput):
+    quantity: Decimal | None = None
+
+    @field_validator("quantity", mode="before")
+    @classmethod
+    def blank_quantity_to_none(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip():
+            return None
         return value
 
 
@@ -171,19 +186,79 @@ class InventoryWorkspaceResponse(BaseModel):
     low_stock_items: list[InventoryStockRowResponse]
 
 
+class InventoryIntakeSuggestedProductResponse(BaseModel):
+    product_name: str
+    sku_root: str
+
+
+class InventoryIntakeExactVariantMatchResponse(BaseModel):
+    match_reason: str
+    product: CatalogProductResponse
+    variant: CatalogVariantResponse
+
+
+class InventoryIntakeLookupResponse(BaseModel):
+    query: str = ""
+    exact_variants: list[InventoryIntakeExactVariantMatchResponse]
+    product_matches: list[CatalogProductResponse]
+    suggested_new_product: InventoryIntakeSuggestedProductResponse | None = None
+
+
 class ReceiveStockRequest(BaseModel):
-    mode: Literal["existing_variant", "existing_product_new_variant", "new_product"]
+    action: Literal["receive_stock", "save_template_only"] = "receive_stock"
     location_id: str | None = None
-    quantity: Decimal = Field(gt=Decimal("0"))
     notes: str = ""
-    identity: ProductIdentityInput
-    variant: CatalogVariantInput
+    update_matched_product_details: bool = False
+    identity: InventoryIntakeIdentityInput
+    lines: list[ReceiveStockLineInput] = Field(default_factory=list)
+    mode: Literal["existing_variant", "existing_product_new_variant", "new_product"] | None = None
+    quantity: Decimal | None = None
+    variant: CatalogVariantInput | None = None
+
+    @field_validator("quantity", mode="before")
+    @classmethod
+    def blank_receive_quantity_to_none(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_legacy_single_line_payload(cls, value: object) -> object:
+        if not isinstance(value, dict) or value.get("lines"):
+            return value
+        variant = value.get("variant")
+        if variant is None:
+            return value
+        line = dict(variant)
+        line["quantity"] = value.get("quantity")
+        normalized = dict(value)
+        normalized["action"] = normalized.get("action") or "receive_stock"
+        normalized["lines"] = [line]
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_lines(self) -> "ReceiveStockRequest":
+        if not self.lines:
+            raise ValueError("At least one line is required")
+        if self.action == "receive_stock":
+            for line in self.lines:
+                if line.quantity is None or line.quantity <= Decimal("0"):
+                    raise ValueError("Quantity is required for each received line")
+        return self
+
+
+class PurchaseReceiptLineResponse(BaseModel):
+    quantity_received: Decimal
+    variant: CatalogVariantResponse
 
 
 class PurchaseReceiptResponse(BaseModel):
-    purchase_id: str
-    purchase_number: str
-    variant: CatalogVariantResponse
+    action: Literal["receive_stock", "save_template_only"]
+    purchase_id: str | None = None
+    purchase_number: str | None = None
+    product: CatalogProductResponse
+    lines: list[PurchaseReceiptLineResponse]
 
 
 class InventoryAdjustmentRequest(BaseModel):

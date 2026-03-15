@@ -38,6 +38,12 @@ vi.mock('@/lib/api/commerce', () => ({
     stock_items: [],
     low_stock_items: [],
   })),
+  getInventoryIntakeLookup: vi.fn(async () => ({
+    query: '',
+    exact_variants: [],
+    product_matches: [],
+    suggested_new_product: null,
+  })),
   receiveInventoryStock: vi.fn(),
   createInventoryAdjustment: vi.fn(),
   getSalesOrders: vi.fn(async () => ({ items: [] })),
@@ -95,7 +101,7 @@ describe('Business pages', () => {
     vi.resetModules();
   });
 
-  test('legacy products-stock route redirects to catalog', async () => {
+  test('legacy products-stock route redirects into inventory receive stock', async () => {
     vi.resetModules();
     const redirectMock = vi.fn();
     vi.doMock('next/navigation', () => ({
@@ -105,7 +111,7 @@ describe('Business pages', () => {
     const module = await import('@/app/(app)/products-stock/page');
     module.default();
 
-    expect(redirectMock).toHaveBeenCalledWith('/catalog');
+    expect(redirectMock).toHaveBeenCalledWith('/inventory?tab=receive');
     vi.doUnmock('next/navigation');
     vi.resetModules();
   });

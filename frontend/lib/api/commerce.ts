@@ -6,6 +6,7 @@ import type {
 } from '@/types/catalog';
 import type {
   InventoryAdjustmentPayload,
+  InventoryIntakeLookup,
   InventoryStockRow,
   InventoryWorkspace,
   ReceiveStockPayload,
@@ -58,6 +59,16 @@ export async function saveCatalogProduct(payload: CatalogUpsertPayload) {
 export async function getInventoryWorkspace(params: { q?: string; locationId?: string } = {}) {
   return apiClient<InventoryWorkspace>(
     `/inventory/workspace${buildQuery({
+      q: params.q,
+      location_id: params.locationId,
+    })}`
+  );
+}
+
+
+export async function getInventoryIntakeLookup(params: { q: string; locationId?: string }) {
+  return apiClient<InventoryIntakeLookup>(
+    `/inventory/intake/lookup${buildQuery({
       q: params.q,
       location_id: params.locationId,
     })}`

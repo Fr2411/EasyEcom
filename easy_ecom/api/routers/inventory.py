@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, Query
 from easy_ecom.api.dependencies import ServiceContainer, get_authenticated_user, get_container, require_page_access
 from easy_ecom.api.schemas.commerce import (
     InventoryAdjustmentRequest,
+    InventoryIntakeLookupResponse,
     InventoryStockRowResponse,
     InventoryWorkspaceResponse,
     PurchaseReceiptResponse,
@@ -35,6 +36,18 @@ def inventory_workspace(
     )
 
 
+@router.get("/intake/lookup", response_model=InventoryIntakeLookupResponse)
+def inventory_intake_lookup(
+    q: str = Query(default=""),
+    location_id: str | None = Query(default=None),
+    user: AuthenticatedUser = Depends(get_authenticated_user),
+    container: ServiceContainer = Depends(get_container),
+) -> InventoryIntakeLookupResponse:
+    return InventoryIntakeLookupResponse.model_validate(
+        container.inventory.intake_lookup(user, query=q, location_id=location_id)
+    )
+
+
 @router.get("/low-stock", response_model=list[InventoryStockRowResponse])
 def low_stock(
     location_id: str | None = Query(default=None),
@@ -54,11 +67,12 @@ def receive_stock(
     return PurchaseReceiptResponse.model_validate(
         container.inventory.receive_stock(
             user,
+            action=payload.action,
             location_id=payload.location_id,
-            quantity=payload.quantity,
             notes=payload.notes,
+            update_matched_product_details=payload.update_matched_product_details,
             identity=payload.identity.model_dump(),
-            variant_payload=payload.variant.model_dump(),
+            lines=[item.model_dump() for item in payload.lines],
         )
     )
 

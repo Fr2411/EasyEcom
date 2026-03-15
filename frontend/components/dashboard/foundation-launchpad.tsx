@@ -2,14 +2,9 @@ import Link from 'next/link';
 
 const MODULES = [
   {
-    href: '/catalog',
-    title: 'Catalog',
-    summary: 'Products, variants, categories, suppliers, and pricing guardrails start here.',
-  },
-  {
     href: '/inventory',
     title: 'Inventory',
-    summary: 'Available stock, receive stock, adjustments, and low-stock work now share one inventory command center.',
+    summary: 'Receive-first product intake, available stock, adjustments, and low-stock workflows now share one inventory command center.',
   },
   {
     href: '/sales',

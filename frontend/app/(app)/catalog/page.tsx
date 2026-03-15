@@ -3,7 +3,7 @@ import { CatalogWorkspace } from '@/components/commerce/catalog-workspace';
 
 export default function CatalogPage() {
   return (
-    <PageShell title="Catalog" description="Manage parent products and saleable variants with stock-aware search.">
+    <PageShell title="Catalog" description="Advanced maintenance for parent products and saleable variants. Daily intake now starts in Receive Stock.">
       <CatalogWorkspace />
     </PageShell>
   );
