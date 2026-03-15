@@ -24,6 +24,7 @@ from easy_ecom.domain.services.commerce_service import (
 )
 from easy_ecom.domain.services.dashboard_service import DashboardAnalyticsService
 from easy_ecom.domain.services.overview_service import OverviewService
+from easy_ecom.domain.services.sales_agent_service import SalesAgentService
 
 
 @dataclass(frozen=True)
@@ -49,6 +50,7 @@ class ServiceContainer:
         self.inventory = InventoryService(session_factory)
         self.sales = SalesService(session_factory)
         self.returns = ReturnsService(session_factory)
+        self.sales_agent = SalesAgentService(session_factory)
 
 
 def _signer() -> SessionSigner:

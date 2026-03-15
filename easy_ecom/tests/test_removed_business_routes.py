@@ -50,9 +50,20 @@ def test_removed_legacy_business_paths_still_return_missing(monkeypatch, tmp_pat
         "/returns/approve",
         "/purchases/receive",
         "/admin/users",
-        "/integrations/channels",
         "/ai-review/drafts",
         "/automation/policies",
     ]:
         response = client.get(path)
         assert response.status_code == 404, path
+
+
+def test_new_sales_agent_routes_are_available_with_auth(monkeypatch, tmp_path: Path) -> None:
+    client = _client_with_auth(tmp_path, monkeypatch)
+
+    for path in [
+        "/integrations/channels",
+        "/sales-agent/conversations",
+        "/sales-agent/orders",
+    ]:
+        response = client.get(path)
+        assert response.status_code == 200, path

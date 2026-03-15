@@ -352,6 +352,10 @@ class SalesOrderResponse(BaseModel):
     discount_amount: Decimal
     total_amount: Decimal
     paid_amount: Decimal
+    source_type: str
+    source_channel_id: str | None
+    source_conversation_id: str | None
+    source_agent_draft_id: str | None
     lines: list[SalesOrderLineResponse]
 
 

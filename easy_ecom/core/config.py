@@ -101,6 +101,11 @@ class Settings:
         default_factory=lambda: os.getenv("SESSION_COOKIE_SAMESITE", "lax").strip().lower()
     )
     bcrypt_rounds: int = field(default_factory=lambda: _to_int(os.getenv("BCRYPT_ROUNDS"), 12))
+    openai_api_key: str = field(default_factory=lambda: os.getenv("OPENAI_API_KEY", "").strip())
+    openai_model: str = field(default_factory=lambda: os.getenv("OPENAI_MODEL", "gpt-5-mini").strip() or "gpt-5-mini")
+    openai_base_url: str = field(default_factory=lambda: os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").strip() or "https://api.openai.com/v1")
+    openai_timeout_seconds: int = field(default_factory=lambda: _to_int(os.getenv("OPENAI_TIMEOUT_SECONDS"), 20))
+    whatsapp_graph_version: str = field(default_factory=lambda: os.getenv("WHATSAPP_GRAPH_VERSION", "v23.0").strip() or "v23.0")
 
     @property
     def postgres_dsn(self) -> str:

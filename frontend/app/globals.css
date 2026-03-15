@@ -1111,6 +1111,287 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
   color: var(--primary-strong);
 }
 
+.sales-agent-stack {
+  align-items: start;
+}
+
+.sales-agent-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.sales-agent-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.sales-agent-form-grid label,
+.sales-agent-form-wide {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.sales-agent-form-wide {
+  grid-column: 1 / -1;
+}
+
+.sales-agent-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.sales-agent-checkbox {
+  align-content: center;
+  grid-template-columns: auto 1fr;
+  gap: 0.65rem;
+  min-height: 2.7rem;
+}
+
+.sales-agent-checkbox input {
+  margin: 0.15rem 0 0;
+}
+
+.sales-agent-status-grid {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.sales-agent-stat-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: #fff;
+  padding: 0.95rem;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.sales-agent-stat-card span {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.sales-agent-stat-card strong {
+  font-size: 1rem;
+}
+
+.sales-agent-stat-card p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.sales-agent-table-wrap {
+  overflow-x: auto;
+}
+
+.sales-agent-table {
+  min-width: 980px;
+}
+
+.sales-agent-preview {
+  margin: 0.35rem 0;
+  max-width: 34ch;
+  color: var(--text);
+}
+
+.sales-agent-status-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.28rem 0.7rem;
+  font-size: 0.76rem;
+  text-transform: capitalize;
+  border: 1px solid #cbe8df;
+  background: #eefaf6;
+  color: var(--primary-strong);
+}
+
+.sales-agent-status-pill.status-needs_review {
+  border-color: #e9d38e;
+  background: #fff8dc;
+  color: #8a6708;
+}
+
+.sales-agent-status-pill.status-handoff {
+  border-color: #d6c7f4;
+  background: #f7f3ff;
+  color: #6241a3;
+}
+
+.sales-agent-expanded {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1.5fr) minmax(320px, 0.9fr);
+  padding-top: 0.35rem;
+}
+
+.sales-agent-expanded-main,
+.sales-agent-expanded-side {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.sales-agent-expanded-main h4,
+.sales-agent-side-card h4 {
+  margin: 0;
+}
+
+.sales-agent-expanded-side {
+  align-content: start;
+}
+
+.sales-agent-side-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: #fff;
+  padding: 0.95rem;
+  display: grid;
+  gap: 0.8rem;
+}
+
+.sales-agent-side-card textarea {
+  width: 100%;
+  resize: vertical;
+}
+
+.sales-agent-side-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.sales-agent-timeline {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.sales-agent-message {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: #fff;
+  padding: 0.9rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.sales-agent-message.direction-outbound {
+  background: #f5fffb;
+  border-color: #cbe8df;
+}
+
+.sales-agent-message header {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: baseline;
+}
+
+.sales-agent-message header span {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.sales-agent-message p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.sales-agent-mentions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.sales-agent-mentions span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 999px;
+  border: 1px solid #dbe8e5;
+  background: #f7fbfb;
+  padding: 0.28rem 0.55rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.sales-agent-order-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.sales-agent-order-lines li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.sales-agent-order-lines strong,
+.sales-agent-order-lines span {
+  display: block;
+}
+
+.sales-agent-order-lines span {
+  color: var(--text-muted);
+  text-align: right;
+}
+
+.sales-agent-order-queue {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.sales-agent-order-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  align-items: flex-start;
+}
+
+.sales-agent-order-head p {
+  margin: 0.2rem 0 0;
+}
+
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.35rem;
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.button-link:hover {
+  border-color: #8bdccf;
+  background: #f5fffb;
+}
+
+button.secondary,
+.button-link.secondary {
+  background: #f7fbfb;
+  color: var(--text);
+  border-color: var(--border);
+}
+
+button.secondary:hover,
+.button-link.secondary:hover {
+  background: #eef7f6;
+  border-color: #b6d3ce;
+}
+
 @media (max-width: 1150px) {
   .top-header { grid-template-columns: 1fr auto; }
   .header-search { display: none; }
@@ -1148,6 +1429,9 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
   .workspace-form-grid,
   .workspace-form-grid.compact,
   .workspace-two-column { grid-template-columns: 1fr; }
+
+  .sales-agent-form-grid,
+  .sales-agent-expanded { grid-template-columns: 1fr; }
 
   .section-card-wide,
   .field-span-2 { grid-column: auto; }

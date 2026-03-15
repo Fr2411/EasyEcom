@@ -52,6 +52,10 @@ export type SalesOrder = {
   discount_amount: string;
   total_amount: string;
   paid_amount: string;
+  source_type: string;
+  source_channel_id: string | null;
+  source_conversation_id: string | null;
+  source_agent_draft_id: string | null;
   lines: SalesOrderLine[];
 };
 

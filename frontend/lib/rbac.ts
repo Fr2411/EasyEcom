@@ -1,7 +1,7 @@
 const ROLE_PAGE_ACCESS: Record<string, string[]> = {
-  SUPER_ADMIN: ['Home', 'Dashboard', 'Catalog', 'Inventory', 'Purchases', 'Sales', 'Customers', 'Finance', 'Returns', 'Reports', 'Admin', 'Settings'],
-  CLIENT_OWNER: ['Home', 'Dashboard', 'Catalog', 'Inventory', 'Purchases', 'Sales', 'Finance', 'Returns', 'Reports', 'Settings'],
-  CLIENT_STAFF: ['Home', 'Dashboard', 'Catalog', 'Inventory', 'Purchases', 'Sales', 'Returns', 'Settings'],
+  SUPER_ADMIN: ['Home', 'Dashboard', 'Catalog', 'Inventory', 'Purchases', 'Sales', 'Sales Agent', 'Customers', 'Finance', 'Returns', 'Reports', 'Admin', 'Settings'],
+  CLIENT_OWNER: ['Home', 'Dashboard', 'Catalog', 'Inventory', 'Purchases', 'Sales', 'Sales Agent', 'Finance', 'Returns', 'Reports', 'Settings'],
+  CLIENT_STAFF: ['Home', 'Dashboard', 'Catalog', 'Inventory', 'Purchases', 'Sales', 'Sales Agent', 'Returns', 'Settings'],
   FINANCE_STAFF: ['Home', 'Dashboard', 'Finance', 'Returns', 'Reports', 'Settings'],
 };
 

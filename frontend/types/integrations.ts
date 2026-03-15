@@ -4,12 +4,21 @@ export type ChannelIntegration = {
   display_name: string;
   status: 'inactive' | 'active' | 'disabled';
   external_account_id: string;
+  phone_number_id: string;
+  phone_number: string;
   verify_token_set: boolean;
   inbound_secret_set: boolean;
+  access_token_set: boolean;
+  default_location_id: string | null;
+  auto_send_enabled: boolean;
+  agent_enabled: boolean;
+  model_name: string;
+  persona_prompt: string;
   config: Record<string, string>;
   created_at: string;
   updated_at: string;
   last_inbound_at: string | null;
+  last_outbound_at: string | null;
 };
 
 export type ChannelMessage = {
@@ -34,4 +43,24 @@ export type ChannelConversation = {
   linked_sale_id: string | null;
   last_message_at: string;
   updated_at: string;
+};
+
+export type WhatsAppMetaIntegrationPayload = {
+  display_name: string;
+  external_account_id: string;
+  phone_number_id: string;
+  phone_number: string;
+  verify_token: string;
+  access_token: string;
+  app_secret: string;
+  default_location_id?: string | null;
+  auto_send_enabled: boolean;
+  agent_enabled: boolean;
+  model_name: string;
+  persona_prompt: string;
+};
+
+export type WhatsAppMetaIntegrationResult = {
+  channel: ChannelIntegration;
+  setup_verify_token: string | null;
 };
