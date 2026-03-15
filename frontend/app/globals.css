@@ -86,6 +86,10 @@ button:disabled {
   min-height: 100vh;
 }
 
+.shell.sidebar-collapsed {
+  grid-template-columns: 96px 1fr;
+}
+
 .sidebar {
   border-right: 1px solid var(--border);
   background: linear-gradient(180deg, #ffffff 0%, #f7fbfb 100%);
@@ -93,6 +97,7 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  transition: padding 150ms ease;
 }
 
 .brand-block {
@@ -101,6 +106,13 @@ button:disabled {
   background: #f8fffd;
   border-radius: var(--radius-md);
   padding: 0.85rem;
+}
+
+.brand-top-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
 }
 
 .brand-logo-wrap {
@@ -132,6 +144,54 @@ button:disabled {
 .brand-title { margin: 0 0 0.2rem; font-size: 1.12rem; }
 .brand-subtitle { margin: 0; color: var(--text-muted); font-size: 0.82rem; }
 
+.sidebar-toggle {
+  border-radius: 999px;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.sidebar-user-card {
+  margin-top: 0.85rem;
+  display: grid;
+  gap: 0.7rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid #def0ee;
+}
+
+.sidebar-user-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.65rem;
+  align-items: flex-start;
+}
+
+.sidebar-user-row svg {
+  margin-top: 0.1rem;
+  color: var(--primary-strong);
+}
+
+.sidebar-user-row strong,
+.sidebar-user-row span,
+.sidebar-user-row small {
+  display: block;
+}
+
+.sidebar-user-row strong,
+.sidebar-user-row span {
+  overflow-wrap: anywhere;
+}
+
+.sidebar-user-row small {
+  margin-top: 0.15rem;
+  color: var(--text-muted);
+  text-transform: capitalize;
+}
+
 .sidebar-nav { overflow: auto; display: grid; gap: 0.8rem; }
 .nav-group h2 { margin: 0 0 0.4rem; padding-left: 0.45rem; font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; }
 .nav-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.25rem; }
@@ -150,6 +210,7 @@ button:disabled {
 
 .nav-link:hover { border-color: var(--border); background: #f9fcfc; }
 .nav-link.active { color: var(--primary-strong); background: var(--primary-soft); border-color: #8bdccf; font-weight: 600; }
+.nav-link.collapsed { justify-content: center; padding-inline: 0.4rem; }
 
 .sidebar-footer {
   margin-top: auto;
@@ -164,6 +225,41 @@ button:disabled {
 .sidebar-logout-btn {
   width: 100%;
   margin-top: 0.65rem;
+}
+
+.sidebar.sidebar-collapsed {
+  padding-inline: 0.7rem;
+}
+
+.sidebar.sidebar-collapsed .brand-block {
+  padding: 0.75rem 0.55rem;
+}
+
+.sidebar.sidebar-collapsed .brand-title,
+.sidebar.sidebar-collapsed .brand-subtitle,
+.sidebar.sidebar-collapsed .sidebar-user-card,
+.sidebar.sidebar-collapsed .nav-group h2,
+.sidebar.sidebar-collapsed .nav-link-label,
+.sidebar.sidebar-collapsed .sidebar-footer .eyebrow,
+.sidebar.sidebar-collapsed .sidebar-footer strong {
+  display: none;
+}
+
+.sidebar.sidebar-collapsed .brand-logo-wrap {
+  justify-content: center;
+  margin-bottom: 0;
+}
+
+.sidebar.sidebar-collapsed .easyecom-logo-sidebar {
+  width: 48px;
+}
+
+.sidebar.sidebar-collapsed .sidebar-footer {
+  padding: 0.55rem;
+}
+
+.sidebar.sidebar-collapsed .sidebar-logout-btn {
+  margin-top: 0;
 }
 
 .content-pane { display: flex; flex-direction: column; }

@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from easy_ecom.data.store.postgres_models import (
+    ClientModel,
     UserPageAccessOverrideModel,
     UserModel,
     UserRoleModel,
@@ -20,6 +21,7 @@ class PostgresUserRecord:
     client_id: str
     name: str
     email: str
+    business_name: str | None
     password: str
     password_hash: str
     is_active: bool
@@ -29,12 +31,13 @@ class PostgresAuthRepo:
     def __init__(self, session_factory: sessionmaker[Session]):
         self._session_factory = session_factory
 
-    def _record_from_model(self, record: UserModel) -> AuthUserRecord:
+    def _record_from_model(self, record: UserModel, business_name: str | None) -> AuthUserRecord:
         return PostgresUserRecord(
             user_id=str(record.user_id),
             client_id=str(record.client_id),
             name=record.name,
             email=record.email,
+            business_name=business_name,
             password=record.password or "",
             password_hash=(record.password_hash or ""),
             is_active=bool(record.is_active),
@@ -42,12 +45,15 @@ class PostgresAuthRepo:
 
     def get_user_by_email(self, email: str) -> AuthUserRecord | None:
         with self._session_factory() as session:
-            record = session.execute(
-                select(UserModel).where(UserModel.email == email.lower().strip())
-            ).scalar_one_or_none()
-            if record is None:
+            row = session.execute(
+                select(UserModel, ClientModel.business_name)
+                .outerjoin(ClientModel, ClientModel.client_id == UserModel.client_id)
+                .where(UserModel.email == email.lower().strip())
+            ).one_or_none()
+            if row is None:
                 return None
-            return self._record_from_model(record)
+            record, business_name = row
+            return self._record_from_model(record, business_name)
 
     def get_roles_for_user(self, user_id: str) -> list[str]:
         with self._session_factory() as session:

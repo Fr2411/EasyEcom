@@ -33,6 +33,7 @@ class SessionUserPayload:
     allowed_pages: list[str]
     email: str
     name: str
+    business_name: str | None
 
 
 class ServiceContainer:
@@ -65,6 +66,7 @@ def build_session_token(user: AuthenticatedUser) -> str:
             "allowed_pages": user.allowed_pages,
             "email": user.email,
             "name": user.name,
+            "business_name": user.business_name,
         }
     )
 
@@ -98,6 +100,8 @@ def _parse_session_user(token: str | None) -> SessionUserPayload:
     client_id = str(payload.get("client_id", "")).strip()
     email = str(payload.get("email", "")).strip()
     name = str(payload.get("name", "")).strip()
+    raw_business_name = payload.get("business_name")
+    business_name = str(raw_business_name).strip() if raw_business_name is not None else None
     roles = _parse_roles(payload.get("roles"))
     allowed_pages = _parse_roles(payload.get("allowed_pages")) or []
 
@@ -114,6 +118,7 @@ def _parse_session_user(token: str | None) -> SessionUserPayload:
         allowed_pages=allowed_pages,
         email=email,
         name=name,
+        business_name=business_name or None,
     )
 
 
@@ -128,6 +133,7 @@ def get_authenticated_user(
         allowed_pages=session_user.allowed_pages,
         email=session_user.email,
         name=session_user.name,
+        business_name=session_user.business_name,
     )
 
 

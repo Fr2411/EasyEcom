@@ -12,7 +12,14 @@ import type {
   ProductIdentityInput,
   VariantOptions,
 } from '@/types/catalog';
-import { WorkspaceEmpty, WorkspaceNotice, WorkspacePanel, WorkspaceTabs, WorkspaceToast } from '@/components/commerce/workspace-primitives';
+import {
+  WorkspaceEmpty,
+  WorkspaceHint,
+  WorkspaceNotice,
+  WorkspacePanel,
+  WorkspaceTabs,
+  WorkspaceToast,
+} from '@/components/commerce/workspace-primitives';
 import { formatMoney, formatPercent, formatQuantity, numberFromString } from '@/lib/commerce-format';
 
 
@@ -340,7 +347,7 @@ export function CatalogWorkspace() {
 
       <WorkspacePanel
         title="Variant-first catalog"
-        description="Search and manage products as parent records with saleable child variants."
+        hint="Search and manage products as parent records with saleable child variants."
         actions={
           <div className="workspace-inline-actions">
             <form className="workspace-search" onSubmit={onSearch}>
@@ -425,10 +432,13 @@ export function CatalogWorkspace() {
           <form className="workspace-form" onSubmit={onSave}>
             <div className="workspace-subsection">
               <div className="workspace-subsection-header">
-                <div>
-                  <h4>Basic Info</h4>
-                  <p>Shared product identity and code generation inputs.</p>
-                </div>
+                <h4 className="workspace-heading">
+                  Basic Info
+                  <WorkspaceHint
+                    label="Basic info help"
+                    text="These shared fields define the parent product and the SKU base used for generating new variant codes."
+                  />
+                </h4>
               </div>
               <div className="workspace-form-grid">
                 <label>
@@ -513,10 +523,13 @@ export function CatalogWorkspace() {
 
             <div className="workspace-subsection">
               <div className="workspace-subsection-header">
-                <div>
-                  <h4>Pricing Rules</h4>
-                  <p>Product-level price rules are optional templates for new variants.</p>
-                </div>
+                <h4 className="workspace-heading">
+                  Pricing Rules
+                  <WorkspaceHint
+                    label="Pricing rules help"
+                    text="Product-level price rules are optional templates. Variants can inherit them or override them row by row."
+                  />
+                </h4>
               </div>
               <div className="workspace-form-grid compact">
                 <label>
@@ -556,10 +569,13 @@ export function CatalogWorkspace() {
 
             <div className="workspace-subsection">
               <div className="workspace-subsection-header">
-                <div>
-                  <h4>Variant Generator</h4>
-                  <p>Generate combinations from comma-separated values, then review and edit the rows below.</p>
-                </div>
+                <h4 className="workspace-heading">
+                  Variant Generator
+                  <WorkspaceHint
+                    label="Catalog variant generator help"
+                    text="Enter comma-separated option values to generate combinations, then review and edit the rows below before saving."
+                  />
+                </h4>
                 <div className="workspace-inline-actions">
                   <button type="button" onClick={() => applyGenerator('merge')}>Generate / Regenerate</button>
                   <button type="button" onClick={() => applyGenerator('reset')}>Reset from generator</button>
@@ -600,10 +616,13 @@ export function CatalogWorkspace() {
 
             <div className="workspace-subsection">
               <div className="workspace-subsection-header">
-                <div>
-                  <h4>Variant Defaults</h4>
-                  <p>Use shared defaults when many variants have the same cost, price, minimum price, or reorder level.</p>
-                </div>
+                <h4 className="workspace-heading">
+                  Variant Defaults
+                  <WorkspaceHint
+                    label="Variant defaults help"
+                    text="Use these shared defaults when many variants should start with the same cost, price, minimum price, or reorder level."
+                  />
+                </h4>
                 <div className="workspace-inline-actions">
                   <button type="button" onClick={() => applyDefaultsToVariants('empty')}>Apply to empty rows</button>
                   <button type="button" onClick={() => applyDefaultsToVariants('all')}>Apply to all rows</button>
@@ -653,10 +672,13 @@ export function CatalogWorkspace() {
 
             <div className="workspace-subsection">
               <div className="workspace-subsection-header">
-                <div>
-                  <h4>Variants</h4>
-                  <p>Each row is still fully editable before save. Existing variants keep their SKU stable after first save.</p>
-                </div>
+                <h4 className="workspace-heading">
+                  Variants
+                  <WorkspaceHint
+                    label="Variants section help"
+                    text="Each row is still fully editable before save. Existing variants keep their SKU stable after the first save."
+                  />
+                </h4>
                 <button
                   type="button"
                   onClick={() =>

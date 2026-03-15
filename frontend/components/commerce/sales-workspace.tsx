@@ -240,7 +240,7 @@ export function SalesWorkspace() {
 
       <WorkspacePanel
         title="Order-first sales workspace"
-        description="Create orders from available variants only, reserve truthfully, and fulfill with audited stock impact."
+        hint="Create orders from available variants only, reserve truthfully, and fulfill with audited stock impact."
         actions={
           <form
             className="workspace-search"
@@ -268,7 +268,7 @@ export function SalesWorkspace() {
             <div className="workspace-stack">
               <WorkspacePanel
                 title="Customer"
-                description="Lookup by phone or email, or capture a new customer inline."
+                hint="Lookup by phone or email, or capture a new customer inline."
               >
                 <form className="workspace-form" onSubmit={onCustomerSearch}>
                   <div className="workspace-form-grid compact">
@@ -344,7 +344,10 @@ export function SalesWorkspace() {
                 </div>
               </WorkspacePanel>
 
-              <WorkspacePanel title="Add sellable variants" description="Only available stock appears in the search results.">
+              <WorkspacePanel
+                title="Add sellable variants"
+                hint="Only available stock appears in the search results."
+              >
                 <form className="workspace-search" onSubmit={onVariantSearch}>
                   <input
                     type="search"
@@ -411,7 +414,10 @@ export function SalesWorkspace() {
               </WorkspacePanel>
             </div>
 
-            <WorkspacePanel title="Order draft" description="Draft, confirm, or fulfill the whole order from one workspace.">
+            <WorkspacePanel
+              title="Order draft"
+              hint="Draft, confirm, or fulfill the whole order from one workspace."
+            >
               {draftLines.length ? (
                 <div className="table-scroll">
                   <table className="workspace-table">

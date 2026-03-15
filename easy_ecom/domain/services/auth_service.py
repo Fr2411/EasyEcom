@@ -15,6 +15,7 @@ class AuthUserRecord:
     client_id: str
     name: str
     email: str
+    business_name: str | None
     password: str
     password_hash: str
     is_active: bool
@@ -71,6 +72,7 @@ class AuthService:
             client_id=user.client_id,
             name=user.name,
             email=user.email,
+            business_name=user.business_name,
             roles=roles,
             allowed_pages=allowed_pages,
         )

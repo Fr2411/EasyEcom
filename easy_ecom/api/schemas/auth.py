@@ -19,6 +19,7 @@ class CurrentUserResponse(BaseModel):
     user_id: str
     email: str
     name: str
+    business_name: str | None = None
     role: str
     client_id: str
     roles: list[str]
