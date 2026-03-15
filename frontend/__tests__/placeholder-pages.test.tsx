@@ -126,6 +126,9 @@ vi.mock('@/lib/api/integrations', () => ({
       },
     ],
   })),
+  getChannelLocations: vi.fn(async () => ({
+    items: [{ location_id: 'loc-1', name: 'Main', is_default: true }],
+  })),
   saveWhatsAppMetaIntegration: vi.fn(),
 }));
 

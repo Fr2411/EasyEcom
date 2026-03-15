@@ -27,6 +27,7 @@ from easy_ecom.data.store.postgres_models import (
     ChannelJobModel,
     ChannelMessageModel,
     ChannelMessageProductMentionModel,
+    ClientModel,
     ClientSettingsModel,
     CustomerModel,
     LocationModel,
@@ -111,31 +112,65 @@ class SalesAgentService(CommerceBaseService):
         super().__init__(session_factory)
         self._sales_service = SalesService(session_factory)
 
-    def list_integrations(self, user: AuthenticatedUser) -> list[dict[str, Any]]:
+    def list_integrations(self, user: AuthenticatedUser, *, target_client_id: str | None = None) -> list[dict[str, Any]]:
         self._require_sales_agent_access(user)
+        client_id = self._target_client_id(user, target_client_id)
         with self._session_factory() as session:
-            profile = self._profile_for_client(session, user.client_id)
+            self._ensure_client_exists(session, client_id)
+            profile = self._profile_for_client(session, client_id)
             rows = session.execute(
                 select(ChannelIntegrationModel)
-                .where(ChannelIntegrationModel.client_id == user.client_id)
+                .where(ChannelIntegrationModel.client_id == client_id)
                 .order_by(ChannelIntegrationModel.created_at.desc())
             ).scalars()
             return [self._integration_payload(item, profile) for item in rows]
 
-    def upsert_whatsapp_integration(self, user: AuthenticatedUser, payload: dict[str, Any]) -> dict[str, Any]:
+    def list_available_locations(
+        self,
+        user: AuthenticatedUser,
+        *,
+        target_client_id: str | None = None,
+    ) -> list[dict[str, Any]]:
         self._require_owner_or_admin(user)
+        client_id = self._target_client_id(user, target_client_id)
+        with self._session_factory() as session:
+            self._ensure_client_exists(session, client_id)
+            rows = session.execute(
+                select(LocationModel)
+                .where(LocationModel.client_id == client_id, LocationModel.status == "active")
+                .order_by(LocationModel.is_default.desc(), LocationModel.name.asc())
+            ).scalars()
+            return [
+                {
+                    "location_id": str(item.location_id),
+                    "name": item.name,
+                    "is_default": item.is_default,
+                }
+                for item in rows
+            ]
+
+    def upsert_whatsapp_integration(
+        self,
+        user: AuthenticatedUser,
+        payload: dict[str, Any],
+        *,
+        target_client_id: str | None = None,
+    ) -> dict[str, Any]:
+        self._require_owner_or_admin(user)
+        client_id = self._target_client_id(user, target_client_id)
         setup_verify_token = str(payload.get("verify_token") or "").strip() or new_token(18)
         with self._session_factory() as session:
+            self._ensure_client_exists(session, client_id)
             integration = session.execute(
                 select(ChannelIntegrationModel).where(
-                    ChannelIntegrationModel.client_id == user.client_id,
+                    ChannelIntegrationModel.client_id == client_id,
                     ChannelIntegrationModel.provider == "whatsapp",
                 )
             ).scalar_one_or_none()
             if integration is None:
                 integration = ChannelIntegrationModel(
                     channel_id=new_uuid(),
-                    client_id=user.client_id,
+                    client_id=client_id,
                     provider="whatsapp",
                     webhook_key=new_token(24),
                     created_by_user_id=user.user_id,
@@ -168,11 +203,11 @@ class SalesAgentService(CommerceBaseService):
                 else "inactive"
             )
 
-            profile = self._profile_for_client(session, user.client_id)
+            profile = self._profile_for_client(session, client_id)
             if profile is None:
                 profile = TenantAgentProfileModel(
                     agent_profile_id=new_uuid(),
-                    client_id=user.client_id,
+                    client_id=client_id,
                 )
                 session.add(profile)
             profile.channel_id = integration.channel_id
@@ -188,7 +223,7 @@ class SalesAgentService(CommerceBaseService):
 
             self._log_audit(
                 session,
-                client_id=user.client_id,
+                client_id=client_id,
                 actor_user_id=user.user_id,
                 entity_type="channel_integration",
                 entity_id=integration.channel_id,
@@ -735,6 +770,20 @@ class SalesAgentService(CommerceBaseService):
         ).scalar_one_or_none()
         self._require(integration is not None, message="Channel integration was not found", code="CHANNEL_NOT_FOUND", status_code=404)
         return integration
+
+    def _target_client_id(self, user: AuthenticatedUser, target_client_id: str | None) -> str:
+        candidate = str(target_client_id or "").strip()
+        if candidate:
+            if "SUPER_ADMIN" not in user.roles and candidate != user.client_id:
+                raise ApiException(status_code=403, code="ACCESS_DENIED", message="Cross-tenant access is not allowed")
+            return candidate
+        return user.client_id
+
+    def _ensure_client_exists(self, session: Session, client_id: str) -> None:
+        record = session.execute(
+            select(ClientModel).where(ClientModel.client_id == client_id)
+        ).scalar_one_or_none()
+        self._require(record is not None, message="Client not found", code="CLIENT_NOT_FOUND", status_code=404)
 
     def _apply_status_update(self, session: Session, integration: ChannelIntegrationModel, status_payload: dict[str, Any]) -> int:
         provider_event_id = str(status_payload.get("id", "")).strip()

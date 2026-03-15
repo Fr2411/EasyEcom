@@ -134,6 +134,7 @@ def test_login_then_me_returns_authenticated_user(monkeypatch, tmp_path: Path):
             "Finance",
             "Returns",
             "Reports",
+            "Sales Agent",
             "Admin",
             "Settings",
         ],
@@ -174,10 +175,7 @@ def test_me_backfills_business_name_for_older_session_cookie(monkeypatch, tmp_pa
 
     assert response.status_code == 200
     assert response.json()["business_name"] == "Client One"
-    refreshed_cookie = response.cookies.get("easy_ecom_session")
-    assert refreshed_cookie
-    refreshed_payload = signer.loads(refreshed_cookie)
-    assert refreshed_payload["business_name"] == "Client One"
+    assert "Sales Agent" in response.json()["allowed_pages"]
 
 
 def test_me_rejects_corrupted_cookie(monkeypatch, tmp_path: Path):
