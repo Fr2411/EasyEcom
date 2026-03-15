@@ -1,5 +1,7 @@
 'use client';
 
+import { useId } from 'react';
+
 export function WorkspaceTabs<T extends string>({
   tabs,
   activeTab,
@@ -34,7 +36,7 @@ export function WorkspacePanel({
   actions,
   children,
 }: {
-  title: string;
+  title: React.ReactNode;
   description?: string;
   actions?: React.ReactNode;
   children: React.ReactNode;
@@ -50,6 +52,25 @@ export function WorkspacePanel({
       </header>
       <div className="workspace-panel-body">{children}</div>
     </section>
+  );
+}
+
+export function WorkspaceHint({
+  text,
+  label = 'More information',
+}: {
+  text: string;
+  label?: string;
+}) {
+  const hintId = useId();
+
+  return (
+    <span className="workspace-hint" tabIndex={0} aria-label={label} aria-describedby={hintId}>
+      <span aria-hidden="true">i</span>
+      <span id={hintId} role="tooltip" className="workspace-hint-text">
+        {text}
+      </span>
+    </span>
   );
 }
 

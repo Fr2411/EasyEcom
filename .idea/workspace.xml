@@ -6,8 +6,8 @@
   <component name="ChangeListManager">
     <list default="true" id="422a27fe-a4b6-4e02-9405-249a4bc2035b" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/frontend/app/globals.css" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/app/globals.css" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/app/login/page.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/app/login/page.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/components/layout/sidebar.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/components/layout/sidebar.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/components/commerce/inventory-workspace.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/components/commerce/inventory-workspace.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/components/commerce/workspace-primitives.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/components/commerce/workspace-primitives.tsx" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

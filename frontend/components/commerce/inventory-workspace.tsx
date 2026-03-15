@@ -18,7 +18,13 @@ import type {
   ReceiveStockLineInput,
   ReceiveStockPayload,
 } from '@/types/inventory';
-import { WorkspaceEmpty, WorkspaceNotice, WorkspacePanel, WorkspaceTabs } from '@/components/commerce/workspace-primitives';
+import {
+  WorkspaceEmpty,
+  WorkspaceHint,
+  WorkspaceNotice,
+  WorkspacePanel,
+  WorkspaceTabs,
+} from '@/components/commerce/workspace-primitives';
 import { formatMoney, formatQuantity } from '@/lib/commerce-format';
 import { buildSkuPreview, buildVariantCombinations, signatureForVariant } from '@/lib/variant-generator';
 
@@ -58,7 +64,7 @@ const EMPTY_LINE: ReceiveStockLineInput = {
   size: '',
   color: '',
   other: '',
-  quantity: '1',
+  quantity: '',
   default_purchase_price: '',
   default_selling_price: '',
   min_selling_price: '',
@@ -70,7 +76,7 @@ const EMPTY_GENERATOR: IntakeGeneratorState = {
   size_values: '',
   color_values: '',
   other_values: '',
-  quantity: '1',
+  quantity: '',
   default_purchase_price: '',
   default_selling_price: '',
   min_selling_price: '',
@@ -123,7 +129,7 @@ function productIdentityFromCatalog(product: CatalogProduct): InventoryIntakeIde
   };
 }
 
-function lineFromExistingVariant(variant: CatalogVariant): ReceiveStockLineInput {
+function lineFromExistingVariant(variant: CatalogVariant, quantity = '1'): ReceiveStockLineInput {
   return {
     variant_id: variant.variant_id,
     sku: variant.sku,
@@ -131,7 +137,7 @@ function lineFromExistingVariant(variant: CatalogVariant): ReceiveStockLineInput
     size: variant.options.size,
     color: variant.options.color,
     other: variant.options.other,
-    quantity: '1',
+    quantity,
     default_purchase_price: valueOrEmpty(variant.unit_cost),
     default_selling_price: valueOrEmpty(variant.unit_price ?? variant.effective_unit_price),
     min_selling_price: valueOrEmpty(variant.min_price ?? variant.effective_min_price),
@@ -145,7 +151,7 @@ function generatorFromProduct(product: CatalogProduct): IntakeGeneratorState {
     size_values: Array.from(new Set(product.variants.map((variant) => variant.options.size).filter(Boolean))).join(', '),
     color_values: Array.from(new Set(product.variants.map((variant) => variant.options.color).filter(Boolean))).join(', '),
     other_values: Array.from(new Set(product.variants.map((variant) => variant.options.other).filter(Boolean))).join(', '),
-    quantity: '1',
+    quantity: '',
     default_purchase_price: firstFilled(product.variants.map((variant) => variant.unit_cost)),
     default_selling_price: firstFilled([
       ...product.variants.map((variant) => variant.unit_price ?? variant.effective_unit_price),
@@ -169,7 +175,7 @@ function newLineFromCombo(
     size: combo.size,
     color: combo.color,
     other: combo.other,
-    quantity: generator.quantity || '1',
+    quantity: generator.quantity,
     default_purchase_price: generator.default_purchase_price,
     default_selling_price: generator.default_selling_price || identity.default_selling_price,
     min_selling_price: generator.min_selling_price || identity.min_selling_price,
@@ -366,7 +372,7 @@ export function InventoryWorkspace() {
         if (existingVariant) {
           const existingKey = `variant:${existingVariant.variant_id}`;
           if (!indexed.has(existingKey)) {
-            next.push(lineFromExistingVariant(existingVariant));
+            next.push(lineFromExistingVariant(existingVariant, generator.quantity));
             indexed.add(existingKey);
           }
           return;
@@ -478,14 +484,21 @@ export function InventoryWorkspace() {
       />
 
       <WorkspacePanel
-        title="Variant-level inventory control"
-        description="Use Receive Stock as the main intake flow, then keep every stock movement auditable."
+        title={
+          <span className="workspace-heading">
+            Variant-level inventory control
+            <WorkspaceHint
+              label="Inventory workspace help"
+              text="Use Receive Stock for day-to-day intake. Available Stock, Low Stock, and Adjustments stay ledger-driven so every movement remains auditable."
+            />
+          </span>
+        }
         actions={
           <form className="workspace-search" onSubmit={onSearch}>
             <input
               type="search"
               value={queryInput}
-              placeholder="Search available stock by product, variant, SKU, barcode"
+              placeholder="Search available stock"
               onChange={(event) => setQueryInput(event.target.value)}
             />
             <button type="submit">Search</button>
@@ -549,10 +562,13 @@ export function InventoryWorkspace() {
           <div className="workspace-stack">
             <section className="workspace-subsection">
               <div className="workspace-subsection-header">
-                <div>
-                  <h4>Find or Create Item</h4>
-                  <p>Search by barcode, SKU, product name, or product plus variant text before creating anything new.</p>
-                </div>
+                <h4 className="workspace-heading">
+                  Find or Create Item
+                  <WorkspaceHint
+                    label="Find or create item help"
+                    text="Search by barcode, SKU, product name, or product plus variant text before creating anything new. Existing matches stay separate until you choose one."
+                  />
+                </h4>
                 {showAdvancedCatalog ? (
                   <Link href="/catalog" className="nav-link">
                     Open Advanced Catalog
@@ -578,10 +594,6 @@ export function InventoryWorkspace() {
                   Create new item
                 </button>
               </form>
-
-              {!intakeResults ? (
-                <WorkspaceNotice>Start with a search so we can match an existing record safely before creating a new one.</WorkspaceNotice>
-              ) : null}
 
               {intakeResults?.exact_variants.length ? (
                 <div className="workspace-stack">
@@ -648,17 +660,14 @@ export function InventoryWorkspace() {
             {receiveForm.identity.product_name ? (
               <section className="workspace-subsection">
                 <div className="workspace-subsection-header">
-                  <div>
-                    <h4>Review Variants and Receive</h4>
-                    <p>Receive existing variants or generate new ones under the selected product before posting one auditable receipt.</p>
-                  </div>
+                  <h4 className="workspace-heading">
+                    Review Variants and Receive
+                    <WorkspaceHint
+                      label="Review and receive help"
+                      text="Confirm the product details first, then add saved variants or generate new ones. One save posts a single audited receipt with all of the lines below."
+                    />
+                  </h4>
                 </div>
-
-                {selectedProduct ? (
-                  <WorkspaceNotice>
-                    Saved product details are locked by default so warehouse users do not accidentally rewrite your catalog.
-                  </WorkspaceNotice>
-                ) : null}
 
                 {selectedProduct ? (
                   <label className="workspace-toggle">
@@ -672,7 +681,13 @@ export function InventoryWorkspace() {
                         }))
                       }
                     />
-                    Edit saved product details
+                    <span className="workspace-heading">
+                      Edit saved product details
+                      <WorkspaceHint
+                        label="Edit saved product details help"
+                        text="Keep this off for normal receiving. Turn it on only when you need to update the saved catalog details for the matched product."
+                      />
+                    </span>
                   </label>
                 ) : null}
 
@@ -712,87 +727,6 @@ export function InventoryWorkspace() {
                   </div>
                 ) : null}
 
-                <div className="workspace-subsection">
-                  <div className="workspace-subsection-header">
-                    <div>
-                      <h4>Variant Generator</h4>
-                      <p>Enter comma-separated values to generate multiple variants at once. Existing option combinations will reuse saved variants automatically.</p>
-                    </div>
-                  </div>
-                  <div className="workspace-form-grid">
-                    <label>
-                      Sizes
-                      <input
-                        value={generator.size_values}
-                        onChange={(event) => setGenerator((current) => ({ ...current, size_values: event.target.value }))}
-                        placeholder="40, 41, 42"
-                      />
-                    </label>
-                    <label>
-                      Colors
-                      <input
-                        value={generator.color_values}
-                        onChange={(event) => setGenerator((current) => ({ ...current, color_values: event.target.value }))}
-                        placeholder="Black, White"
-                      />
-                    </label>
-                    <label>
-                      Other
-                      <input
-                        value={generator.other_values}
-                        onChange={(event) => setGenerator((current) => ({ ...current, other_values: event.target.value }))}
-                        placeholder="Men, Women, Wide"
-                      />
-                    </label>
-                    <label>
-                      Default quantity
-                      <input
-                        value={generator.quantity}
-                        onChange={(event) => setGenerator((current) => ({ ...current, quantity: event.target.value }))}
-                      />
-                    </label>
-                    <label>
-                      Default unit cost
-                      <input
-                        value={generator.default_purchase_price}
-                        onChange={(event) =>
-                          setGenerator((current) => ({ ...current, default_purchase_price: event.target.value }))
-                        }
-                      />
-                    </label>
-                    <label>
-                      Default price
-                      <input
-                        value={generator.default_selling_price}
-                        onChange={(event) =>
-                          setGenerator((current) => ({ ...current, default_selling_price: event.target.value }))
-                        }
-                      />
-                    </label>
-                    <label>
-                      Minimum price
-                      <input
-                        value={generator.min_selling_price}
-                        onChange={(event) =>
-                          setGenerator((current) => ({ ...current, min_selling_price: event.target.value }))
-                        }
-                      />
-                    </label>
-                    <label>
-                      Reorder level
-                      <input
-                        value={generator.reorder_level}
-                        onChange={(event) => setGenerator((current) => ({ ...current, reorder_level: event.target.value }))}
-                      />
-                    </label>
-                  </div>
-                  <div className="workspace-actions">
-                    <button type="button" onClick={applyGenerator}>Generate variants</button>
-                    <button type="button" onClick={() => applyDefaultsToLines('empty')}>Fill empty line fields</button>
-                    <button type="button" onClick={() => applyDefaultsToLines('all')}>Overwrite all line defaults</button>
-                  </div>
-                </div>
-
                 <form
                   className="workspace-form"
                   onSubmit={(event) => {
@@ -802,10 +736,13 @@ export function InventoryWorkspace() {
                 >
                   <div className="workspace-subsection">
                     <div className="workspace-subsection-header">
-                      <div>
-                        <h4>Product Details</h4>
-                        <p>Shared identity and pricing defaults for this intake.</p>
-                      </div>
+                      <h4 className="workspace-heading">
+                        Product Details
+                        <WorkspaceHint
+                          label="Product details help"
+                          text="These shared details define the product identity and the fallback selling-price rules for any new variants created in this receipt."
+                        />
+                      </h4>
                     </div>
                     <div className="workspace-form-grid">
                       <label>
@@ -905,10 +842,104 @@ export function InventoryWorkspace() {
 
                   <div className="workspace-subsection">
                     <div className="workspace-subsection-header">
-                      <div>
-                        <h4>Receipt Lines</h4>
-                        <p>Each line becomes one purchase item. Existing variants keep their saved identity; new variants can be edited before saving.</p>
-                      </div>
+                      <h4 className="workspace-heading">
+                        Variant Generator
+                        <WorkspaceHint
+                          label="Variant generator help"
+                          text="Enter comma-separated values to generate many variants at once. Matching saved combinations reuse the existing variant, and new combinations become editable receipt lines."
+                        />
+                      </h4>
+                    </div>
+                    <div className="workspace-form-grid">
+                      <label>
+                        Sizes
+                        <input
+                          value={generator.size_values}
+                          onChange={(event) => setGenerator((current) => ({ ...current, size_values: event.target.value }))}
+                          placeholder="40, 41, 42"
+                        />
+                      </label>
+                      <label>
+                        Colors
+                        <input
+                          value={generator.color_values}
+                          onChange={(event) => setGenerator((current) => ({ ...current, color_values: event.target.value }))}
+                          placeholder="Black, White"
+                        />
+                      </label>
+                      <label>
+                        Other
+                        <input
+                          value={generator.other_values}
+                          onChange={(event) => setGenerator((current) => ({ ...current, other_values: event.target.value }))}
+                          placeholder="Men, Women, Wide"
+                        />
+                      </label>
+                      <label>
+                        <span className="workspace-heading">
+                          Default Qty Each Variant
+                          <WorkspaceHint
+                            label="Default quantity for each variant help"
+                            text="Leave this blank when each generated line will receive a different quantity. Fill it only when the same quantity should prefill every generated line."
+                          />
+                        </span>
+                        <input
+                          value={generator.quantity}
+                          onChange={(event) => setGenerator((current) => ({ ...current, quantity: event.target.value }))}
+                          placeholder="Leave blank for line-by-line quantity"
+                        />
+                      </label>
+                      <label>
+                        Default unit cost
+                        <input
+                          value={generator.default_purchase_price}
+                          onChange={(event) =>
+                            setGenerator((current) => ({ ...current, default_purchase_price: event.target.value }))
+                          }
+                        />
+                      </label>
+                      <label>
+                        Default price
+                        <input
+                          value={generator.default_selling_price}
+                          onChange={(event) =>
+                            setGenerator((current) => ({ ...current, default_selling_price: event.target.value }))
+                          }
+                        />
+                      </label>
+                      <label>
+                        Minimum price
+                        <input
+                          value={generator.min_selling_price}
+                          onChange={(event) =>
+                            setGenerator((current) => ({ ...current, min_selling_price: event.target.value }))
+                          }
+                        />
+                      </label>
+                      <label>
+                        Reorder level
+                        <input
+                          value={generator.reorder_level}
+                          onChange={(event) => setGenerator((current) => ({ ...current, reorder_level: event.target.value }))}
+                        />
+                      </label>
+                    </div>
+                    <div className="workspace-actions">
+                      <button type="button" onClick={applyGenerator}>Generate variants</button>
+                      <button type="button" onClick={() => applyDefaultsToLines('empty')}>Fill empty line fields</button>
+                      <button type="button" onClick={() => applyDefaultsToLines('all')}>Overwrite all line defaults</button>
+                    </div>
+                  </div>
+
+                  <div className="workspace-subsection">
+                    <div className="workspace-subsection-header">
+                      <h4 className="workspace-heading">
+                        Receipt Lines
+                        <WorkspaceHint
+                          label="Receipt lines help"
+                          text="Each line becomes one purchase item. Existing variants keep their saved identity, and new variants can still be edited before you save the receipt."
+                        />
+                      </h4>
                     </div>
 
                     {receiveForm.lines.length ? (
@@ -1091,7 +1122,7 @@ export function InventoryWorkspace() {
                     ) : (
                       <WorkspaceEmpty
                         title="No receipt lines yet"
-                        message="Add an existing variant or use the generator above to create the lines you want to receive."
+                        message="Add an existing variant or use the generator below Product Details to create the lines you want to receive."
                       />
                     )}
                   </div>
