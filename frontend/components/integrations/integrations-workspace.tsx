@@ -2,11 +2,13 @@
 
 import { FormEvent, useEffect, useState, useTransition } from 'react';
 
-import { getInventoryWorkspace } from '@/lib/api/commerce';
-import { getChannelIntegrations, saveWhatsAppMetaIntegration } from '@/lib/api/integrations';
+import { useAuth } from '@/components/auth/auth-provider';
 import { WorkspaceNotice, WorkspacePanel } from '@/components/commerce/workspace-primitives';
-import type { ChannelIntegration, WhatsAppMetaIntegrationPayload } from '@/types/integrations';
+import { listAdminClients } from '@/lib/api/admin';
+import { getChannelIntegrations, getChannelLocations, saveWhatsAppMetaIntegration } from '@/lib/api/integrations';
 import { formatDateTime } from '@/lib/commerce-format';
+import type { AdminClient } from '@/types/admin';
+import type { ChannelIntegration, ChannelLocation, WhatsAppMetaIntegrationPayload } from '@/types/integrations';
 
 
 const EMPTY_FORM: WhatsAppMetaIntegrationPayload = {
@@ -25,50 +27,85 @@ const EMPTY_FORM: WhatsAppMetaIntegrationPayload = {
     'You are an aggressive but honest sales agent. Increase revenue through smart upsell and slow-moving stock suggestions, but never promise unavailable stock or unauthorized discounts.',
 };
 
-
-type LocationOption = {
-  location_id: string;
-  name: string;
-};
-
-
 export function IntegrationsWorkspace() {
+  const { user } = useAuth();
+  const isSuperAdmin = user?.roles?.includes('SUPER_ADMIN') ?? false;
   const [integrations, setIntegrations] = useState<ChannelIntegration[]>([]);
-  const [locations, setLocations] = useState<LocationOption[]>([]);
+  const [locations, setLocations] = useState<ChannelLocation[]>([]);
+  const [clients, setClients] = useState<AdminClient[]>([]);
+  const [selectedClientId, setSelectedClientId] = useState('');
   const [draft, setDraft] = useState<WhatsAppMetaIntegrationPayload>(EMPTY_FORM);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [isPending, startTransition] = useTransition();
 
-  useEffect(() => {
+  const applyCurrentChannel = (current: ChannelIntegration | undefined) => {
+    if (!current) {
+      setDraft(EMPTY_FORM);
+      return;
+    }
+    setDraft((existing) => ({
+      ...existing,
+      display_name: current.display_name,
+      external_account_id: current.external_account_id,
+      phone_number_id: current.phone_number_id,
+      phone_number: current.phone_number,
+      default_location_id: current.default_location_id ?? '',
+      auto_send_enabled: current.auto_send_enabled,
+      agent_enabled: current.agent_enabled,
+      model_name: current.model_name,
+      persona_prompt: current.persona_prompt,
+      verify_token: '',
+      access_token: '',
+      app_secret: '',
+    }));
+  };
+
+  const loadWorkspace = (targetClientId = selectedClientId) => {
     startTransition(async () => {
+      if (isSuperAdmin && !targetClientId) {
+        setIntegrations([]);
+        setLocations([]);
+        setDraft(EMPTY_FORM);
+        setError('');
+        return;
+      }
       try {
-        const [integrationPayload, inventoryPayload] = await Promise.all([
-          getChannelIntegrations(),
-          getInventoryWorkspace(),
+        const [integrationPayload, locationPayload] = await Promise.all([
+          getChannelIntegrations(targetClientId || undefined),
+          getChannelLocations(targetClientId || undefined),
         ]);
         setIntegrations(integrationPayload.items);
-        setLocations(inventoryPayload.locations);
-        const current = integrationPayload.items[0];
-        if (current) {
-          setDraft((existing) => ({
-            ...existing,
-            display_name: current.display_name,
-            external_account_id: current.external_account_id,
-            phone_number_id: current.phone_number_id,
-            phone_number: current.phone_number,
-            default_location_id: current.default_location_id ?? '',
-            auto_send_enabled: current.auto_send_enabled,
-            agent_enabled: current.agent_enabled,
-            model_name: current.model_name,
-            persona_prompt: current.persona_prompt,
-          }));
-        }
+        setLocations(locationPayload.items);
+        applyCurrentChannel(integrationPayload.items[0]);
+        setNotice('');
+        setError('');
       } catch (loadError) {
         setError(loadError instanceof Error ? loadError.message : 'Unable to load channel integrations.');
       }
     });
-  }, []);
+  };
+
+  useEffect(() => {
+    if (!isSuperAdmin) {
+      loadWorkspace('');
+      return;
+    }
+    startTransition(async () => {
+      try {
+        const adminClients = await listAdminClients();
+        setClients(adminClients.items);
+      } catch (loadError) {
+        setError(loadError instanceof Error ? loadError.message : 'Unable to load tenants.');
+      }
+    });
+  }, [isSuperAdmin]);
+
+  useEffect(() => {
+    if (isSuperAdmin) {
+      loadWorkspace(selectedClientId);
+    }
+  }, [selectedClientId]);
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -78,7 +115,7 @@ export function IntegrationsWorkspace() {
       const response = await saveWhatsAppMetaIntegration({
         ...draft,
         default_location_id: draft.default_location_id || null,
-      });
+      }, selectedClientId || undefined);
       setIntegrations([response.channel]);
       if (response.setup_verify_token) {
         setNotice(`Integration saved. Verify token: ${response.setup_verify_token}`);
@@ -92,18 +129,52 @@ export function IntegrationsWorkspace() {
   };
 
   const current = integrations[0] ?? null;
+  const selectedClient = clients.find((item) => item.client_id === selectedClientId) ?? null;
+  const tenantSelectionRequired = isSuperAdmin && !selectedClientId;
 
   return (
     <div className="workspace-stack sales-agent-stack">
       {notice ? <WorkspaceNotice tone="success">{notice}</WorkspaceNotice> : null}
       {error ? <WorkspaceNotice tone="error">{error}</WorkspaceNotice> : null}
 
+      {isSuperAdmin ? (
+        <WorkspacePanel
+          title="Tenant target"
+          description="Super admin can configure one tenant channel at a time. Select the tenant first, then save the WhatsApp credentials for that business."
+        >
+          <div className="sales-agent-form-grid">
+            <label className="sales-agent-form-wide">
+              <span>Tenant</span>
+              <select value={selectedClientId} onChange={(event) => setSelectedClientId(event.target.value)}>
+                <option value="">Select a tenant</option>
+                {clients.map((client) => (
+                  <option key={client.client_id} value={client.client_id}>
+                    {client.business_name} ({client.client_code})
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          {selectedClient ? (
+            <p className="workspace-field-note">
+              Editing the live channel settings for <strong>{selectedClient.business_name}</strong>.
+            </p>
+          ) : null}
+        </WorkspacePanel>
+      ) : null}
+
       <WorkspacePanel
         title="WhatsApp Meta channel"
         description="Store tenant channel details, webhook verification, and sales-agent behavior in one place."
         hint="This config enables inbound persistence, guarded reply generation, and draft-order creation for the tenant."
       >
-        <form className="sales-agent-form" onSubmit={onSubmit}>
+        {tenantSelectionRequired ? (
+          <div className="workspace-empty">
+            <h4>Select a tenant first</h4>
+            <p>Once a tenant is selected above, this form will load that business account’s WhatsApp channel details.</p>
+          </div>
+        ) : null}
+        <form className="sales-agent-form" onSubmit={onSubmit} aria-disabled={tenantSelectionRequired}>
           <div className="sales-agent-form-grid">
             <label>
               <span>Display name</span>
@@ -212,7 +283,7 @@ export function IntegrationsWorkspace() {
             </label>
           </div>
           <div className="sales-agent-form-actions">
-            <button type="submit" disabled={isPending || !draft.phone_number_id.trim()}>
+            <button type="submit" disabled={tenantSelectionRequired || isPending || !draft.phone_number_id.trim()}>
               Save integration
             </button>
           </div>
@@ -223,7 +294,12 @@ export function IntegrationsWorkspace() {
         title="Current channel"
         description="Non-secret channel state is shown here so operators can verify the tenant is connected correctly."
       >
-        {current ? (
+        {tenantSelectionRequired ? (
+          <div className="workspace-empty">
+            <h4>No tenant selected</h4>
+            <p>Choose a tenant above to inspect its current channel status and secrets readiness.</p>
+          </div>
+        ) : current ? (
           <div className="sales-agent-status-grid">
             <article className="sales-agent-stat-card">
               <span>Status</span>

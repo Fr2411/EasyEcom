@@ -7,7 +7,7 @@ from fastapi import Cookie, Depends
 
 from easy_ecom.core.config import settings
 from easy_ecom.core.errors import ApiException
-from easy_ecom.core.rbac import can_access_page, default_page_names_for_roles
+from easy_ecom.core.rbac import can_access_page, default_page_names_for_roles, mandatory_page_names_for_roles
 from easy_ecom.core.session import SessionSigner
 from easy_ecom.core.tenancy import TenantContext
 from easy_ecom.data.repos.postgres.auth_repo import PostgresAuthRepo
@@ -114,6 +114,8 @@ def _parse_session_user(token: str | None) -> SessionUserPayload:
 
     if not allowed_pages:
         allowed_pages = list(default_page_names_for_roles(roles))
+    else:
+        allowed_pages = list(dict.fromkeys([*allowed_pages, *mandatory_page_names_for_roles(roles)]))
 
     return SessionUserPayload(
         user_id=user_id,

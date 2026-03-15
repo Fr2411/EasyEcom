@@ -69,6 +69,10 @@ ROLE_PAGE_ACCESS: dict[str, tuple[str, ...]] = {
     ),
 }
 
+MANDATORY_ROLE_PAGE_ACCESS: dict[str, tuple[str, ...]] = {
+    "CLIENT_OWNER": ("Sales Agent",),
+}
+
 PAGE_PERMISSIONS: dict[str, set[str]] = {}
 for role_code, pages in ROLE_PAGE_ACCESS.items():
     for page in pages:
@@ -92,6 +96,11 @@ def default_page_names_for_roles(user_roles: Iterable[str]) -> tuple[str, ...]:
     return tuple(page for page in ALL_PAGE_NAMES if page in allowed)
 
 
+def mandatory_page_names_for_roles(user_roles: Iterable[str]) -> tuple[str, ...]:
+    required = {page for role in user_roles for page in MANDATORY_ROLE_PAGE_ACCESS.get(role, ())}
+    return tuple(page for page in ALL_PAGE_NAMES if page in required)
+
+
 def default_page_codes_for_roles(user_roles: Iterable[str]) -> tuple[str, ...]:
     names = set(default_page_names_for_roles(user_roles))
     return tuple(code for code, name in PAGE_CODE_TO_NAME.items() if name in names)
@@ -110,6 +119,7 @@ def effective_page_names(
     allowed = set(default_page_names_for_roles(user_roles))
     allowed.update(page_names_from_codes(granted_page_codes))
     allowed.difference_update(page_names_from_codes(revoked_page_codes))
+    allowed.update(mandatory_page_names_for_roles(user_roles))
     return tuple(page for page in ALL_PAGE_NAMES if page in allowed)
 
 

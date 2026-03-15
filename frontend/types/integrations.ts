@@ -64,3 +64,9 @@ export type WhatsAppMetaIntegrationResult = {
   channel: ChannelIntegration;
   setup_verify_token: string | null;
 };
+
+export type ChannelLocation = {
+  location_id: string;
+  name: string;
+  is_default: boolean;
+};

@@ -34,6 +34,8 @@ LOCATION_ID = "33333333-3333-3333-3333-333333333333"
 USER_ID = "11111111-1111-1111-1111-111111111111"
 OTHER_CLIENT_ID = "44444444-4444-4444-4444-444444444444"
 OTHER_USER_ID = "55555555-5555-5555-5555-555555555555"
+SUPER_ADMIN_ID = "66666666-6666-6666-6666-666666666666"
+SUPER_ADMIN_CLIENT_ID = "77777777-7777-7777-7777-777777777777"
 
 
 def _setup_runtime(tmp_path: Path, monkeypatch):
@@ -85,6 +87,13 @@ def _setup_runtime(tmp_path: Path, monkeypatch):
 def _login_client() -> TestClient:
     client = TestClient(create_app())
     response = client.post("/auth/login", json={"email": "owner@example.com", "password": "secret"})
+    assert response.status_code == 200
+    return client
+
+
+def _login(email: str, password: str) -> TestClient:
+    client = TestClient(create_app())
+    response = client.post("/auth/login", json={"email": email, "password": password})
     assert response.status_code == 200
     return client
 
@@ -262,6 +271,49 @@ def test_whatsapp_integration_can_be_saved_and_listed(monkeypatch, tmp_path: Pat
         ).scalar_one()
         assert str(profile.default_location_id) == LOCATION_ID
         assert profile.is_enabled is True
+
+
+def test_super_admin_can_configure_tenant_integrations_by_client(monkeypatch, tmp_path: Path) -> None:
+    runtime = _setup_runtime(tmp_path, monkeypatch)
+    seed_auth_user(
+        runtime.session_factory,
+        user_id=SUPER_ADMIN_ID,
+        client_id=SUPER_ADMIN_CLIENT_ID,
+        email="admin@example.com",
+        name="Super Admin",
+        password_hash=hash_password("secret"),
+        role_code="SUPER_ADMIN",
+    )
+    client = _login("admin@example.com", "secret")
+
+    locations_response = client.get("/integrations/channels/locations", params={"client_id": CLIENT_ID})
+    assert locations_response.status_code == 200
+    assert locations_response.json()["items"][0]["location_id"] == LOCATION_ID
+
+    saved = client.put(
+        "/integrations/channels/whatsapp/meta",
+        params={"client_id": CLIENT_ID},
+        json={
+            "display_name": "Tenant WhatsApp",
+            "external_account_id": "tenant-waba",
+            "phone_number_id": "tenant-phone",
+            "phone_number": "+971500000001",
+            "verify_token": "tenant-verify",
+            "access_token": "tenant-token",
+            "app_secret": "",
+            "default_location_id": LOCATION_ID,
+            "auto_send_enabled": False,
+            "agent_enabled": True,
+            "model_name": "gpt-5-mini",
+            "persona_prompt": "Sell for this tenant.",
+        },
+    )
+    assert saved.status_code == 200
+    assert saved.json()["channel"]["phone_number_id"] == "tenant-phone"
+
+    listed = client.get("/integrations/channels", params={"client_id": CLIENT_ID})
+    assert listed.status_code == 200
+    assert listed.json()["items"][0]["display_name"] == "Tenant WhatsApp"
 
 
 def test_public_webhook_verification_is_idempotent_and_persists_conversation(monkeypatch, tmp_path: Path) -> None:

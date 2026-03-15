@@ -86,4 +86,18 @@ describe('Sidebar role filtering', () => {
     expect(screen.getByText('codex@example.com')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Minimize sidebar' })).toBeTruthy();
   });
+
+  test('keeps Sales Agent visible for client owners even if an older allowed page list omits it', () => {
+    useAuthMock.mockReturnValue({
+      user: {
+        roles: ['CLIENT_OWNER'],
+        allowed_pages: ['Dashboard', 'Inventory', 'Sales', 'Settings'],
+      },
+      clearAuth: vi.fn(),
+    });
+
+    render(<Sidebar />);
+
+    expect(screen.getByRole('link', { name: 'Sales Agent' })).toBeTruthy();
+  });
 });

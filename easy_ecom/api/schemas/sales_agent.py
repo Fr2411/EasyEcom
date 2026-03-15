@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, Field, field_validator
 
-from easy_ecom.api.schemas.commerce import SalesOrderResponse
+from easy_ecom.api.schemas.commerce import LocationSummaryResponse, SalesOrderResponse
 
 
 class ChannelIntegrationResponse(BaseModel):
@@ -32,6 +32,10 @@ class ChannelIntegrationResponse(BaseModel):
 
 class ChannelIntegrationsResponse(BaseModel):
     items: list[ChannelIntegrationResponse]
+
+
+class ChannelLocationsResponse(BaseModel):
+    items: list[LocationSummaryResponse]
 
 
 class WhatsAppMetaIntegrationRequest(BaseModel):

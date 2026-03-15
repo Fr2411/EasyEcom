@@ -5,11 +5,20 @@ const ROLE_PAGE_ACCESS: Record<string, string[]> = {
   FINANCE_STAFF: ['Home', 'Dashboard', 'Finance', 'Returns', 'Reports', 'Settings'],
 };
 
+const MANDATORY_ROLE_PAGE_ACCESS: Record<string, string[]> = {
+  CLIENT_OWNER: ['Sales Agent'],
+};
+
 export function canAccessPage(
   userRoles: string[] | undefined,
   pageLabel: string,
   allowedPages?: string[] | undefined,
 ) {
+  const mandatoryPages = userRoles?.flatMap((role) => MANDATORY_ROLE_PAGE_ACCESS[role] ?? []) ?? [];
+  if (mandatoryPages.includes(pageLabel)) {
+    return true;
+  }
+
   if (allowedPages?.length) {
     return allowedPages.includes(pageLabel);
   }
