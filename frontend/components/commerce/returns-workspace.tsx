@@ -118,7 +118,7 @@ export function ReturnsWorkspace() {
 
       <WorkspacePanel
         title="Return and restock control"
-        description="Start from completed orders, validate eligible quantities, and restock only what becomes sellable again."
+        hint="Start from completed orders, validate eligible quantities, and restock only what becomes sellable again."
       >
         {notice ? <WorkspaceNotice tone="success">{notice}</WorkspaceNotice> : null}
         {error ? <WorkspaceNotice tone="error">{error}</WorkspaceNotice> : null}

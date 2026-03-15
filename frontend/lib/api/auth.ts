@@ -4,6 +4,7 @@ export type SessionUser = {
   user_id: string;
   email: string;
   name: string;
+  business_name?: string | null;
   role: string;
   client_id: string | null;
   roles: string[];

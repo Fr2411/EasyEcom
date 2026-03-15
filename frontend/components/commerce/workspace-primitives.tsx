@@ -1,6 +1,6 @@
 'use client';
 
-import { useId } from 'react';
+import { HoverHint } from '@/components/ui/hover-hint';
 
 export function WorkspaceTabs<T extends string>({
   tabs,
@@ -33,11 +33,15 @@ export function WorkspaceTabs<T extends string>({
 export function WorkspacePanel({
   title,
   description,
+  hint,
+  hintLabel,
   actions,
   children,
 }: {
   title: React.ReactNode;
   description?: string;
+  hint?: string;
+  hintLabel?: string;
   actions?: React.ReactNode;
   children: React.ReactNode;
 }) {
@@ -45,7 +49,16 @@ export function WorkspacePanel({
     <section className="workspace-panel">
       <header className="workspace-panel-header">
         <div>
-          <h3>{title}</h3>
+          <h3>
+            {typeof title === 'string' ? (
+              <span className="workspace-heading">
+                {title}
+                {hint ? <HoverHint text={hint} label={hintLabel} /> : null}
+              </span>
+            ) : (
+              title
+            )}
+          </h3>
           {description ? <p>{description}</p> : null}
         </div>
         {actions ? <div className="workspace-panel-actions">{actions}</div> : null}
@@ -55,24 +68,7 @@ export function WorkspacePanel({
   );
 }
 
-export function WorkspaceHint({
-  text,
-  label = 'More information',
-}: {
-  text: string;
-  label?: string;
-}) {
-  const hintId = useId();
-
-  return (
-    <span className="workspace-hint" tabIndex={0} aria-label={label} aria-describedby={hintId}>
-      <span aria-hidden="true">i</span>
-      <span id={hintId} role="tooltip" className="workspace-hint-text">
-        {text}
-      </span>
-    </span>
-  );
-}
+export const WorkspaceHint = HoverHint;
 
 
 export function WorkspaceNotice({

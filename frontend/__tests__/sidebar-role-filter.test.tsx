@@ -66,4 +66,24 @@ describe('Sidebar role filtering', () => {
     expect(screen.getByRole('link', { name: 'Inventory' })).toBeTruthy();
     expect(screen.queryByRole('link', { name: 'Catalog' })).toBeNull();
   });
+
+  test('shows workspace identity under the logo when session details are available', () => {
+    useAuthMock.mockReturnValue({
+      user: {
+        roles: ['CLIENT_OWNER'],
+        allowed_pages: ['Dashboard', 'Inventory', 'Sales', 'Settings'],
+        business_name: 'Codex Footwear',
+        name: 'Codex User',
+        email: 'codex@example.com',
+      },
+      clearAuth: vi.fn(),
+    });
+
+    render(<Sidebar />);
+
+    expect(screen.getByText('Codex Footwear')).toBeTruthy();
+    expect(screen.getByText('Codex User')).toBeTruthy();
+    expect(screen.getByText('codex@example.com')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Minimize sidebar' })).toBeTruthy();
+  });
 });

@@ -9,6 +9,7 @@ class AuthenticatedUser:
     client_id: str
     name: str
     email: str
+    business_name: str | None
     roles: list[str]
     allowed_pages: list[str]
 

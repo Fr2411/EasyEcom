@@ -40,15 +40,26 @@ const ICONS = {
   settings: Settings
 } as const;
 
-export function NavItem({ item }: { item: NavigationItem }) {
+export function NavItem({
+  item,
+  collapsed = false,
+}: {
+  item: NavigationItem;
+  collapsed?: boolean;
+}) {
   const pathname = usePathname();
   const isActive = pathname === item.href;
   const Icon = ICONS[item.icon];
 
   return (
-    <Link href={item.href} className={isActive ? 'nav-link active' : 'nav-link'}>
+    <Link
+      href={item.href}
+      className={collapsed ? `${isActive ? 'nav-link active' : 'nav-link'} collapsed` : isActive ? 'nav-link active' : 'nav-link'}
+      aria-label={item.label}
+      title={collapsed ? item.label : undefined}
+    >
       <Icon size={16} aria-hidden="true" />
-      <span>{item.label}</span>
+      <span className="nav-link-label">{item.label}</span>
     </Link>
   );
 }

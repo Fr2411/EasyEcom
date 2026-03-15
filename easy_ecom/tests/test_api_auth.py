@@ -111,6 +111,7 @@ def test_login_then_me_returns_authenticated_user(monkeypatch, tmp_path: Path):
         "user_id": USER_ID,
         "email": "u1@example.com",
         "name": "User One",
+        "business_name": "Client One",
         "role": "SUPER_ADMIN",
         "client_id": CLIENT_ID,
         "roles": ["SUPER_ADMIN"],

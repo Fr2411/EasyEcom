@@ -64,6 +64,7 @@ def me(user: AuthenticatedUser = Depends(get_authenticated_user)) -> CurrentUser
         user_id=user.user_id,
         email=user.email,
         name=user.name,
+        business_name=user.business_name,
         role=user.roles[0],
         client_id=user.client_id,
         roles=user.roles,
