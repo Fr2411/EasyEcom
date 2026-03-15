@@ -11,6 +11,7 @@ import InventoryPage from '@/app/(app)/inventory/page';
 import HomePage from '@/app/(app)/page';
 import ReportsPage from '@/app/(app)/reports/page';
 import ReturnsPage from '@/app/(app)/returns/page';
+import SalesAgentPage from '@/app/(app)/sales-agent/page';
 import SalesPage from '@/app/(app)/sales/page';
 import SettingsPage from '@/app/(app)/settings/page';
 
@@ -98,6 +99,50 @@ vi.mock('@/lib/api/dashboard', () => ({
   })),
 }));
 
+vi.mock('@/lib/api/integrations', () => ({
+  getChannelIntegrations: vi.fn(async () => ({
+    items: [
+      {
+        channel_id: 'channel-1',
+        provider: 'whatsapp',
+        display_name: 'WhatsApp Sales Agent',
+        status: 'active',
+        external_account_id: 'waba-1',
+        phone_number_id: 'phone-1',
+        phone_number: '+971551234567',
+        verify_token_set: true,
+        inbound_secret_set: true,
+        access_token_set: true,
+        default_location_id: 'loc-1',
+        auto_send_enabled: false,
+        agent_enabled: true,
+        model_name: 'gpt-5-mini',
+        persona_prompt: 'Sell honestly.',
+        config: {},
+        created_at: '2026-03-15T10:00:00+00:00',
+        updated_at: '2026-03-15T10:00:00+00:00',
+        last_inbound_at: null,
+        last_outbound_at: null,
+      },
+    ],
+  })),
+  saveWhatsAppMetaIntegration: vi.fn(),
+}));
+
+vi.mock('@/lib/api/sales-agent', () => ({
+  getSalesAgentConversations: vi.fn(async () => ({
+    items: [],
+  })),
+  getSalesAgentConversation: vi.fn(),
+  handoffSalesAgentConversation: vi.fn(),
+  approveSalesAgentDraft: vi.fn(),
+  rejectSalesAgentDraft: vi.fn(),
+  getSalesAgentOrders: vi.fn(async () => ({
+    items: [],
+  })),
+  confirmSalesAgentOrder: vi.fn(),
+}));
+
 const cases = [
   ['Home', HomePage, /the product foundation is live again/i],
   ['Dashboard', DashboardPage, /business analytics dashboard/i],
@@ -106,9 +151,10 @@ const cases = [
   ['Customers', CustomersPage, /embedded customer records/i],
   ['Inventory', InventoryPage, /variant-level inventory control/i],
   ['Sales', SalesPage, /order-first sales workspace/i],
+  ['Sales Agent', SalesAgentPage, /no pending agent orders/i],
   ['Finance', FinancePage, /reset in progress|rebuild foundation/i],
   ['Returns', ReturnsPage, /return and restock control/i],
-  ['Integrations & Channels', IntegrationsPage, /reset in progress|rebuild foundation/i],
+  ['Integrations & Channels', IntegrationsPage, /whatsapp meta channel/i],
   ['AI Review Inbox', AiReviewPage, /reset in progress|rebuild foundation/i],
   ['Automation', AutomationPage, /reset in progress|rebuild foundation/i],
   ['Settings', SettingsPage, /reset in progress|rebuild foundation/i],

@@ -42,6 +42,7 @@ const ACCESS_PAGE_OPTIONS = [
   { code: 'INVENTORY', label: 'Inventory' },
   { code: 'PURCHASES', label: 'Purchases' },
   { code: 'SALES', label: 'Sales' },
+  { code: 'SALES_AGENT', label: 'Sales Agent' },
   { code: 'CUSTOMERS', label: 'Customers' },
   { code: 'FINANCE', label: 'Finance' },
   { code: 'RETURNS', label: 'Returns' },
