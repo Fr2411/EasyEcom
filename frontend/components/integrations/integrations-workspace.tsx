@@ -7,10 +7,23 @@ import { WorkspaceNotice, WorkspacePanel } from '@/components/commerce/workspace
 import { ApiNetworkError } from '@/lib/api/client';
 import { getPublicEnv } from '@/lib/env';
 import { listAdminClients } from '@/lib/api/admin';
-import { getChannelIntegrations, getChannelLocations, saveWhatsAppMetaIntegration } from '@/lib/api/integrations';
+import {
+  getChannelIntegrations,
+  getChannelLocations,
+  runChannelDiagnostics,
+  saveWhatsAppMetaIntegration,
+  sendChannelSmoke,
+  validateWhatsAppMetaIntegration,
+} from '@/lib/api/integrations';
 import { formatDateTime } from '@/lib/commerce-format';
 import type { AdminClient } from '@/types/admin';
-import type { ChannelIntegration, ChannelLocation, WhatsAppMetaIntegrationPayload } from '@/types/integrations';
+import type {
+  ChannelDiagnostics,
+  ChannelDiagnosticsEnvelope,
+  ChannelIntegration,
+  ChannelLocation,
+  WhatsAppMetaIntegrationPayload,
+} from '@/types/integrations';
 
 
 const EMPTY_FORM: WhatsAppMetaIntegrationPayload = {
@@ -29,6 +42,97 @@ const EMPTY_FORM: WhatsAppMetaIntegrationPayload = {
     'You are an aggressive but honest sales agent. Increase revenue through smart upsell and slow-moving stock suggestions, but never promise unavailable stock or unauthorized discounts.',
 };
 
+type DiagnosticStep = {
+  label: string;
+  status: 'pass' | 'fail' | 'pending';
+  detail: string;
+};
+
+function stepClassName(status: DiagnosticStep['status']) {
+  return `integration-step integration-step-${status}`;
+}
+
+function diagnosticsFromChannel(channel: ChannelIntegration): ChannelDiagnostics {
+  return {
+    config_saved: channel.config_saved,
+    verify_token_set: channel.verify_token_set,
+    webhook_verified_at: channel.webhook_verified_at,
+    last_webhook_post_at: channel.last_webhook_post_at,
+    signature_validation_ok: channel.signature_validation_ok,
+    graph_auth_ok: channel.graph_auth_ok,
+    outbound_send_ok: channel.outbound_send_ok,
+    openai_ready: channel.openai_ready ?? false,
+    openai_probe_ok: channel.openai_probe_ok,
+    last_error_code: channel.last_error_code,
+    last_error_message: channel.last_error_message,
+    last_provider_status_code: channel.last_provider_status_code,
+    last_provider_response_excerpt: channel.last_provider_response_excerpt,
+    last_diagnostic_at: channel.last_diagnostic_at,
+    next_action: channel.next_action,
+  };
+}
+
+function mergeChannelDiagnostics(channel: ChannelIntegration, diagnostics: ChannelDiagnostics): ChannelIntegration {
+  return { ...channel, ...diagnostics };
+}
+
+function buildDiagnosticSteps(diagnostics: ChannelDiagnostics, autoSendEnabled: boolean): DiagnosticStep[] {
+  return [
+    {
+      label: 'Saved',
+      status: diagnostics.config_saved ? 'pass' : 'fail',
+      detail: diagnostics.config_saved
+        ? 'Core WhatsApp credentials are saved for this tenant.'
+        : 'Phone number ID, verify token, access token, or app secret is missing.',
+    },
+    {
+      label: 'Verified',
+      status: diagnostics.webhook_verified_at ? 'pass' : 'pending',
+      detail: diagnostics.webhook_verified_at
+        ? `Webhook verified at ${formatDateTime(diagnostics.webhook_verified_at)}.`
+        : 'Meta callback verification has not been completed yet.',
+    },
+    {
+      label: 'Receiving webhooks',
+      status: diagnostics.last_webhook_post_at ? 'pass' : diagnostics.signature_validation_ok === false ? 'fail' : 'pending',
+      detail: diagnostics.last_webhook_post_at
+        ? `Meta last posted at ${formatDateTime(diagnostics.last_webhook_post_at)}.`
+        : diagnostics.signature_validation_ok === false
+          ? 'Webhook POSTs are reaching EasyEcom, but signature validation is failing.'
+          : 'No signed webhook POST has been observed yet.',
+    },
+    {
+      label: 'Can send WhatsApp',
+      status: diagnostics.outbound_send_ok === true ? 'pass' : diagnostics.outbound_send_ok === false ? 'fail' : 'pending',
+      detail: diagnostics.outbound_send_ok === true
+        ? 'WhatsApp outbound send passed.'
+        : diagnostics.outbound_send_ok === false
+          ? 'Outbound send failed. Review the last provider error below.'
+          : 'Run diagnostics and a smoke send to confirm outbound delivery.',
+    },
+    {
+      label: 'OpenAI ready',
+      status: diagnostics.openai_probe_ok === true ? 'pass' : diagnostics.openai_ready ? 'pending' : 'fail',
+      detail: diagnostics.openai_probe_ok === true
+        ? 'OpenAI probe passed with the configured model.'
+        : diagnostics.openai_ready
+          ? 'Backend key is present, but the probe has not passed yet.'
+          : 'The backend process does not currently expose OPENAI_API_KEY.',
+    },
+    {
+      label: 'Auto-send enabled',
+      status: autoSendEnabled ? 'pass' : 'pending',
+      detail: autoSendEnabled
+        ? 'Guarded auto-send is enabled for this tenant.'
+        : 'Replies will be routed to review until auto-send is turned on.',
+    },
+  ];
+}
+
+function formatProviderDetails(details: Record<string, string | number | null>) {
+  return Object.entries(details).filter(([, value]) => value !== null && `${value}`.trim() !== '');
+}
+
 export function IntegrationsWorkspace() {
   const { user } = useAuth();
   const isSuperAdmin = user?.roles?.includes('SUPER_ADMIN') ?? false;
@@ -41,6 +145,10 @@ export function IntegrationsWorkspace() {
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [latestVerifyToken, setLatestVerifyToken] = useState('');
+  const [draftDiagnostics, setDraftDiagnostics] = useState<ChannelDiagnosticsEnvelope | null>(null);
+  const [currentProviderDetails, setCurrentProviderDetails] = useState<Record<string, string | number | null>>({});
+  const [smokeRecipient, setSmokeRecipient] = useState('');
+  const [smokeText, setSmokeText] = useState('EasyEcom smoke test. Reply path is working.');
   const [isPending, startTransition] = useTransition();
 
   const applyCurrentChannel = (current: ChannelIntegration | undefined) => {
@@ -82,6 +190,8 @@ export function IntegrationsWorkspace() {
         setIntegrations(integrationPayload.items);
         setLocations(locationPayload.items);
         applyCurrentChannel(integrationPayload.items[0]);
+        setDraftDiagnostics(null);
+        setCurrentProviderDetails({});
         setNotice('');
         setError('');
       } catch (loadError) {
@@ -121,6 +231,7 @@ export function IntegrationsWorkspace() {
         default_location_id: draft.default_location_id || null,
       }, selectedClientId || undefined);
       setIntegrations([response.channel]);
+      applyCurrentChannel(response.channel);
       if (response.setup_verify_token) {
         setLatestVerifyToken(response.setup_verify_token);
         setNotice(`Integration saved. Verify token: ${response.setup_verify_token}`);
@@ -128,7 +239,9 @@ export function IntegrationsWorkspace() {
         setLatestVerifyToken('');
         setNotice('Integration saved.');
       }
-      setDraft((existing) => ({ ...existing, verify_token: '' }));
+      setDraft((existing) => ({ ...existing, verify_token: '', access_token: '', app_secret: '' }));
+      setDraftDiagnostics(null);
+      setCurrentProviderDetails({});
     } catch (submitError) {
       if (submitError instanceof ApiNetworkError) {
         setError(
@@ -140,10 +253,62 @@ export function IntegrationsWorkspace() {
     }
   };
 
+  const onValidateDraft = async () => {
+    setNotice('');
+    setError('');
+    try {
+      const response = await validateWhatsAppMetaIntegration({
+        ...draft,
+        default_location_id: draft.default_location_id || null,
+      }, selectedClientId || undefined);
+      setDraftDiagnostics(response);
+      setNotice(response.diagnostics.last_error_message ? response.diagnostics.last_error_message : 'Draft validation completed.');
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : 'Unable to validate the WhatsApp integration draft.');
+    }
+  };
+
+  const onRunDiagnostics = async () => {
+    if (!current) {
+      return;
+    }
+    setNotice('');
+    setError('');
+    try {
+      const response = await runChannelDiagnostics(current.channel_id);
+      setIntegrations([response.channel]);
+      setCurrentProviderDetails(response.provider_details);
+      setNotice(response.diagnostics.last_error_message ? response.diagnostics.last_error_message : 'Channel diagnostics completed.');
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : 'Unable to run channel diagnostics.');
+    }
+  };
+
+  const onSendSmoke = async () => {
+    if (!current) {
+      return;
+    }
+    setNotice('');
+    setError('');
+    try {
+      const response = await sendChannelSmoke(current.channel_id, { recipient: smokeRecipient, text: smokeText });
+      setIntegrations((items) =>
+        items.map((item) => (item.channel_id === current.channel_id ? mergeChannelDiagnostics(item, response.diagnostics) : item)),
+      );
+      setCurrentProviderDetails(response.provider_details);
+      setNotice(response.message);
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : 'Unable to send a WhatsApp smoke message.');
+    }
+  };
+
   const current = integrations[0] ?? null;
   const selectedClient = clients.find((item) => item.client_id === selectedClientId) ?? null;
   const tenantSelectionRequired = isSuperAdmin && !selectedClientId;
   const webhookUrl = current?.webhook_key ? `${apiBaseUrl}/public/webhooks/whatsapp/${current.webhook_key}` : '';
+  const currentDiagnostics = current ? diagnosticsFromChannel(current) : null;
+  const currentSteps = currentDiagnostics ? buildDiagnosticSteps(currentDiagnostics, current.auto_send_enabled) : [];
+  const draftSteps = draftDiagnostics ? buildDiagnosticSteps(draftDiagnostics.diagnostics, draft.auto_send_enabled) : [];
 
   return (
     <div className="workspace-stack sales-agent-stack">
@@ -227,11 +392,11 @@ export function IntegrationsWorkspace() {
               <input
                 value={draft.verify_token}
                 onChange={(event) => setDraft({ ...draft, verify_token: event.target.value })}
-                placeholder="Leave blank to auto-generate"
+                placeholder={current?.verify_token_set ? 'Leave blank to keep the saved token' : 'Leave blank to auto-generate'}
               />
               <small className="workspace-field-note">
-                Meta must receive the exact same verify token in its webhook form. If you leave this blank, EasyEcom
-                generates one during save and shows it after the save succeeds.
+                Leave blank to preserve the existing saved token. If this is a new channel and you leave it blank,
+                EasyEcom generates one during save and shows it after the save succeeds.
               </small>
             </label>
             <label>
@@ -254,6 +419,7 @@ export function IntegrationsWorkspace() {
                 onChange={(event) => setDraft({ ...draft, access_token: event.target.value })}
                 placeholder={current?.access_token_set ? 'Saved. Enter a new value to rotate.' : 'Meta permanent access token'}
               />
+              <small className="workspace-field-note">Leave blank to keep the currently saved access token.</small>
             </label>
             <label>
               <span>App secret</span>
@@ -263,6 +429,7 @@ export function IntegrationsWorkspace() {
                 onChange={(event) => setDraft({ ...draft, app_secret: event.target.value })}
                 placeholder={current?.inbound_secret_set ? 'Saved. Enter a new value to rotate.' : 'Webhook app secret'}
               />
+              <small className="workspace-field-note">Leave blank to keep the currently saved app secret.</small>
             </label>
             <label>
               <span>Default location</span>
@@ -304,11 +471,55 @@ export function IntegrationsWorkspace() {
             </label>
           </div>
           <div className="sales-agent-form-actions">
+            <button
+              type="button"
+              onClick={onValidateDraft}
+              disabled={tenantSelectionRequired || isPending || !draft.phone_number_id.trim()}
+            >
+              Validate details
+            </button>
             <button type="submit" disabled={tenantSelectionRequired || isPending || !draft.phone_number_id.trim()}>
               Save integration
             </button>
           </div>
         </form>
+
+        {draftDiagnostics ? (
+          <div className="workspace-stack">
+            <div className="integration-step-grid">
+              {draftSteps.map((step) => (
+                <article key={step.label} className={stepClassName(step.status)}>
+                  <span>{step.label}</span>
+                  <strong>{step.status === 'pass' ? 'Pass' : step.status === 'fail' ? 'Fail' : 'Pending'}</strong>
+                  <p>{step.detail}</p>
+                </article>
+              ))}
+            </div>
+            <div className="integration-detail-card">
+              <div className="integration-detail-head">
+                <strong>Draft validation</strong>
+                <span>{draftDiagnostics.diagnostics.last_diagnostic_at ? formatDateTime(draftDiagnostics.diagnostics.last_diagnostic_at) : 'Just now'}</span>
+              </div>
+              <p>{draftDiagnostics.diagnostics.next_action}</p>
+              {draftDiagnostics.diagnostics.last_error_message ? (
+                <p className="integration-detail-error">
+                  {draftDiagnostics.diagnostics.last_error_code ? `${draftDiagnostics.diagnostics.last_error_code}: ` : ''}
+                  {draftDiagnostics.diagnostics.last_error_message}
+                </p>
+              ) : null}
+              {formatProviderDetails(draftDiagnostics.provider_details).length ? (
+                <dl className="integration-detail-grid">
+                  {formatProviderDetails(draftDiagnostics.provider_details).map(([key, value]) => (
+                    <div key={key}>
+                      <dt>{key.replace(/_/g, ' ')}</dt>
+                      <dd>{String(value)}</dd>
+                    </div>
+                  ))}
+                </dl>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
       </WorkspacePanel>
 
       <WorkspacePanel
@@ -378,27 +589,103 @@ export function IntegrationsWorkspace() {
               </label>
             </div>
 
-            {!current.last_inbound_at ? (
-              <WorkspaceNotice tone="error">
-                No inbound WhatsApp webhooks have reached EasyEcom yet. Until Meta is pointed to the callback URL above,
-                customer messages sent to the test number will never enter the Sales Agent pipeline.
-              </WorkspaceNotice>
+            <div className="integration-step-grid">
+              {currentSteps.map((step) => (
+                <article key={step.label} className={stepClassName(step.status)}>
+                  <span>{step.label}</span>
+                  <strong>{step.status === 'pass' ? 'Pass' : step.status === 'fail' ? 'Fail' : 'Pending'}</strong>
+                  <p>{step.detail}</p>
+                </article>
+              ))}
+            </div>
+
+            <div className="integration-detail-card">
+              <div className="integration-detail-head">
+                <strong>Next action</strong>
+                <span>{current.last_diagnostic_at ? formatDateTime(current.last_diagnostic_at) : 'Not run yet'}</span>
+              </div>
+              <p>{current.next_action}</p>
+              {current.last_error_message ? (
+                <p className="integration-detail-error">
+                  {current.last_error_code ? `${current.last_error_code}: ` : ''}
+                  {current.last_error_message}
+                </p>
+              ) : null}
+              {current.last_provider_status_code || current.last_provider_response_excerpt ? (
+                <dl className="integration-detail-grid">
+                  {current.last_provider_status_code ? (
+                    <div>
+                      <dt>Provider status</dt>
+                      <dd>{current.last_provider_status_code}</dd>
+                    </div>
+                  ) : null}
+                  {current.last_provider_response_excerpt ? (
+                    <div className="integration-detail-grid-wide">
+                      <dt>Provider response</dt>
+                      <dd>{current.last_provider_response_excerpt}</dd>
+                    </div>
+                  ) : null}
+                </dl>
+              ) : null}
+            </div>
+
+            {formatProviderDetails(currentProviderDetails).length ? (
+              <div className="integration-detail-card">
+                <div className="integration-detail-head">
+                  <strong>Provider diagnostics</strong>
+                  <span>Latest run</span>
+                </div>
+                <dl className="integration-detail-grid">
+                  {formatProviderDetails(currentProviderDetails).map(([key, value]) => (
+                    <div key={key}>
+                      <dt>{key.replace(/_/g, ' ')}</dt>
+                      <dd>{String(value)}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
             ) : null}
 
-            {!current.auto_send_enabled ? (
-              <WorkspaceNotice tone="error">
-                Guarded auto-send is off. Inbound messages will create review drafts in Sales Agent, but the customer
-                will not receive an automatic reply.
-              </WorkspaceNotice>
-            ) : null}
+            <div className="sales-agent-form-actions integration-actions">
+              <button type="button" onClick={onRunDiagnostics} disabled={isPending}>
+                Run diagnostics
+              </button>
+            </div>
 
-            {!current.openai_ready ? (
-              <WorkspaceNotice tone="error">
-                The backend does not have <code>OPENAI_API_KEY</code> configured right now. The workflow can still store
-                inbound conversations, but it will not use OpenAI for sales-agent responses until that env var is set on
-                the API server.
-              </WorkspaceNotice>
-            ) : null}
+            <div className="integration-detail-card">
+              <div className="integration-detail-head">
+                <strong>Smoke send</strong>
+                <span>Operator-triggered only</span>
+              </div>
+              <p>
+                Send a single WhatsApp test message to an approved recipient before enabling live tenant traffic. Use a
+                human test number here, not the business test number itself.
+              </p>
+              <div className="sales-agent-form-grid">
+                <label>
+                  <span>Approved recipient</span>
+                  <input
+                    value={smokeRecipient}
+                    onChange={(event) => setSmokeRecipient(event.target.value)}
+                    placeholder="+971..."
+                  />
+                </label>
+                <label className="sales-agent-form-wide">
+                  <span>Smoke message</span>
+                  <textarea rows={3} value={smokeText} onChange={(event) => setSmokeText(event.target.value)} />
+                </label>
+              </div>
+              <div className="sales-agent-form-actions integration-actions">
+                <button type="button" onClick={onSendSmoke} disabled={isPending || !smokeRecipient.trim()}>
+                  Send smoke message
+                </button>
+              </div>
+            </div>
+
+            <WorkspaceNotice tone="info">
+              Backend and frontend deploy separately. If diagnostics change on the API but this screen still looks old,
+              confirm the backend deploy first, then wait for the Amplify frontend deploy to finish.
+            </WorkspaceNotice>
           </div>
         ) : (
           null

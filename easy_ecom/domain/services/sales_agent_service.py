@@ -151,6 +151,49 @@ class SalesAgentService(CommerceBaseService):
                 for item in rows
             ]
 
+    def validate_whatsapp_integration(
+        self,
+        user: AuthenticatedUser,
+        payload: dict[str, Any],
+        *,
+        target_client_id: str | None = None,
+    ) -> dict[str, Any]:
+        self._require_owner_or_admin(user)
+        client_id = self._target_client_id(user, target_client_id)
+        with self._session_factory() as session:
+            self._ensure_client_exists(session, client_id)
+            existing = session.execute(
+                select(ChannelIntegrationModel).where(
+                    ChannelIntegrationModel.client_id == client_id,
+                    ChannelIntegrationModel.provider == "whatsapp",
+                )
+            ).scalar_one_or_none()
+            access_token_input = str(payload.get("access_token", "")).strip()
+            app_secret_input = str(payload.get("app_secret", "")).strip()
+            verify_token_input = str(payload.get("verify_token", "")).strip()
+            verify_token_set = bool(verify_token_input) or bool(existing.verify_token_hash) if existing is not None else bool(verify_token_input)
+            default_location_id = self._clean_uuid(payload.get("default_location_id")) or (
+                str(existing.default_location_id) if existing is not None and existing.default_location_id else None
+            )
+            result = self._run_whatsapp_diagnostics(
+                session,
+                integration=None,
+                client_id=client_id,
+                external_account_id=str(payload.get("external_account_id", "")).strip(),
+                phone_number_id=str(payload.get("phone_number_id", "")).strip(),
+                verify_token_set=verify_token_set,
+                access_token=access_token_input or (existing.access_token if existing else ""),
+                app_secret=app_secret_input or (existing.app_secret if existing else ""),
+                model_name=str(payload.get("model_name", "")).strip() or settings.openai_model,
+                default_location_id=default_location_id,
+                auto_send_enabled=bool(payload.get("auto_send_enabled")),
+                persist=False,
+            )
+            return {
+                "diagnostics": result["diagnostics"],
+                "provider_details": result["provider_details"],
+            }
+
     def upsert_whatsapp_integration(
         self,
         user: AuthenticatedUser,
@@ -160,7 +203,6 @@ class SalesAgentService(CommerceBaseService):
     ) -> dict[str, Any]:
         self._require_owner_or_admin(user)
         client_id = self._target_client_id(user, target_client_id)
-        setup_verify_token = str(payload.get("verify_token") or "").strip() or new_token(18)
         with self._session_factory() as session:
             self._ensure_client_exists(session, client_id)
             actor_user_id = self._canonical_actor_user_id(session, user, client_id)
@@ -170,6 +212,7 @@ class SalesAgentService(CommerceBaseService):
                     ChannelIntegrationModel.provider == "whatsapp",
                 )
             ).scalar_one_or_none()
+            is_new = integration is None
             if integration is None:
                 integration = ChannelIntegrationModel(
                     channel_id=new_uuid(),
@@ -180,29 +223,70 @@ class SalesAgentService(CommerceBaseService):
                 )
                 session.add(integration)
 
+            previous_phone_number_id = integration.phone_number_id
+            previous_external_account_id = integration.external_account_id
+            previous_access_token = integration.access_token
+            previous_app_secret = integration.app_secret
+            previous_verify_token_hash = integration.verify_token_hash
+            previous_model_name = str(self._integration_base_config(integration).get("model_name", settings.openai_model))
+
             integration.display_name = str(payload.get("display_name", "")).strip() or "WhatsApp Sales Agent"
             integration.external_account_id = str(payload.get("external_account_id", "")).strip() or str(
                 payload.get("phone_number_id", "")
             ).strip()
             integration.phone_number_id = str(payload.get("phone_number_id", "")).strip()
             integration.phone_number = str(payload.get("phone_number", "")).strip()
-            integration.verify_token_hash = hash_token(setup_verify_token)
-            access_token = payload.get("access_token")
-            if access_token is not None:
-                integration.access_token = str(access_token).strip()
-            app_secret = payload.get("app_secret")
-            if app_secret is not None:
-                integration.app_secret = str(app_secret).strip()
+            verify_token_input = str(payload.get("verify_token") or "").strip()
+            setup_verify_token: str | None = None
+            if verify_token_input:
+                integration.verify_token_hash = hash_token(verify_token_input)
+                setup_verify_token = verify_token_input
+            elif is_new or not integration.verify_token_hash:
+                setup_verify_token = new_token(18)
+                integration.verify_token_hash = hash_token(setup_verify_token)
+
+            access_token_input = str(payload.get("access_token") or "").strip()
+            if access_token_input:
+                integration.access_token = access_token_input
+            elif is_new:
+                integration.access_token = ""
+
+            app_secret_input = str(payload.get("app_secret") or "").strip()
+            if app_secret_input:
+                integration.app_secret = app_secret_input
+            elif is_new:
+                integration.app_secret = ""
+
             default_location_id = self._clean_uuid(payload.get("default_location_id"))
             integration.default_location_id = default_location_id or None
             integration.auto_send_enabled = bool(payload.get("auto_send_enabled"))
-            integration.config_json = {
-                "model_name": str(payload.get("model_name", "")).strip() or settings.openai_model,
-                "persona_prompt": str(payload.get("persona_prompt", "")).strip(),
-            }
+            model_name = str(payload.get("model_name", "")).strip() or settings.openai_model
+            persona_prompt = str(payload.get("persona_prompt", "")).strip()
+            self._set_integration_config(
+                integration,
+                model_name=model_name,
+                persona_prompt=persona_prompt,
+            )
+            credentials_changed = any(
+                (
+                    previous_phone_number_id != integration.phone_number_id,
+                    previous_external_account_id != integration.external_account_id,
+                    previous_access_token != integration.access_token,
+                    previous_app_secret != integration.app_secret,
+                    previous_verify_token_hash != integration.verify_token_hash,
+                )
+            )
+            openai_changed = previous_model_name != model_name
+            if is_new or credentials_changed or openai_changed:
+                self._reset_integration_diagnostics(
+                    integration,
+                    reset_webhook=is_new or credentials_changed,
+                    reset_provider=is_new or credentials_changed,
+                    reset_openai=is_new or credentials_changed or openai_changed,
+                )
             integration.status = (
                 "active"
-                if integration.phone_number_id and integration.access_token and integration.verify_token_hash
+                if integration.phone_number_id and integration.access_token and integration.verify_token_hash and integration.app_secret
                 else "inactive"
             )
 
@@ -243,11 +327,113 @@ class SalesAgentService(CommerceBaseService):
                 "setup_verify_token": setup_verify_token,
             }
 
+    def run_channel_diagnostics(self, user: AuthenticatedUser, channel_id: str) -> dict[str, Any]:
+        with self._session_factory() as session:
+            integration, profile = self._channel_for_owner_or_admin(session, user, channel_id)
+            result = self._run_whatsapp_diagnostics(
+                session,
+                integration=integration,
+                client_id=integration.client_id,
+                external_account_id=integration.external_account_id,
+                phone_number_id=integration.phone_number_id,
+                verify_token_set=bool(integration.verify_token_hash),
+                access_token=integration.access_token,
+                app_secret=integration.app_secret,
+                model_name=str(self._integration_base_config(integration).get("model_name", profile.model_name if profile else settings.openai_model)),
+                default_location_id=str(integration.default_location_id) if integration.default_location_id else None,
+                auto_send_enabled=integration.auto_send_enabled,
+                persist=True,
+            )
+            session.commit()
+            return {
+                "channel": self._integration_payload(integration, profile),
+                "diagnostics": result["diagnostics"],
+                "provider_details": result["provider_details"],
+            }
+
+    def send_channel_smoke(self, user: AuthenticatedUser, channel_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        with self._session_factory() as session:
+            integration, _profile = self._channel_for_owner_or_admin(session, user, channel_id)
+            recipient = normalize_phone(str(payload.get("recipient", "")).strip()) or str(payload.get("recipient", "")).strip()
+            self._require(bool(recipient), message="Recipient phone is required", code="RECIPIENT_REQUIRED")
+            text = str(payload.get("text", "")).strip() or "EasyEcom smoke test. Reply path is working."
+            diagnostics_time = now_utc()
+            provider_details: dict[str, Any] = {"recipient": recipient}
+            try:
+                send_result = self._send_whatsapp_text(integration, recipient, text)
+            except Exception as exc:
+                provider_status_code = None
+                provider_response_excerpt = None
+                if isinstance(exc, ApiException):
+                    provider_status_code = exc.details.get("provider_status_code") if exc.details else None
+                    provider_response_excerpt = exc.details.get("provider_response_excerpt") if exc.details else None
+                diagnostics = self._update_integration_diagnostics(
+                    integration,
+                    outbound_send_ok=False,
+                    last_error_code=self._diagnostic_code(exc),
+                    last_error_message=str(exc.message if isinstance(exc, ApiException) else exc),
+                    last_provider_status_code=provider_status_code,
+                    last_provider_response_excerpt=self._bounded_text(provider_response_excerpt),
+                    last_diagnostic_at=diagnostics_time.isoformat(),
+                )
+                self._log_audit(
+                    session,
+                    client_id=integration.client_id,
+                    actor_user_id=self._canonical_actor_user_id(session, user, integration.client_id),
+                    entity_type="channel_integration",
+                    entity_id=integration.channel_id,
+                    action="channel_smoke_send_failed",
+                    metadata_json={"recipient": recipient, "error_code": diagnostics.get("last_error_code")},
+                )
+                session.commit()
+                return {
+                    "ok": False,
+                    "provider_event_id": None,
+                    "message": diagnostics.get("last_error_message") or "Smoke send failed",
+                    "diagnostics": self._integration_diagnostics_payload(integration),
+                    "provider_details": provider_details,
+                }
+
+            diagnostics = self._update_integration_diagnostics(
+                integration,
+                outbound_send_ok=True,
+                last_error_code=None,
+                last_error_message=None,
+                last_provider_status_code=200,
+                last_provider_response_excerpt=None,
+                last_diagnostic_at=diagnostics_time.isoformat(),
+            )
+            self._log_audit(
+                session,
+                client_id=integration.client_id,
+                actor_user_id=self._canonical_actor_user_id(session, user, integration.client_id),
+                entity_type="channel_integration",
+                entity_id=integration.channel_id,
+                action="channel_smoke_sent",
+                metadata_json={"recipient": recipient, "provider_event_id": str(send_result.get("provider_event_id", ""))},
+            )
+            session.commit()
+            return {
+                "ok": True,
+                "provider_event_id": str(send_result.get("provider_event_id", "")) or None,
+                "message": "Smoke message accepted by WhatsApp.",
+                "diagnostics": self._integration_diagnostics_payload(integration),
+                "provider_details": provider_details,
+            }
+
     def verify_whatsapp_webhook(self, webhook_key: str, *, mode: str, verify_token: str, challenge: str) -> str:
         with self._session_factory() as session:
             integration = self._integration_by_webhook_key(session, webhook_key)
             if mode != "subscribe" or hash_token(verify_token.strip()) != integration.verify_token_hash:
                 raise ApiException(status_code=403, code="WHATSAPP_VERIFY_FAILED", message="Webhook verification failed")
+            self._update_integration_diagnostics(
+                integration,
+                webhook_verified_at=now_utc().isoformat(),
+                last_error_code=None,
+                last_error_message=None,
+                last_diagnostic_at=now_utc().isoformat(),
+            )
+            session.commit()
             return challenge
 
     def handle_whatsapp_webhook(
@@ -260,9 +446,37 @@ class SalesAgentService(CommerceBaseService):
     ) -> dict[str, Any]:
         with self._session_factory() as session:
             integration = self._integration_by_webhook_key(session, webhook_key)
-            self._verify_signature(integration, raw_body, signature)
+            webhook_seen_at = now_utc().isoformat()
+            self._update_integration_diagnostics(
+                integration,
+                last_webhook_post_at=webhook_seen_at,
+                last_diagnostic_at=webhook_seen_at,
+            )
+            try:
+                self._verify_signature(integration, raw_body, signature)
+            except ApiException as exc:
+                self._update_integration_diagnostics(
+                    integration,
+                    signature_validation_ok=False,
+                    last_error_code=self._diagnostic_code(exc),
+                    last_error_message=exc.message,
+                    last_provider_status_code=None,
+                    last_provider_response_excerpt=None,
+                    last_diagnostic_at=now_utc().isoformat(),
+                )
+                session.commit()
+                raise
+
+            self._update_integration_diagnostics(
+                integration,
+                signature_validation_ok=True,
+                last_error_code=None,
+                last_error_message=None,
+                last_diagnostic_at=now_utc().isoformat(),
+            )
             processed_messages = 0
             updated_statuses = 0
+            failed_messages = 0
 
             for change in self._iter_whatsapp_changes(payload):
                 value = change.get("value") or {}
@@ -280,10 +494,24 @@ class SalesAgentService(CommerceBaseService):
                     ).scalar_one_or_none():
                         continue
                     processed_messages += 1
-                    self._process_inbound_payload(session, integration, value, inbound_payload)
+                    try:
+                        self._process_inbound_payload(session, integration, value, inbound_payload)
+                    except Exception as exc:
+                        failed_messages += 1
+                        self._update_integration_diagnostics(
+                            integration,
+                            last_error_code=self._diagnostic_code(exc),
+                            last_error_message=str(exc),
+                            last_diagnostic_at=now_utc().isoformat(),
+                        )
 
             session.commit()
-            return {"ok": True, "processed_messages": processed_messages, "updated_statuses": updated_statuses}
+            return {
+                "ok": True,
+                "processed_messages": processed_messages,
+                "updated_statuses": updated_statuses,
+                "failed_messages": failed_messages,
+            }
 
     def list_conversations(
         self,
@@ -572,9 +800,38 @@ class SalesAgentService(CommerceBaseService):
             self._handle_inbound_message(session, integration, conversation, inbound_message, customer)
             job.status = "completed"
         except Exception as exc:
+            error_code = self._diagnostic_code(exc)
+            error_message = exc.message if isinstance(exc, ApiException) else str(exc)
             job.status = "failed"
-            job.last_error = str(exc)
-            raise
+            job.last_error = f"{error_code}: {error_message}".strip()
+            conversation.status = "needs_review"
+            conversation.latest_intent = conversation.latest_intent or "manual_review"
+            hold_text = "Thanks for your message. A team member will review and reply shortly."
+            conversation.latest_summary = self._summarize_text(error_message or hold_text, limit=500)
+            if self._latest_draft(session, conversation.conversation_id) is None:
+                session.add(
+                    AiReviewDraftModel(
+                        draft_id=new_uuid(),
+                        client_id=integration.client_id,
+                        conversation_id=conversation.conversation_id,
+                        inbound_message_id=inbound_message.message_id,
+                        linked_sales_order_id=None,
+                        status="needs_review",
+                        ai_draft_text=hold_text,
+                        final_text=hold_text,
+                        intent="manual_review",
+                        confidence=Decimal("0.10"),
+                        grounding_json={"reason_codes": [error_code]},
+                        reason_codes_json=[error_code],
+                        failed_reason=error_message or hold_text,
+                    )
+                )
+            self._update_integration_diagnostics(
+                integration,
+                last_error_code=error_code,
+                last_error_message=error_message or hold_text,
+                last_diagnostic_at=now_utc().isoformat(),
+            )
         finally:
             job.finished_at = now_utc()
 
@@ -600,7 +857,14 @@ class SalesAgentService(CommerceBaseService):
         matches = self._match_variants(session, integration.client_id, location_id, inbound_message.message_text)
         upsell_options = self._upsell_candidates(session, integration.client_id, location_id, {row.variant_id for row in matches})
         fallback = self._fallback_decision(inbound_message.message_text, matches, upsell_options)
-        decision = self._openai_decision(conversation, inbound_message, matches, upsell_options, fallback)
+        decision = self._openai_decision(
+            conversation,
+            inbound_message,
+            matches,
+            upsell_options,
+            fallback,
+            model_name=str(self._integration_base_config(integration).get("model_name", settings.openai_model)),
+        )
 
         conversation.latest_intent = decision.intent
         conversation.latest_summary = self._summarize_text(decision.reply_text, limit=500)
@@ -676,6 +940,15 @@ class SalesAgentService(CommerceBaseService):
                 if "auto_send_failed" not in draft_reason_codes:
                     draft_reason_codes.append("auto_send_failed")
                 draft = create_review_draft(reason_codes=draft_reason_codes, failed_reason=exc.message)
+                self._update_integration_diagnostics(
+                    integration,
+                    outbound_send_ok=False,
+                    last_error_code=self._diagnostic_code(exc),
+                    last_error_message=exc.message,
+                    last_provider_status_code=exc.details.get("provider_status_code") if exc.details else None,
+                    last_provider_response_excerpt=exc.details.get("provider_response_excerpt") if exc.details else None,
+                    last_diagnostic_at=now_utc().isoformat(),
+                )
             else:
                 outbound_message = ChannelMessageModel(
                     message_id=new_uuid(),
@@ -701,6 +974,15 @@ class SalesAgentService(CommerceBaseService):
                 conversation.last_message_preview = outbound_message.content_summary
                 conversation.status = "open"
                 integration.last_outbound_at = outbound_message.occurred_at
+                self._update_integration_diagnostics(
+                    integration,
+                    outbound_send_ok=True,
+                    last_error_code=None,
+                    last_error_message=None,
+                    last_provider_status_code=200,
+                    last_provider_response_excerpt=None,
+                    last_diagnostic_at=now_utc().isoformat(),
+                )
                 for row in upsell_options[:2]:
                     session.add(
                         ChannelMessageProductMentionModel(
@@ -831,7 +1113,7 @@ class SalesAgentService(CommerceBaseService):
 
     def _verify_signature(self, integration: ChannelIntegrationModel, raw_body: bytes, signature: str | None) -> None:
         if not integration.app_secret.strip():
-            return
+            raise ApiException(status_code=401, code="INVALID_SIGNATURE", message="App secret is required for webhook signature validation")
         if not signature or not signature.startswith("sha256="):
             raise ApiException(status_code=401, code="INVALID_SIGNATURE", message="Missing webhook signature")
         expected = hmac.new(
@@ -1180,6 +1462,8 @@ class SalesAgentService(CommerceBaseService):
         matches: list[MatchedVariant],
         upsell_options: list[MatchedVariant],
         fallback: DecisionPayload,
+        *,
+        model_name: str,
     ) -> DecisionPayload:
         if not settings.openai_api_key or not matches:
             return fallback
@@ -1212,7 +1496,7 @@ class SalesAgentService(CommerceBaseService):
             "required": ["reply_text", "intent", "confidence", "needs_review", "reason_codes", "behavior_tags"],
         }
         request_payload = {
-            "model": settings.openai_model,
+            "model": model_name,
             "input": [
                 {
                     "role": "system",
@@ -1308,7 +1592,15 @@ class SalesAgentService(CommerceBaseService):
                 },
             )
         if response.status_code >= 400:
-            raise ApiException(status_code=502, code="WHATSAPP_SEND_FAILED", message=response.text or "WhatsApp send failed")
+            raise ApiException(
+                status_code=502,
+                code="WHATSAPP_SEND_FAILED",
+                message=response.text or "WhatsApp send failed",
+                details={
+                    "provider_status_code": response.status_code,
+                    "provider_response_excerpt": self._bounded_text(response.text, limit=400),
+                },
+            )
         body = response.json()
         message_id = ""
         messages = body.get("messages") or []
@@ -1318,6 +1610,227 @@ class SalesAgentService(CommerceBaseService):
             "provider": "whatsapp",
             "provider_event_id": message_id,
             "response": body,
+        }
+
+    def _probe_whatsapp_graph(
+        self,
+        *,
+        external_account_id: str,
+        phone_number_id: str,
+        access_token: str,
+    ) -> dict[str, Any]:
+        if not access_token or not phone_number_id:
+            return {
+                "ok": False,
+                "error_code": "graph_auth_failed",
+                "error_message": "WhatsApp access token and phone number ID are required.",
+                "provider_status_code": None,
+                "provider_response_excerpt": None,
+                "provider_details": {},
+            }
+        headers = {"Authorization": f"Bearer {access_token}"}
+        provider_details: dict[str, Any] = {}
+        with httpx.Client(timeout=settings.openai_timeout_seconds) as client:
+            response = client.get(
+                f"https://graph.facebook.com/{settings.whatsapp_graph_version}/{phone_number_id}",
+                headers=headers,
+                params={"fields": "id,display_phone_number,verified_name"},
+            )
+            if response.status_code >= 400:
+                return {
+                    "ok": False,
+                    "error_code": "graph_auth_failed",
+                    "error_message": response.text or "Unable to validate WhatsApp credentials.",
+                    "provider_status_code": response.status_code,
+                    "provider_response_excerpt": self._bounded_text(response.text, limit=400),
+                    "provider_details": provider_details,
+                }
+            phone_details = response.json()
+            provider_details.update(
+                {
+                    "display_phone_number": str(phone_details.get("display_phone_number", "")).strip(),
+                    "verified_name": str(phone_details.get("verified_name", "")).strip(),
+                    "resolved_phone_number_id": str(phone_details.get("id", "")).strip(),
+                }
+            )
+            if external_account_id:
+                account_response = client.get(
+                    f"https://graph.facebook.com/{settings.whatsapp_graph_version}/{external_account_id}/phone_numbers",
+                    headers=headers,
+                )
+                if account_response.status_code >= 400:
+                    return {
+                        "ok": False,
+                        "error_code": "graph_auth_failed",
+                        "error_message": account_response.text or "Unable to read WhatsApp business account phone numbers.",
+                        "provider_status_code": account_response.status_code,
+                        "provider_response_excerpt": self._bounded_text(account_response.text, limit=400),
+                        "provider_details": provider_details,
+                    }
+                phone_rows = account_response.json().get("data") or []
+                provider_details["business_phone_count"] = len(phone_rows)
+                if not any(str(item.get("id", "")).strip() == phone_number_id for item in phone_rows):
+                    return {
+                        "ok": False,
+                        "error_code": "graph_auth_failed",
+                        "error_message": "The phone number ID is not linked to the configured WhatsApp business account.",
+                        "provider_status_code": 400,
+                        "provider_response_excerpt": "Configured phone_number_id was not found in the WABA phone number list.",
+                        "provider_details": provider_details,
+                    }
+        return {
+            "ok": True,
+            "error_code": None,
+            "error_message": None,
+            "provider_status_code": 200,
+            "provider_response_excerpt": None,
+            "provider_details": provider_details,
+        }
+
+    def _probe_openai_model(self, *, model_name: str) -> dict[str, Any]:
+        if not settings.openai_api_key:
+            return {
+                "ok": False,
+                "error_code": "openai_not_configured",
+                "error_message": "OPENAI_API_KEY is not configured on the backend.",
+                "provider_status_code": None,
+                "provider_response_excerpt": None,
+            }
+        request_payload = {
+            "model": model_name,
+            "input": "Reply with OK only.",
+            "store": False,
+            "max_output_tokens": 8,
+        }
+        try:
+            with httpx.Client(timeout=settings.openai_timeout_seconds) as client:
+                response = client.post(
+                    f"{settings.openai_base_url}/responses",
+                    headers={
+                        "Authorization": f"Bearer {settings.openai_api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json=request_payload,
+                )
+        except Exception as exc:
+            return {
+                "ok": False,
+                "error_code": "openai_probe_failed",
+                "error_message": str(exc),
+                "provider_status_code": None,
+                "provider_response_excerpt": None,
+            }
+        if response.status_code >= 400:
+            return {
+                "ok": False,
+                "error_code": "openai_probe_failed",
+                "error_message": response.text or "OpenAI probe failed.",
+                "provider_status_code": response.status_code,
+                "provider_response_excerpt": self._bounded_text(response.text, limit=400),
+            }
+        return {
+            "ok": True,
+            "error_code": None,
+            "error_message": None,
+            "provider_status_code": 200,
+            "provider_response_excerpt": None,
+        }
+
+    def _run_whatsapp_diagnostics(
+        self,
+        session: Session,
+        *,
+        integration: ChannelIntegrationModel | None,
+        client_id: str,
+        external_account_id: str,
+        phone_number_id: str,
+        verify_token_set: bool,
+        access_token: str,
+        app_secret: str,
+        model_name: str,
+        default_location_id: str | None,
+        auto_send_enabled: bool,
+        persist: bool,
+    ) -> dict[str, Any]:
+        diagnostics_time = now_utc().isoformat()
+        provider_details: dict[str, Any] = {}
+        failures: list[dict[str, Any]] = []
+
+        if default_location_id:
+            location = session.execute(
+                select(LocationModel).where(
+                    LocationModel.client_id == client_id,
+                    LocationModel.location_id == default_location_id,
+                    LocationModel.status == "active",
+                )
+            ).scalar_one_or_none()
+            if location is None:
+                failures.append(
+                    {
+                        "error_code": "location_missing",
+                        "error_message": "The configured default location is missing or inactive.",
+                        "provider_status_code": None,
+                        "provider_response_excerpt": None,
+                    }
+                )
+        else:
+            try:
+                self._default_location_id(session, client_id)
+            except ApiException as exc:
+                failures.append(
+                    {
+                        "error_code": self._diagnostic_code(exc),
+                        "error_message": exc.message,
+                        "provider_status_code": None,
+                        "provider_response_excerpt": None,
+                    }
+                )
+
+        graph_probe = self._probe_whatsapp_graph(
+            external_account_id=external_account_id,
+            phone_number_id=phone_number_id,
+            access_token=access_token,
+        )
+        provider_details.update(graph_probe.get("provider_details", {}))
+        if not graph_probe["ok"]:
+            failures.append(graph_probe)
+
+        openai_probe = self._probe_openai_model(model_name=model_name)
+        if not openai_probe["ok"]:
+            failures.append(openai_probe)
+
+        primary_failure = failures[0] if failures else {}
+        diagnostics_payload = self._diagnostics_payload(
+            config_saved=bool(phone_number_id and verify_token_set and access_token and app_secret),
+            verify_token_set=verify_token_set,
+            webhook_verified_at=self._integration_diagnostics(integration).get("webhook_verified_at") if integration else None,
+            last_webhook_post_at=self._integration_diagnostics(integration).get("last_webhook_post_at") if integration else None,
+            signature_validation_ok=self._integration_diagnostics(integration).get("signature_validation_ok") if integration else None,
+            graph_auth_ok=graph_probe["ok"],
+            outbound_send_ok=self._integration_diagnostics(integration).get("outbound_send_ok") if integration else None,
+            openai_ready=bool(settings.openai_api_key),
+            openai_probe_ok=openai_probe["ok"],
+            last_error_code=primary_failure.get("error_code"),
+            last_error_message=primary_failure.get("error_message"),
+            last_provider_status_code=primary_failure.get("provider_status_code"),
+            last_provider_response_excerpt=primary_failure.get("provider_response_excerpt"),
+            last_diagnostic_at=diagnostics_time,
+            auto_send_enabled=auto_send_enabled,
+        )
+        if persist and integration is not None:
+            self._update_integration_diagnostics(
+                integration,
+                graph_auth_ok=graph_probe["ok"],
+                openai_probe_ok=openai_probe["ok"],
+                last_error_code=diagnostics_payload["last_error_code"],
+                last_error_message=diagnostics_payload["last_error_message"],
+                last_provider_status_code=diagnostics_payload["last_provider_status_code"],
+                last_provider_response_excerpt=diagnostics_payload["last_provider_response_excerpt"],
+                last_diagnostic_at=diagnostics_time,
+            )
+        return {
+            "diagnostics": diagnostics_payload,
+            "provider_details": provider_details,
         }
 
     def _default_location_id(self, session: Session, client_id: str) -> str:
@@ -1370,12 +1883,198 @@ class SalesAgentService(CommerceBaseService):
             ).scalars()
         ]
 
+    def _channel_for_owner_or_admin(
+        self,
+        session: Session,
+        user: AuthenticatedUser,
+        channel_id: str,
+    ) -> tuple[ChannelIntegrationModel, TenantAgentProfileModel | None]:
+        self._require_owner_or_admin(user)
+        integration = session.execute(
+            select(ChannelIntegrationModel).where(ChannelIntegrationModel.channel_id == channel_id)
+        ).scalar_one_or_none()
+        self._require(integration is not None, message="Channel not found", code="CHANNEL_NOT_FOUND", status_code=404)
+        if "SUPER_ADMIN" not in user.roles and integration.client_id != user.client_id:
+            raise ApiException(status_code=403, code="ACCESS_DENIED", message="Cross-tenant access is not allowed")
+        return integration, self._profile_for_client(session, integration.client_id)
+
+    def _integration_base_config(self, integration: ChannelIntegrationModel) -> dict[str, Any]:
+        config = dict(integration.config_json or {})
+        config.pop("diagnostics", None)
+        return config
+
+    def _integration_diagnostics(self, integration: ChannelIntegrationModel) -> dict[str, Any]:
+        config = dict(integration.config_json or {})
+        diagnostics = config.get("diagnostics") if isinstance(config.get("diagnostics"), dict) else {}
+        return dict(diagnostics or {})
+
+    def _set_integration_config(
+        self,
+        integration: ChannelIntegrationModel,
+        *,
+        model_name: str | None = None,
+        persona_prompt: str | None = None,
+        diagnostics: dict[str, Any] | None = None,
+    ) -> None:
+        config = self._integration_base_config(integration)
+        if model_name is not None:
+            config["model_name"] = model_name
+        if persona_prompt is not None:
+            config["persona_prompt"] = persona_prompt
+        if diagnostics is None:
+            diagnostics = self._integration_diagnostics(integration)
+        config["diagnostics"] = diagnostics
+        integration.config_json = config
+
+    def _reset_integration_diagnostics(
+        self,
+        integration: ChannelIntegrationModel,
+        *,
+        reset_webhook: bool = False,
+        reset_provider: bool = False,
+        reset_openai: bool = False,
+    ) -> None:
+        diagnostics = self._integration_diagnostics(integration)
+        if reset_webhook:
+            diagnostics["webhook_verified_at"] = None
+            diagnostics["last_webhook_post_at"] = None
+            diagnostics["signature_validation_ok"] = None
+        if reset_provider:
+            diagnostics["graph_auth_ok"] = None
+            diagnostics["outbound_send_ok"] = None
+            diagnostics["last_provider_status_code"] = None
+            diagnostics["last_provider_response_excerpt"] = None
+        if reset_openai:
+            diagnostics["openai_probe_ok"] = None
+        diagnostics["last_error_code"] = None
+        diagnostics["last_error_message"] = None
+        diagnostics["last_diagnostic_at"] = None
+        self._set_integration_config(integration, diagnostics=diagnostics)
+
+    def _update_integration_diagnostics(self, integration: ChannelIntegrationModel, **updates: Any) -> dict[str, Any]:
+        diagnostics = self._integration_diagnostics(integration)
+        for key, value in updates.items():
+            diagnostics[key] = value
+        self._set_integration_config(integration, diagnostics=diagnostics)
+        return diagnostics
+
+    def _diagnostic_timestamp(self, value: Any) -> str | None:
+        if hasattr(value, "isoformat"):
+            return value.isoformat()
+        raw = str(value or "").strip()
+        return raw or None
+
+    def _bounded_text(self, text: Any, *, limit: int = 280) -> str | None:
+        compact = " ".join(str(text or "").split())
+        if not compact:
+            return None
+        if len(compact) <= limit:
+            return compact
+        return compact[: limit - 1].rstrip() + "…"
+
+    def _diagnostic_code(self, exc: Exception) -> str:
+        if isinstance(exc, ApiException):
+            mapping = {
+                "INVALID_SIGNATURE": "invalid_signature",
+                "WHATSAPP_SEND_FAILED": "whatsapp_send_failed",
+                "CHANNEL_NOT_READY": "graph_auth_failed",
+                "LOCATION_REQUIRED": "location_missing",
+                "CONVERSATION_NOT_FOUND": "conversation_not_found",
+            }
+            return mapping.get(exc.code, exc.code.lower())
+        return "unexpected_error"
+
+    def _integration_diagnostics_payload(self, integration: ChannelIntegrationModel) -> dict[str, Any]:
+        diagnostics = self._integration_diagnostics(integration)
+        return self._diagnostics_payload(
+            config_saved=bool(
+                integration.phone_number_id
+                and integration.verify_token_hash
+                and integration.access_token
+                and integration.app_secret
+            ),
+            verify_token_set=bool(integration.verify_token_hash),
+            webhook_verified_at=diagnostics.get("webhook_verified_at"),
+            last_webhook_post_at=diagnostics.get("last_webhook_post_at"),
+            signature_validation_ok=diagnostics.get("signature_validation_ok"),
+            graph_auth_ok=diagnostics.get("graph_auth_ok"),
+            outbound_send_ok=diagnostics.get("outbound_send_ok"),
+            openai_ready=bool(settings.openai_api_key),
+            openai_probe_ok=diagnostics.get("openai_probe_ok"),
+            last_error_code=diagnostics.get("last_error_code"),
+            last_error_message=diagnostics.get("last_error_message"),
+            last_provider_status_code=diagnostics.get("last_provider_status_code"),
+            last_provider_response_excerpt=diagnostics.get("last_provider_response_excerpt"),
+            last_diagnostic_at=diagnostics.get("last_diagnostic_at"),
+            auto_send_enabled=integration.auto_send_enabled,
+        )
+
+    def _diagnostics_payload(
+        self,
+        *,
+        config_saved: bool,
+        verify_token_set: bool,
+        webhook_verified_at: Any,
+        last_webhook_post_at: Any,
+        signature_validation_ok: bool | None,
+        graph_auth_ok: bool | None,
+        outbound_send_ok: bool | None,
+        openai_ready: bool,
+        openai_probe_ok: bool | None,
+        last_error_code: Any,
+        last_error_message: Any,
+        last_provider_status_code: Any,
+        last_provider_response_excerpt: Any,
+        last_diagnostic_at: Any,
+        auto_send_enabled: bool,
+    ) -> dict[str, Any]:
+        payload = {
+            "config_saved": config_saved,
+            "verify_token_set": verify_token_set,
+            "webhook_verified_at": self._diagnostic_timestamp(webhook_verified_at),
+            "last_webhook_post_at": self._diagnostic_timestamp(last_webhook_post_at),
+            "signature_validation_ok": signature_validation_ok,
+            "graph_auth_ok": graph_auth_ok,
+            "outbound_send_ok": outbound_send_ok,
+            "openai_ready": openai_ready,
+            "openai_probe_ok": openai_probe_ok,
+            "last_error_code": str(last_error_code or "").strip() or None,
+            "last_error_message": str(last_error_message or "").strip() or None,
+            "last_provider_status_code": last_provider_status_code,
+            "last_provider_response_excerpt": self._bounded_text(last_provider_response_excerpt),
+            "last_diagnostic_at": self._diagnostic_timestamp(last_diagnostic_at),
+        }
+        payload["next_action"] = self._integration_next_action(payload, auto_send_enabled=auto_send_enabled)
+        return payload
+
+    def _integration_next_action(self, payload: dict[str, Any], *, auto_send_enabled: bool) -> str:
+        if not payload.get("config_saved"):
+            return "Save the WhatsApp phone number ID, verify token, access token, and app secret for this tenant."
+        if not payload.get("webhook_verified_at"):
+            return "Verify the callback URL in Meta with the exact verify token saved for this tenant."
+        if payload.get("signature_validation_ok") is False:
+            return "Re-save the exact Meta app secret for this app, then send a new WhatsApp test message."
+        if not payload.get("last_webhook_post_at"):
+            return "Subscribe the Meta app to the messages webhook field, then send a new WhatsApp test message."
+        if payload.get("graph_auth_ok") is False:
+            return "Run diagnostics and correct the Meta access token, phone number ID, or business account mapping."
+        if payload.get("outbound_send_ok") is False:
+            return "Run a smoke send and review the saved provider error before enabling live customer traffic."
+        if not payload.get("openai_ready"):
+            return "Set OPENAI_API_KEY on the backend environment and restart the API service."
+        if payload.get("openai_probe_ok") is False:
+            return "Fix the backend OpenAI key or model configuration, then rerun diagnostics."
+        if not auto_send_enabled:
+            return "Turn on guarded auto-send after diagnostics are passing."
+        return "Channel is ready. Send a WhatsApp test message and confirm the conversation appears in Sales Agent."
+
     def _integration_payload(
         self,
         integration: ChannelIntegrationModel,
         profile: TenantAgentProfileModel | None,
     ) -> dict[str, Any]:
-        config = dict(integration.config_json or {})
+        config = self._integration_base_config(integration)
+        diagnostics = self._integration_diagnostics_payload(integration)
         return {
             "channel_id": str(integration.channel_id),
             "provider": integration.provider,
@@ -1388,17 +2087,17 @@ class SalesAgentService(CommerceBaseService):
             "verify_token_set": bool(integration.verify_token_hash),
             "inbound_secret_set": bool(integration.app_secret),
             "access_token_set": bool(integration.access_token),
-            "openai_ready": bool(settings.openai_api_key),
             "default_location_id": str(integration.default_location_id) if integration.default_location_id else None,
             "auto_send_enabled": integration.auto_send_enabled,
             "agent_enabled": profile.is_enabled if profile else False,
             "model_name": str(config.get("model_name", profile.model_name if profile else settings.openai_model)),
             "persona_prompt": str(config.get("persona_prompt", profile.persona_prompt if profile else "")),
-            "config": config,
+            "config": {key: value for key, value in config.items() if isinstance(value, str)},
             "created_at": integration.created_at.isoformat(),
             "updated_at": integration.updated_at.isoformat(),
             "last_inbound_at": integration.last_inbound_at.isoformat() if integration.last_inbound_at else None,
             "last_outbound_at": integration.last_outbound_at.isoformat() if integration.last_outbound_at else None,
+            **diagnostics,
         }
 
     def _conversation_summary_payload(
