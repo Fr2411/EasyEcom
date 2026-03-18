@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import json
 import re
+import uuid
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
@@ -161,6 +162,7 @@ class SalesAgentService(CommerceBaseService):
         setup_verify_token = str(payload.get("verify_token") or "").strip() or new_token(18)
         with self._session_factory() as session:
             self._ensure_client_exists(session, client_id)
+            actor_user_id = self._canonical_actor_user_id(session, user, client_id)
             integration = session.execute(
                 select(ChannelIntegrationModel).where(
                     ChannelIntegrationModel.client_id == client_id,
@@ -173,7 +175,7 @@ class SalesAgentService(CommerceBaseService):
                     client_id=client_id,
                     provider="whatsapp",
                     webhook_key=new_token(24),
-                    created_by_user_id=user.user_id,
+                    created_by_user_id=actor_user_id,
                 )
                 session.add(integration)
 
@@ -190,7 +192,7 @@ class SalesAgentService(CommerceBaseService):
             app_secret = payload.get("app_secret")
             if app_secret is not None:
                 integration.app_secret = str(app_secret).strip()
-            default_location_id = str(payload.get("default_location_id", "")).strip()
+            default_location_id = self._clean_uuid(payload.get("default_location_id"))
             integration.default_location_id = default_location_id or None
             integration.auto_send_enabled = bool(payload.get("auto_send_enabled"))
             integration.config_json = {
@@ -224,7 +226,7 @@ class SalesAgentService(CommerceBaseService):
             self._log_audit(
                 session,
                 client_id=client_id,
-                actor_user_id=user.user_id,
+                actor_user_id=actor_user_id,
                 entity_type="channel_integration",
                 entity_id=integration.channel_id,
                 action="channel_integration_saved",
@@ -772,12 +774,14 @@ class SalesAgentService(CommerceBaseService):
         return integration
 
     def _target_client_id(self, user: AuthenticatedUser, target_client_id: str | None) -> str:
-        candidate = str(target_client_id or "").strip()
+        candidate = self._clean_uuid(target_client_id)
         if candidate:
             if "SUPER_ADMIN" not in user.roles and candidate != user.client_id:
                 raise ApiException(status_code=403, code="ACCESS_DENIED", message="Cross-tenant access is not allowed")
             return candidate
-        return user.client_id
+        resolved = self._clean_uuid(user.client_id)
+        self._require(bool(resolved), message="Session client is invalid. Please log in again.", code="INVALID_SESSION", status_code=401)
+        return resolved
 
     def _ensure_client_exists(self, session: Session, client_id: str) -> None:
         record = session.execute(
@@ -1464,6 +1468,31 @@ class SalesAgentService(CommerceBaseService):
 
     def _agent_user_id(self, session: Session, client_id: str) -> str:
         return self._ensure_agent_user(session, client_id).user_id
+
+    def _canonical_actor_user_id(self, session: Session, user: AuthenticatedUser, client_id: str) -> str | None:
+        direct_user_id = self._clean_uuid(user.user_id)
+        if direct_user_id:
+            return direct_user_id
+        email = user.email.lower().strip()
+        if not email:
+            return None
+        record = session.execute(
+            select(UserModel.user_id).where(
+                UserModel.email == email,
+                UserModel.client_id == client_id,
+            )
+        ).scalar_one_or_none()
+        resolved = self._clean_uuid(record)
+        return resolved or None
+
+    def _clean_uuid(self, value: object) -> str:
+        raw = str(value or "").strip()
+        if not raw:
+            return ""
+        try:
+            return str(uuid.UUID(raw))
+        except (ValueError, TypeError, AttributeError):
+            return ""
 
     def _ensure_agent_user(self, session: Session, client_id: str) -> AuthenticatedUser:
         email = f"sales-agent+{client_id.split('-')[0]}@easy-ecom.local"

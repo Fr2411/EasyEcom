@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from easy_ecom.api.dependencies import build_session_token
 from easy_ecom.api import dependencies as deps
 from easy_ecom.api.main import create_app
 from easy_ecom.core.ids import new_uuid
@@ -26,6 +27,7 @@ from easy_ecom.data.store.postgres_models import (
     TenantAgentProfileModel,
 )
 from easy_ecom.domain.services.sales_agent_service import SalesAgentService
+from easy_ecom.domain.models.auth import AuthenticatedUser
 from easy_ecom.tests.support.sqlite_runtime import build_sqlite_runtime, seed_auth_user
 
 
@@ -258,6 +260,43 @@ def test_whatsapp_integration_can_be_saved_and_listed(monkeypatch, tmp_path: Pat
     assert channel["access_token_set"] is True
     assert channel["inbound_secret_set"] is True
     assert saved["setup_verify_token"] == "verify-me"
+
+
+def test_whatsapp_integration_save_recovers_from_stale_session_user_id(monkeypatch, tmp_path: Path) -> None:
+    _setup_runtime(tmp_path, monkeypatch)
+    client = TestClient(create_app())
+    stale_user = AuthenticatedUser(
+        user_id="legacy-user-id",
+        client_id=CLIENT_ID,
+        name="Owner",
+        email="owner@example.com",
+        business_name="EasyEcom Test",
+        roles=["CLIENT_OWNER"],
+        allowed_pages=["Dashboard", "Sales Agent", "Settings"],
+    )
+    client.cookies.set("easy_ecom_session", build_session_token(stale_user))
+
+    response = client.put(
+        "/integrations/channels/whatsapp/meta",
+        json={
+            "display_name": "WhatsApp Sales Agent",
+            "external_account_id": "waba-1",
+            "phone_number_id": "phone-1",
+            "phone_number": "+971551234567",
+            "verify_token": "verify-me",
+            "access_token": "meta-token",
+            "app_secret": "meta-secret",
+            "default_location_id": LOCATION_ID,
+            "auto_send_enabled": False,
+            "agent_enabled": True,
+            "model_name": "gpt-5-mini",
+            "persona_prompt": "Sell honestly and stay grounded in stock and price truth.",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["channel"]["provider"] == "whatsapp"
 
     listed = client.get("/integrations/channels")
     assert listed.status_code == 200
