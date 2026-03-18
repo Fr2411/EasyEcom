@@ -5,6 +5,7 @@ import { FormEvent, useEffect, useState, useTransition } from 'react';
 import { useAuth } from '@/components/auth/auth-provider';
 import { WorkspaceNotice, WorkspacePanel } from '@/components/commerce/workspace-primitives';
 import { ApiNetworkError } from '@/lib/api/client';
+import { getPublicEnv } from '@/lib/env';
 import { listAdminClients } from '@/lib/api/admin';
 import { getChannelIntegrations, getChannelLocations, saveWhatsAppMetaIntegration } from '@/lib/api/integrations';
 import { formatDateTime } from '@/lib/commerce-format';
@@ -31,6 +32,7 @@ const EMPTY_FORM: WhatsAppMetaIntegrationPayload = {
 export function IntegrationsWorkspace() {
   const { user } = useAuth();
   const isSuperAdmin = user?.roles?.includes('SUPER_ADMIN') ?? false;
+  const { apiBaseUrl } = getPublicEnv();
   const [integrations, setIntegrations] = useState<ChannelIntegration[]>([]);
   const [locations, setLocations] = useState<ChannelLocation[]>([]);
   const [clients, setClients] = useState<AdminClient[]>([]);
@@ -138,6 +140,7 @@ export function IntegrationsWorkspace() {
   const current = integrations[0] ?? null;
   const selectedClient = clients.find((item) => item.client_id === selectedClientId) ?? null;
   const tenantSelectionRequired = isSuperAdmin && !selectedClientId;
+  const webhookUrl = current?.webhook_key ? `${apiBaseUrl}/public/webhooks/whatsapp/${current.webhook_key}` : '';
 
   return (
     <div className="workspace-stack sales-agent-stack">
@@ -338,6 +341,48 @@ export function IntegrationsWorkspace() {
             <h4>No tenant channel configured yet</h4>
             <p>Save the Meta WhatsApp details above to activate the Sales Agent pipeline for this tenant.</p>
           </div>
+        )}
+
+        {current ? (
+          <div className="workspace-stack">
+            <div className="sales-agent-form-grid">
+              <label className="sales-agent-form-wide">
+                <span>Webhook callback URL</span>
+                <input value={webhookUrl} readOnly />
+                <small className="workspace-field-note">
+                  Use this exact callback URL in Meta webhook configuration for the WhatsApp app.
+                </small>
+              </label>
+              <label>
+                <span>Webhook key</span>
+                <input value={current.webhook_key ?? ''} readOnly />
+              </label>
+            </div>
+
+            {!current.last_inbound_at ? (
+              <WorkspaceNotice tone="error">
+                No inbound WhatsApp webhooks have reached EasyEcom yet. Until Meta is pointed to the callback URL above,
+                customer messages sent to the test number will never enter the Sales Agent pipeline.
+              </WorkspaceNotice>
+            ) : null}
+
+            {!current.auto_send_enabled ? (
+              <WorkspaceNotice tone="error">
+                Guarded auto-send is off. Inbound messages will create review drafts in Sales Agent, but the customer
+                will not receive an automatic reply.
+              </WorkspaceNotice>
+            ) : null}
+
+            {!current.openai_ready ? (
+              <WorkspaceNotice tone="error">
+                The backend does not have <code>OPENAI_API_KEY</code> configured right now. The workflow can still store
+                inbound conversations, but it will not use OpenAI for sales-agent responses until that env var is set on
+                the API server.
+              </WorkspaceNotice>
+            ) : null}
+          </div>
+        ) : (
+          null
         )}
       </WorkspacePanel>
     </div>
