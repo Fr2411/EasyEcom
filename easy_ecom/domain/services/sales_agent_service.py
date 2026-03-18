@@ -1700,7 +1700,7 @@ class SalesAgentService(CommerceBaseService):
             "model": model_name,
             "input": "Reply with OK only.",
             "store": False,
-            "max_output_tokens": 8,
+            "max_output_tokens": 16,
         }
         try:
             with httpx.Client(timeout=settings.openai_timeout_seconds) as client:
