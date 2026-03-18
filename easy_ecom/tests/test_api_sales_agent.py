@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
+import json
 from decimal import Decimal
 from pathlib import Path
 
@@ -181,8 +184,8 @@ def _upsert_integration(client: TestClient, **overrides: object) -> dict[str, ob
         "phone_number_id": "phone-1",
         "phone_number": "+971551234567",
         "verify_token": "verify-me",
-        "access_token": "",
-        "app_secret": "",
+        "access_token": "meta-token",
+        "app_secret": "meta-secret",
         "default_location_id": LOCATION_ID,
         "auto_send_enabled": False,
         "agent_enabled": True,
@@ -241,6 +244,19 @@ def _webhook_key(runtime) -> str:
         return str(integration.webhook_key)
 
 
+def _signed_webhook_request(client: TestClient, webhook_key: str, payload: dict[str, object], *, app_secret: str = "meta-secret"):
+    raw_body = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    signature = hmac.new(app_secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
+    return client.post(
+        f"/public/webhooks/whatsapp/{webhook_key}",
+        content=raw_body,
+        headers={
+            "content-type": "application/json",
+            "X-Hub-Signature-256": f"sha256={signature}",
+        },
+    )
+
+
 def test_whatsapp_integration_can_be_saved_and_listed(monkeypatch, tmp_path: Path) -> None:
     runtime = _setup_runtime(tmp_path, monkeypatch)
     client = _login_client()
@@ -261,10 +277,41 @@ def test_whatsapp_integration_can_be_saved_and_listed(monkeypatch, tmp_path: Pat
     assert channel["access_token_set"] is True
     assert channel["inbound_secret_set"] is True
     assert saved["setup_verify_token"] == "verify-me"
+    assert channel["config_saved"] is True
+    assert channel["next_action"] == "Verify the callback URL in Meta with the exact verify token saved for this tenant."
+
+
+def test_blank_secret_fields_preserve_existing_channel_credentials(monkeypatch, tmp_path: Path) -> None:
+    runtime = _setup_runtime(tmp_path, monkeypatch)
+    client = _login_client()
+
+    _upsert_integration(client, verify_token="stable-verify", access_token="meta-token-1", app_secret="meta-secret-1")
+
+    second_save = _upsert_integration(
+        client,
+        display_name="WhatsApp Sales Agent Updated",
+        verify_token="",
+        access_token="",
+        app_secret="",
+    )
+    assert second_save["setup_verify_token"] is None
+    assert second_save["channel"]["status"] == "active"
+    assert second_save["channel"]["verify_token_set"] is True
+    assert second_save["channel"]["access_token_set"] is True
+    assert second_save["channel"]["inbound_secret_set"] is True
+
+    with runtime.session_factory() as session:
+        integration = session.execute(
+            select(ChannelIntegrationModel).where(ChannelIntegrationModel.client_id == CLIENT_ID)
+        ).scalar_one()
+        assert integration.verify_token_hash == hash_token("stable-verify")
+        assert integration.access_token == "meta-token-1"
+        assert integration.app_secret == "meta-secret-1"
+        assert integration.display_name == "WhatsApp Sales Agent Updated"
 
 
 def test_whatsapp_integration_save_recovers_from_stale_session_user_id(monkeypatch, tmp_path: Path) -> None:
-    _setup_runtime(tmp_path, monkeypatch)
+    runtime = _setup_runtime(tmp_path, monkeypatch)
     client = TestClient(create_app())
     stale_user = AuthenticatedUser(
         user_id="legacy-user-id",
@@ -340,7 +387,7 @@ def test_super_admin_can_configure_tenant_integrations_by_client(monkeypatch, tm
             "phone_number": "+971500000001",
             "verify_token": "tenant-verify",
             "access_token": "tenant-token",
-            "app_secret": "",
+            "app_secret": "tenant-secret",
             "default_location_id": LOCATION_ID,
             "auto_send_enabled": False,
             "agent_enabled": True,
@@ -356,12 +403,150 @@ def test_super_admin_can_configure_tenant_integrations_by_client(monkeypatch, tm
     assert listed.json()["items"][0]["display_name"] == "Tenant WhatsApp"
 
 
+def test_validate_run_diagnostics_and_send_smoke_surface_provider_state(monkeypatch, tmp_path: Path) -> None:
+    runtime = _setup_runtime(tmp_path, monkeypatch)
+    client = _login_client()
+
+    monkeypatch.setattr(
+        SalesAgentService,
+        "_probe_whatsapp_graph",
+        lambda self, **kwargs: {
+            "ok": True,
+            "error_code": None,
+            "error_message": None,
+            "provider_status_code": 200,
+            "provider_response_excerpt": None,
+            "provider_details": {
+                "display_phone_number": "+971551234567",
+                "verified_name": "Test Number",
+            },
+        },
+    )
+    monkeypatch.setattr(
+        SalesAgentService,
+        "_probe_openai_model",
+        lambda self, **kwargs: {
+            "ok": False,
+            "error_code": "openai_not_configured",
+            "error_message": "OPENAI_API_KEY is not configured on the backend.",
+            "provider_status_code": None,
+            "provider_response_excerpt": None,
+        },
+    )
+    monkeypatch.setattr(
+        SalesAgentService,
+        "_send_whatsapp_text",
+        lambda self, integration, recipient, text: {
+            "provider": "whatsapp",
+            "provider_event_id": "wamid-smoke-1",
+            "response": {"messages": [{"id": "wamid-smoke-1"}]},
+        },
+    )
+
+    validate_response = client.post(
+        "/integrations/channels/whatsapp/meta/validate",
+        json={
+            "display_name": "WhatsApp Sales Agent",
+            "external_account_id": "waba-1",
+            "phone_number_id": "phone-1",
+            "phone_number": "+971551234567",
+            "verify_token": "verify-diagnostics",
+            "access_token": "meta-token",
+            "app_secret": "meta-secret",
+            "default_location_id": LOCATION_ID,
+            "auto_send_enabled": False,
+            "agent_enabled": True,
+            "model_name": "gpt-5-mini",
+            "persona_prompt": "Sell honestly and stay grounded in stock and price truth.",
+        },
+    )
+    assert validate_response.status_code == 200
+    validate_payload = validate_response.json()
+    assert validate_payload["diagnostics"]["config_saved"] is True
+    assert validate_payload["diagnostics"]["graph_auth_ok"] is True
+    assert validate_payload["diagnostics"]["openai_probe_ok"] is False
+    assert validate_payload["provider_details"]["verified_name"] == "Test Number"
+
+    saved = _upsert_integration(client, verify_token="verify-diagnostics")
+    channel_id = saved["channel"]["channel_id"]
+
+    validate_existing_response = client.post(
+        "/integrations/channels/whatsapp/meta/validate",
+        json={
+            "display_name": "WhatsApp Sales Agent",
+            "external_account_id": "waba-1",
+            "phone_number_id": "phone-1",
+            "phone_number": "+971551234567",
+            "verify_token": "",
+            "access_token": "",
+            "app_secret": "",
+            "default_location_id": LOCATION_ID,
+            "auto_send_enabled": False,
+            "agent_enabled": True,
+            "model_name": "gpt-5-mini",
+            "persona_prompt": "Sell honestly and stay grounded in stock and price truth.",
+        },
+    )
+    assert validate_existing_response.status_code == 200
+    assert validate_existing_response.json()["diagnostics"]["config_saved"] is True
+
+    diagnostics_response = client.post(f"/integrations/channels/{channel_id}/run-diagnostics", json={})
+    assert diagnostics_response.status_code == 200
+    diagnostics_payload = diagnostics_response.json()
+    assert diagnostics_payload["diagnostics"]["graph_auth_ok"] is True
+    assert diagnostics_payload["diagnostics"]["last_error_code"] == "openai_not_configured"
+    assert diagnostics_payload["channel"]["next_action"] == "Verify the callback URL in Meta with the exact verify token saved for this tenant."
+
+    smoke_response = client.post(
+        f"/integrations/channels/{channel_id}/send-smoke",
+        json={"recipient": "+971500000001", "text": "Smoke test"},
+    )
+    assert smoke_response.status_code == 200
+    smoke_payload = smoke_response.json()
+    assert smoke_payload["ok"] is True
+    assert smoke_payload["provider_event_id"] == "wamid-smoke-1"
+    assert smoke_payload["diagnostics"]["outbound_send_ok"] is True
+
+    with runtime.session_factory() as session:
+        integration = session.execute(
+            select(ChannelIntegrationModel).where(ChannelIntegrationModel.channel_id == channel_id)
+        ).scalar_one()
+        diagnostics = (integration.config_json or {}).get("diagnostics") or {}
+        assert diagnostics["graph_auth_ok"] is True
+        assert diagnostics["outbound_send_ok"] is True
+
+
+def test_invalid_webhook_signature_is_rejected_and_recorded(monkeypatch, tmp_path: Path) -> None:
+    runtime = _setup_runtime(tmp_path, monkeypatch)
+    client = _login_client()
+
+    _upsert_integration(client, verify_token="verify-signature", app_secret="meta-secret")
+    webhook_key = _webhook_key(runtime)
+
+    bad_response = client.post(
+        f"/public/webhooks/whatsapp/{webhook_key}",
+        content=json.dumps(_webhook_payload("wamid-bad-signature-1", "hello")).encode("utf-8"),
+        headers={
+            "content-type": "application/json",
+            "X-Hub-Signature-256": "sha256=bad-signature",
+        },
+    )
+    assert bad_response.status_code == 401
+
+    integrations_response = client.get("/integrations/channels")
+    assert integrations_response.status_code == 200
+    channel = integrations_response.json()["items"][0]
+    assert channel["signature_validation_ok"] is False
+    assert channel["last_error_code"] == "invalid_signature"
+    assert channel["last_webhook_post_at"] is not None
+
+
 def test_public_webhook_verification_is_idempotent_and_persists_conversation(monkeypatch, tmp_path: Path) -> None:
     runtime = _setup_runtime(tmp_path, monkeypatch)
     _seed_variant(runtime)
     client = _login_client()
 
-    _upsert_integration(client, verify_token="verify-price")
+    _upsert_integration(client, verify_token="verify-price", app_secret="meta-secret")
     webhook_key = _webhook_key(runtime)
 
     verify_response = client.get(
@@ -374,10 +559,13 @@ def test_public_webhook_verification_is_idempotent_and_persists_conversation(mon
     )
     assert verify_response.status_code == 200
     assert verify_response.text == "challenge-123"
+    listed_after_verify = client.get("/integrations/channels")
+    assert listed_after_verify.status_code == 200
+    assert listed_after_verify.json()["items"][0]["webhook_verified_at"] is not None
 
     payload = _webhook_payload("wamid-price-1", "What is the price for Trail Runner 42 Black today?")
-    first_response = client.post(f"/public/webhooks/whatsapp/{webhook_key}", json=payload)
-    second_response = client.post(f"/public/webhooks/whatsapp/{webhook_key}", json=payload)
+    first_response = _signed_webhook_request(client, webhook_key, payload)
+    second_response = _signed_webhook_request(client, webhook_key, payload)
     assert first_response.status_code == 200
     assert first_response.json()["processed_messages"] == 1
     assert second_response.status_code == 200
@@ -420,6 +608,12 @@ def test_public_webhook_verification_is_idempotent_and_persists_conversation(mon
         assert "sales_agent_message_received" in audit_actions
         assert "sales_agent_draft_created" in audit_actions
 
+    integrations_response = client.get("/integrations/channels")
+    assert integrations_response.status_code == 200
+    channel = integrations_response.json()["items"][0]
+    assert channel["last_webhook_post_at"] is not None
+    assert channel["signature_validation_ok"] is True
+
 
 def test_greeting_message_auto_sends_without_openai_or_product_match(monkeypatch, tmp_path: Path) -> None:
     runtime = _setup_runtime(tmp_path, monkeypatch)
@@ -439,14 +633,12 @@ def test_greeting_message_auto_sends_without_openai_or_product_match(monkeypatch
         client,
         verify_token="verify-greeting",
         access_token="meta-token",
+        app_secret="meta-secret",
         auto_send_enabled=True,
     )
     webhook_key = _webhook_key(runtime)
 
-    inbound_response = client.post(
-        f"/public/webhooks/whatsapp/{webhook_key}",
-        json=_webhook_payload("wamid-greeting-inbound-1", "hello"),
-    )
+    inbound_response = _signed_webhook_request(client, webhook_key, _webhook_payload("wamid-greeting-inbound-1", "hello"))
     assert inbound_response.status_code == 200
     assert inbound_response.json()["processed_messages"] == 1
 
@@ -483,14 +675,12 @@ def test_inbound_message_is_saved_when_auto_send_fails(monkeypatch, tmp_path: Pa
         client,
         verify_token="verify-send-fail",
         access_token="meta-token",
+        app_secret="meta-secret",
         auto_send_enabled=True,
     )
     webhook_key = _webhook_key(runtime)
 
-    inbound_response = client.post(
-        f"/public/webhooks/whatsapp/{webhook_key}",
-        json=_webhook_payload("wamid-greeting-inbound-2", "hello"),
-    )
+    inbound_response = _signed_webhook_request(client, webhook_key, _webhook_payload("wamid-greeting-inbound-2", "hello"))
     assert inbound_response.status_code == 200
     assert inbound_response.json()["processed_messages"] == 1
 
@@ -527,10 +717,7 @@ def test_sales_agent_review_and_order_confirmation_flow(monkeypatch, tmp_path: P
     _upsert_integration(client, verify_token="verify-order", access_token="meta-token")
     webhook_key = _webhook_key(runtime)
 
-    inbound_response = client.post(
-        f"/public/webhooks/whatsapp/{webhook_key}",
-        json=_webhook_payload("wamid-order-1", "I want 2 Trail Runner 42 Black"),
-    )
+    inbound_response = _signed_webhook_request(client, webhook_key, _webhook_payload("wamid-order-1", "I want 2 Trail Runner 42 Black"))
     assert inbound_response.status_code == 200
     assert inbound_response.json()["processed_messages"] == 1
 

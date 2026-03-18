@@ -46,4 +46,8 @@ echo "[remote] Service status"
 sudo systemctl status "$SERVICE_NAME" --no-pager
 
 echo "[remote] Deployment completed successfully"
+echo "[remote] Next checks:"
+echo "[remote]   1. Run scripts/auth_deploy_smoke.sh against the backend."
+echo "[remote]   2. If a WhatsApp channel is configured, run channel diagnostics with SESSION_COOKIE and CHANNEL_ID."
+echo "[remote]   3. Confirm frontend changes separately in Amplify before treating the UI as updated."
 REMOTE

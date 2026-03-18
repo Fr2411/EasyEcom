@@ -1,7 +1,11 @@
 import { apiClient } from '@/lib/api/client';
 import type {
+  ChannelDiagnosticsEnvelope,
   ChannelIntegration,
   ChannelLocation,
+  ChannelRunDiagnosticsResult,
+  ChannelSmokePayload,
+  ChannelSmokeResult,
   WhatsAppMetaIntegrationPayload,
   WhatsAppMetaIntegrationResult,
 } from '@/types/integrations';
@@ -29,6 +33,30 @@ export async function getChannelLocations(clientId?: string) {
 export async function saveWhatsAppMetaIntegration(payload: WhatsAppMetaIntegrationPayload, clientId?: string) {
   return apiClient<WhatsAppMetaIntegrationResult>(`/integrations/channels/whatsapp/meta${buildQuery(clientId)}`, {
     method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+
+export async function validateWhatsAppMetaIntegration(payload: WhatsAppMetaIntegrationPayload, clientId?: string) {
+  return apiClient<ChannelDiagnosticsEnvelope>(`/integrations/channels/whatsapp/meta/validate${buildQuery(clientId)}`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+
+export async function runChannelDiagnostics(channelId: string) {
+  return apiClient<ChannelRunDiagnosticsResult>(`/integrations/channels/${channelId}/run-diagnostics`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
+
+
+export async function sendChannelSmoke(channelId: string, payload: ChannelSmokePayload) {
+  return apiClient<ChannelSmokeResult>(`/integrations/channels/${channelId}/send-smoke`, {
+    method: 'POST',
     body: JSON.stringify(payload),
   });
 }

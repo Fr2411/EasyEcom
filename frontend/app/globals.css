@@ -1255,6 +1255,10 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
   gap: 0.75rem;
 }
 
+.integration-actions {
+  justify-content: flex-start;
+}
+
 .sales-agent-checkbox {
   align-content: center;
   grid-template-columns: auto 1fr;
@@ -1295,6 +1299,112 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
 .sales-agent-stat-card p {
   margin: 0;
   color: var(--text-muted);
+}
+
+.integration-step-grid {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.integration-step {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: #fff;
+  padding: 0.95rem;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.integration-step span {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.integration-step strong {
+  font-size: 1rem;
+}
+
+.integration-step p {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.integration-step-pass {
+  border-color: #b6dec3;
+  background: #f3fcf5;
+}
+
+.integration-step-fail {
+  border-color: #f0c3c3;
+  background: #fff5f5;
+}
+
+.integration-step-pending {
+  border-color: #e9d38e;
+  background: #fffbf1;
+}
+
+.integration-detail-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: #fff;
+  padding: 0.95rem;
+  display: grid;
+  gap: 0.8rem;
+}
+
+.integration-detail-card p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.integration-detail-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: baseline;
+}
+
+.integration-detail-head span {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.integration-detail-error {
+  color: var(--danger);
+}
+
+.integration-detail-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  margin: 0;
+}
+
+.integration-detail-grid div {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.integration-detail-grid-wide {
+  grid-column: 1 / -1;
+}
+
+.integration-detail-grid dt {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.integration-detail-grid dd {
+  margin: 0;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .sales-agent-table-wrap {
@@ -1544,6 +1654,8 @@ button.secondary:hover,
   .workspace-two-column { grid-template-columns: 1fr; }
 
   .sales-agent-form-grid,
+  .integration-step-grid,
+  .integration-detail-grid,
   .sales-agent-expanded { grid-template-columns: 1fr; }
 
   .section-card-wide,

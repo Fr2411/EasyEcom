@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Any
 from decimal import Decimal
 
 from pydantic import BaseModel, Field, field_validator
@@ -12,6 +13,7 @@ class ChannelIntegrationResponse(BaseModel):
     provider: str
     display_name: str
     status: str
+    config_saved: bool
     webhook_key: str
     external_account_id: str
     phone_number_id: str
@@ -19,7 +21,19 @@ class ChannelIntegrationResponse(BaseModel):
     verify_token_set: bool
     inbound_secret_set: bool
     access_token_set: bool
+    webhook_verified_at: str | None
+    last_webhook_post_at: str | None
+    signature_validation_ok: bool | None
+    graph_auth_ok: bool | None
+    outbound_send_ok: bool | None
     openai_ready: bool
+    openai_probe_ok: bool | None
+    last_error_code: str | None
+    last_error_message: str | None
+    last_provider_status_code: int | None
+    last_provider_response_excerpt: str | None
+    last_diagnostic_at: str | None
+    next_action: str
     default_location_id: str | None
     auto_send_enabled: bool
     agent_enabled: bool
@@ -58,6 +72,48 @@ class WhatsAppMetaIntegrationRequest(BaseModel):
 class WhatsAppMetaIntegrationResponse(BaseModel):
     channel: ChannelIntegrationResponse
     setup_verify_token: str | None = None
+
+
+class ChannelDiagnosticsResponse(BaseModel):
+    config_saved: bool
+    verify_token_set: bool
+    webhook_verified_at: str | None
+    last_webhook_post_at: str | None
+    signature_validation_ok: bool | None
+    graph_auth_ok: bool | None
+    outbound_send_ok: bool | None
+    openai_ready: bool
+    openai_probe_ok: bool | None
+    last_error_code: str | None
+    last_error_message: str | None
+    last_provider_status_code: int | None
+    last_provider_response_excerpt: str | None
+    last_diagnostic_at: str | None
+    next_action: str
+
+
+class ChannelDiagnosticsEnvelopeResponse(BaseModel):
+    diagnostics: ChannelDiagnosticsResponse
+    provider_details: dict[str, Any]
+
+
+class ChannelRunDiagnosticsResponse(BaseModel):
+    channel: ChannelIntegrationResponse
+    diagnostics: ChannelDiagnosticsResponse
+    provider_details: dict[str, Any]
+
+
+class ChannelSmokeRequest(BaseModel):
+    recipient: str = Field(min_length=5, max_length=64)
+    text: str = Field(default="EasyEcom smoke test. Reply path is working.", max_length=1000)
+
+
+class ChannelSmokeResponse(BaseModel):
+    ok: bool
+    provider_event_id: str | None
+    message: str
+    diagnostics: ChannelDiagnosticsResponse
+    provider_details: dict[str, Any]
 
 
 class SalesAgentMentionResponse(BaseModel):
