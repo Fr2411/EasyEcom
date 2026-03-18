@@ -658,7 +658,7 @@ def test_greeting_message_auto_sends_without_openai_or_product_match(monkeypatch
     conversation = conversations_response.json()["items"][0]
     assert conversation["status"] == "open"
     assert conversation["latest_draft_id"] is None
-    assert conversation["last_message_preview"].lower().startswith("hello")
+    assert conversation["last_message_preview"].lower().startswith("hi.")
 
     detail_response = client.get(f"/sales-agent/conversations/{conversation['conversation_id']}")
     assert detail_response.status_code == 200
@@ -668,6 +668,86 @@ def test_greeting_message_auto_sends_without_openai_or_product_match(monkeypatch
     assert detail["messages"][1]["direction"] == "outbound"
     assert "live stock" in detail["messages"][1]["message_text"].lower()
     assert detail["latest_draft"] is None
+
+
+def test_duplicate_inbound_webhook_only_sends_one_auto_reply(monkeypatch, tmp_path: Path) -> None:
+    runtime = _setup_runtime(tmp_path, monkeypatch)
+    client = _login_client()
+    outbound_texts: list[str] = []
+
+    def _fake_send(self, integration, recipient, text):  # type: ignore[no-untyped-def]
+        del self, integration, recipient
+        outbound_texts.append(text)
+        return {
+            "provider": "whatsapp",
+            "provider_event_id": f"wamid-greeting-dedup-{len(outbound_texts)}",
+            "response": {"messages": [{"id": f"wamid-greeting-dedup-{len(outbound_texts)}"}]},
+        }
+
+    monkeypatch.setattr(SalesAgentService, "_send_whatsapp_text", _fake_send)
+
+    _upsert_integration(
+        client,
+        verify_token="verify-greeting-dedup",
+        access_token="meta-token",
+        app_secret="meta-secret",
+        auto_send_enabled=True,
+    )
+    webhook_key = _webhook_key(runtime)
+    payload = _webhook_payload("wamid-greeting-dedup-in-1", "hello")
+
+    first_response = _signed_webhook_request(client, webhook_key, payload)
+    second_response = _signed_webhook_request(client, webhook_key, payload)
+    assert first_response.status_code == 200
+    assert first_response.json()["processed_messages"] == 1
+    assert second_response.status_code == 200
+    assert second_response.json()["processed_messages"] == 0
+    assert outbound_texts == ["Hi. Tell me the product name, size, or color you want and I’ll check the live stock and price for you."]
+
+    conversation = client.get("/sales-agent/conversations").json()["items"][0]
+    detail = client.get(f"/sales-agent/conversations/{conversation['conversation_id']}").json()
+    assert len(detail["messages"]) == 2
+    assert [item["direction"] for item in detail["messages"]] == ["inbound", "outbound"]
+
+
+def test_follow_up_greeting_uses_shorter_non_repetitive_reply(monkeypatch, tmp_path: Path) -> None:
+    runtime = _setup_runtime(tmp_path, monkeypatch)
+    client = _login_client()
+    outbound_texts: list[str] = []
+
+    def _fake_send(self, integration, recipient, text):  # type: ignore[no-untyped-def]
+        del self, integration, recipient
+        outbound_texts.append(text)
+        return {
+            "provider": "whatsapp",
+            "provider_event_id": f"wamid-greeting-followup-{len(outbound_texts)}",
+            "response": {"messages": [{"id": f"wamid-greeting-followup-{len(outbound_texts)}"}]},
+        }
+
+    monkeypatch.setattr(SalesAgentService, "_send_whatsapp_text", _fake_send)
+
+    _upsert_integration(
+        client,
+        verify_token="verify-greeting-followup",
+        access_token="meta-token",
+        app_secret="meta-secret",
+        auto_send_enabled=True,
+    )
+    webhook_key = _webhook_key(runtime)
+
+    first_response = _signed_webhook_request(client, webhook_key, _webhook_payload("wamid-greeting-followup-in-1", "hi"))
+    second_response = _signed_webhook_request(client, webhook_key, _webhook_payload("wamid-greeting-followup-in-2", "hello"))
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+    assert first_response.json()["processed_messages"] == 1
+    assert second_response.json()["processed_messages"] == 1
+    assert outbound_texts[0].startswith("Hi.")
+    assert outbound_texts[1].startswith("Send the product name")
+    assert outbound_texts[0] != outbound_texts[1]
+
+    conversation = client.get("/sales-agent/conversations").json()["items"][0]
+    detail = client.get(f"/sales-agent/conversations/{conversation['conversation_id']}").json()
+    assert len(detail["messages"]) == 4
 
 
 def test_exact_variant_query_stays_deterministic_and_persists_offer_trace(monkeypatch, tmp_path: Path) -> None:

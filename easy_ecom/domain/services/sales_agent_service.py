@@ -11,6 +11,7 @@ from typing import Any
 
 import httpx
 from sqlalchemy import Select, func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from easy_ecom.core.config import settings
@@ -866,16 +867,26 @@ class SalesAgentService(CommerceBaseService):
                     if str(inbound_payload.get("type", "")).strip() != "text":
                         continue
                     provider_event_id = str(inbound_payload.get("id", "")).strip()
-                    if provider_event_id and session.execute(
-                        select(ChannelMessageModel).where(
-                            ChannelMessageModel.client_id == integration.client_id,
-                            ChannelMessageModel.provider_event_id == provider_event_id,
-                        )
-                    ).scalar_one_or_none():
-                        continue
-                    processed_messages += 1
                     try:
-                        self._process_inbound_payload(session, integration, value, inbound_payload)
+                        with session.begin_nested():
+                            if provider_event_id and session.execute(
+                                select(ChannelMessageModel).where(
+                                    ChannelMessageModel.client_id == integration.client_id,
+                                    ChannelMessageModel.provider_event_id == provider_event_id,
+                                )
+                            ).scalar_one_or_none():
+                                continue
+                            self._process_inbound_payload(session, integration, value, inbound_payload)
+                    except IntegrityError as exc:
+                        if provider_event_id and self._is_duplicate_provider_event_error(exc):
+                            continue
+                        failed_messages += 1
+                        self._update_integration_diagnostics(
+                            integration,
+                            last_error_code="webhook_persistence_failed",
+                            last_error_message=str(exc),
+                            last_diagnostic_at=now_utc().isoformat(),
+                        )
                     except Exception as exc:
                         failed_messages += 1
                         self._update_integration_diagnostics(
@@ -884,6 +895,8 @@ class SalesAgentService(CommerceBaseService):
                             last_error_message=str(exc),
                             last_diagnostic_at=now_utc().isoformat(),
                         )
+                    else:
+                        processed_messages += 1
 
             session.commit()
             return {
@@ -1156,6 +1169,7 @@ class SalesAgentService(CommerceBaseService):
             outbound_status="received",
         )
         session.add(inbound_message)
+        session.flush()
         conversation.last_message_at = occurred_at
         conversation.last_message_preview = inbound_message.content_summary
         conversation.status = "open"
@@ -1512,6 +1526,22 @@ class SalesAgentService(CommerceBaseService):
         if next_status in {"sent", "delivered", "read"}:
             message.outbound_status = next_status
         return 1
+
+    def _is_duplicate_provider_event_error(self, exc: IntegrityError) -> bool:
+        message = str(getattr(exc, "orig", exc)).lower()
+        return (
+            "uq_channel_messages_client_provider_event" in message
+            or (
+                "duplicate key value violates unique constraint" in message
+                and "provider_event" in message
+                and "channel_messages" in message
+            )
+            or (
+                "unique constraint failed" in message
+                and "channel_messages.client_id" in message
+                and "channel_messages.provider_event_id" in message
+            )
+        )
 
     def _iter_whatsapp_changes(self, payload: dict[str, Any]) -> list[dict[str, Any]]:
         entries = payload.get("entry") or []
@@ -2024,10 +2054,7 @@ class SalesAgentService(CommerceBaseService):
         if facts_pack.intent == "greeting" and lead is None:
             return SalesReplyDecision(
                 intent=facts_pack.intent,
-                reply_text=(
-                    "Hello. I can check live stock, price, and the exact size or color for you. "
-                    "Send the product name, size, or color you want and I’ll narrow it down."
-                ),
+                reply_text=self._greeting_reply_text(facts_pack.conversation_memory),
                 reply_mode="tier0_deterministic",
                 confidence=Decimal("0.96"),
                 selected_variant_id=None,
@@ -2063,10 +2090,10 @@ class SalesAgentService(CommerceBaseService):
 
         if facts_pack.next_required_action == "ask_clarifier":
             if lead is None:
-                reply = "I can help with that. Send the product name, size, or color you want and I’ll check the exact variant for you."
+                reply = "Send the product name, size, or color you want and I’ll check the exact variant for you."
             else:
                 options = facts_pack.clarifier_options or tuple(item.label for item in facts_pack.primary_matches[:2])
-                reply = f"I found a couple of close matches: {', '.join(options[:2])}. Which one should I quote or reserve for you?"
+                reply = f"I found two close matches: {', '.join(options[:2])}. Which one should I check for you?"
             return SalesReplyDecision(
                 intent=facts_pack.intent,
                 reply_text=reply,
@@ -2086,7 +2113,7 @@ class SalesAgentService(CommerceBaseService):
         if lead is None or selected_price is None:
             return SalesReplyDecision(
                 intent=facts_pack.intent,
-                reply_text="I can help with that. Tell me the product name, size, or color and I’ll check the best available option.",
+                reply_text="Tell me the product name, size, or color you want and I’ll check the best available option.",
                 reply_mode="tier0_deterministic",
                 confidence=Decimal("0.40"),
                 selected_variant_id=None,
@@ -2154,12 +2181,12 @@ class SalesAgentService(CommerceBaseService):
                 sales_model_used=False,
             )
 
-        reply = f"{lead.label} is available right now at {selected_price:.2f} each with {lead.available_to_sell:.0f} ready to ship."
+        reply = f"Yes, {lead.label} is available. Price is {selected_price:.2f} and I have {lead.available_to_sell:.0f} ready right now."
         if facts_pack.offer_policy.discount_requested and facts_pack.offer_policy.selected_offer_id != "list_price":
             reply = f"{lead.label} is available. The best instant price I can do is {selected_price:.2f} each, and I have {lead.available_to_sell:.0f} ready right now."
         if facts_pack.upsell_candidates and facts_pack.intent in {"catalog", "purchase"}:
             upsell = facts_pack.upsell_candidates[0]
-            reply = f"{reply} If you want a second option, {upsell.label} is also available at {upsell.unit_price:.2f}."
+            reply = f"{reply} If you want another option, {upsell.label} is also available at {upsell.unit_price:.2f}."
         return SalesReplyDecision(
             intent=facts_pack.intent,
             reply_text=reply,
@@ -2183,15 +2210,21 @@ class SalesAgentService(CommerceBaseService):
             return False
         if fallback.needs_review and facts_pack.next_required_action == "review":
             return False
-        if facts_pack.next_required_action == "ask_clarifier" and not facts_pack.helper_used:
+        if facts_pack.next_required_action == "ask_clarifier":
             return False
         if facts_pack.offer_policy.discount_requested:
             return True
         if facts_pack.next_required_action == "create_draft_order":
             return True
-        if facts_pack.helper_used:
+        if facts_pack.intent == "purchase" and facts_pack.upsell_candidates and len(facts_pack.primary_matches) == 1:
             return True
-        return bool(facts_pack.upsell_candidates and len(facts_pack.primary_matches) == 1)
+        if (
+            {"comparison_shopper", "upsell_receptive"}.intersection(facts_pack.behavior_tags)
+            and facts_pack.upsell_candidates
+            and len(facts_pack.primary_matches) == 1
+        ):
+            return True
+        return False
 
     def _sales_reply_with_model(
         self,
@@ -2238,7 +2271,7 @@ class SalesAgentService(CommerceBaseService):
                 "Choose only from the provided variant ids and offer ids. Push to close honestly."
             ),
             payload=payload,
-            max_output_tokens=220,
+            max_output_tokens=160,
         )
         if parsed is None:
             return fallback
@@ -2330,6 +2363,11 @@ class SalesAgentService(CommerceBaseService):
             "provider_event_id": message_id,
             "response": body,
         }
+
+    def _greeting_reply_text(self, memory: ConversationMemorySnapshot) -> str:
+        if any(turn.speaker == "sales_agent" for turn in memory.recent_turns):
+            return "Send the product name, size, or color you want and I’ll check the live stock and price for you."
+        return "Hi. Tell me the product name, size, or color you want and I’ll check the live stock and price for you."
 
     def _probe_whatsapp_graph(
         self,
