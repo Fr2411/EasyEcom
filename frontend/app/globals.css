@@ -1541,6 +1541,52 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
   color: var(--text-muted);
 }
 
+.sales-agent-trace {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.sales-agent-trace-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.sales-agent-trace-pills span {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid #dbe8e5;
+  background: #f7fbfb;
+  padding: 0.28rem 0.55rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.sales-agent-trace-block {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.sales-agent-trace-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.sales-agent-trace-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.sales-agent-trace-list small {
+  color: var(--text-muted);
+  text-align: right;
+}
+
 .sales-agent-order-lines {
   list-style: none;
   margin: 0;

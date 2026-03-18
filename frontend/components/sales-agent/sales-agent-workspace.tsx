@@ -20,6 +20,22 @@ import type { SalesOrder } from '@/types/sales';
 import type { SalesAgentConversationDetail, SalesAgentConversationRow, SalesAgentDraft } from '@/types/sales-agent';
 
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+function asRecordArray(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value) ? value.filter((item) => item && typeof item === 'object') as Record<string, unknown>[] : [];
+}
+
+function asStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.map((item) => `${item}`.trim()).filter(Boolean) : [];
+}
+
+function asString(value: unknown) {
+  return `${value ?? ''}`.trim();
+}
+
 export function SalesAgentWorkspace() {
   const [integrations, setIntegrations] = useState<ChannelIntegration[]>([]);
   const [conversations, setConversations] = useState<SalesAgentConversationRow[]>([]);
@@ -192,6 +208,16 @@ export function SalesAgentWorkspace() {
                   const conversationDetail = isExpanded ? detail : null;
                   const draft = conversationDetail?.latest_draft ?? null;
                   const linkedOrder = conversationDetail?.linked_order ?? conversation.linked_order;
+                  const trace = draft ? asRecord(asRecord(draft.grounding).trace) : asRecord(conversationDetail?.latest_trace);
+                  const traceRuntime = asRecord(trace.runtime);
+                  const traceFacts = asRecord(trace.facts_pack);
+                  const traceDecision = asRecord(trace.decision);
+                  const traceOfferPolicy = asRecord(traceFacts.offer_policy);
+                  const tracePrimaryMatches = asRecordArray(traceFacts.primary_matches);
+                  const traceAlternatives = asRecordArray(traceFacts.alternatives);
+                  const traceUpsells = asRecordArray(traceFacts.upsell_candidates);
+                  const traceOfferSteps = asRecordArray(traceOfferPolicy.auto_discount_steps);
+                  const traceReasonCodes = asStringArray(traceDecision.reason_codes ?? traceFacts.reason_codes);
                   return (
                     <Fragment key={conversation.conversation_id}>
                       <tr>
@@ -279,6 +305,85 @@ export function SalesAgentWorkspace() {
                                     </>
                                   ) : (
                                     <p className="admin-muted">No review draft is waiting on this conversation.</p>
+                                  )}
+                                </section>
+
+                                <section className="sales-agent-side-card">
+                                  <h4>Warehouse trace</h4>
+                                  {Object.keys(trace).length ? (
+                                    <div className="sales-agent-trace">
+                                      <div className="sales-agent-trace-pills">
+                                        <span>Tier: {asString(traceRuntime.tier) || 'n/a'}</span>
+                                        <span>Next action: {asString(traceRuntime.next_required_action) || 'n/a'}</span>
+                                        <span>Helper: {traceRuntime.helper_used ? 'yes' : 'no'}</span>
+                                        <span>Sales model: {traceRuntime.sales_model_used ? 'yes' : 'no'}</span>
+                                      </div>
+                                      {traceReasonCodes.length ? (
+                                        <p className="admin-muted">Reason codes: {traceReasonCodes.join(', ')}</p>
+                                      ) : null}
+                                      {tracePrimaryMatches.length ? (
+                                        <div className="sales-agent-trace-block">
+                                          <strong>Primary matches</strong>
+                                          <ul className="sales-agent-trace-list">
+                                            {tracePrimaryMatches.map((item) => (
+                                              <li key={asString(item.variant_id)}>
+                                                <span>{asString(item.label)}</span>
+                                                <small>
+                                                  ${formatMoney(asString(item.unit_price))} · {formatQuantity(asString(item.available_to_sell))} avail
+                                                </small>
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        </div>
+                                      ) : null}
+                                      {traceAlternatives.length ? (
+                                        <div className="sales-agent-trace-block">
+                                          <strong>Alternatives</strong>
+                                          <ul className="sales-agent-trace-list">
+                                            {traceAlternatives.map((item) => (
+                                              <li key={asString(item.variant_id)}>
+                                                <span>{asString(item.label)}</span>
+                                                <small>${formatMoney(asString(item.unit_price))}</small>
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        </div>
+                                      ) : null}
+                                      {traceUpsells.length ? (
+                                        <div className="sales-agent-trace-block">
+                                          <strong>Upsell candidates</strong>
+                                          <ul className="sales-agent-trace-list">
+                                            {traceUpsells.map((item) => (
+                                              <li key={asString(item.variant_id)}>
+                                                <span>{asString(item.label)}</span>
+                                                <small>${formatMoney(asString(item.unit_price))}</small>
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        </div>
+                                      ) : null}
+                                      {traceOfferSteps.length ? (
+                                        <div className="sales-agent-trace-block">
+                                          <strong>Offer ladder</strong>
+                                          <ul className="sales-agent-trace-list">
+                                            {traceOfferSteps.map((item) => (
+                                              <li key={asString(item.offer_id)}>
+                                                <span>
+                                                  {asString(item.label)}
+                                                  {asString(traceOfferPolicy.selected_offer_id) === asString(item.offer_id) ? ' · selected' : ''}
+                                                </span>
+                                                <small>
+                                                  ${formatMoney(asString(item.unit_price))}
+                                                  {asString(item.discount_percent) ? ` · ${asString(item.discount_percent)}% off` : ''}
+                                                </small>
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  ) : (
+                                    <p className="admin-muted">No warehouse trace has been captured for this conversation yet.</p>
                                   )}
                                 </section>
 

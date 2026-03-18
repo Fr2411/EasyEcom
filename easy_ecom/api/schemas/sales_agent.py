@@ -178,6 +178,7 @@ class SalesAgentConversationRowResponse(BaseModel):
     linked_draft_order_status: str
     latest_draft_id: str | None
     latest_draft_status: str | None
+    latest_trace: dict[str, object] = Field(default_factory=dict)
     linked_order: SalesOrderResponse | None
 
 

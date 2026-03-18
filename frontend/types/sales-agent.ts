@@ -62,6 +62,7 @@ export type SalesAgentConversationRow = {
   linked_draft_order_status: string;
   latest_draft_id: string | null;
   latest_draft_status: string | null;
+  latest_trace: Record<string, unknown>;
   linked_order: SalesOrder | null;
 };
 
