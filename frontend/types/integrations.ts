@@ -3,12 +3,14 @@ export type ChannelIntegration = {
   provider: 'whatsapp' | 'messenger' | 'webhook';
   display_name: string;
   status: 'inactive' | 'active' | 'disabled';
+  webhook_key?: string;
   external_account_id: string;
   phone_number_id: string;
   phone_number: string;
   verify_token_set: boolean;
   inbound_secret_set: boolean;
   access_token_set: boolean;
+  openai_ready?: boolean;
   default_location_id: string | null;
   auto_send_enabled: boolean;
   agent_enabled: boolean;

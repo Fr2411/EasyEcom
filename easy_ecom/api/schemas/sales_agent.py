@@ -12,12 +12,14 @@ class ChannelIntegrationResponse(BaseModel):
     provider: str
     display_name: str
     status: str
+    webhook_key: str
     external_account_id: str
     phone_number_id: str
     phone_number: str
     verify_token_set: bool
     inbound_secret_set: bool
     access_token_set: bool
+    openai_ready: bool
     default_location_id: str | None
     auto_send_enabled: bool
     agent_enabled: bool
