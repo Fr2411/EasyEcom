@@ -82,6 +82,58 @@ REVIEW_KEYWORDS = {
     "discount_request": ("discount", "less", "best price", "offer", "cheap", "deal"),
 }
 GREETING_KEYWORDS = ("hello", "hi", "hey", "good morning", "good afternoon", "good evening", "salam")
+MATCH_STOPWORDS = {
+    "a",
+    "an",
+    "and",
+    "any",
+    "anything",
+    "are",
+    "at",
+    "available",
+    "availability",
+    "be",
+    "best",
+    "cost",
+    "do",
+    "does",
+    "for",
+    "good",
+    "have",
+    "hello",
+    "hey",
+    "hi",
+    "how",
+    "i",
+    "in",
+    "is",
+    "it",
+    "me",
+    "morning",
+    "much",
+    "my",
+    "need",
+    "of",
+    "on",
+    "or",
+    "please",
+    "price",
+    "products",
+    "salam",
+    "show",
+    "stock",
+    "tell",
+    "the",
+    "to",
+    "today",
+    "want",
+    "what",
+    "which",
+    "with",
+    "you",
+    "your",
+}
+SIZE_MATCH_TOKENS = {"xs", "s", "m", "l", "xl", "xxl", "xxxl"}
 
 
 @dataclass(frozen=True)
@@ -855,8 +907,22 @@ class SalesAgentService(CommerceBaseService):
     ) -> None:
         location_id = integration.default_location_id or self._default_location_id(session, integration.client_id)
         matches = self._match_variants(session, integration.client_id, location_id, inbound_message.message_text)
-        upsell_options = self._upsell_candidates(session, integration.client_id, location_id, {row.variant_id for row in matches})
-        fallback = self._fallback_decision(inbound_message.message_text, matches, upsell_options)
+        if matches:
+            upsell_options = self._upsell_candidates(
+                session,
+                integration.client_id,
+                location_id,
+                {row.variant_id for row in matches},
+            )
+            fallback = self._fallback_decision(inbound_message.message_text, matches, upsell_options)
+        else:
+            greeting_fallback = self._fallback_decision(inbound_message.message_text, [], [])
+            if greeting_fallback.intent == "greeting":
+                upsell_options = []
+                fallback = greeting_fallback
+            else:
+                upsell_options = self._upsell_candidates(session, integration.client_id, location_id, set())
+                fallback = self._fallback_decision(inbound_message.message_text, [], upsell_options)
         decision = self._openai_decision(
             conversation,
             inbound_message,
@@ -1248,7 +1314,16 @@ class SalesAgentService(CommerceBaseService):
         text: str,
     ) -> list[MatchedVariant]:
         normalized = " ".join(text.strip().lower().split())
-        tokens = [token for token in re.split(r"[^a-z0-9]+", normalized) if len(token) >= 2][:6]
+        raw_tokens = [token for token in re.split(r"[^a-z0-9]+", normalized) if token]
+        tokens = [
+            token
+            for token in raw_tokens
+            if (
+                token.isdigit()
+                or token in SIZE_MATCH_TOKENS
+                or (len(token) >= 3 and token not in MATCH_STOPWORDS)
+            )
+        ][:6]
         if not tokens:
             return []
         token_filters = []
