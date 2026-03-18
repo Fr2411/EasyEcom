@@ -40,6 +40,7 @@ export function IntegrationsWorkspace() {
   const [draft, setDraft] = useState<WhatsAppMetaIntegrationPayload>(EMPTY_FORM);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
+  const [latestVerifyToken, setLatestVerifyToken] = useState('');
   const [isPending, startTransition] = useTransition();
 
   const applyCurrentChannel = (current: ChannelIntegration | undefined) => {
@@ -121,8 +122,10 @@ export function IntegrationsWorkspace() {
       }, selectedClientId || undefined);
       setIntegrations([response.channel]);
       if (response.setup_verify_token) {
+        setLatestVerifyToken(response.setup_verify_token);
         setNotice(`Integration saved. Verify token: ${response.setup_verify_token}`);
       } else {
+        setLatestVerifyToken('');
         setNotice('Integration saved.');
       }
       setDraft((existing) => ({ ...existing, verify_token: '' }));
@@ -226,6 +229,10 @@ export function IntegrationsWorkspace() {
                 onChange={(event) => setDraft({ ...draft, verify_token: event.target.value })}
                 placeholder="Leave blank to auto-generate"
               />
+              <small className="workspace-field-note">
+                Meta must receive the exact same verify token in its webhook form. If you leave this blank, EasyEcom
+                generates one during save and shows it after the save succeeds.
+              </small>
             </label>
             <label>
               <span>OpenAI model</span>
@@ -356,6 +363,18 @@ export function IntegrationsWorkspace() {
               <label>
                 <span>Webhook key</span>
                 <input value={current.webhook_key ?? ''} readOnly />
+              </label>
+              <label>
+                <span>Latest generated verify token</span>
+                <input
+                  value={latestVerifyToken}
+                  readOnly
+                  placeholder="Use a manual token before saving if you want a stable value here"
+                />
+                <small className="workspace-field-note">
+                  This is only available when EasyEcom auto-generated the token in this browser session. Meta's verify
+                  token field cannot be blank.
+                </small>
               </label>
             </div>
 
