@@ -4,7 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, JSON, Numeric, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, JSON, Numeric, String, Text, UniqueConstraint, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from easy_ecom.data.store.postgres_db import Base
@@ -422,6 +422,14 @@ class ChannelMessageModel(TenantMixin, Base):
     __table_args__ = (
         Index("ix_channel_messages_conversation", "client_id", "conversation_id", "occurred_at"),
         Index("ix_channel_messages_provider_event", "client_id", "provider_event_id"),
+        Index(
+            "uq_channel_messages_client_provider_event",
+            "client_id",
+            "provider_event_id",
+            unique=True,
+            sqlite_where=text("provider_event_id <> ''"),
+            postgresql_where=text("provider_event_id <> ''"),
+        ),
     )
 
     message_id: Mapped[str] = mapped_column(GUID(), primary_key=True)
