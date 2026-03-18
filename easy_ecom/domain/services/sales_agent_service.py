@@ -81,6 +81,7 @@ REVIEW_KEYWORDS = {
     "payment_issue": ("payment", "paid", "transfer", "receipt"),
     "discount_request": ("discount", "less", "best price", "offer", "cheap", "deal"),
 }
+GREETING_KEYWORDS = ("hello", "hi", "hey", "good morning", "good afternoon", "good evening", "salam")
 
 
 @dataclass(frozen=True)
@@ -1067,13 +1068,17 @@ class SalesAgentService(CommerceBaseService):
         upsell_options: list[MatchedVariant],
     ) -> DecisionPayload:
         lowered = text.strip().lower()
+        normalized = re.sub(r"\s+", " ", lowered)
         reason_codes = {name for name, keywords in REVIEW_KEYWORDS.items() if any(keyword in lowered for keyword in keywords)}
+        is_greeting = any(keyword in normalized for keyword in GREETING_KEYWORDS)
         if any(keyword in lowered for keyword in PURCHASE_KEYWORDS):
             intent = "purchase"
         elif any(keyword in lowered for keyword in PRICE_KEYWORDS):
             intent = "pricing"
         elif any(keyword in lowered for keyword in AVAILABILITY_KEYWORDS):
             intent = "availability"
+        elif is_greeting:
+            intent = "greeting"
         else:
             intent = "catalog"
         behavior_tags = {
@@ -1088,6 +1093,13 @@ class SalesAgentService(CommerceBaseService):
         order_line = None
         needs_review = bool(reason_codes)
         confidence = Decimal("0.70")
+
+        if not matches and is_greeting:
+            reply = (
+                "Hello. I can help with product recommendations, pricing, and live stock. "
+                "Tell me the product name, size, or color you want and I will check the best available option."
+            )
+            return DecisionPayload(intent, reply, Decimal("0.96"), False, (), cleaned_tags, None, ())
 
         if not matches:
             reply = "I can help with that. Tell me the product name, size, or color you want and I will check the best available option for you."

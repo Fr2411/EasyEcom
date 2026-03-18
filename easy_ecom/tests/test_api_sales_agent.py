@@ -420,6 +420,52 @@ def test_public_webhook_verification_is_idempotent_and_persists_conversation(mon
         assert "sales_agent_draft_created" in audit_actions
 
 
+def test_greeting_message_auto_sends_without_openai_or_product_match(monkeypatch, tmp_path: Path) -> None:
+    runtime = _setup_runtime(tmp_path, monkeypatch)
+    client = _login_client()
+
+    monkeypatch.setattr(
+        SalesAgentService,
+        "_send_whatsapp_text",
+        lambda self, integration, recipient, text: {
+            "provider": "whatsapp",
+            "provider_event_id": "wamid-greeting-1",
+            "response": {"messages": [{"id": "wamid-greeting-1"}]},
+        },
+    )
+
+    _upsert_integration(
+        client,
+        verify_token="verify-greeting",
+        access_token="meta-token",
+        auto_send_enabled=True,
+    )
+    webhook_key = _webhook_key(runtime)
+
+    inbound_response = client.post(
+        f"/public/webhooks/whatsapp/{webhook_key}",
+        json=_webhook_payload("wamid-greeting-inbound-1", "hello"),
+    )
+    assert inbound_response.status_code == 200
+    assert inbound_response.json()["processed_messages"] == 1
+
+    conversations_response = client.get("/sales-agent/conversations")
+    assert conversations_response.status_code == 200
+    conversation = conversations_response.json()["items"][0]
+    assert conversation["status"] == "open"
+    assert conversation["latest_draft_id"] is None
+    assert conversation["last_message_preview"].lower().startswith("hello")
+
+    detail_response = client.get(f"/sales-agent/conversations/{conversation['conversation_id']}")
+    assert detail_response.status_code == 200
+    detail = detail_response.json()
+    assert len(detail["messages"]) == 2
+    assert detail["messages"][0]["direction"] == "inbound"
+    assert detail["messages"][1]["direction"] == "outbound"
+    assert "product recommendations" in detail["messages"][1]["message_text"].lower()
+    assert detail["latest_draft"] is None
+
+
 def test_sales_agent_review_and_order_confirmation_flow(monkeypatch, tmp_path: Path) -> None:
     runtime = _setup_runtime(tmp_path, monkeypatch)
     _seed_variant(runtime, stock_qty=Decimal("10"))
