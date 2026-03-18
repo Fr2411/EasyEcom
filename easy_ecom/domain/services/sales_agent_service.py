@@ -636,9 +636,7 @@ class SalesAgentService(CommerceBaseService):
                 decision.order_line,
             )
 
-        needs_review = decision.needs_review or not integration.auto_send_enabled
-        draft = None
-        if needs_review:
+        def create_review_draft(*, reason_codes: list[str], failed_reason: str | None = None) -> AiReviewDraftModel:
             draft = AiReviewDraftModel(
                 draft_id=new_uuid(),
                 client_id=integration.client_id,
@@ -653,65 +651,80 @@ class SalesAgentService(CommerceBaseService):
                 grounding_json={
                     "matched_variants": [self._matched_variant_payload(item) for item in matches[:3]],
                     "upsell_variants": [self._matched_variant_payload(item) for item in upsell_options[:3]],
-                    "reason_codes": list(decision.reason_codes),
+                    "reason_codes": list(reason_codes),
+                    "send_failure": failed_reason or "",
                 },
-                reason_codes_json=list(decision.reason_codes),
+                reason_codes_json=list(reason_codes),
+                failed_reason=failed_reason,
             )
             session.add(draft)
             session.flush()
             if order is not None:
                 order.source_agent_draft_id = draft.draft_id
             conversation.status = "needs_review"
+            return draft
+
+        needs_review = decision.needs_review or not integration.auto_send_enabled
+        draft = None
+        if needs_review:
+            draft = create_review_draft(reason_codes=list(decision.reason_codes))
         else:
-            send_result = self._send_whatsapp_text(integration, conversation.external_sender_id, decision.reply_text)
-            outbound_message = ChannelMessageModel(
-                message_id=new_uuid(),
-                client_id=integration.client_id,
-                conversation_id=conversation.conversation_id,
-                channel_id=integration.channel_id,
-                direction="outbound",
-                external_sender_id=conversation.external_sender_id,
-                provider_event_id=str(send_result.get("provider_event_id", "")),
-                provider_status="accepted",
-                message_text=decision.reply_text,
-                content_summary=self._summarize_text(decision.reply_text),
-                raw_payload_json=send_result,
-                ai_metadata_json={
-                    "intent": decision.intent,
-                    "reason_codes": list(decision.reason_codes),
-                },
-                occurred_at=now_utc(),
-                outbound_status="sent",
-            )
-            session.add(outbound_message)
-            conversation.last_message_at = outbound_message.occurred_at
-            conversation.last_message_preview = outbound_message.content_summary
-            conversation.status = "open"
-            integration.last_outbound_at = outbound_message.occurred_at
-            for row in upsell_options[:2]:
-                session.add(
-                    ChannelMessageProductMentionModel(
-                        mention_id=new_uuid(),
-                        client_id=integration.client_id,
-                        message_id=outbound_message.message_id,
-                        conversation_id=conversation.conversation_id,
-                        product_id=row.product_id,
-                        variant_id=row.variant_id,
-                        mention_role="recommended",
-                        unit_price_amount=row.unit_price,
-                        min_price_amount=row.min_price,
-                        available_to_sell_snapshot=row.available_to_sell,
-                    )
+            try:
+                send_result = self._send_whatsapp_text(integration, conversation.external_sender_id, decision.reply_text)
+            except ApiException as exc:
+                draft_reason_codes = list(decision.reason_codes)
+                if "auto_send_failed" not in draft_reason_codes:
+                    draft_reason_codes.append("auto_send_failed")
+                draft = create_review_draft(reason_codes=draft_reason_codes, failed_reason=exc.message)
+            else:
+                outbound_message = ChannelMessageModel(
+                    message_id=new_uuid(),
+                    client_id=integration.client_id,
+                    conversation_id=conversation.conversation_id,
+                    channel_id=integration.channel_id,
+                    direction="outbound",
+                    external_sender_id=conversation.external_sender_id,
+                    provider_event_id=str(send_result.get("provider_event_id", "")),
+                    provider_status="accepted",
+                    message_text=decision.reply_text,
+                    content_summary=self._summarize_text(decision.reply_text),
+                    raw_payload_json=send_result,
+                    ai_metadata_json={
+                        "intent": decision.intent,
+                        "reason_codes": list(decision.reason_codes),
+                    },
+                    occurred_at=now_utc(),
+                    outbound_status="sent",
                 )
-            self._log_audit(
-                session,
-                client_id=integration.client_id,
-                actor_user_id=self._agent_user_id(session, integration.client_id),
-                entity_type="channel_message",
-                entity_id=outbound_message.message_id,
-                action="sales_agent_message_sent",
-                metadata_json={"conversation_id": conversation.conversation_id},
-            )
+                session.add(outbound_message)
+                conversation.last_message_at = outbound_message.occurred_at
+                conversation.last_message_preview = outbound_message.content_summary
+                conversation.status = "open"
+                integration.last_outbound_at = outbound_message.occurred_at
+                for row in upsell_options[:2]:
+                    session.add(
+                        ChannelMessageProductMentionModel(
+                            mention_id=new_uuid(),
+                            client_id=integration.client_id,
+                            message_id=outbound_message.message_id,
+                            conversation_id=conversation.conversation_id,
+                            product_id=row.product_id,
+                            variant_id=row.variant_id,
+                            mention_role="recommended",
+                            unit_price_amount=row.unit_price,
+                            min_price_amount=row.min_price,
+                            available_to_sell_snapshot=row.available_to_sell,
+                        )
+                    )
+                self._log_audit(
+                    session,
+                    client_id=integration.client_id,
+                    actor_user_id=self._agent_user_id(session, integration.client_id),
+                    entity_type="channel_message",
+                    entity_id=outbound_message.message_id,
+                    action="sales_agent_message_sent",
+                    metadata_json={"conversation_id": conversation.conversation_id},
+                )
 
         if order is not None:
             conversation.linked_draft_order_id = order.sales_order_id

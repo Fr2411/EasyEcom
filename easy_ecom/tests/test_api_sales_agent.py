@@ -10,6 +10,7 @@ from easy_ecom.api.dependencies import build_session_token
 from easy_ecom.api import dependencies as deps
 from easy_ecom.api.main import create_app
 from easy_ecom.core.ids import new_uuid
+from easy_ecom.core.errors import ApiException
 from easy_ecom.core.security import hash_password, hash_token
 from easy_ecom.data.store.postgres_models import (
     AuditLogModel,
@@ -464,6 +465,48 @@ def test_greeting_message_auto_sends_without_openai_or_product_match(monkeypatch
     assert detail["messages"][1]["direction"] == "outbound"
     assert "product recommendations" in detail["messages"][1]["message_text"].lower()
     assert detail["latest_draft"] is None
+
+
+def test_inbound_message_is_saved_when_auto_send_fails(monkeypatch, tmp_path: Path) -> None:
+    runtime = _setup_runtime(tmp_path, monkeypatch)
+    client = _login_client()
+
+    monkeypatch.setattr(
+        SalesAgentService,
+        "_send_whatsapp_text",
+        lambda self, integration, recipient, text: (_ for _ in ()).throw(
+            ApiException(status_code=502, code="WHATSAPP_SEND_FAILED", message="Token expired")
+        ),
+    )
+
+    _upsert_integration(
+        client,
+        verify_token="verify-send-fail",
+        access_token="meta-token",
+        auto_send_enabled=True,
+    )
+    webhook_key = _webhook_key(runtime)
+
+    inbound_response = client.post(
+        f"/public/webhooks/whatsapp/{webhook_key}",
+        json=_webhook_payload("wamid-greeting-inbound-2", "hello"),
+    )
+    assert inbound_response.status_code == 200
+    assert inbound_response.json()["processed_messages"] == 1
+
+    conversations_response = client.get("/sales-agent/conversations")
+    assert conversations_response.status_code == 200
+    conversation = conversations_response.json()["items"][0]
+    assert conversation["status"] == "needs_review"
+
+    detail_response = client.get(f"/sales-agent/conversations/{conversation['conversation_id']}")
+    assert detail_response.status_code == 200
+    detail = detail_response.json()
+    assert len(detail["messages"]) == 1
+    assert detail["messages"][0]["direction"] == "inbound"
+    assert detail["latest_draft"]["status"] == "needs_review"
+    assert detail["latest_draft"]["failed_reason"] == "Token expired"
+    assert "auto_send_failed" in detail["latest_draft"]["reason_codes"]
 
 
 def test_sales_agent_review_and_order_confirmation_flow(monkeypatch, tmp_path: Path) -> None:
