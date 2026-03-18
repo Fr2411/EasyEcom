@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { LegalPageShell } from '@/components/legal/legal-page-shell';
 
 export const metadata: Metadata = {
   title: 'Privacy Policy | EasyEcom',
@@ -10,22 +11,16 @@ const contactEmail = 'support@easy-ecom.online';
 
 export default function PrivacyPage() {
   return (
-    <main className="legal-page">
-      <section className="legal-hero">
-        <p className="legal-eyebrow">EasyEcom Legal</p>
-        <h1>Privacy Policy</h1>
-        <p className="legal-lead">
-          This Privacy Policy explains how EasyEcom collects, uses, stores, and protects information when businesses use
-          the EasyEcom platform, including inventory, sales, warehouse, reporting, and AI-assisted customer communication
-          features.
-        </p>
-        <div className="legal-meta">
-          <span>Effective date: {effectiveDate}</span>
-          <span>Contact: {contactEmail}</span>
-        </div>
-      </section>
-
-      <section className="legal-card">
+    <LegalPageShell
+      title="Privacy Policy"
+      lead="This Privacy Policy explains how EasyEcom collects, uses, stores, and protects information when businesses use the EasyEcom platform, including inventory, sales, warehouse, reporting, and AI-assisted customer communication features."
+      effectiveDate={effectiveDate}
+      contactEmail={contactEmail}
+      links={[
+        { href: '/privacy', label: 'Privacy Policy' },
+        { href: '/data-deletion', label: 'Data Deletion' },
+      ]}
+    >
         <h2>1. Who We Are</h2>
         <p>
           EasyEcom provides software for commerce operations, including catalog management, inventory tracking, purchase
@@ -122,7 +117,6 @@ export default function PrivacyPage() {
         <p>
           For privacy-related questions, requests, or complaints, contact us at <a href={`mailto:${contactEmail}`}>{contactEmail}</a>.
         </p>
-      </section>
-    </main>
+    </LegalPageShell>
   );
 }

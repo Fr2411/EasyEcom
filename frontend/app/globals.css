@@ -305,6 +305,31 @@ button:disabled {
   font-size: 0.92rem;
 }
 
+.legal-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  margin-top: 1.1rem;
+}
+
+.legal-link-chip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #b8d8d2;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.8);
+  color: var(--primary-strong);
+  padding: 0.45rem 0.8rem;
+  text-decoration: none;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.legal-link-chip:hover {
+  background: #ffffff;
+  border-color: #8fd0c3;
+}
+
 .legal-card {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
