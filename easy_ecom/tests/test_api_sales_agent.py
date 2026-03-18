@@ -104,7 +104,17 @@ def _login(email: str, password: str) -> TestClient:
     return client
 
 
-def _seed_variant(runtime, *, stock_qty: Decimal = Decimal("6")) -> dict[str, str]:
+def _seed_variant(
+    runtime,
+    *,
+    stock_qty: Decimal = Decimal("6"),
+    product_name: str = "Trail Runner",
+    title: str = "42 / Black",
+    sku: str = "TRAIL-42-BLACK",
+    barcode: str = "BC-TRAIL-42-BLACK",
+    price_amount: Decimal = Decimal("75"),
+    min_price_amount: Decimal = Decimal("65"),
+) -> dict[str, str]:
     with runtime.session_factory() as session:
         supplier = SupplierModel(
             supplier_id=new_uuid(),
@@ -125,28 +135,28 @@ def _seed_variant(runtime, *, stock_qty: Decimal = Decimal("6")) -> dict[str, st
             client_id=CLIENT_ID,
             supplier_id=supplier.supplier_id,
             category_id=category.category_id,
-            name="Trail Runner",
+            name=product_name,
             slug="trail-runner-sales-agent",
             sku_root="TRAIL",
             brand="Easy Brand",
-            description="Trail Runner description",
+            description=f"{product_name} description",
             status="active",
-            default_price_amount=Decimal("75"),
-            min_price_amount=Decimal("65"),
+            default_price_amount=price_amount,
+            min_price_amount=min_price_amount,
             max_discount_percent=Decimal("10"),
         )
         variant = ProductVariantModel(
             variant_id=new_uuid(),
             client_id=CLIENT_ID,
             product_id=product.product_id,
-            title="42 / Black",
-            sku="TRAIL-42-BLACK",
-            barcode="BC-TRAIL-42-BLACK",
-            option_values_json={"size": "42", "color": "Black", "other": ""},
+            title=title,
+            sku=sku,
+            barcode=barcode,
+            option_values_json={"size": title.split("/")[0].strip(), "color": title.split("/")[-1].strip(), "other": ""},
             status="active",
             cost_amount=Decimal("40"),
-            price_amount=Decimal("75"),
-            min_price_amount=Decimal("65"),
+            price_amount=price_amount,
+            min_price_amount=min_price_amount,
             reorder_level=Decimal("1"),
         )
         session.add_all([supplier, category])
@@ -165,7 +175,7 @@ def _seed_variant(runtime, *, stock_qty: Decimal = Decimal("6")) -> dict[str, st
                 reference_line_id=None,
                 quantity_delta=stock_qty,
                 unit_cost_amount=Decimal("40"),
-                unit_price_amount=Decimal("75"),
+                unit_price_amount=price_amount,
                 reason="Seed stock",
                 created_by_user_id=USER_ID,
             )
@@ -657,6 +667,57 @@ def test_greeting_message_auto_sends_without_openai_or_product_match(monkeypatch
     assert detail["messages"][1]["direction"] == "outbound"
     assert "product recommendations" in detail["messages"][1]["message_text"].lower()
     assert detail["latest_draft"] is None
+
+
+def test_short_greeting_token_does_not_false_match_white_variant(monkeypatch, tmp_path: Path) -> None:
+    runtime = _setup_runtime(tmp_path, monkeypatch)
+    _seed_variant(
+        runtime,
+        product_name="Campus Court Low",
+        title="40 / White",
+        sku="CAMPUS-40-WHITE",
+        barcode="BC-CAMPUS-40-WHITE",
+        price_amount=Decimal("149"),
+        min_price_amount=Decimal("129"),
+        stock_qty=Decimal("11"),
+    )
+    client = _login_client()
+
+    monkeypatch.setattr(
+        SalesAgentService,
+        "_send_whatsapp_text",
+        lambda self, integration, recipient, text: {
+            "provider": "whatsapp",
+            "provider_event_id": "wamid-greeting-2",
+            "response": {"messages": [{"id": "wamid-greeting-2"}]},
+        },
+    )
+
+    _upsert_integration(
+        client,
+        verify_token="verify-greeting-short",
+        access_token="meta-token",
+        app_secret="meta-secret",
+        auto_send_enabled=True,
+    )
+    webhook_key = _webhook_key(runtime)
+
+    inbound_response = _signed_webhook_request(client, webhook_key, _webhook_payload("wamid-greeting-inbound-3", "hi"))
+    assert inbound_response.status_code == 200
+    assert inbound_response.json()["processed_messages"] == 1
+
+    conversations_response = client.get("/sales-agent/conversations")
+    assert conversations_response.status_code == 200
+    conversation = conversations_response.json()["items"][0]
+    assert conversation["status"] == "open"
+    assert conversation["latest_recommended_products_summary"] == ""
+
+    detail_response = client.get(f"/sales-agent/conversations/{conversation['conversation_id']}")
+    assert detail_response.status_code == 200
+    detail = detail_response.json()
+    assert len(detail["messages"]) == 2
+    assert "product recommendations" in detail["messages"][1]["message_text"].lower()
+    assert "campus court low" not in detail["messages"][1]["message_text"].lower()
 
 
 def test_inbound_message_is_saved_when_auto_send_fails(monkeypatch, tmp_path: Path) -> None:
