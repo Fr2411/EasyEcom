@@ -258,6 +258,94 @@ button:disabled {
   padding: 0.55rem;
 }
 
+.legal-page {
+  min-height: 100vh;
+  padding: 4rem 1.5rem 5rem;
+}
+
+.legal-hero,
+.legal-card {
+  width: min(960px, 100%);
+  margin: 0 auto;
+}
+
+.legal-hero {
+  margin-bottom: 1.5rem;
+}
+
+.legal-eyebrow {
+  margin: 0 0 0.75rem;
+  color: var(--primary-strong);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.legal-hero h1 {
+  margin: 0;
+  font-size: clamp(2.3rem, 4vw, 3.5rem);
+  line-height: 1.05;
+}
+
+.legal-lead {
+  max-width: 760px;
+  margin: 1rem 0 0;
+  color: var(--text-muted);
+  font-size: 1.02rem;
+  line-height: 1.75;
+}
+
+.legal-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  margin-top: 1rem;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+}
+
+.legal-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: var(--shadow-md);
+  padding: clamp(1.4rem, 3vw, 2.4rem);
+  backdrop-filter: blur(8px);
+}
+
+.legal-card h2 {
+  margin: 1.85rem 0 0.6rem;
+  font-size: 1.12rem;
+}
+
+.legal-card h2:first-child {
+  margin-top: 0;
+}
+
+.legal-card p,
+.legal-card li {
+  color: var(--text);
+  line-height: 1.75;
+}
+
+.legal-card p {
+  margin: 0.55rem 0 0;
+}
+
+.legal-card ul {
+  margin: 0.75rem 0 0;
+  padding-left: 1.25rem;
+}
+
+.legal-card li + li {
+  margin-top: 0.45rem;
+}
+
+.legal-card a {
+  color: var(--primary-strong);
+}
+
 .sidebar.sidebar-collapsed .sidebar-logout-btn {
   margin-top: 0;
 }
