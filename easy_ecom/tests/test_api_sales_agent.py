@@ -116,18 +116,19 @@ def _seed_variant(
     min_price_amount: Decimal = Decimal("65"),
 ) -> dict[str, str]:
     with runtime.session_factory() as session:
+        suffix = new_uuid().split("-")[0]
         supplier = SupplierModel(
             supplier_id=new_uuid(),
             client_id=CLIENT_ID,
             name="Default Supplier",
-            code="SUP-SA",
+            code=f"SUP-{suffix}",
             status="active",
         )
         category = CategoryModel(
             category_id=new_uuid(),
             client_id=CLIENT_ID,
             name="Footwear",
-            slug="footwear-sales-agent",
+            slug=f"footwear-sales-agent-{suffix}",
             status="active",
         )
         product = ProductModel(
@@ -136,8 +137,8 @@ def _seed_variant(
             supplier_id=supplier.supplier_id,
             category_id=category.category_id,
             name=product_name,
-            slug="trail-runner-sales-agent",
-            sku_root="TRAIL",
+            slug=f"sales-agent-{suffix}",
+            sku_root=f"TRAIL-{suffix}",
             brand="Easy Brand",
             description=f"{product_name} description",
             status="active",
@@ -665,8 +666,62 @@ def test_greeting_message_auto_sends_without_openai_or_product_match(monkeypatch
     assert len(detail["messages"]) == 2
     assert detail["messages"][0]["direction"] == "inbound"
     assert detail["messages"][1]["direction"] == "outbound"
-    assert "product recommendations" in detail["messages"][1]["message_text"].lower()
+    assert "live stock" in detail["messages"][1]["message_text"].lower()
     assert detail["latest_draft"] is None
+
+
+def test_exact_variant_query_stays_deterministic_and_persists_offer_trace(monkeypatch, tmp_path: Path) -> None:
+    runtime = _setup_runtime(tmp_path, monkeypatch)
+    _seed_variant(runtime, stock_qty=Decimal("8"))
+    client = _login_client()
+
+    monkeypatch.setattr(
+        SalesAgentService,
+        "_helper_rank_candidates_with_model",
+        lambda self, **kwargs: (_ for _ in ()).throw(AssertionError("helper model should not run")),
+    )
+    monkeypatch.setattr(
+        SalesAgentService,
+        "_sales_reply_with_model",
+        lambda self, **kwargs: (_ for _ in ()).throw(AssertionError("sales model should not run")),
+    )
+    monkeypatch.setattr(
+        SalesAgentService,
+        "_send_whatsapp_text",
+        lambda self, integration, recipient, text: {
+            "provider": "whatsapp",
+            "provider_event_id": "wamid-tier0-1",
+            "response": {"messages": [{"id": "wamid-tier0-1"}]},
+        },
+    )
+
+    _upsert_integration(
+        client,
+        verify_token="verify-tier0",
+        access_token="meta-token",
+        app_secret="meta-secret",
+        auto_send_enabled=True,
+    )
+    webhook_key = _webhook_key(runtime)
+
+    response = _signed_webhook_request(client, webhook_key, _webhook_payload("wamid-tier0-in-1", "What is the price for Trail Runner 42 Black?"))
+    assert response.status_code == 200
+    assert response.json()["processed_messages"] == 1
+
+    conversations = client.get("/sales-agent/conversations")
+    assert conversations.status_code == 200
+    conversation = conversations.json()["items"][0]
+    assert conversation["status"] == "open"
+
+    detail_response = client.get(f"/sales-agent/conversations/{conversation['conversation_id']}")
+    assert detail_response.status_code == 200
+    detail = detail_response.json()
+    assert len(detail["messages"]) == 2
+    assert detail["latest_draft"] is None
+    assert detail["latest_trace"]["runtime"]["tier"] == "tier0_deterministic"
+    assert detail["latest_trace"]["runtime"]["sales_model_used"] is False
+    assert detail["latest_trace"]["facts_pack"]["offer_policy"]["selected_offer_id"] == "list_price"
+    assert detail["latest_trace"]["facts_pack"]["primary_matches"][0]["label"] == "Trail Runner / 42 / Black"
 
 
 def test_short_greeting_token_does_not_false_match_white_variant(monkeypatch, tmp_path: Path) -> None:
@@ -716,8 +771,79 @@ def test_short_greeting_token_does_not_false_match_white_variant(monkeypatch, tm
     assert detail_response.status_code == 200
     detail = detail_response.json()
     assert len(detail["messages"]) == 2
-    assert "product recommendations" in detail["messages"][1]["message_text"].lower()
+    assert "live stock" in detail["messages"][1]["message_text"].lower()
     assert "campus court low" not in detail["messages"][1]["message_text"].lower()
+
+
+def test_ambiguous_query_uses_helper_trace_and_clarifier(monkeypatch, tmp_path: Path) -> None:
+    runtime = _setup_runtime(tmp_path, monkeypatch)
+    _seed_variant(
+        runtime,
+        product_name="Campus Court Low",
+        title="40 / White",
+        sku="CAMPUS-40-WHITE",
+        barcode="BC-CAMPUS-40-WHITE",
+        price_amount=Decimal("149"),
+        min_price_amount=Decimal("129"),
+        stock_qty=Decimal("11"),
+    )
+    _seed_variant(
+        runtime,
+        product_name="Campus Court Low",
+        title="40 / Black",
+        sku="CAMPUS-40-BLACK",
+        barcode="BC-CAMPUS-40-BLACK",
+        price_amount=Decimal("149"),
+        min_price_amount=Decimal("129"),
+        stock_qty=Decimal("9"),
+    )
+    client = _login_client()
+
+    monkeypatch.setattr(
+        SalesAgentService,
+        "_helper_rank_candidates_with_model",
+        lambda self, **kwargs: {
+            "ranked_variant_ids": [item.variant_id for item in kwargs["candidates"]],
+            "clarifier_options": ["40 / White", "40 / Black"],
+            "summary": "Two close size-color matches need clarification.",
+        },
+    )
+    monkeypatch.setattr(
+        SalesAgentService,
+        "_sales_reply_with_model",
+        lambda self, **kwargs: kwargs["fallback"],
+    )
+    monkeypatch.setattr(
+        SalesAgentService,
+        "_send_whatsapp_text",
+        lambda self, integration, recipient, text: {
+            "provider": "whatsapp",
+            "provider_event_id": "wamid-clarifier-1",
+            "response": {"messages": [{"id": "wamid-clarifier-1"}]},
+        },
+    )
+
+    _upsert_integration(
+        client,
+        verify_token="verify-helper",
+        access_token="meta-token",
+        app_secret="meta-secret",
+        auto_send_enabled=True,
+    )
+    webhook_key = _webhook_key(runtime)
+
+    response = _signed_webhook_request(client, webhook_key, _webhook_payload("wamid-helper-in-1", "Do you have Campus Court Low size 40?"))
+    assert response.status_code == 200
+    assert response.json()["processed_messages"] == 1
+
+    detail = client.get("/sales-agent/conversations").json()["items"][0]
+    detail_response = client.get(f"/sales-agent/conversations/{detail['conversation_id']}")
+    assert detail_response.status_code == 200
+    conversation_detail = detail_response.json()
+    assert conversation_detail["latest_trace"]["runtime"]["helper_used"] is True
+    assert conversation_detail["latest_trace"]["runtime"]["tier"] == "tier1_clarifier"
+    assert conversation_detail["latest_trace"]["facts_pack"]["clarifier_options"] == ["40 / White", "40 / Black"]
+    assert "close matches" in conversation_detail["messages"][1]["message_text"].lower()
 
 
 def test_inbound_message_is_saved_when_auto_send_fails(monkeypatch, tmp_path: Path) -> None:
@@ -758,6 +884,44 @@ def test_inbound_message_is_saved_when_auto_send_fails(monkeypatch, tmp_path: Pa
     assert detail["latest_draft"]["status"] == "needs_review"
     assert detail["latest_draft"]["failed_reason"] == "Token expired"
     assert "auto_send_failed" in detail["latest_draft"]["reason_codes"]
+
+
+def test_discount_request_respects_review_policy_and_offer_ladder(monkeypatch, tmp_path: Path) -> None:
+    runtime = _setup_runtime(tmp_path, monkeypatch)
+    _seed_variant(runtime, stock_qty=Decimal("12"))
+    with runtime.session_factory() as session:
+        settings_row = session.execute(
+            select(ClientSettingsModel).where(ClientSettingsModel.client_id == CLIENT_ID)
+        ).scalar_one()
+        settings_row.require_discount_approval = True
+        session.commit()
+    client = _login_client()
+
+    _upsert_integration(
+        client,
+        verify_token="verify-discount",
+        access_token="meta-token",
+        app_secret="meta-secret",
+        auto_send_enabled=True,
+    )
+    webhook_key = _webhook_key(runtime)
+
+    response = _signed_webhook_request(client, webhook_key, _webhook_payload("wamid-discount-in-1", "Best discount for Trail Runner 42 Black?"))
+    assert response.status_code == 200
+    assert response.json()["processed_messages"] == 1
+
+    conversation = client.get("/sales-agent/conversations").json()["items"][0]
+    assert conversation["status"] == "needs_review"
+
+    detail_response = client.get(f"/sales-agent/conversations/{conversation['conversation_id']}")
+    assert detail_response.status_code == 200
+    detail = detail_response.json()
+    assert detail["latest_draft"]["status"] == "needs_review"
+    assert "discount_request" in detail["latest_draft"]["reason_codes"]
+    offer_policy = detail["latest_draft"]["grounding"]["facts_pack"]["offer_policy"]
+    assert offer_policy["requires_discount_approval"] is True
+    assert offer_policy["selected_offer_id"] == "list_price"
+    assert len(offer_policy["auto_discount_steps"]) >= 1
 
 
 def test_sales_agent_review_and_order_confirmation_flow(monkeypatch, tmp_path: Path) -> None:
