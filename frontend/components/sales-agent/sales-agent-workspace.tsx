@@ -341,6 +341,12 @@ export function SalesAgentWorkspace() {
                                                 <small>{asString(traceConstraints.active_product_family)}</small>
                                               </li>
                                             ) : null}
+                                            {asString(traceConstraints.active_need_label) ? (
+                                              <li>
+                                                <span>Need</span>
+                                                <small>{asString(traceConstraints.active_need_label)}</small>
+                                              </li>
+                                            ) : null}
                                             {asString(traceConstraints.active_color) ? (
                                               <li>
                                                 <span>Color</span>

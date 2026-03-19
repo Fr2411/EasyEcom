@@ -868,6 +868,84 @@ def test_brand_query_prefers_brand_match_and_asks_for_size_or_style(monkeypatch,
     assert detail["latest_trace"]["facts_pack"]["primary_matches"][0]["brand"] == "Adidas"
 
 
+def test_running_shoe_context_carries_into_brand_follow_up_without_drifting(monkeypatch, tmp_path: Path) -> None:
+    runtime = _setup_runtime(tmp_path, monkeypatch)
+    _seed_variant(
+        runtime,
+        product_name="Motion Lite Trainer",
+        brand="Nike",
+        title="39 / White",
+        sku="NIKE-MOTION-39-WHITE",
+        barcode="BC-NIKE-MOTION-39-WHITE",
+        stock_qty=Decimal("9"),
+        price_amount=Decimal("159"),
+        min_price_amount=Decimal("139"),
+    )
+    _seed_variant(
+        runtime,
+        product_name="Atlas Runner",
+        brand="Adidas",
+        title="40 / Black",
+        sku="ADI-ATLAS-40-BLACK",
+        barcode="BC-ADI-ATLAS-40-BLACK",
+        stock_qty=Decimal("8"),
+        price_amount=Decimal("169"),
+        min_price_amount=Decimal("149"),
+    )
+    _seed_variant(
+        runtime,
+        product_name="Ember Heel Sandal",
+        brand="Easy Brand",
+        title="37 / Black",
+        sku="HEEL-37-BLACK",
+        barcode="BC-HEEL-37-BLACK",
+        stock_qty=Decimal("4"),
+        price_amount=Decimal("129"),
+        min_price_amount=Decimal("109"),
+    )
+    client = _login_client()
+
+    monkeypatch.setattr(
+        SalesAgentService,
+        "_send_whatsapp_text",
+        lambda self, integration, recipient, text: {
+            "provider": "whatsapp",
+            "provider_event_id": "",
+            "response": {"messages": [{"id": ""}]},
+        },
+    )
+    monkeypatch.setattr(
+        SalesAgentService,
+        "_sales_reply_with_model",
+        lambda self, **kwargs: kwargs["fallback"],
+    )
+
+    _upsert_integration(
+        client,
+        verify_token="verify-running-context",
+        access_token="meta-token",
+        app_secret="meta-secret",
+        auto_send_enabled=True,
+    )
+    webhook_key = _webhook_key(runtime)
+
+    first = _signed_webhook_request(client, webhook_key, _webhook_payload("wamid-running-context-1", "I'm interested in running shoes. Should be comfortable"))
+    second = _signed_webhook_request(client, webhook_key, _webhook_payload("wamid-running-context-2", "I'm not worrying about the price but a good brand"))
+    assert first.status_code == 200
+    assert second.status_code == 200
+
+    conversation = client.get("/sales-agent/conversations").json()["items"][0]
+    detail = client.get(f"/sales-agent/conversations/{conversation['conversation_id']}").json()
+    reply = detail["messages"][-1]["message_text"].lower()
+    assert "running shoes" in reply
+    assert "ember heel sandal" not in reply
+    assert "sandal" not in reply
+    assert detail["latest_trace"]["facts_pack"]["active_constraints"]["active_need_label"] == "running shoes"
+    labels = [item["label"].lower() for item in detail["latest_trace"]["facts_pack"]["primary_matches"]]
+    assert any("runner" in label or "trainer" in label for label in labels)
+    assert all("sandal" not in label and "heel" not in label for label in labels)
+
+
 def test_exact_variant_query_stays_deterministic_and_persists_offer_trace(monkeypatch, tmp_path: Path) -> None:
     runtime = _setup_runtime(tmp_path, monkeypatch)
     _seed_variant(runtime, stock_qty=Decimal("8"))

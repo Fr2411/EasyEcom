@@ -109,6 +109,10 @@ MATCH_STOPWORDS = {
     "availability",
     "be",
     "best",
+    "brand",
+    "brands",
+    "comfortable",
+    "comfort",
     "cost",
     "do",
     "does",
@@ -187,6 +191,14 @@ CATEGORY_TOKENS = (
     "boot",
     "boots",
 )
+NEED_LABEL_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "running shoes": ("running", "runner", "train", "trainer", "trainers", "jog", "jogging", "sneaker", "sneakers"),
+    "school shoes": ("school",),
+    "sandals": ("sandal", "sandals", "slide", "slides"),
+    "heels": ("heel", "heels"),
+}
+NEED_LABEL_PRIORITY = ("running shoes", "school shoes", "sandals", "heels")
+ABSTRACT_FOLLOWUP_TOKENS = ("brand", "comfortable", "comfort", "quality", "good", "best", "these", "those", "that")
 PERCENT_QUANTUM = Decimal("0.01")
 FACTS_SUMMARY_LIMIT = 600
 MAX_RECENT_TURNS = 4
@@ -215,6 +227,7 @@ class MatchedVariant:
 class ActiveConstraints:
     active_brand: str | None
     active_product_family: str | None
+    active_need_label: str | None
     active_color: str | None
     active_size: str | None
     active_price_intent: str | None
@@ -234,6 +247,7 @@ class RangeSummary:
 class ConversationState:
     active_brand: str | None
     active_product_family: str | None
+    active_need_label: str | None
     active_color: str | None
     active_size: str | None
     active_price_intent: str | None
@@ -512,6 +526,17 @@ class WarehouseContextService:
             else []
         )
         active_constraints = self._service._derive_active_constraints(search_request, prior_state, raw_matches)
+        if (
+            not raw_matches
+            and active_constraints.active_need_label
+            and base_intent not in {"business_info", "greeting", "handoff"}
+        ):
+            raw_matches = self._service._match_variants(
+                self._session,
+                integration.client_id,
+                location_id,
+                self._service._need_search_text(active_constraints.active_need_label),
+            )
         matches = self._service._apply_active_constraints(raw_matches, active_constraints)
         resolved_intent = self._service._resolve_sales_intent(base_intent, search_request, active_constraints, matches)
         search_request = WarehouseSearchRequest(
@@ -569,6 +594,7 @@ class WarehouseContextService:
             conversation_state=ConversationState(
                 active_brand=active_constraints.active_brand,
                 active_product_family=active_constraints.active_product_family,
+                active_need_label=active_constraints.active_need_label,
                 active_color=active_constraints.active_color,
                 active_size=active_constraints.active_size,
                 active_price_intent=active_constraints.active_price_intent,
@@ -1944,6 +1970,7 @@ class SalesAgentService(CommerceBaseService):
         return ConversationState(
             active_brand=self._bounded_text(raw.get("active_brand"), limit=120),
             active_product_family=self._bounded_text(raw.get("active_product_family"), limit=160),
+            active_need_label=self._bounded_text(raw.get("active_need_label"), limit=120),
             active_color=self._bounded_text(raw.get("active_color"), limit=64),
             active_size=self._bounded_text(raw.get("active_size"), limit=64),
             active_price_intent=self._bounded_text(raw.get("active_price_intent"), limit=64),
@@ -1961,6 +1988,7 @@ class SalesAgentService(CommerceBaseService):
         return {
             "active_brand": state.active_brand,
             "active_product_family": state.active_product_family,
+            "active_need_label": state.active_need_label,
             "active_color": state.active_color,
             "active_size": state.active_size,
             "active_price_intent": state.active_price_intent,
@@ -1978,6 +2006,7 @@ class SalesAgentService(CommerceBaseService):
     ) -> ActiveConstraints:
         explicit_brand = self._brand_from_matches(search_request.normalized_text, matches)
         explicit_product_family = self._explicit_product_family(search_request.normalized_text, matches)
+        explicit_need_label = self._requested_need_label(search_request.normalized_text)
         explicit_color = self._requested_color(search_request.normalized_text)
         explicit_size = self._requested_size(search_request.normalized_text)
         active_price_intent = "range" if search_request.intent == "price_range" else None
@@ -1985,6 +2014,7 @@ class SalesAgentService(CommerceBaseService):
         carry_forward = search_request.intent not in {"greeting", "business_info", "handoff"}
         active_brand = explicit_brand or (prior_state.active_brand if carry_forward and not explicit_product_family else None)
         active_product_family = explicit_product_family or (prior_state.active_product_family if carry_forward else None)
+        active_need_label = explicit_need_label or (prior_state.active_need_label if carry_forward else None)
         active_color = explicit_color or (prior_state.active_color if carry_forward and not explicit_brand else None)
         active_size = explicit_size or (prior_state.active_size if carry_forward and not explicit_brand else None)
         if active_price_intent is None and carry_forward:
@@ -1999,6 +2029,7 @@ class SalesAgentService(CommerceBaseService):
         return ActiveConstraints(
             active_brand=active_brand,
             active_product_family=active_product_family,
+            active_need_label=active_need_label,
             active_color=active_color,
             active_size=active_size,
             active_price_intent=active_price_intent,
@@ -2020,6 +2051,10 @@ class SalesAgentService(CommerceBaseService):
             ]
             if family_matches:
                 filtered = family_matches
+        if constraints.active_need_label:
+            need_matches = [item for item in filtered if self._variant_matches_need_label(item, constraints.active_need_label)]
+            if need_matches:
+                filtered = need_matches
         if constraints.active_size:
             size_matches = [item for item in filtered if self._variant_matches_size(item, constraints.active_size)]
             if size_matches:
@@ -2041,7 +2076,7 @@ class SalesAgentService(CommerceBaseService):
             return base_intent
         if base_intent == "price_range" and not constraints.active_product_family and not constraints.active_size and len(matches) > 1:
             return "price_range"
-        if constraints.active_brand and not constraints.active_product_family and not constraints.active_size:
+        if (constraints.active_brand or self._requests_brand_guidance(search_request.normalized_text)) and not constraints.active_product_family and not constraints.active_size:
             return "brand_browse"
         if self._requested_category(search_request.normalized_text) and not constraints.active_product_family and not constraints.active_brand:
             return "category_browse"
@@ -2102,12 +2137,41 @@ class SalesAgentService(CommerceBaseService):
                 return token
         return None
 
+    def _requested_need_label(self, normalized_text: str) -> str | None:
+        for label in NEED_LABEL_PRIORITY:
+            keywords = NEED_LABEL_KEYWORDS.get(label, ())
+            if any(keyword in normalized_text for keyword in keywords):
+                return label
+        return None
+
+    def _variant_matches_need_label(self, item: MatchedVariant, need_label: str) -> bool:
+        text = " ".join(filter(None, [item.product_name, item.category_name, item.label, item.brand])).lower()
+        keywords = NEED_LABEL_KEYWORDS.get(need_label, ())
+        if not keywords:
+            return True
+        return any(keyword in text for keyword in keywords)
+
+    def _need_search_text(self, need_label: str) -> str:
+        keywords = NEED_LABEL_KEYWORDS.get(need_label, ())
+        return " ".join(keywords) if keywords else need_label
+
+    def _requests_brand_guidance(self, normalized_text: str) -> bool:
+        return "brand" in normalized_text or "quality" in normalized_text
+
+    def _is_abstract_followup(self, normalized_text: str) -> bool:
+        tokens = self._search_tokens(normalized_text)
+        if not tokens:
+            return True
+        if self._requested_need_label(normalized_text) or self._brand_from_matches(normalized_text, []):
+            return False
+        return any(token in ABSTRACT_FOLLOWUP_TOKENS for token in tokens)
+
     def _requested_size(self, normalized_text: str) -> str | None:
         size_match = re.search(r"\bsize\s*([a-z0-9]+)\b", normalized_text)
         if size_match:
             return size_match.group(1).upper()
         for token in self._search_tokens(normalized_text):
-            if token.isdigit() or token in SIZE_MATCH_TOKENS:
+            if token.isdigit():
                 return token.upper()
         return None
 
@@ -2538,6 +2602,40 @@ class SalesAgentService(CommerceBaseService):
                 sales_model_used=False,
             )
 
+        if facts_pack.intent == "brand_browse" and facts_pack.active_constraints.active_brand is None:
+            brands = []
+            for item in (*facts_pack.primary_matches, *facts_pack.alternatives):
+                brand = item.brand.strip()
+                if brand and brand not in brands:
+                    brands.append(brand)
+            subject = facts_pack.active_constraints.active_need_label or "these products"
+            if brands:
+                if lead is not None:
+                    reply = (
+                        f"For {subject}, the strongest brand options I have right now are {', '.join(brands[:3])}. "
+                        f"A good comfort pick is {lead.label} at {lead.unit_price:.2f}. What size should I check for you?"
+                    )
+                else:
+                    reply = (
+                        f"For {subject}, the strongest brand options I have right now are {', '.join(brands[:3])}. "
+                        "What size or style should I narrow it down to?"
+                    )
+                return SalesReplyDecision(
+                    intent=facts_pack.intent,
+                    reply_text=reply,
+                    reply_mode="answer_and_ask",
+                    confidence=Decimal("0.82"),
+                    selected_variant_id=lead.variant_id if lead else None,
+                    selected_offer_id=facts_pack.offer_policy.selected_offer_id,
+                    recommended_variant_ids=recommended_variant_ids,
+                    needs_review=False,
+                    reason_codes=tuple(sorted(reason_codes)),
+                    behavior_tags=facts_pack.behavior_tags,
+                    draft_order_request=None,
+                    helper_used=facts_pack.helper_used,
+                    sales_model_used=False,
+                )
+
         if facts_pack.next_required_action in {"review", "handoff"}:
             reply = "I’m checking that with my team now, and they’ll reply shortly."
             if lead is not None and "discount_request" in reason_codes and selected_price is not None:
@@ -2564,6 +2662,7 @@ class SalesAgentService(CommerceBaseService):
             subject = (
                 facts_pack.active_constraints.active_product_family
                 or facts_pack.active_constraints.active_brand
+                or facts_pack.active_constraints.active_need_label
                 or facts_pack.range_summary.matched_category
                 or "these options"
             )
@@ -2877,15 +2976,19 @@ class SalesAgentService(CommerceBaseService):
             or len(facts_pack.primary_matches) == 1
         )
         unresolved_turn_count = 0 if resolved_enough else min(prior.unresolved_turn_count + 1, 3)
+        last_need_summary = self._summarize_text(facts_pack.search_request.message_text, limit=180)
+        if self._is_abstract_followup(facts_pack.search_request.normalized_text) and prior.last_customer_need_summary:
+            last_need_summary = prior.last_customer_need_summary
         return ConversationState(
             active_brand=facts_pack.active_constraints.active_brand,
             active_product_family=facts_pack.active_constraints.active_product_family,
+            active_need_label=facts_pack.active_constraints.active_need_label,
             active_color=facts_pack.active_constraints.active_color,
             active_size=facts_pack.active_constraints.active_size,
             active_price_intent=facts_pack.active_constraints.active_price_intent,
             last_resolved_variant_ids=resolved_variant_ids or prior.last_resolved_variant_ids,
             unresolved_turn_count=unresolved_turn_count,
-            last_customer_need_summary=self._summarize_text(facts_pack.search_request.message_text, limit=180),
+            last_customer_need_summary=last_need_summary,
             customer_ack_sent=customer_ack_sent,
         )
 
@@ -3560,6 +3663,7 @@ class SalesAgentService(CommerceBaseService):
         return {
             "active_brand": constraints.active_brand,
             "active_product_family": constraints.active_product_family,
+            "active_need_label": constraints.active_need_label,
             "active_color": constraints.active_color,
             "active_size": constraints.active_size,
             "active_price_intent": constraints.active_price_intent,
