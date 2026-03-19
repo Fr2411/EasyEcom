@@ -4,6 +4,7 @@ export type SalesAgentMention = {
   mention_id: string;
   product_id: string | null;
   variant_id: string | null;
+  label: string | null;
   mention_role: string;
   quantity: string | null;
   unit_price: string | null;

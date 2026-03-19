@@ -120,6 +120,7 @@ class SalesAgentMentionResponse(BaseModel):
     mention_id: str
     product_id: str | None
     variant_id: str | None
+    label: str | None
     mention_role: str
     quantity: Decimal | None
     unit_price: Decimal | None
