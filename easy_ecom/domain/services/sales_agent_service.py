@@ -66,6 +66,17 @@ REPLY_REVIEW_REASONS = {
     "missing_price",
     "low_confidence",
 }
+BUSINESS_INFO_PHRASES = (
+    "shop name",
+    "store name",
+    "business name",
+    "company name",
+    "what is your shop name",
+    "what's your shop name",
+    "what is your store name",
+    "what's your store name",
+    "who are you",
+)
 ALLOWED_BEHAVIOR_TAGS = {
     "price_sensitive",
     "discount_seeking",
@@ -114,6 +125,7 @@ MATCH_STOPWORDS = {
     "much",
     "my",
     "need",
+    "name",
     "of",
     "on",
     "or",
@@ -123,7 +135,9 @@ MATCH_STOPWORDS = {
     "salam",
     "show",
     "stock",
+    "store",
     "tell",
+    "there",
     "the",
     "to",
     "today",
@@ -133,8 +147,27 @@ MATCH_STOPWORDS = {
     "with",
     "you",
     "your",
+    "shop",
+    "asking",
+    "else",
+    "exact",
+    "nothing",
 }
 SIZE_MATCH_TOKENS = {"xs", "s", "m", "l", "xl", "xxl", "xxxl"}
+COLOR_TOKENS = (
+    "black",
+    "white",
+    "blue",
+    "red",
+    "green",
+    "yellow",
+    "pink",
+    "brown",
+    "beige",
+    "grey",
+    "gray",
+    "navy",
+)
 PERCENT_QUANTUM = Decimal("0.01")
 FACTS_SUMMARY_LIMIT = 600
 MAX_RECENT_TURNS = 4
@@ -148,6 +181,7 @@ class MatchedVariant:
     variant_id: str
     product_id: str
     product_name: str
+    brand: str
     label: str
     sku: str
     available_to_sell: Decimal
@@ -216,6 +250,7 @@ class OfferPolicy:
 @dataclass(frozen=True)
 class WarehouseFactsPack:
     intent: str
+    business_name: str
     search_request: WarehouseSearchRequest
     customer_snapshot: CustomerSnapshot
     conversation_memory: ConversationMemorySnapshot
@@ -401,6 +436,7 @@ class WarehouseContextService:
     ) -> WarehouseFactsPack:
         text = inbound_message.message_text or ""
         intent, behavior_tags, base_reason_codes = self._service._message_signals(text)
+        business_name = self._service._client_business_name(self._session, integration.client_id) or integration.display_name or "our store"
         location_id = str(integration.default_location_id or self._service._default_location_id(self._session, integration.client_id))
         search_request = WarehouseSearchRequest(
             client_id=integration.client_id,
@@ -413,7 +449,11 @@ class WarehouseContextService:
         )
         customer_snapshot = self._service._customer_snapshot(conversation, customer)
         memory = self._service._conversation_memory_snapshot(self._session, conversation.conversation_id)
-        matches = self._service._match_variants(self._session, integration.client_id, location_id, text)
+        matches = (
+            self._service._match_variants(self._session, integration.client_id, location_id, text)
+            if intent not in {"business_info", "greeting"}
+            else []
+        )
 
         helper_summary = ""
         clarifier_options: tuple[str, ...] = ()
@@ -458,6 +498,7 @@ class WarehouseContextService:
         )
         return WarehouseFactsPack(
             intent=intent,
+            business_name=business_name,
             search_request=search_request,
             customer_snapshot=customer_snapshot,
             conversation_memory=memory,
@@ -1702,13 +1743,16 @@ class SalesAgentService(CommerceBaseService):
             if any(keyword in lowered for keyword in keywords)
         }
         is_greeting = any(keyword in normalized for keyword in GREETING_KEYWORDS)
-        if any(keyword in lowered for keyword in PURCHASE_KEYWORDS):
+        is_business_info = any(phrase in normalized for phrase in BUSINESS_INFO_PHRASES)
+        if is_business_info:
+            intent = "business_info"
+        elif any(keyword in lowered for keyword in PURCHASE_KEYWORDS):
             intent = "purchase"
         elif any(keyword in lowered for keyword in PRICE_KEYWORDS):
             intent = "pricing"
         elif any(keyword in lowered for keyword in AVAILABILITY_KEYWORDS):
             intent = "availability"
-        elif is_greeting:
+        elif is_greeting and len(normalized.split()) <= 4:
             intent = "greeting"
         else:
             intent = "catalog"
@@ -1775,6 +1819,7 @@ class SalesAgentService(CommerceBaseService):
         token_filters = []
         for token in tokens:
             pattern = f"%{token}%"
+            token_filters.append(func.lower(ProductModel.brand).like(pattern))
             token_filters.append(func.lower(ProductModel.name).like(pattern))
             token_filters.append(func.lower(ProductVariantModel.title).like(pattern))
             token_filters.append(func.lower(ProductVariantModel.sku).like(pattern))
@@ -1783,7 +1828,7 @@ class SalesAgentService(CommerceBaseService):
             self._base_variant_stmt(client_id).where(or_(*token_filters))
         ).all()
         on_hand_map, reserved_map = self._stock_maps(session, client_id, location_id)
-        items: list[MatchedVariant] = []
+        ranked_items: list[tuple[MatchedVariant, int, int]] = []
         seen: set[str] = set()
         for product, variant, _supplier, _category in rows:
             if product.status != "active" or variant.status != "active":
@@ -1797,31 +1842,55 @@ class SalesAgentService(CommerceBaseService):
             variant_key = str(variant.variant_id)
             if variant_key in seen:
                 continue
-            haystack = " ".join(
-                [
-                    product.name.lower(),
-                    variant.title.lower(),
-                    variant.sku.lower(),
-                    variant.barcode.lower(),
-                ]
+            brand_value = (product.brand or "").lower()
+            name_value = product.name.lower()
+            title_value = variant.title.lower()
+            sku_value = variant.sku.lower()
+            barcode_value = variant.barcode.lower()
+            brand_match_count = sum(1 for token in tokens if token in brand_value)
+            name_match_count = sum(1 for token in tokens if token in name_value)
+            title_match_count = sum(1 for token in tokens if token in title_value)
+            sku_match_count = sum(1 for token in tokens if token in sku_value)
+            barcode_match_count = sum(1 for token in tokens if token in barcode_value)
+            match_score = (
+                (brand_match_count * 8)
+                + (name_match_count * 5)
+                + (title_match_count * 4)
+                + (sku_match_count * 3)
+                + barcode_match_count
             )
-            match_score = sum(1 for token in tokens if token in haystack)
-            items.append(
-                MatchedVariant(
-                    variant_id=variant_key,
-                    product_id=str(product.product_id),
-                    product_name=product.name,
-                    label=build_variant_label(product.name, variant.title),
-                    sku=variant.sku,
-                    available_to_sell=available,
-                    unit_price=as_decimal(unit_price),
-                    min_price=as_optional_decimal(self._effective_variant_min_price(product, variant)),
-                    match_score=match_score,
+            ranked_items.append(
+                (
+                    MatchedVariant(
+                        variant_id=variant_key,
+                        product_id=str(product.product_id),
+                        product_name=product.name,
+                        brand=product.brand or "",
+                        label=build_variant_label(product.name, variant.title),
+                        sku=variant.sku,
+                        available_to_sell=available,
+                        unit_price=as_decimal(unit_price),
+                        min_price=as_optional_decimal(self._effective_variant_min_price(product, variant)),
+                        match_score=match_score,
+                    ),
+                    brand_match_count,
+                    title_match_count,
                 )
             )
             seen.add(variant_key)
-        items.sort(key=lambda item: (item.match_score, item.available_to_sell, item.product_name), reverse=True)
-        return items[:5]
+        if any(brand_matches > 0 for _item, brand_matches, _title_matches in ranked_items):
+            ranked_items = [row for row in ranked_items if row[1] > 0]
+        ranked_items.sort(
+            key=lambda row: (
+                row[0].match_score,
+                row[1],
+                row[2],
+                row[0].available_to_sell,
+                row[0].product_name,
+            ),
+            reverse=True,
+        )
+        return [item for item, _brand_matches, _title_matches in ranked_items[:5]]
 
     def _upsell_candidates(
         self,
@@ -1866,6 +1935,7 @@ class SalesAgentService(CommerceBaseService):
                     variant_id=variant_id,
                     product_id=str(product.product_id),
                     product_name=product.name,
+                    brand=product.brand or "",
                     label=build_variant_label(product.name, variant.title),
                     sku=variant.sku,
                     available_to_sell=available,
@@ -1879,6 +1949,8 @@ class SalesAgentService(CommerceBaseService):
 
     def _should_use_helper(self, search_request: WarehouseSearchRequest, matches: list[MatchedVariant]) -> bool:
         if len(matches) <= 1:
+            return False
+        if self._query_brand_name(search_request, matches):
             return False
         if search_request.intent in {"purchase", "pricing"}:
             return True
@@ -1934,7 +2006,7 @@ class SalesAgentService(CommerceBaseService):
         offer_policy: OfferPolicy,
     ) -> str:
         review_reasons = set(reason_codes).intersection(REPLY_REVIEW_REASONS)
-        if search_request.intent == "greeting" and not primary_matches:
+        if search_request.intent in {"greeting", "business_info"} and not primary_matches:
             return "answer"
         if review_reasons:
             return "review"
@@ -1946,6 +2018,26 @@ class SalesAgentService(CommerceBaseService):
         if search_request.intent == "purchase" and search_request.quantity <= lead.available_to_sell:
             return "create_draft_order"
         return "answer"
+
+    def _client_business_name(self, session: Session, client_id: str) -> str | None:
+        record = session.execute(
+            select(ClientModel.business_name).where(ClientModel.client_id == client_id)
+        ).scalar_one_or_none()
+        return str(record).strip() if record else None
+
+    def _query_brand_name(self, search_request: WarehouseSearchRequest, matches: list[MatchedVariant] | tuple[MatchedVariant, ...]) -> str | None:
+        for token in search_request.tokens:
+            for item in matches:
+                brand = item.brand.strip()
+                if brand and token in brand.lower():
+                    return brand
+        return None
+
+    def _requested_color(self, normalized_text: str) -> str | None:
+        for color in COLOR_TOKENS:
+            if color in normalized_text:
+                return color
+        return None
 
     def _offer_unit_price(self, offer_policy: OfferPolicy) -> Decimal | None:
         return offer_policy.selected_unit_price or offer_policy.list_price
@@ -2051,6 +2143,26 @@ class SalesAgentService(CommerceBaseService):
         recommended_variant_ids = tuple(item.variant_id for item in facts_pack.upsell_candidates[:MAX_UPSELL_MATCHES])
         draft_order_request = None
 
+        if facts_pack.intent == "business_info":
+            return SalesReplyDecision(
+                intent=facts_pack.intent,
+                reply_text=(
+                    f"You’re chatting with {facts_pack.business_name}. "
+                    "If you want a product, send the name, size, or color and I’ll check stock for you."
+                ),
+                reply_mode="tier0_deterministic",
+                confidence=Decimal("0.96"),
+                selected_variant_id=None,
+                selected_offer_id=facts_pack.offer_policy.selected_offer_id,
+                recommended_variant_ids=(),
+                needs_review=False,
+                reason_codes=(),
+                behavior_tags=facts_pack.behavior_tags,
+                draft_order_request=None,
+                helper_used=facts_pack.helper_used,
+                sales_model_used=False,
+            )
+
         if facts_pack.intent == "greeting" and lead is None:
             return SalesReplyDecision(
                 intent=facts_pack.intent,
@@ -2092,8 +2204,19 @@ class SalesAgentService(CommerceBaseService):
             if lead is None:
                 reply = "Send the product name, size, or color you want and I’ll check the exact variant for you."
             else:
-                options = facts_pack.clarifier_options or tuple(item.label for item in facts_pack.primary_matches[:2])
-                reply = f"I found two close matches: {', '.join(options[:2])}. Which one should I check for you?"
+                brand_name = self._query_brand_name(
+                    facts_pack.search_request,
+                    (*facts_pack.primary_matches, *facts_pack.alternatives),
+                )
+                if brand_name:
+                    color = self._requested_color(facts_pack.search_request.normalized_text)
+                    if color:
+                        reply = f"I do have {brand_name} options in {color}. Tell me your size or preferred style and I’ll narrow it down."
+                    else:
+                        reply = f"I do have {brand_name} options. Tell me your size or preferred style and I’ll narrow it down."
+                else:
+                    options = facts_pack.clarifier_options or tuple(item.label for item in facts_pack.primary_matches[:2])
+                    reply = f"I found two close matches: {', '.join(options[:2])}. Which one should I check for you?"
             return SalesReplyDecision(
                 intent=facts_pack.intent,
                 reply_text=reply,
@@ -2914,6 +3037,7 @@ class SalesAgentService(CommerceBaseService):
             "variant_id": item.variant_id,
             "product_id": item.product_id,
             "product_name": item.product_name,
+            "brand": item.brand,
             "label": item.label,
             "sku": item.sku,
             "available_to_sell": str(item.available_to_sell),
@@ -2967,6 +3091,7 @@ class SalesAgentService(CommerceBaseService):
     def _facts_pack_payload(self, facts_pack: WarehouseFactsPack) -> dict[str, Any]:
         return {
             "intent": facts_pack.intent,
+            "business_name": facts_pack.business_name,
             "search_request": {
                 "client_id": facts_pack.search_request.client_id,
                 "location_id": facts_pack.search_request.location_id,

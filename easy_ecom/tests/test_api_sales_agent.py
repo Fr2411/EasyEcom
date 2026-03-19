@@ -109,6 +109,7 @@ def _seed_variant(
     *,
     stock_qty: Decimal = Decimal("6"),
     product_name: str = "Trail Runner",
+    brand: str = "Easy Brand",
     title: str = "42 / Black",
     sku: str = "TRAIL-42-BLACK",
     barcode: str = "BC-TRAIL-42-BLACK",
@@ -139,7 +140,7 @@ def _seed_variant(
             name=product_name,
             slug=f"sales-agent-{suffix}",
             sku_root=f"TRAIL-{suffix}",
-            brand="Easy Brand",
+            brand=brand,
             description=f"{product_name} description",
             status="active",
             default_price_amount=price_amount,
@@ -748,6 +749,122 @@ def test_follow_up_greeting_uses_shorter_non_repetitive_reply(monkeypatch, tmp_p
     conversation = client.get("/sales-agent/conversations").json()["items"][0]
     detail = client.get(f"/sales-agent/conversations/{conversation['conversation_id']}").json()
     assert len(detail["messages"]) == 4
+
+
+def test_shop_name_query_returns_business_name_instead_of_product_match(monkeypatch, tmp_path: Path) -> None:
+    runtime = _setup_runtime(tmp_path, monkeypatch)
+    _seed_variant(
+        runtime,
+        product_name="Campus Court Low",
+        brand="Adidas",
+        title="40 / White",
+        sku="CAMPUS-40-WHITE",
+        barcode="BC-CAMPUS-40-WHITE",
+        stock_qty=Decimal("11"),
+        price_amount=Decimal("149"),
+        min_price_amount=Decimal("129"),
+    )
+    client = _login_client()
+
+    monkeypatch.setattr(
+        SalesAgentService,
+        "_send_whatsapp_text",
+        lambda self, integration, recipient, text: {
+            "provider": "whatsapp",
+            "provider_event_id": "wamid-business-info-1",
+            "response": {"messages": [{"id": "wamid-business-info-1"}]},
+        },
+    )
+
+    _upsert_integration(
+        client,
+        verify_token="verify-business-info",
+        access_token="meta-token",
+        app_secret="meta-secret",
+        auto_send_enabled=True,
+    )
+    webhook_key = _webhook_key(runtime)
+
+    response = _signed_webhook_request(client, webhook_key, _webhook_payload("wamid-business-info-in-1", "What's your shop name"))
+    assert response.status_code == 200
+    assert response.json()["processed_messages"] == 1
+
+    conversation = client.get("/sales-agent/conversations").json()["items"][0]
+    detail = client.get(f"/sales-agent/conversations/{conversation['conversation_id']}").json()
+    assert len(detail["messages"]) == 2
+    assert "client one" in detail["messages"][1]["message_text"].lower()
+    assert "campus court low" not in detail["messages"][1]["message_text"].lower()
+    assert detail["latest_trace"]["facts_pack"]["intent"] == "business_info"
+
+
+def test_brand_query_prefers_brand_match_and_asks_for_size_or_style(monkeypatch, tmp_path: Path) -> None:
+    runtime = _setup_runtime(tmp_path, monkeypatch)
+    _seed_variant(
+        runtime,
+        product_name="Campus Court Low",
+        brand="Adidas",
+        title="40 / Black",
+        sku="ADI-CAMPUS-40-BLACK",
+        barcode="BC-ADI-CAMPUS-40-BLACK",
+        stock_qty=Decimal("8"),
+        price_amount=Decimal("149"),
+        min_price_amount=Decimal("129"),
+    )
+    _seed_variant(
+        runtime,
+        product_name="Motion Lite Trainer",
+        brand="Adidas",
+        title="39 / Black",
+        sku="ADI-MOTION-39-BLACK",
+        barcode="BC-ADI-MOTION-39-BLACK",
+        stock_qty=Decimal("6"),
+        price_amount=Decimal("159"),
+        min_price_amount=Decimal("139"),
+    )
+    _seed_variant(
+        runtime,
+        product_name="Little Steps School Shoe",
+        brand="Easy Brand",
+        title="30 / Black",
+        sku="SCHOOL-30-BLACK",
+        barcode="BC-SCHOOL-30-BLACK",
+        stock_qty=Decimal("10"),
+        price_amount=Decimal("55"),
+        min_price_amount=Decimal("49"),
+    )
+    client = _login_client()
+
+    monkeypatch.setattr(
+        SalesAgentService,
+        "_send_whatsapp_text",
+        lambda self, integration, recipient, text: {
+            "provider": "whatsapp",
+            "provider_event_id": "wamid-brand-query-1",
+            "response": {"messages": [{"id": "wamid-brand-query-1"}]},
+        },
+    )
+
+    _upsert_integration(
+        client,
+        verify_token="verify-brand-query",
+        access_token="meta-token",
+        app_secret="meta-secret",
+        auto_send_enabled=True,
+    )
+    webhook_key = _webhook_key(runtime)
+
+    response = _signed_webhook_request(client, webhook_key, _webhook_payload("wamid-brand-query-in-1", "I want adidas any black color shoe"))
+    assert response.status_code == 200
+    assert response.json()["processed_messages"] == 1
+
+    conversation = client.get("/sales-agent/conversations").json()["items"][0]
+    detail = client.get(f"/sales-agent/conversations/{conversation['conversation_id']}").json()
+    reply = detail["messages"][1]["message_text"].lower()
+    assert "adidas options" in reply
+    assert "size or preferred style" in reply
+    assert "little steps" not in reply
+    assert detail["latest_trace"]["runtime"]["helper_used"] is False
+    assert detail["latest_trace"]["facts_pack"]["primary_matches"][0]["brand"] == "Adidas"
 
 
 def test_exact_variant_query_stays_deterministic_and_persists_offer_trace(monkeypatch, tmp_path: Path) -> None:

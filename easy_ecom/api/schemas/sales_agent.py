@@ -65,7 +65,7 @@ class WhatsAppMetaIntegrationRequest(BaseModel):
     default_location_id: str | None = None
     auto_send_enabled: bool = False
     agent_enabled: bool = True
-    model_name: str = "gpt-5-nano"
+    model_name: str = "gpt-4o-mini"
     persona_prompt: str = ""
 
 
