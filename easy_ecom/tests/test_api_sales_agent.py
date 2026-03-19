@@ -659,7 +659,7 @@ def test_greeting_message_auto_sends_without_openai_or_product_match(monkeypatch
     conversation = conversations_response.json()["items"][0]
     assert conversation["status"] == "open"
     assert conversation["latest_draft_id"] is None
-    assert conversation["last_message_preview"].lower().startswith("hi.")
+    assert conversation["last_message_preview"].lower().startswith("good to hear from you.")
 
     detail_response = client.get(f"/sales-agent/conversations/{conversation['conversation_id']}")
     assert detail_response.status_code == 200
@@ -667,7 +667,8 @@ def test_greeting_message_auto_sends_without_openai_or_product_match(monkeypatch
     assert len(detail["messages"]) == 2
     assert detail["messages"][0]["direction"] == "inbound"
     assert detail["messages"][1]["direction"] == "outbound"
-    assert "live stock" in detail["messages"][1]["message_text"].lower()
+    assert "what are you" in detail["messages"][1]["message_text"].lower()
+    assert "brand or style" not in detail["messages"][1]["message_text"].lower()
     assert detail["latest_draft"] is None
 
 
@@ -703,7 +704,9 @@ def test_duplicate_inbound_webhook_only_sends_one_auto_reply(monkeypatch, tmp_pa
     assert first_response.json()["processed_messages"] == 1
     assert second_response.status_code == 200
     assert second_response.json()["processed_messages"] == 0
-    assert outbound_texts == ["Hi. I can check live stock, price, and the best options for you. What brand or style are you looking for?"]
+    assert len(outbound_texts) == 1
+    assert "what are you" in outbound_texts[0].lower()
+    assert "brand or style" not in outbound_texts[0].lower()
 
     conversation = client.get("/sales-agent/conversations").json()["items"][0]
     detail = client.get(f"/sales-agent/conversations/{conversation['conversation_id']}").json()
@@ -742,7 +745,7 @@ def test_follow_up_greeting_uses_shorter_non_repetitive_reply(monkeypatch, tmp_p
     assert second_response.status_code == 200
     assert first_response.json()["processed_messages"] == 1
     assert second_response.json()["processed_messages"] == 1
-    assert outbound_texts[0].startswith("Hi.")
+    assert outbound_texts[0].startswith("Good to hear from you.")
     assert outbound_texts[1].startswith("I’m here.")
     assert outbound_texts[0] != outbound_texts[1]
 
@@ -795,6 +798,130 @@ def test_shop_name_query_returns_business_name_instead_of_product_match(monkeypa
     assert "client one" in detail["messages"][1]["message_text"].lower()
     assert "campus court low" not in detail["messages"][1]["message_text"].lower()
     assert detail["latest_trace"]["facts_pack"]["intent"] == "business_info"
+
+
+def test_brand_list_query_uses_catalog_summary_instead_of_generic_clarifier(monkeypatch, tmp_path: Path) -> None:
+    runtime = _setup_runtime(tmp_path, monkeypatch)
+    _seed_variant(
+        runtime,
+        product_name="Campus Court Low",
+        brand="Adidas",
+        title="40 / Black",
+        sku="ADI-CAMPUS-40-BLACK",
+        barcode="BC-ADI-CAMPUS-40-BLACK",
+        stock_qty=Decimal("8"),
+        price_amount=Decimal("149"),
+        min_price_amount=Decimal("129"),
+    )
+    _seed_variant(
+        runtime,
+        product_name="Air Swift",
+        brand="Nike",
+        title="41 / White",
+        sku="NIKE-AIR-41-WHITE",
+        barcode="BC-NIKE-AIR-41-WHITE",
+        stock_qty=Decimal("6"),
+        price_amount=Decimal("179"),
+        min_price_amount=Decimal("159"),
+    )
+    client = _login_client()
+
+    monkeypatch.setattr(
+        SalesAgentService,
+        "_send_whatsapp_text",
+        lambda self, integration, recipient, text: {
+            "provider": "whatsapp",
+            "provider_event_id": "wamid-brand-list-1",
+            "response": {"messages": [{"id": "wamid-brand-list-1"}]},
+        },
+    )
+    monkeypatch.setattr(
+        SalesAgentService,
+        "_sales_reply_with_model",
+        lambda self, **kwargs: kwargs["fallback"],
+    )
+
+    _upsert_integration(
+        client,
+        verify_token="verify-brand-list",
+        access_token="meta-token",
+        app_secret="meta-secret",
+        auto_send_enabled=True,
+    )
+    webhook_key = _webhook_key(runtime)
+
+    response = _signed_webhook_request(client, webhook_key, _webhook_payload("wamid-brand-list-in-1", "What brands of shoes do you sell?"))
+    assert response.status_code == 200
+
+    conversation = client.get("/sales-agent/conversations").json()["items"][0]
+    detail = client.get(f"/sales-agent/conversations/{conversation['conversation_id']}").json()
+    reply = detail["messages"][-1]["message_text"].lower()
+    assert "adidas" in reply
+    assert "nike" in reply
+    assert "brand or style" not in reply
+    assert detail["latest_trace"]["facts_pack"]["catalog_summary"]["top_brand_options"][:2] == ["Adidas", "Nike"]
+
+
+def test_brand_only_correction_is_preserved_in_conversation_state(monkeypatch, tmp_path: Path) -> None:
+    runtime = _setup_runtime(tmp_path, monkeypatch)
+    _seed_variant(
+        runtime,
+        product_name="Campus Court Low",
+        brand="Adidas",
+        title="40 / Black",
+        sku="ADI-CAMPUS-40-BLACK",
+        barcode="BC-ADI-CAMPUS-40-BLACK",
+        stock_qty=Decimal("8"),
+        price_amount=Decimal("149"),
+        min_price_amount=Decimal("129"),
+    )
+    _seed_variant(
+        runtime,
+        product_name="Street Runner",
+        brand="Nike",
+        title="40 / Black",
+        sku="NIKE-STREET-40-BLACK",
+        barcode="BC-NIKE-STREET-40-BLACK",
+        stock_qty=Decimal("8"),
+        price_amount=Decimal("159"),
+        min_price_amount=Decimal("139"),
+    )
+    client = _login_client()
+
+    monkeypatch.setattr(
+        SalesAgentService,
+        "_send_whatsapp_text",
+        lambda self, integration, recipient, text: {
+            "provider": "whatsapp",
+            "provider_event_id": "",
+            "response": {"messages": [{"id": ""}]},
+        },
+    )
+    monkeypatch.setattr(
+        SalesAgentService,
+        "_sales_reply_with_model",
+        lambda self, **kwargs: kwargs["fallback"],
+    )
+
+    _upsert_integration(
+        client,
+        verify_token="verify-correction",
+        access_token="meta-token",
+        app_secret="meta-secret",
+        auto_send_enabled=True,
+    )
+    webhook_key = _webhook_key(runtime)
+
+    first = _signed_webhook_request(client, webhook_key, _webhook_payload("wamid-correction-1", "Do you have adidas"))
+    second = _signed_webhook_request(client, webhook_key, _webhook_payload("wamid-correction-2", "Adidas only. Nothing else"))
+    assert first.status_code == 200
+    assert second.status_code == 200
+
+    conversation = client.get("/sales-agent/conversations").json()["items"][0]
+    detail = client.get(f"/sales-agent/conversations/{conversation['conversation_id']}").json()
+    state = detail["latest_trace"]["conversation_state_after"]
+    assert "Adidas only" in state["customer_corrections"]
+    assert state["active_brand"] == "Adidas"
 
 
 def test_brand_query_prefers_brand_match_and_asks_for_size_or_style(monkeypatch, tmp_path: Path) -> None:
@@ -1167,7 +1294,7 @@ def test_short_greeting_token_does_not_false_match_white_variant(monkeypatch, tm
     assert detail_response.status_code == 200
     detail = detail_response.json()
     assert len(detail["messages"]) == 2
-    assert "live stock" in detail["messages"][1]["message_text"].lower()
+    assert "what are you" in detail["messages"][1]["message_text"].lower()
     assert "campus court low" not in detail["messages"][1]["message_text"].lower()
 
 

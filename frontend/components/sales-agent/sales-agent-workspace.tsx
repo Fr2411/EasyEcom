@@ -212,8 +212,10 @@ export function SalesAgentWorkspace() {
                   const traceRuntime = asRecord(trace.runtime);
                   const traceFacts = asRecord(trace.facts_pack);
                   const traceConstraints = asRecord(traceFacts.active_constraints);
+                  const traceCatalogSummary = asRecord(traceFacts.catalog_summary);
                   const traceRangeSummary = asRecord(traceFacts.range_summary);
                   const traceConversationState = asRecord(trace.conversation_state_after || traceFacts.conversation_state);
+                  const traceReplyContract = asRecord(trace.reply_contract);
                   const traceDecision = asRecord(trace.decision);
                   const traceOfferPolicy = asRecord(traceFacts.offer_policy);
                   const tracePrimaryMatches = asRecordArray(traceFacts.primary_matches);
@@ -221,6 +223,9 @@ export function SalesAgentWorkspace() {
                   const traceUpsells = asRecordArray(traceFacts.upsell_candidates);
                   const traceOfferSteps = asRecordArray(traceOfferPolicy.auto_discount_steps);
                   const traceReasonCodes = asStringArray(traceDecision.reason_codes ?? traceFacts.reason_codes);
+                  const traceCorrections = asStringArray(traceConversationState.customer_corrections);
+                  const traceSupportedBrands = asStringArray(traceCatalogSummary.top_brand_options || traceCatalogSummary.supported_brands);
+                  const traceSupportedNeeds = asStringArray(traceCatalogSummary.supported_need_labels);
                   return (
                     <Fragment key={conversation.conversation_id}>
                       <tr>
@@ -347,6 +352,12 @@ export function SalesAgentWorkspace() {
                                                 <small>{asString(traceConstraints.active_need_label)}</small>
                                               </li>
                                             ) : null}
+                                            {asString(traceConstraints.active_category) ? (
+                                              <li>
+                                                <span>Category</span>
+                                                <small>{asString(traceConstraints.active_category)}</small>
+                                              </li>
+                                            ) : null}
                                             {asString(traceConstraints.active_color) ? (
                                               <li>
                                                 <span>Color</span>
@@ -363,6 +374,32 @@ export function SalesAgentWorkspace() {
                                               <li>
                                                 <span>Price intent</span>
                                                 <small>{asString(traceConstraints.active_price_intent)}</small>
+                                              </li>
+                                            ) : null}
+                                            {asString(traceConstraints.budget_posture) ? (
+                                              <li>
+                                                <span>Budget posture</span>
+                                                <small>{asString(traceConstraints.budget_posture)}</small>
+                                              </li>
+                                            ) : null}
+                                          </ul>
+                                        </div>
+                                      ) : null}
+                                      {(asString(traceCatalogSummary.summary_text) || traceSupportedBrands.length || traceSupportedNeeds.length) ? (
+                                        <div className="sales-agent-trace-block">
+                                          <strong>Warehouse summary</strong>
+                                          {asString(traceCatalogSummary.summary_text) ? <p className="admin-muted">{asString(traceCatalogSummary.summary_text)}</p> : null}
+                                          <ul className="sales-agent-trace-list">
+                                            {traceSupportedBrands.length ? (
+                                              <li>
+                                                <span>Brands</span>
+                                                <small>{traceSupportedBrands.join(', ')}</small>
+                                              </li>
+                                            ) : null}
+                                            {traceSupportedNeeds.length ? (
+                                              <li>
+                                                <span>Needs</span>
+                                                <small>{traceSupportedNeeds.join(', ')}</small>
                                               </li>
                                             ) : null}
                                           </ul>
@@ -399,6 +436,33 @@ export function SalesAgentWorkspace() {
                                                 <small>{asString(traceConversationState.last_customer_need_summary)}</small>
                                               </li>
                                             ) : null}
+                                            {traceCorrections.length ? (
+                                              <li>
+                                                <span>Corrections</span>
+                                                <small>{traceCorrections.join(', ')}</small>
+                                              </li>
+                                            ) : null}
+                                          </ul>
+                                        </div>
+                                      ) : null}
+                                      {Object.keys(traceReplyContract).length ? (
+                                        <div className="sales-agent-trace-block">
+                                          <strong>Reply contract</strong>
+                                          <ul className="sales-agent-trace-list">
+                                            {asString(traceReplyContract.reply_mode) ? (
+                                              <li>
+                                                <span>Mode</span>
+                                                <small>{asString(traceReplyContract.reply_mode)}</small>
+                                              </li>
+                                            ) : null}
+                                            <li>
+                                              <span>Must acknowledge</span>
+                                              <small>{traceReplyContract.must_acknowledge ? 'yes' : 'no'}</small>
+                                            </li>
+                                            <li>
+                                              <span>Needs review</span>
+                                              <small>{traceReplyContract.needs_review ? 'yes' : 'no'}</small>
+                                            </li>
                                           </ul>
                                         </div>
                                       ) : null}
