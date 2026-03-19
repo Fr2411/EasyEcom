@@ -37,7 +37,7 @@ const EMPTY_FORM: WhatsAppMetaIntegrationPayload = {
   default_location_id: '',
   auto_send_enabled: false,
   agent_enabled: true,
-  model_name: 'gpt-5-nano',
+  model_name: 'gpt-4o-mini',
   persona_prompt:
     'You are an aggressive but honest sales agent. Increase revenue through smart upsell and slow-moving stock suggestions, but never promise unavailable stock or unauthorized discounts.',
 };
@@ -404,7 +404,7 @@ export function IntegrationsWorkspace() {
               <input
                 value={draft.model_name}
                 onChange={(event) => setDraft({ ...draft, model_name: event.target.value })}
-                placeholder="gpt-5-nano"
+                placeholder="gpt-4o-mini"
               />
               <small className="workspace-field-note">
                 The OpenAI API key is configured on the backend with <code>OPENAI_API_KEY</code>. This form only selects
