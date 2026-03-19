@@ -176,6 +176,9 @@ COLOR_TOKENS = (
     "navy",
 )
 CATEGORY_TOKENS = (
+    "formal",
+    "accessory",
+    "accessories",
     "shoe",
     "shoes",
     "sneaker",
@@ -192,12 +195,14 @@ CATEGORY_TOKENS = (
     "boots",
 )
 NEED_LABEL_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "formal shoes": ("formal", "office", "dress", "loafer", "loafers", "oxford", "oxfords", "derby", "derbies"),
     "running shoes": ("running", "runner", "train", "trainer", "trainers", "jog", "jogging", "sneaker", "sneakers"),
     "school shoes": ("school",),
     "sandals": ("sandal", "sandals", "slide", "slides"),
     "heels": ("heel", "heels"),
+    "accessories": ("accessory", "accessories", "bag", "bags", "belt", "belts", "wallet", "wallets", "sock", "socks", "cap", "caps"),
 }
-NEED_LABEL_PRIORITY = ("running shoes", "school shoes", "sandals", "heels")
+NEED_LABEL_PRIORITY = ("formal shoes", "running shoes", "school shoes", "sandals", "heels", "accessories")
 ABSTRACT_FOLLOWUP_TOKENS = ("brand", "comfortable", "comfort", "quality", "good", "best", "these", "those", "that")
 PERCENT_QUANTUM = Decimal("0.01")
 FACTS_SUMMARY_LIMIT = 600
@@ -2677,6 +2682,8 @@ class SalesAgentService(CommerceBaseService):
                 follow_up = "What size or style do you want me to narrow it down to?"
             elif facts_pack.active_constraints.active_product_family and not facts_pack.active_constraints.active_size:
                 follow_up = "What size should I check for you?"
+            elif facts_pack.active_constraints.active_size and not facts_pack.active_constraints.active_color:
+                follow_up = "What color or style do you want me to narrow it down to?"
             else:
                 follow_up = "What size, color, or style should I narrow it down to?"
             return SalesReplyDecision(
@@ -2697,12 +2704,22 @@ class SalesAgentService(CommerceBaseService):
 
         if facts_pack.next_required_action == "answer_and_ask":
             if lead is None:
+                if facts_pack.active_constraints.active_need_label == "accessories":
+                    reply = (
+                        "I’m not seeing accessories in the current catalog right now. "
+                        "I mainly have shoes in stock. If you want, I can show you running, formal, or everyday shoe options."
+                    )
                 brand = facts_pack.active_constraints.active_brand
                 product_family = facts_pack.active_constraints.active_product_family
-                if brand:
+                if facts_pack.active_constraints.active_need_label == "accessories":
+                    pass
+                elif brand:
                     reply = f"I can help with {brand}. Tell me the size, color, or style you want and I’ll narrow it down."
                 elif product_family:
                     reply = f"I’m checking {product_family} for you. Tell me the size or color you want and I’ll narrow it down."
+                elif facts_pack.active_constraints.active_size:
+                    subject = facts_pack.active_constraints.active_need_label or "that"
+                    reply = f"I can help with {subject}. Tell me the color or style you want and I’ll narrow it down."
                 else:
                     reply = "I can help with that. Tell me the brand, style, size, or budget you want and I’ll narrow it down."
             elif len(facts_pack.primary_matches) > 1:
@@ -2860,7 +2877,7 @@ class SalesAgentService(CommerceBaseService):
         }
         payload = {
             "facts_pack": self._facts_pack_payload(facts_pack),
-            "fallback": self._decision_payload(fallback),
+            "reply_contract": self._reply_contract_payload(fallback),
         }
         parsed = self._structured_openai_json(
             model_name=model_name,
@@ -2870,6 +2887,7 @@ class SalesAgentService(CommerceBaseService):
                 "You are the customer-facing WhatsApp sales concierge for a retail store. "
                 "Reply like a concise human seller, not a catalog bot. "
                 "Use only the provided facts pack. Never invent products, brands, stock, prices, discounts, or locations. "
+                "The reply_contract defines the required action, allowed selections, and review status. Follow it, but write fresh, natural customer-facing text. "
                 "Answer the customer's question first. Ask at most one focused follow-up question if needed. "
                 "Keep the reply to one short paragraph. "
                 "If the request must be reviewed or handed off, acknowledge that naturally and avoid promising final details you cannot confirm."
@@ -3730,6 +3748,22 @@ class SalesAgentService(CommerceBaseService):
             },
             "helper_used": decision.helper_used,
             "sales_model_used": decision.sales_model_used,
+        }
+
+    def _reply_contract_payload(self, decision: SalesReplyDecision) -> dict[str, Any]:
+        return {
+            "intent": decision.intent,
+            "reply_mode": decision.reply_mode,
+            "selected_variant_id": decision.selected_variant_id,
+            "selected_offer_id": decision.selected_offer_id,
+            "recommended_variant_ids": list(decision.recommended_variant_ids),
+            "needs_review": decision.needs_review,
+            "reason_codes": list(decision.reason_codes),
+            "behavior_tags": list(decision.behavior_tags),
+            "draft_order_request": {
+                key: (str(value) if isinstance(value, Decimal) else value)
+                for key, value in (decision.draft_order_request or {}).items()
+            },
         }
 
     def _decision_trace_payload(self, facts_pack: WarehouseFactsPack, decision: SalesReplyDecision) -> dict[str, Any]:

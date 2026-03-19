@@ -946,6 +946,125 @@ def test_running_shoe_context_carries_into_brand_follow_up_without_drifting(monk
     assert all("sandal" not in label and "heel" not in label for label in labels)
 
 
+def test_formal_shoe_browse_with_known_size_asks_for_color_or_style_not_size(monkeypatch, tmp_path: Path) -> None:
+    runtime = _setup_runtime(tmp_path, monkeypatch)
+    _seed_variant(
+        runtime,
+        product_name="Coast Loafer",
+        brand="Classic Step",
+        title="42 / Black",
+        sku="LOAFER-42-BLACK",
+        barcode="BC-LOAFER-42-BLACK",
+        stock_qty=Decimal("4"),
+        price_amount=Decimal("149"),
+        min_price_amount=Decimal("129"),
+    )
+    _seed_variant(
+        runtime,
+        product_name="Coast Loafer",
+        brand="Classic Step",
+        title="42 / Brown",
+        sku="LOAFER-42-BROWN",
+        barcode="BC-LOAFER-42-BROWN",
+        stock_qty=Decimal("3"),
+        price_amount=Decimal("154"),
+        min_price_amount=Decimal("129"),
+    )
+    _seed_variant(
+        runtime,
+        product_name="Motion Lite Trainer",
+        brand="Adidas",
+        title="42 / Black",
+        sku="RUN-42-BLACK",
+        barcode="BC-RUN-42-BLACK",
+        stock_qty=Decimal("6"),
+        price_amount=Decimal("159"),
+        min_price_amount=Decimal("139"),
+    )
+    client = _login_client()
+
+    monkeypatch.setattr(
+        SalesAgentService,
+        "_send_whatsapp_text",
+        lambda self, integration, recipient, text: {
+            "provider": "whatsapp",
+            "provider_event_id": "",
+            "response": {"messages": [{"id": ""}]},
+        },
+    )
+    monkeypatch.setattr(
+        SalesAgentService,
+        "_sales_reply_with_model",
+        lambda self, **kwargs: kwargs["fallback"],
+    )
+
+    _upsert_integration(
+        client,
+        verify_token="verify-formal",
+        access_token="meta-token",
+        app_secret="meta-secret",
+        auto_send_enabled=True,
+    )
+    webhook_key = _webhook_key(runtime)
+    response = _signed_webhook_request(
+        client,
+        webhook_key,
+        _webhook_payload("wamid-formal-1", "I wear size 42 and need some formal shoes."),
+    )
+    assert response.status_code == 200
+
+    conversation = client.get("/sales-agent/conversations").json()["items"][0]
+    detail = client.get(f"/sales-agent/conversations/{conversation['conversation_id']}").json()
+    reply = detail["messages"][-1]["message_text"].lower()
+    assert "formal shoes" in reply
+    assert "what size" not in reply
+    assert "color or style" in reply
+    assert detail["latest_trace"]["facts_pack"]["active_constraints"]["active_need_label"] == "formal shoes"
+
+
+def test_accessories_query_without_catalog_match_answers_catalog_truth(monkeypatch, tmp_path: Path) -> None:
+    runtime = _setup_runtime(tmp_path, monkeypatch)
+    _seed_variant(runtime, product_name="Trail Runner", brand="Adidas", title="42 / Black")
+    client = _login_client()
+
+    monkeypatch.setattr(
+        SalesAgentService,
+        "_send_whatsapp_text",
+        lambda self, integration, recipient, text: {
+            "provider": "whatsapp",
+            "provider_event_id": "",
+            "response": {"messages": [{"id": ""}]},
+        },
+    )
+    monkeypatch.setattr(
+        SalesAgentService,
+        "_sales_reply_with_model",
+        lambda self, **kwargs: kwargs["fallback"],
+    )
+
+    _upsert_integration(
+        client,
+        verify_token="verify-accessories",
+        access_token="meta-token",
+        app_secret="meta-secret",
+        auto_send_enabled=True,
+    )
+    webhook_key = _webhook_key(runtime)
+    response = _signed_webhook_request(
+        client,
+        webhook_key,
+        _webhook_payload("wamid-accessories-1", "I wanted to know what accessories you sell"),
+    )
+    assert response.status_code == 200
+
+    conversation = client.get("/sales-agent/conversations").json()["items"][0]
+    detail = client.get(f"/sales-agent/conversations/{conversation['conversation_id']}").json()
+    reply = detail["messages"][-1]["message_text"].lower()
+    assert "not seeing accessories" in reply
+    assert "shoes" in reply
+    assert detail["latest_trace"]["facts_pack"]["active_constraints"]["active_need_label"] == "accessories"
+
+
 def test_exact_variant_query_stays_deterministic_and_persists_offer_trace(monkeypatch, tmp_path: Path) -> None:
     runtime = _setup_runtime(tmp_path, monkeypatch)
     _seed_variant(runtime, stock_qty=Decimal("8"))
