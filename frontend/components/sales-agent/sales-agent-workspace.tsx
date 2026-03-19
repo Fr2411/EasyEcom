@@ -211,6 +211,9 @@ export function SalesAgentWorkspace() {
                   const trace = draft ? asRecord(asRecord(draft.grounding).trace) : asRecord(conversationDetail?.latest_trace);
                   const traceRuntime = asRecord(trace.runtime);
                   const traceFacts = asRecord(trace.facts_pack);
+                  const traceConstraints = asRecord(traceFacts.active_constraints);
+                  const traceRangeSummary = asRecord(traceFacts.range_summary);
+                  const traceConversationState = asRecord(trace.conversation_state_after || traceFacts.conversation_state);
                   const traceDecision = asRecord(trace.decision);
                   const traceOfferPolicy = asRecord(traceFacts.offer_policy);
                   const tracePrimaryMatches = asRecordArray(traceFacts.primary_matches);
@@ -262,7 +265,7 @@ export function SalesAgentWorkspace() {
                                         <div className="sales-agent-mentions">
                                           {message.mentions.map((mention) => (
                                             <span key={mention.mention_id}>
-                                              {mention.mention_role}: {mention.variant_id ?? mention.product_id}
+                                              {mention.mention_role}: {mention.label || mention.variant_id || mention.product_id}
                                               {mention.available_to_sell ? ` · ${formatQuantity(mention.available_to_sell)} avail` : ''}
                                             </span>
                                           ))}
@@ -313,13 +316,85 @@ export function SalesAgentWorkspace() {
                                   {Object.keys(trace).length ? (
                                     <div className="sales-agent-trace">
                                       <div className="sales-agent-trace-pills">
-                                        <span>Tier: {asString(traceRuntime.tier) || 'n/a'}</span>
+                                        <span>Answer type: {asString(traceRuntime.answer_type) || 'n/a'}</span>
                                         <span>Next action: {asString(traceRuntime.next_required_action) || 'n/a'}</span>
                                         <span>Helper: {traceRuntime.helper_used ? 'yes' : 'no'}</span>
                                         <span>Sales model: {traceRuntime.sales_model_used ? 'yes' : 'no'}</span>
+                                        <span>Ack sent: {traceRuntime.review_ack_sent ? 'yes' : 'no'}</span>
                                       </div>
                                       {traceReasonCodes.length ? (
                                         <p className="admin-muted">Reason codes: {traceReasonCodes.join(', ')}</p>
+                                      ) : null}
+                                      {Object.keys(traceConstraints).length ? (
+                                        <div className="sales-agent-trace-block">
+                                          <strong>Active constraints</strong>
+                                          <ul className="sales-agent-trace-list">
+                                            {asString(traceConstraints.active_brand) ? (
+                                              <li>
+                                                <span>Brand</span>
+                                                <small>{asString(traceConstraints.active_brand)}</small>
+                                              </li>
+                                            ) : null}
+                                            {asString(traceConstraints.active_product_family) ? (
+                                              <li>
+                                                <span>Product family</span>
+                                                <small>{asString(traceConstraints.active_product_family)}</small>
+                                              </li>
+                                            ) : null}
+                                            {asString(traceConstraints.active_color) ? (
+                                              <li>
+                                                <span>Color</span>
+                                                <small>{asString(traceConstraints.active_color)}</small>
+                                              </li>
+                                            ) : null}
+                                            {asString(traceConstraints.active_size) ? (
+                                              <li>
+                                                <span>Size</span>
+                                                <small>{asString(traceConstraints.active_size)}</small>
+                                              </li>
+                                            ) : null}
+                                            {asString(traceConstraints.active_price_intent) ? (
+                                              <li>
+                                                <span>Price intent</span>
+                                                <small>{asString(traceConstraints.active_price_intent)}</small>
+                                              </li>
+                                            ) : null}
+                                          </ul>
+                                        </div>
+                                      ) : null}
+                                      {Object.keys(traceRangeSummary).length ? (
+                                        <div className="sales-agent-trace-block">
+                                          <strong>Range summary</strong>
+                                          <ul className="sales-agent-trace-list">
+                                            <li>
+                                              <span>Price range</span>
+                                              <small>
+                                                ${formatMoney(asString(traceRangeSummary.min_price))} to ${formatMoney(asString(traceRangeSummary.max_price))}
+                                              </small>
+                                            </li>
+                                            <li>
+                                              <span>Candidates</span>
+                                              <small>{asString(traceRangeSummary.candidate_count) || '0'}</small>
+                                            </li>
+                                          </ul>
+                                        </div>
+                                      ) : null}
+                                      {Object.keys(traceConversationState).length ? (
+                                        <div className="sales-agent-trace-block">
+                                          <strong>Conversation state</strong>
+                                          <ul className="sales-agent-trace-list">
+                                            <li>
+                                              <span>Unresolved turns</span>
+                                              <small>{asString(traceConversationState.unresolved_turn_count) || '0'}</small>
+                                            </li>
+                                            {asString(traceConversationState.last_customer_need_summary) ? (
+                                              <li>
+                                                <span>Latest need</span>
+                                                <small>{asString(traceConversationState.last_customer_need_summary)}</small>
+                                              </li>
+                                            ) : null}
+                                          </ul>
+                                        </div>
                                       ) : null}
                                       {tracePrimaryMatches.length ? (
                                         <div className="sales-agent-trace-block">

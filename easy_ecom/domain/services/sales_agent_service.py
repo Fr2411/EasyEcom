@@ -24,6 +24,7 @@ from easy_ecom.core.time_utils import now_utc
 from easy_ecom.data.store.postgres_models import (
     AiReviewDraftModel,
     AuditLogModel,
+    CategoryModel,
     ChannelConversationModel,
     ChannelIntegrationModel,
     ChannelJobModel,
@@ -77,6 +78,8 @@ BUSINESS_INFO_PHRASES = (
     "what's your store name",
     "who are you",
 )
+HANDOFF_KEYWORDS = ("human", "person", "agent", "representative", "call me", "someone there")
+RANGE_KEYWORDS = ("range", "most expensive", "cheapest", "highest", "lowest", "price range")
 ALLOWED_BEHAVIOR_TAGS = {
     "price_sensitive",
     "discount_seeking",
@@ -93,7 +96,7 @@ REVIEW_KEYWORDS = {
     "payment_issue": ("payment", "paid", "transfer", "receipt"),
     "discount_request": ("discount", "less", "best price", "offer", "cheap", "deal"),
 }
-GREETING_KEYWORDS = ("hello", "hi", "hey", "good morning", "good afternoon", "good evening", "salam")
+GREETING_KEYWORDS = ("hello", "hi", "hey", "good morning", "good afternoon", "good evening", "salam", "are you there")
 MATCH_STOPWORDS = {
     "a",
     "an",
@@ -168,12 +171,29 @@ COLOR_TOKENS = (
     "gray",
     "navy",
 )
+CATEGORY_TOKENS = (
+    "shoe",
+    "shoes",
+    "sneaker",
+    "sneakers",
+    "trainer",
+    "trainers",
+    "slide",
+    "slides",
+    "sandal",
+    "sandals",
+    "heel",
+    "heels",
+    "boot",
+    "boots",
+)
 PERCENT_QUANTUM = Decimal("0.01")
 FACTS_SUMMARY_LIMIT = 600
 MAX_RECENT_TURNS = 4
 MAX_PRIMARY_MATCHES = 3
 MAX_ALTERNATIVE_MATCHES = 2
 MAX_UPSELL_MATCHES = 2
+MAX_MATCH_CANDIDATES = 20
 
 
 @dataclass(frozen=True)
@@ -182,12 +202,45 @@ class MatchedVariant:
     product_id: str
     product_name: str
     brand: str
+    category_name: str
     label: str
     sku: str
     available_to_sell: Decimal
     unit_price: Decimal
     min_price: Decimal | None
     match_score: int
+
+
+@dataclass(frozen=True)
+class ActiveConstraints:
+    active_brand: str | None
+    active_product_family: str | None
+    active_color: str | None
+    active_size: str | None
+    active_price_intent: str | None
+
+
+@dataclass(frozen=True)
+class RangeSummary:
+    min_price: Decimal | None
+    max_price: Decimal | None
+    candidate_count: int
+    matched_brand: str | None
+    matched_category: str | None
+    matched_product_family: str | None
+
+
+@dataclass(frozen=True)
+class ConversationState:
+    active_brand: str | None
+    active_product_family: str | None
+    active_color: str | None
+    active_size: str | None
+    active_price_intent: str | None
+    last_resolved_variant_ids: tuple[str, ...]
+    unresolved_turn_count: int
+    last_customer_need_summary: str
+    customer_ack_sent: bool
 
 
 @dataclass(frozen=True)
@@ -252,6 +305,9 @@ class WarehouseFactsPack:
     intent: str
     business_name: str
     search_request: WarehouseSearchRequest
+    active_constraints: ActiveConstraints
+    range_summary: RangeSummary | None
+    conversation_state: ConversationState
     customer_snapshot: CustomerSnapshot
     conversation_memory: ConversationMemorySnapshot
     primary_matches: tuple[MatchedVariant, ...]
@@ -435,7 +491,7 @@ class WarehouseContextService:
         customer: CustomerModel | None,
     ) -> WarehouseFactsPack:
         text = inbound_message.message_text or ""
-        intent, behavior_tags, base_reason_codes = self._service._message_signals(text)
+        base_intent, behavior_tags, base_reason_codes = self._service._message_signals(text)
         business_name = self._service._client_business_name(self._session, integration.client_id) or integration.display_name or "our store"
         location_id = str(integration.default_location_id or self._service._default_location_id(self._session, integration.client_id))
         search_request = WarehouseSearchRequest(
@@ -444,31 +500,36 @@ class WarehouseContextService:
             message_text=text,
             normalized_text=" ".join(text.strip().lower().split()),
             tokens=self._service._search_tokens(text),
-            intent=intent,
+            intent=base_intent,
             quantity=self._service._extract_quantity(text.lower()),
         )
         customer_snapshot = self._service._customer_snapshot(conversation, customer)
         memory = self._service._conversation_memory_snapshot(self._session, conversation.conversation_id)
-        matches = (
+        prior_state = self._service._conversation_state(conversation)
+        raw_matches = (
             self._service._match_variants(self._session, integration.client_id, location_id, text)
-            if intent not in {"business_info", "greeting"}
+            if base_intent not in {"business_info", "greeting", "handoff"}
             else []
         )
-
+        active_constraints = self._service._derive_active_constraints(search_request, prior_state, raw_matches)
+        matches = self._service._apply_active_constraints(raw_matches, active_constraints)
+        resolved_intent = self._service._resolve_sales_intent(base_intent, search_request, active_constraints, matches)
+        search_request = WarehouseSearchRequest(
+            client_id=search_request.client_id,
+            location_id=search_request.location_id,
+            message_text=search_request.message_text,
+            normalized_text=search_request.normalized_text,
+            tokens=search_request.tokens,
+            intent=resolved_intent,
+            quantity=search_request.quantity,
+        )
+        range_summary = self._service._range_summary(matches, active_constraints, resolved_intent)
         helper_summary = ""
         clarifier_options: tuple[str, ...] = ()
         helper_used = False
-        if self._service._should_use_helper(search_request, matches):
-            matches, helper_summary, clarifier_options, helper_used = self._helper.resolve(
-                model_name=settings.openai_helper_model,
-                message_text=text,
-                memory=memory,
-                candidates=matches,
-            )
-
         primary_matches, alternatives = self._service._split_match_candidates(search_request, matches, helper_used)
         upsell_candidates: tuple[MatchedVariant, ...] = ()
-        if primary_matches and intent != "greeting":
+        if primary_matches and resolved_intent in {"exact_match", "negotiation"}:
             upsell_candidates = tuple(
                 self._service._upsell_candidates(
                     self._session,
@@ -489,17 +550,33 @@ class WarehouseContextService:
             primary_matches=primary_matches,
             alternatives=alternatives,
             offer_policy=offer_policy,
+            range_summary=range_summary,
         )
         next_required_action = self._service._next_required_action(
             search_request=search_request,
             primary_matches=primary_matches,
             reason_codes=reason_codes,
             offer_policy=offer_policy,
+            range_summary=range_summary,
+            prior_state=prior_state,
         )
         return WarehouseFactsPack(
-            intent=intent,
+            intent=resolved_intent,
             business_name=business_name,
             search_request=search_request,
+            active_constraints=active_constraints,
+            range_summary=range_summary,
+            conversation_state=ConversationState(
+                active_brand=active_constraints.active_brand,
+                active_product_family=active_constraints.active_product_family,
+                active_color=active_constraints.active_color,
+                active_size=active_constraints.active_size,
+                active_price_intent=active_constraints.active_price_intent,
+                last_resolved_variant_ids=prior_state.last_resolved_variant_ids,
+                unresolved_turn_count=prior_state.unresolved_turn_count,
+                last_customer_need_summary=prior_state.last_customer_need_summary,
+                customer_ack_sent=prior_state.customer_ack_sent,
+            ),
             customer_snapshot=customer_snapshot,
             conversation_memory=memory,
             primary_matches=primary_matches,
@@ -1073,7 +1150,11 @@ class SalesAgentService(CommerceBaseService):
                 channel_id=integration.channel_id,
                 direction="outbound",
                 external_sender_id=conversation.external_sender_id,
-                provider_event_id=str(send_result.get("provider_event_id", "")),
+                provider_event_id=self._provider_event_id_for_storage(
+                    session,
+                    user.client_id,
+                    str(send_result.get("provider_event_id", "")),
+                ),
                 provider_status="accepted",
                 message_text=outbound_text,
                 content_summary=self._summarize_text(outbound_text),
@@ -1302,12 +1383,13 @@ class SalesAgentService(CommerceBaseService):
         decision_trace = self._decision_trace_payload(facts_pack, decision)
 
         inbound_message.ai_metadata_json = {
-            "tier": decision.reply_mode,
+            "answer_type": decision.reply_mode,
             "helper_used": facts_pack.helper_used,
             "sales_model_used": decision.sales_model_used,
             "reason_codes": list(decision.reason_codes),
             "selected_variant_id": decision.selected_variant_id,
             "selected_offer_id": decision.selected_offer_id,
+            "active_constraints": self._active_constraints_payload(facts_pack.active_constraints),
         }
         inbound_message.structured_extraction_json = {
             "intent": facts_pack.intent,
@@ -1315,18 +1397,7 @@ class SalesAgentService(CommerceBaseService):
             "quantity": str(facts_pack.search_request.quantity),
             "next_required_action": facts_pack.next_required_action,
         }
-
-        metadata = dict(conversation.metadata_json or {})
-        metadata["latest_trace"] = decision_trace
-        metadata["rolling_summary"] = self._rolling_summary(
-            memory=facts_pack.conversation_memory,
-            inbound_text=inbound_message.message_text,
-            latest_reply=decision.reply_text,
-            needs_review=decision.needs_review,
-        )
-        conversation.metadata_json = metadata
         conversation.latest_intent = decision.intent
-        conversation.latest_summary = str(metadata.get("rolling_summary", "")) or self._summarize_text(decision.reply_text, limit=500)
         conversation.last_recommended_products_summary = self._recommended_summary(
             list(facts_pack.primary_matches),
             list(facts_pack.upsell_candidates),
@@ -1398,8 +1469,80 @@ class SalesAgentService(CommerceBaseService):
 
         needs_review = decision.needs_review or not integration.auto_send_enabled
         draft = None
+        customer_visible_reply = decision.reply_text
+        review_ack_sent = False
         if needs_review:
             draft = create_review_draft(reason_codes=list(decision.reason_codes))
+            ack_text = self._review_acknowledgment_text(
+                facts_pack=facts_pack,
+                decision=decision,
+                auto_send_enabled=integration.auto_send_enabled,
+            )
+            try:
+                send_result = self._send_whatsapp_text(integration, conversation.external_sender_id, ack_text)
+            except ApiException as exc:
+                self._update_integration_diagnostics(
+                    integration,
+                    outbound_send_ok=False,
+                    last_error_code=self._diagnostic_code(exc),
+                    last_error_message=exc.message,
+                    last_provider_status_code=exc.details.get("provider_status_code") if exc.details else None,
+                    last_provider_response_excerpt=exc.details.get("provider_response_excerpt") if exc.details else None,
+                    last_diagnostic_at=now_utc().isoformat(),
+                )
+            else:
+                review_ack_sent = True
+                customer_visible_reply = ack_text
+                outbound_message = ChannelMessageModel(
+                    message_id=new_uuid(),
+                    client_id=integration.client_id,
+                    conversation_id=conversation.conversation_id,
+                    channel_id=integration.channel_id,
+                    direction="outbound",
+                    external_sender_id=conversation.external_sender_id,
+                    provider_event_id=self._provider_event_id_for_storage(
+                        session,
+                        integration.client_id,
+                        str(send_result.get("provider_event_id", "")),
+                    ),
+                    provider_status="accepted",
+                    message_text=ack_text,
+                    content_summary=self._summarize_text(ack_text),
+                    raw_payload_json=send_result,
+                    ai_metadata_json={
+                        **decision_trace,
+                        "runtime": {
+                            **dict(decision_trace.get("runtime") or {}),
+                            "review_ack_sent": True,
+                            "acknowledgment_only": True,
+                        },
+                    },
+                    occurred_at=now_utc(),
+                    outbound_status="sent",
+                )
+                session.add(outbound_message)
+                conversation.last_message_at = outbound_message.occurred_at
+                conversation.last_message_preview = outbound_message.content_summary
+                conversation.status = "needs_review"
+                integration.last_outbound_at = outbound_message.occurred_at
+                self._update_integration_diagnostics(
+                    integration,
+                    outbound_send_ok=True,
+                    last_error_code=None,
+                    last_error_message=None,
+                    last_provider_status_code=200,
+                    last_provider_response_excerpt=None,
+                    last_diagnostic_at=now_utc().isoformat(),
+                )
+                self._log_audit(
+                    session,
+                    client_id=integration.client_id,
+                    actor_user_id=self._agent_user_id(session, integration.client_id),
+                    entity_type="channel_message",
+                    entity_id=outbound_message.message_id,
+                    action="sales_agent_ack_sent",
+                    metadata_json={"conversation_id": conversation.conversation_id},
+                )
         else:
             try:
                 send_result = self._send_whatsapp_text(integration, conversation.external_sender_id, decision.reply_text)
@@ -1425,7 +1568,11 @@ class SalesAgentService(CommerceBaseService):
                     channel_id=integration.channel_id,
                     direction="outbound",
                     external_sender_id=conversation.external_sender_id,
-                    provider_event_id=str(send_result.get("provider_event_id", "")),
+                    provider_event_id=self._provider_event_id_for_storage(
+                        session,
+                        integration.client_id,
+                        str(send_result.get("provider_event_id", "")),
+                    ),
                     provider_status="accepted",
                     message_text=decision.reply_text,
                     content_summary=self._summarize_text(decision.reply_text),
@@ -1472,6 +1619,26 @@ class SalesAgentService(CommerceBaseService):
                     action="sales_agent_message_sent",
                     metadata_json={"conversation_id": conversation.conversation_id},
                 )
+
+        updated_state = self._updated_conversation_state(
+            facts_pack=facts_pack,
+            decision=decision,
+            customer_ack_sent=review_ack_sent,
+        )
+        decision_trace["runtime"]["review_ack_sent"] = review_ack_sent
+        decision_trace["runtime"]["answer_type"] = decision.reply_mode
+        decision_trace["conversation_state_after"] = self._conversation_state_payload(updated_state)
+        metadata = dict(conversation.metadata_json or {})
+        metadata["conversation_state"] = self._conversation_state_payload(updated_state)
+        metadata["latest_trace"] = decision_trace
+        metadata["rolling_summary"] = self._rolling_summary(
+            memory=facts_pack.conversation_memory,
+            inbound_text=inbound_message.message_text,
+            latest_reply=customer_visible_reply,
+            needs_review=decision.needs_review,
+        )
+        conversation.metadata_json = metadata
+        conversation.latest_summary = str(metadata.get("rolling_summary", "")) or self._summarize_text(customer_visible_reply, limit=500)
 
         if order is not None:
             conversation.linked_draft_order_id = order.sales_order_id
@@ -1746,12 +1913,12 @@ class SalesAgentService(CommerceBaseService):
         is_business_info = any(phrase in normalized for phrase in BUSINESS_INFO_PHRASES)
         if is_business_info:
             intent = "business_info"
-        elif any(keyword in lowered for keyword in PURCHASE_KEYWORDS):
-            intent = "purchase"
-        elif any(keyword in lowered for keyword in PRICE_KEYWORDS):
-            intent = "pricing"
-        elif any(keyword in lowered for keyword in AVAILABILITY_KEYWORDS):
-            intent = "availability"
+        elif any(keyword in lowered for keyword in HANDOFF_KEYWORDS):
+            intent = "handoff"
+        elif "discount_request" in reason_codes:
+            intent = "negotiation"
+        elif any(keyword in lowered for keyword in PRICE_KEYWORDS) or any(keyword in lowered for keyword in RANGE_KEYWORDS):
+            intent = "price_range"
         elif is_greeting and len(normalized.split()) <= 4:
             intent = "greeting"
         else:
@@ -1770,6 +1937,183 @@ class SalesAgentService(CommerceBaseService):
             )
         )
         return intent, behavior_tags, tuple(sorted(reason_codes))
+
+    def _conversation_state(self, conversation: ChannelConversationModel) -> ConversationState:
+        metadata = dict(conversation.metadata_json or {})
+        raw = metadata.get("conversation_state") if isinstance(metadata.get("conversation_state"), dict) else {}
+        return ConversationState(
+            active_brand=self._bounded_text(raw.get("active_brand"), limit=120),
+            active_product_family=self._bounded_text(raw.get("active_product_family"), limit=160),
+            active_color=self._bounded_text(raw.get("active_color"), limit=64),
+            active_size=self._bounded_text(raw.get("active_size"), limit=64),
+            active_price_intent=self._bounded_text(raw.get("active_price_intent"), limit=64),
+            last_resolved_variant_ids=tuple(
+                str(item).strip()
+                for item in raw.get("last_resolved_variant_ids", [])
+                if str(item).strip()
+            )[:MAX_PRIMARY_MATCHES + MAX_ALTERNATIVE_MATCHES],
+            unresolved_turn_count=max(0, int(raw.get("unresolved_turn_count") or 0)),
+            last_customer_need_summary=self._bounded_text(raw.get("last_customer_need_summary"), limit=180) or "",
+            customer_ack_sent=bool(raw.get("customer_ack_sent")),
+        )
+
+    def _conversation_state_payload(self, state: ConversationState) -> dict[str, Any]:
+        return {
+            "active_brand": state.active_brand,
+            "active_product_family": state.active_product_family,
+            "active_color": state.active_color,
+            "active_size": state.active_size,
+            "active_price_intent": state.active_price_intent,
+            "last_resolved_variant_ids": list(state.last_resolved_variant_ids),
+            "unresolved_turn_count": state.unresolved_turn_count,
+            "last_customer_need_summary": state.last_customer_need_summary,
+            "customer_ack_sent": state.customer_ack_sent,
+        }
+
+    def _derive_active_constraints(
+        self,
+        search_request: WarehouseSearchRequest,
+        prior_state: ConversationState,
+        matches: list[MatchedVariant],
+    ) -> ActiveConstraints:
+        explicit_brand = self._brand_from_matches(search_request.normalized_text, matches)
+        explicit_product_family = self._explicit_product_family(search_request.normalized_text, matches)
+        explicit_color = self._requested_color(search_request.normalized_text)
+        explicit_size = self._requested_size(search_request.normalized_text)
+        active_price_intent = "range" if search_request.intent == "price_range" else None
+
+        carry_forward = search_request.intent not in {"greeting", "business_info", "handoff"}
+        active_brand = explicit_brand or (prior_state.active_brand if carry_forward and not explicit_product_family else None)
+        active_product_family = explicit_product_family or (prior_state.active_product_family if carry_forward else None)
+        active_color = explicit_color or (prior_state.active_color if carry_forward and not explicit_brand else None)
+        active_size = explicit_size or (prior_state.active_size if carry_forward and not explicit_brand else None)
+        if active_price_intent is None and carry_forward:
+            active_price_intent = prior_state.active_price_intent
+
+        if explicit_brand and prior_state.active_brand and explicit_brand.lower() != prior_state.active_brand.lower():
+            active_product_family = explicit_product_family
+            if not explicit_color:
+                active_color = None
+            if not explicit_size:
+                active_size = None
+        return ActiveConstraints(
+            active_brand=active_brand,
+            active_product_family=active_product_family,
+            active_color=active_color,
+            active_size=active_size,
+            active_price_intent=active_price_intent,
+        )
+
+    def _apply_active_constraints(
+        self,
+        matches: list[MatchedVariant],
+        constraints: ActiveConstraints,
+    ) -> list[MatchedVariant]:
+        filtered = list(matches)
+        if constraints.active_brand:
+            brand_matches = [item for item in filtered if item.brand.lower() == constraints.active_brand.lower()]
+            if brand_matches:
+                filtered = brand_matches
+        if constraints.active_product_family:
+            family_matches = [
+                item for item in filtered if item.product_name.lower() == constraints.active_product_family.lower()
+            ]
+            if family_matches:
+                filtered = family_matches
+        if constraints.active_size:
+            size_matches = [item for item in filtered if self._variant_matches_size(item, constraints.active_size)]
+            if size_matches:
+                filtered = size_matches
+        if constraints.active_color:
+            color_matches = [item for item in filtered if constraints.active_color.lower() in item.label.lower()]
+            if color_matches:
+                filtered = color_matches
+        return filtered
+
+    def _resolve_sales_intent(
+        self,
+        base_intent: str,
+        search_request: WarehouseSearchRequest,
+        constraints: ActiveConstraints,
+        matches: list[MatchedVariant],
+    ) -> str:
+        if base_intent in {"greeting", "business_info", "negotiation", "handoff"}:
+            return base_intent
+        if base_intent == "price_range" and not constraints.active_product_family and not constraints.active_size and len(matches) > 1:
+            return "price_range"
+        if constraints.active_brand and not constraints.active_product_family and not constraints.active_size:
+            return "brand_browse"
+        if self._requested_category(search_request.normalized_text) and not constraints.active_product_family and not constraints.active_brand:
+            return "category_browse"
+        return "exact_match"
+
+    def _range_summary(
+        self,
+        matches: list[MatchedVariant],
+        constraints: ActiveConstraints,
+        intent: str,
+    ) -> RangeSummary | None:
+        if intent not in {"price_range", "brand_browse", "category_browse"} or not matches:
+            return None
+        prices = [item.unit_price for item in matches if item.unit_price is not None]
+        if not prices:
+            return None
+        category_name = None
+        if constraints.active_product_family is None:
+            categories = [item.category_name for item in matches if item.category_name]
+            if categories:
+                category_name = categories[0]
+        return RangeSummary(
+            min_price=min(prices),
+            max_price=max(prices),
+            candidate_count=len(matches),
+            matched_brand=constraints.active_brand,
+            matched_category=category_name,
+            matched_product_family=constraints.active_product_family,
+        )
+
+    def _brand_from_matches(self, normalized_text: str, matches: list[MatchedVariant]) -> str | None:
+        brand_hits: list[str] = []
+        for item in matches:
+            brand = item.brand.strip()
+            if not brand:
+                continue
+            brand_tokens = [token for token in self._search_tokens(brand) if token]
+            if brand_tokens and all(token in normalized_text for token in brand_tokens):
+                brand_hits.append(brand)
+        if not brand_hits:
+            return None
+        unique_hits = []
+        for item in brand_hits:
+            if item not in unique_hits:
+                unique_hits.append(item)
+        return unique_hits[0] if len(unique_hits) == 1 else unique_hits[0]
+
+    def _explicit_product_family(self, normalized_text: str, matches: list[MatchedVariant]) -> str | None:
+        for item in matches:
+            family_tokens = [token for token in self._search_tokens(item.product_name) if token not in CATEGORY_TOKENS]
+            if family_tokens and all(token in normalized_text for token in family_tokens[:3]):
+                return item.product_name
+        return None
+
+    def _requested_category(self, normalized_text: str) -> str | None:
+        for token in CATEGORY_TOKENS:
+            if token in normalized_text:
+                return token
+        return None
+
+    def _requested_size(self, normalized_text: str) -> str | None:
+        size_match = re.search(r"\bsize\s*([a-z0-9]+)\b", normalized_text)
+        if size_match:
+            return size_match.group(1).upper()
+        for token in self._search_tokens(normalized_text):
+            if token.isdigit() or token in SIZE_MATCH_TOKENS:
+                return token.upper()
+        return None
+
+    def _variant_matches_size(self, item: MatchedVariant, size: str) -> bool:
+        pattern = f"/ {size.lower()} /"
+        return pattern in item.label.lower() or pattern in item.product_name.lower()
 
     def _customer_snapshot(
         self,
@@ -1821,6 +2165,7 @@ class SalesAgentService(CommerceBaseService):
             pattern = f"%{token}%"
             token_filters.append(func.lower(ProductModel.brand).like(pattern))
             token_filters.append(func.lower(ProductModel.name).like(pattern))
+            token_filters.append(func.lower(CategoryModel.name).like(pattern))
             token_filters.append(func.lower(ProductVariantModel.title).like(pattern))
             token_filters.append(func.lower(ProductVariantModel.sku).like(pattern))
             token_filters.append(func.lower(ProductVariantModel.barcode).like(pattern))
@@ -1830,7 +2175,7 @@ class SalesAgentService(CommerceBaseService):
         on_hand_map, reserved_map = self._stock_maps(session, client_id, location_id)
         ranked_items: list[tuple[MatchedVariant, int, int]] = []
         seen: set[str] = set()
-        for product, variant, _supplier, _category in rows:
+        for product, variant, _supplier, category in rows:
             if product.status != "active" or variant.status != "active":
                 continue
             available = on_hand_map.get(str(variant.variant_id), ZERO) - reserved_map.get(str(variant.variant_id), ZERO)
@@ -1844,17 +2189,20 @@ class SalesAgentService(CommerceBaseService):
                 continue
             brand_value = (product.brand or "").lower()
             name_value = product.name.lower()
+            category_value = (category.name or "").lower() if category else ""
             title_value = variant.title.lower()
             sku_value = variant.sku.lower()
             barcode_value = variant.barcode.lower()
             brand_match_count = sum(1 for token in tokens if token in brand_value)
             name_match_count = sum(1 for token in tokens if token in name_value)
+            category_match_count = sum(1 for token in tokens if token in category_value)
             title_match_count = sum(1 for token in tokens if token in title_value)
             sku_match_count = sum(1 for token in tokens if token in sku_value)
             barcode_match_count = sum(1 for token in tokens if token in barcode_value)
             match_score = (
                 (brand_match_count * 8)
                 + (name_match_count * 5)
+                + (category_match_count * 4)
                 + (title_match_count * 4)
                 + (sku_match_count * 3)
                 + barcode_match_count
@@ -1866,6 +2214,7 @@ class SalesAgentService(CommerceBaseService):
                         product_id=str(product.product_id),
                         product_name=product.name,
                         brand=product.brand or "",
+                        category_name=category.name if category else "",
                         label=build_variant_label(product.name, variant.title),
                         sku=variant.sku,
                         available_to_sell=available,
@@ -1890,7 +2239,7 @@ class SalesAgentService(CommerceBaseService):
             ),
             reverse=True,
         )
-        return [item for item, _brand_matches, _title_matches in ranked_items[:5]]
+        return [item for item, _brand_matches, _title_matches in ranked_items[:MAX_MATCH_CANDIDATES]]
 
     def _upsell_candidates(
         self,
@@ -1917,7 +2266,7 @@ class SalesAgentService(CommerceBaseService):
             ).all()
         }
         items: list[MatchedVariant] = []
-        for product, variant, _supplier, _category in session.execute(self._base_variant_stmt(client_id)).all():
+        for product, variant, _supplier, category in session.execute(self._base_variant_stmt(client_id)).all():
             variant_id = str(variant.variant_id)
             if variant_id in exclude_variant_ids or product.status != "active" or variant.status != "active":
                 continue
@@ -1936,6 +2285,7 @@ class SalesAgentService(CommerceBaseService):
                     product_id=str(product.product_id),
                     product_name=product.name,
                     brand=product.brand or "",
+                    category_name=category.name if category else "",
                     label=build_variant_label(product.name, variant.title),
                     sku=variant.sku,
                     available_to_sell=available,
@@ -1948,15 +2298,7 @@ class SalesAgentService(CommerceBaseService):
         return items[:MAX_UPSELL_MATCHES]
 
     def _should_use_helper(self, search_request: WarehouseSearchRequest, matches: list[MatchedVariant]) -> bool:
-        if len(matches) <= 1:
-            return False
-        if self._query_brand_name(search_request, matches):
-            return False
-        if search_request.intent in {"purchase", "pricing"}:
-            return True
-        if len(search_request.tokens) <= 2:
-            return True
-        return len(matches) > 1 and matches[0].match_score <= matches[1].match_score + 1
+        return False
 
     def _split_match_candidates(
         self,
@@ -1968,7 +2310,7 @@ class SalesAgentService(CommerceBaseService):
             return (), ()
         if len(matches) == 1:
             return (matches[0],), ()
-        if helper_used or search_request.intent in {"purchase", "pricing"}:
+        if helper_used or search_request.intent in {"exact_match", "negotiation"}:
             if matches[0].match_score >= matches[1].match_score + 2:
                 return (matches[0],), tuple(matches[1: 1 + MAX_ALTERNATIVE_MATCHES])
             return tuple(matches[:2]), tuple(matches[2: 2 + MAX_ALTERNATIVE_MATCHES])
@@ -1981,19 +2323,24 @@ class SalesAgentService(CommerceBaseService):
         primary_matches: tuple[MatchedVariant, ...],
         alternatives: tuple[MatchedVariant, ...],
         offer_policy: OfferPolicy,
+        range_summary: RangeSummary | None,
     ) -> tuple[str, ...]:
         reason_codes = set(offer_policy.reason_codes)
-        if not primary_matches and search_request.intent != "greeting":
+        if (
+            not primary_matches
+            and range_summary is None
+            and search_request.intent not in {"greeting", "business_info", "handoff"}
+        ):
             reason_codes.add("variant_match_failed")
-        if len(primary_matches) > 1:
+        if len(primary_matches) > 1 and search_request.intent not in {"price_range", "brand_browse", "category_browse"}:
             reason_codes.add("ambiguous_variant")
         if primary_matches:
             lead = primary_matches[0]
             if search_request.quantity > lead.available_to_sell:
                 reason_codes.add("out_of_stock")
-            if search_request.intent in {"pricing", "purchase"} and lead.min_price is None and offer_policy.discount_requested:
+            if search_request.intent in {"negotiation", "exact_match"} and lead.min_price is None and offer_policy.discount_requested:
                 reason_codes.add("missing_price")
-        if alternatives and search_request.intent == "catalog" and not primary_matches:
+        if alternatives and search_request.intent == "exact_match" and not primary_matches:
             reason_codes.add("low_confidence")
         return tuple(sorted(reason_codes))
 
@@ -2004,19 +2351,30 @@ class SalesAgentService(CommerceBaseService):
         primary_matches: tuple[MatchedVariant, ...],
         reason_codes: tuple[str, ...],
         offer_policy: OfferPolicy,
+        range_summary: RangeSummary | None,
+        prior_state: ConversationState,
     ) -> str:
         review_reasons = set(reason_codes).intersection(REPLY_REVIEW_REASONS)
-        if search_request.intent in {"greeting", "business_info"} and not primary_matches:
+        if search_request.intent in {"greeting", "business_info"}:
             return "answer"
+        if search_request.intent == "handoff":
+            return "handoff"
         if review_reasons:
             return "review"
+        if search_request.intent in {"price_range", "brand_browse", "category_browse"}:
+            if range_summary is not None or primary_matches:
+                return "answer_and_ask"
+            return "handoff" if prior_state.unresolved_turn_count >= 1 else "answer_and_ask"
         if not primary_matches:
-            return "ask_clarifier"
+            return "handoff" if prior_state.unresolved_turn_count >= 1 else "answer_and_ask"
         if len(primary_matches) > 1:
-            return "ask_clarifier"
+            return "handoff" if prior_state.unresolved_turn_count >= 1 else "answer_and_ask"
         lead = primary_matches[0]
-        if search_request.intent == "purchase" and search_request.quantity <= lead.available_to_sell:
+        lowered = search_request.normalized_text
+        if any(keyword in lowered for keyword in PURCHASE_KEYWORDS) and search_request.quantity <= lead.available_to_sell:
             return "create_draft_order"
+        if any(keyword in lowered for keyword in PRICE_KEYWORDS) or any(keyword in lowered for keyword in AVAILABILITY_KEYWORDS):
+            return "answer_and_ask"
         return "answer"
 
     def _client_business_name(self, session: Session, client_id: str) -> str | None:
@@ -2148,9 +2506,9 @@ class SalesAgentService(CommerceBaseService):
                 intent=facts_pack.intent,
                 reply_text=(
                     f"You’re chatting with {facts_pack.business_name}. "
-                    "If you want a product, send the name, size, or color and I’ll check stock for you."
+                    "Tell me the brand, style, size, or budget you want and I’ll check the best in-stock options for you."
                 ),
-                reply_mode="tier0_deterministic",
+                reply_mode="answer",
                 confidence=Decimal("0.96"),
                 selected_variant_id=None,
                 selected_offer_id=facts_pack.offer_policy.selected_offer_id,
@@ -2167,7 +2525,7 @@ class SalesAgentService(CommerceBaseService):
             return SalesReplyDecision(
                 intent=facts_pack.intent,
                 reply_text=self._greeting_reply_text(facts_pack.conversation_memory),
-                reply_mode="tier0_deterministic",
+                reply_mode="answer_and_ask",
                 confidence=Decimal("0.96"),
                 selected_variant_id=None,
                 selected_offer_id=facts_pack.offer_policy.selected_offer_id,
@@ -2180,14 +2538,16 @@ class SalesAgentService(CommerceBaseService):
                 sales_model_used=False,
             )
 
-        if facts_pack.next_required_action == "review":
-            reply = "I have the right context for this request. A team member needs to review it before I confirm anything, and they will follow up shortly."
+        if facts_pack.next_required_action in {"review", "handoff"}:
+            reply = "I’m checking that with my team now, and they’ll reply shortly."
             if lead is not None and "discount_request" in reason_codes and selected_price is not None:
-                reply = f"{lead.label} is available. I need a quick approval before I confirm the final price for you."
+                reply = f"{lead.label} is available. I’m checking the best approved price for you now, and my team will confirm it shortly."
+            if facts_pack.intent == "handoff":
+                reply = "I’m connecting you with a team member now so you can get the right help quickly."
             return SalesReplyDecision(
                 intent=facts_pack.intent,
                 reply_text=reply,
-                reply_mode="review_hold",
+                reply_mode="handoff",
                 confidence=Decimal("0.62"),
                 selected_variant_id=lead.variant_id if lead else None,
                 selected_offer_id=facts_pack.offer_policy.selected_offer_id,
@@ -2200,28 +2560,67 @@ class SalesAgentService(CommerceBaseService):
                 sales_model_used=False,
             )
 
-        if facts_pack.next_required_action == "ask_clarifier":
-            if lead is None:
-                reply = "Send the product name, size, or color you want and I’ll check the exact variant for you."
+        if facts_pack.intent in {"price_range", "brand_browse", "category_browse"} and facts_pack.range_summary is not None:
+            subject = (
+                facts_pack.active_constraints.active_product_family
+                or facts_pack.active_constraints.active_brand
+                or facts_pack.range_summary.matched_category
+                or "these options"
+            )
+            if facts_pack.range_summary.min_price == facts_pack.range_summary.max_price:
+                answer = f"{subject} is currently {facts_pack.range_summary.min_price:.2f}."
             else:
-                brand_name = self._query_brand_name(
-                    facts_pack.search_request,
-                    (*facts_pack.primary_matches, *facts_pack.alternatives),
+                answer = (
+                    f"{subject} currently range from {facts_pack.range_summary.min_price:.2f} "
+                    f"to {facts_pack.range_summary.max_price:.2f}."
                 )
-                if brand_name:
-                    color = self._requested_color(facts_pack.search_request.normalized_text)
-                    if color:
-                        reply = f"I do have {brand_name} options in {color}. Tell me your size or preferred style and I’ll narrow it down."
-                    else:
-                        reply = f"I do have {brand_name} options. Tell me your size or preferred style and I’ll narrow it down."
+            if facts_pack.active_constraints.active_brand and not facts_pack.active_constraints.active_size:
+                follow_up = "What size or style do you want me to narrow it down to?"
+            elif facts_pack.active_constraints.active_product_family and not facts_pack.active_constraints.active_size:
+                follow_up = "What size should I check for you?"
+            else:
+                follow_up = "What size, color, or style should I narrow it down to?"
+            return SalesReplyDecision(
+                intent=facts_pack.intent,
+                reply_text=f"{answer} {follow_up}",
+                reply_mode="answer_and_ask",
+                confidence=Decimal("0.82"),
+                selected_variant_id=lead.variant_id if lead else None,
+                selected_offer_id=facts_pack.offer_policy.selected_offer_id,
+                recommended_variant_ids=recommended_variant_ids,
+                needs_review=False,
+                reason_codes=tuple(sorted(reason_codes)),
+                behavior_tags=facts_pack.behavior_tags,
+                draft_order_request=None,
+                helper_used=facts_pack.helper_used,
+                sales_model_used=False,
+            )
+
+        if facts_pack.next_required_action == "answer_and_ask":
+            if lead is None:
+                brand = facts_pack.active_constraints.active_brand
+                product_family = facts_pack.active_constraints.active_product_family
+                if brand:
+                    reply = f"I can help with {brand}. Tell me the size, color, or style you want and I’ll narrow it down."
+                elif product_family:
+                    reply = f"I’m checking {product_family} for you. Tell me the size or color you want and I’ll narrow it down."
                 else:
-                    options = facts_pack.clarifier_options or tuple(item.label for item in facts_pack.primary_matches[:2])
-                    reply = f"I found two close matches: {', '.join(options[:2])}. Which one should I check for you?"
+                    reply = "I can help with that. Tell me the brand, style, size, or budget you want and I’ll narrow it down."
+            elif len(facts_pack.primary_matches) > 1:
+                options = [item.label for item in facts_pack.primary_matches[:2]]
+                reply = f"I have {options[0]} and {options[1]} in stock. Which one should I price for you?"
+            elif selected_price is not None:
+                reply = (
+                    f"{lead.label} is available at {selected_price:.2f}, and I have {lead.available_to_sell:.0f} ready now. "
+                    "Do you want me to check another size or color too?"
+                )
+            else:
+                reply = f"{lead.label} is available. Tell me if you want the price, another size, or another color."
             return SalesReplyDecision(
                 intent=facts_pack.intent,
                 reply_text=reply,
-                reply_mode="tier1_clarifier" if facts_pack.helper_used else "tier0_clarifier",
-                confidence=Decimal("0.72") if lead is not None else Decimal("0.44"),
+                reply_mode="answer_and_ask",
+                confidence=Decimal("0.78") if lead is not None else Decimal("0.52"),
                 selected_variant_id=lead.variant_id if lead else None,
                 selected_offer_id=facts_pack.offer_policy.selected_offer_id,
                 recommended_variant_ids=recommended_variant_ids,
@@ -2236,8 +2635,8 @@ class SalesAgentService(CommerceBaseService):
         if lead is None or selected_price is None:
             return SalesReplyDecision(
                 intent=facts_pack.intent,
-                reply_text="Tell me the product name, size, or color you want and I’ll check the best available option.",
-                reply_mode="tier0_deterministic",
+                reply_text="I can help with that. Tell me the brand, style, size, or budget you want and I’ll check the best available option.",
+                reply_mode="answer_and_ask",
                 confidence=Decimal("0.40"),
                 selected_variant_id=None,
                 selected_offer_id=facts_pack.offer_policy.selected_offer_id,
@@ -2261,7 +2660,7 @@ class SalesAgentService(CommerceBaseService):
             return SalesReplyDecision(
                 intent=facts_pack.intent,
                 reply_text=reply,
-                reply_mode="tier0_deterministic",
+                reply_mode="answer_and_ask",
                 confidence=Decimal("0.84"),
                 selected_variant_id=lead.variant_id,
                 selected_offer_id=facts_pack.offer_policy.selected_offer_id,
@@ -2291,7 +2690,7 @@ class SalesAgentService(CommerceBaseService):
             return SalesReplyDecision(
                 intent=facts_pack.intent,
                 reply_text=reply,
-                reply_mode="tier0_deterministic",
+                reply_mode="answer",
                 confidence=Decimal("0.91"),
                 selected_variant_id=lead.variant_id,
                 selected_offer_id=facts_pack.offer_policy.selected_offer_id,
@@ -2307,13 +2706,13 @@ class SalesAgentService(CommerceBaseService):
         reply = f"Yes, {lead.label} is available. Price is {selected_price:.2f} and I have {lead.available_to_sell:.0f} ready right now."
         if facts_pack.offer_policy.discount_requested and facts_pack.offer_policy.selected_offer_id != "list_price":
             reply = f"{lead.label} is available. The best instant price I can do is {selected_price:.2f} each, and I have {lead.available_to_sell:.0f} ready right now."
-        if facts_pack.upsell_candidates and facts_pack.intent in {"catalog", "purchase"}:
+        if facts_pack.upsell_candidates and facts_pack.intent in {"exact_match", "negotiation"}:
             upsell = facts_pack.upsell_candidates[0]
             reply = f"{reply} If you want another option, {upsell.label} is also available at {upsell.unit_price:.2f}."
         return SalesReplyDecision(
             intent=facts_pack.intent,
             reply_text=reply,
-            reply_mode="tier0_deterministic",
+            reply_mode="answer_and_ask" if any(keyword in facts_pack.search_request.normalized_text for keyword in PRICE_KEYWORDS) else "answer",
             confidence=Decimal("0.86"),
             selected_variant_id=lead.variant_id,
             selected_offer_id=facts_pack.offer_policy.selected_offer_id,
@@ -2327,27 +2726,7 @@ class SalesAgentService(CommerceBaseService):
         )
 
     def _should_use_sales_model(self, facts_pack: WarehouseFactsPack, fallback: SalesReplyDecision) -> bool:
-        if not settings.openai_api_key:
-            return False
-        if facts_pack.intent == "greeting":
-            return False
-        if fallback.needs_review and facts_pack.next_required_action == "review":
-            return False
-        if facts_pack.next_required_action == "ask_clarifier":
-            return False
-        if facts_pack.offer_policy.discount_requested:
-            return True
-        if facts_pack.next_required_action == "create_draft_order":
-            return True
-        if facts_pack.intent == "purchase" and facts_pack.upsell_candidates and len(facts_pack.primary_matches) == 1:
-            return True
-        if (
-            {"comparison_shopper", "upsell_receptive"}.intersection(facts_pack.behavior_tags)
-            and facts_pack.upsell_candidates
-            and len(facts_pack.primary_matches) == 1
-        ):
-            return True
-        return False
+        return bool(settings.openai_api_key)
 
     def _sales_reply_with_model(
         self,
@@ -2361,7 +2740,7 @@ class SalesAgentService(CommerceBaseService):
             "additionalProperties": False,
             "properties": {
                 "reply_text": {"type": "string"},
-                "reply_mode": {"type": "string"},
+                "reply_mode": {"type": "string", "enum": ["answer", "answer_and_ask", "handoff"]},
                 "selected_variant_id": {"type": ["string", "null"]},
                 "selected_offer_id": {"type": ["string", "null"]},
                 "recommended_variant_ids": {"type": "array", "items": {"type": "string"}},
@@ -2389,12 +2768,15 @@ class SalesAgentService(CommerceBaseService):
             schema_name="sales_reply_decision",
             schema=schema,
             system_prompt=(
-                "You are the customer-facing sales agent. Speak like a concise human seller. "
-                "Use only the provided facts pack. Never invent stock, warehouse scope, discounts, or prices. "
-                "Choose only from the provided variant ids and offer ids. Push to close honestly."
+                "You are the customer-facing WhatsApp sales concierge for a retail store. "
+                "Reply like a concise human seller, not a catalog bot. "
+                "Use only the provided facts pack. Never invent products, brands, stock, prices, discounts, or locations. "
+                "Answer the customer's question first. Ask at most one focused follow-up question if needed. "
+                "Keep the reply to one short paragraph. "
+                "If the request must be reviewed or handed off, acknowledge that naturally and avoid promising final details you cannot confirm."
             ),
             payload=payload,
-            max_output_tokens=160,
+            max_output_tokens=192,
         )
         if parsed is None:
             return fallback
@@ -2433,20 +2815,78 @@ class SalesAgentService(CommerceBaseService):
                 }
             )
         ) or fallback.behavior_tags
+        reply_mode = str(parsed.get("reply_mode", "")).strip() or fallback.reply_mode
+        if reply_mode not in {"answer", "answer_and_ask", "handoff"}:
+            reply_mode = fallback.reply_mode
+        needs_review = (
+            facts_pack.next_required_action in {"review", "handoff"}
+            or bool(parsed.get("needs_review"))
+            or bool(set(reason_codes).intersection(REPLY_REVIEW_REASONS))
+        )
+        if needs_review:
+            reply_mode = "handoff"
         return SalesReplyDecision(
             intent=facts_pack.intent,
-            reply_text=str(parsed.get("reply_text", "")).strip() or fallback.reply_text,
-            reply_mode=str(parsed.get("reply_mode", "")).strip() or "tier2_sales_model",
+            reply_text=self._bounded_text(str(parsed.get("reply_text", "")).strip() or fallback.reply_text, limit=340) or fallback.reply_text,
+            reply_mode=reply_mode,
             confidence=Decimal("0.88"),
             selected_variant_id=selected_variant_id,
             selected_offer_id=selected_offer_id,
             recommended_variant_ids=recommended_variant_ids,
-            needs_review=bool(parsed.get("needs_review")) or bool(set(reason_codes).intersection(REPLY_REVIEW_REASONS)),
+            needs_review=needs_review,
             reason_codes=reason_codes,
             behavior_tags=behavior_tags,
             draft_order_request=fallback.draft_order_request,
             helper_used=facts_pack.helper_used,
             sales_model_used=True,
+        )
+
+    def _review_acknowledgment_text(
+        self,
+        *,
+        facts_pack: WarehouseFactsPack,
+        decision: SalesReplyDecision,
+        auto_send_enabled: bool,
+    ) -> str:
+        lead = facts_pack.primary_matches[0] if facts_pack.primary_matches else None
+        if decision.intent == "handoff":
+            return "I’m connecting you with a team member now. They’ll reply shortly."
+        if not auto_send_enabled:
+            if lead is not None:
+                return f"I’ve got your request for {lead.label}. I’m checking it now and will get back to you shortly."
+            if facts_pack.active_constraints.active_brand:
+                return f"I’ve got your {facts_pack.active_constraints.active_brand} request. I’m checking the best options now and will get back to you shortly."
+            return "I’ve got your message and I’m checking the best option for you now. I’ll get back to you shortly."
+        if lead is not None and "discount_request" in facts_pack.reason_codes:
+            return f"I have {lead.label} for you. I’m checking the best approved price now and will confirm it shortly."
+        return "I’m checking that for you now, and a team member will confirm the details shortly."
+
+    def _updated_conversation_state(
+        self,
+        *,
+        facts_pack: WarehouseFactsPack,
+        decision: SalesReplyDecision,
+        customer_ack_sent: bool,
+    ) -> ConversationState:
+        prior = facts_pack.conversation_state
+        resolved_variant_ids = tuple(item.variant_id for item in facts_pack.primary_matches[:MAX_PRIMARY_MATCHES])
+        resolved_enough = (
+            decision.reply_mode == "answer"
+            or facts_pack.next_required_action == "create_draft_order"
+            or facts_pack.range_summary is not None
+            or len(facts_pack.primary_matches) == 1
+        )
+        unresolved_turn_count = 0 if resolved_enough else min(prior.unresolved_turn_count + 1, 3)
+        return ConversationState(
+            active_brand=facts_pack.active_constraints.active_brand,
+            active_product_family=facts_pack.active_constraints.active_product_family,
+            active_color=facts_pack.active_constraints.active_color,
+            active_size=facts_pack.active_constraints.active_size,
+            active_price_intent=facts_pack.active_constraints.active_price_intent,
+            last_resolved_variant_ids=resolved_variant_ids or prior.last_resolved_variant_ids,
+            unresolved_turn_count=unresolved_turn_count,
+            last_customer_need_summary=self._summarize_text(facts_pack.search_request.message_text, limit=180),
+            customer_ack_sent=customer_ack_sent,
         )
 
     def _send_whatsapp_text(self, integration: ChannelIntegrationModel, recipient: str, text: str) -> dict[str, Any]:
@@ -2489,8 +2929,8 @@ class SalesAgentService(CommerceBaseService):
 
     def _greeting_reply_text(self, memory: ConversationMemorySnapshot) -> str:
         if any(turn.speaker == "sales_agent" for turn in memory.recent_turns):
-            return "Send the product name, size, or color you want and I’ll check the live stock and price for you."
-        return "Hi. Tell me the product name, size, or color you want and I’ll check the live stock and price for you."
+            return "I’m here. Tell me the brand, style, size, or budget you want and I’ll check what’s in stock."
+        return "Hi. I can check live stock, price, and the best options for you. What brand or style are you looking for?"
 
     def _probe_whatsapp_graph(
         self,
@@ -2745,23 +3185,38 @@ class SalesAgentService(CommerceBaseService):
         return self._sales_service._sales_order_payload(session, order)
 
     def _message_mentions_payload(self, session: Session, message_id: str) -> list[dict[str, Any]]:
-        return [
-            {
-                "mention_id": str(item.mention_id),
-                "product_id": str(item.product_id) if item.product_id else None,
-                "variant_id": str(item.variant_id) if item.variant_id else None,
-                "mention_role": item.mention_role,
-                "quantity": as_decimal(item.quantity) if item.quantity is not None else None,
-                "unit_price": as_optional_decimal(item.unit_price_amount),
-                "min_price": as_optional_decimal(item.min_price_amount),
-                "available_to_sell": as_decimal(item.available_to_sell_snapshot) if item.available_to_sell_snapshot is not None else None,
-            }
-            for item in session.execute(
-                select(ChannelMessageProductMentionModel)
-                .where(ChannelMessageProductMentionModel.message_id == message_id)
-                .order_by(ChannelMessageProductMentionModel.created_at.asc())
-            ).scalars()
-        ]
+        rows = session.execute(
+            select(
+                ChannelMessageProductMentionModel,
+                ProductModel.name,
+                ProductVariantModel.title,
+            )
+            .outerjoin(ProductModel, ProductModel.product_id == ChannelMessageProductMentionModel.product_id)
+            .outerjoin(ProductVariantModel, ProductVariantModel.variant_id == ChannelMessageProductMentionModel.variant_id)
+            .where(ChannelMessageProductMentionModel.message_id == message_id)
+            .order_by(ChannelMessageProductMentionModel.created_at.asc())
+        ).all()
+        items: list[dict[str, Any]] = []
+        for mention, product_name, variant_title in rows:
+            label = ""
+            if product_name and variant_title:
+                label = build_variant_label(str(product_name), str(variant_title))
+            elif product_name:
+                label = str(product_name)
+            items.append(
+                {
+                    "mention_id": str(mention.mention_id),
+                    "product_id": str(mention.product_id) if mention.product_id else None,
+                    "variant_id": str(mention.variant_id) if mention.variant_id else None,
+                    "label": label or None,
+                    "mention_role": mention.mention_role,
+                    "quantity": as_decimal(mention.quantity) if mention.quantity is not None else None,
+                    "unit_price": as_optional_decimal(mention.unit_price_amount),
+                    "min_price": as_optional_decimal(mention.min_price_amount),
+                    "available_to_sell": as_decimal(mention.available_to_sell_snapshot) if mention.available_to_sell_snapshot is not None else None,
+                }
+            )
+        return items
 
     def _channel_for_owner_or_admin(
         self,
@@ -2851,6 +3306,18 @@ class SalesAgentService(CommerceBaseService):
         if len(compact) <= limit:
             return compact
         return compact[: limit - 1].rstrip() + "…"
+
+    def _provider_event_id_for_storage(self, session: Session, client_id: str, provider_event_id: str) -> str:
+        event_id = str(provider_event_id or "").strip()
+        if not event_id:
+            return ""
+        existing = session.execute(
+            select(ChannelMessageModel.message_id).where(
+                ChannelMessageModel.client_id == client_id,
+                ChannelMessageModel.provider_event_id == event_id,
+            )
+        ).scalar_one_or_none()
+        return "" if existing else event_id
 
     def _diagnostic_code(self, exc: Exception) -> str:
         if isinstance(exc, ApiException):
@@ -3038,6 +3505,7 @@ class SalesAgentService(CommerceBaseService):
             "product_id": item.product_id,
             "product_name": item.product_name,
             "brand": item.brand,
+            "category_name": item.category_name,
             "label": item.label,
             "sku": item.sku,
             "available_to_sell": str(item.available_to_sell),
@@ -3088,6 +3556,27 @@ class SalesAgentService(CommerceBaseService):
             ],
         }
 
+    def _active_constraints_payload(self, constraints: ActiveConstraints) -> dict[str, Any]:
+        return {
+            "active_brand": constraints.active_brand,
+            "active_product_family": constraints.active_product_family,
+            "active_color": constraints.active_color,
+            "active_size": constraints.active_size,
+            "active_price_intent": constraints.active_price_intent,
+        }
+
+    def _range_summary_payload(self, summary: RangeSummary | None) -> dict[str, Any] | None:
+        if summary is None:
+            return None
+        return {
+            "min_price": str(summary.min_price) if summary.min_price is not None else None,
+            "max_price": str(summary.max_price) if summary.max_price is not None else None,
+            "candidate_count": summary.candidate_count,
+            "matched_brand": summary.matched_brand,
+            "matched_category": summary.matched_category,
+            "matched_product_family": summary.matched_product_family,
+        }
+
     def _facts_pack_payload(self, facts_pack: WarehouseFactsPack) -> dict[str, Any]:
         return {
             "intent": facts_pack.intent,
@@ -3101,6 +3590,9 @@ class SalesAgentService(CommerceBaseService):
                 "intent": facts_pack.search_request.intent,
                 "quantity": str(facts_pack.search_request.quantity),
             },
+            "active_constraints": self._active_constraints_payload(facts_pack.active_constraints),
+            "range_summary": self._range_summary_payload(facts_pack.range_summary),
+            "conversation_state": self._conversation_state_payload(facts_pack.conversation_state),
             "customer_snapshot": self._customer_snapshot_payload(facts_pack.customer_snapshot),
             "conversation_memory": self._conversation_memory_payload(facts_pack.conversation_memory),
             "primary_matches": [self._matched_variant_payload(item) for item in facts_pack.primary_matches[:MAX_PRIMARY_MATCHES]],
@@ -3139,11 +3631,12 @@ class SalesAgentService(CommerceBaseService):
     def _decision_trace_payload(self, facts_pack: WarehouseFactsPack, decision: SalesReplyDecision) -> dict[str, Any]:
         return {
             "runtime": {
-                "tier": decision.reply_mode,
+                "answer_type": decision.reply_mode,
                 "helper_used": facts_pack.helper_used,
                 "sales_model_used": decision.sales_model_used,
                 "next_required_action": facts_pack.next_required_action,
                 "stock_scope": facts_pack.stock_scope,
+                "review_ack_sent": False,
             },
             "facts_pack": self._facts_pack_payload(facts_pack),
             "decision": self._decision_payload(decision),
