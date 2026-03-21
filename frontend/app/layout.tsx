@@ -15,7 +15,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>
+      <head>
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-TJ4YFZFF9L"
           strategy="afterInteractive"
@@ -28,6 +28,8 @@ export default function RootLayout({
             gtag('config', 'G-TJ4YFZFF9L');
           `}
         </Script>
+      </head>
+      <body>
         <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
