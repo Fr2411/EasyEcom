@@ -842,7 +842,6 @@ class SalesAgentService(CommerceBaseService):
                 integration.app_secret = app_secret_input
             elif is_new:
                 integration.app_secret = ""
-
             default_location_id = self._clean_uuid(payload.get("default_location_id"))
             integration.default_location_id = default_location_id or None
             integration.auto_send_enabled = bool(payload.get("auto_send_enabled"))
