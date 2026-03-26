@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Path, status
+from fastapi.exceptions import HTTPException
 
 from easy_ecom.api.dependencies import ServiceContainer, get_authenticated_user, get_container, require_page_access
 from easy_ecom.api.schemas.commerce import (
@@ -7,6 +8,7 @@ from easy_ecom.api.schemas.commerce import (
     ReturnLookupOrdersResponse,
     ReturnResponse,
     ReturnsResponse,
+    ReturnUpdateRequest,
 )
 from easy_ecom.api.schemas.common import ModuleOverviewResponse
 from easy_ecom.domain.models.auth import AuthenticatedUser
@@ -30,6 +32,23 @@ def list_returns(
     container: ServiceContainer = Depends(get_container),
 ) -> ReturnsResponse:
     return ReturnsResponse(items=container.returns.list_returns(user, query=q))
+
+
+@router.get("/{return_id}", response_model=ReturnResponse)
+def get_return(
+    return_id: str = Path(..., description="The return ID"),
+    user: AuthenticatedUser = Depends(get_authenticated_user),
+    container: ServiceContainer = Depends(get_container),
+) -> ReturnResponse:
+    """Get a specific return by ID."""
+    require_page_access(user, "Returns")
+    return_record = container.returns.get_return(user, return_id)
+    if not return_record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Return not found"
+        )
+    return ReturnResponse.model_validate(return_record)
 
 
 @router.get("/orders/search", response_model=ReturnLookupOrdersResponse)
@@ -58,6 +77,7 @@ def create_return(
     user: AuthenticatedUser = Depends(get_authenticated_user),
     container: ServiceContainer = Depends(get_container),
 ) -> ReturnResponse:
+    """Create a new return."""
     return ReturnResponse.model_validate(
         container.returns.create_return(
             user,
@@ -67,3 +87,21 @@ def create_return(
             lines=[item.model_dump() for item in payload.lines],
         )
     )
+
+
+@router.put("/{return_id}", response_model=ReturnResponse)
+def update_return(
+    return_id: str = Path(..., description="The return ID"),
+    payload: ReturnUpdateRequest = None,
+    user: AuthenticatedUser = Depends(get_authenticated_user),
+    container: ServiceContainer = Depends(get_container),
+) -> ReturnResponse:
+    """Update an existing return (e.g., refund status, notes)."""
+    require_page_access(user, "Returns")
+    return_record = container.returns.update_return(user, return_id, payload)
+    if not return_record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Return not found"
+        )
+    return ReturnResponse.model_validate(return_record)

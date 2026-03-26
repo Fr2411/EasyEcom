@@ -468,3 +468,91 @@ class ReturnResponse(BaseModel):
 
 class ReturnsResponse(BaseModel):
     items: list[ReturnResponse]
+
+
+class ReturnUpdateRequest(BaseModel):
+    refund_status: str | None = None
+    notes: str | None = None
+    status: str | None = None
+
+
+# Purchase Order Schemas
+class PurchaseLineItemResponse(BaseModel):
+    line_id: str
+    variant_id: str
+    product_id: str
+    product_name: str
+    qty: Decimal
+    unit_cost: Decimal
+    line_total: Decimal
+
+
+class PurchaseListItemResponse(BaseModel):
+    purchase_id: str
+    purchase_no: str
+    purchase_date: str  # ISO string
+    supplier_id: str
+    supplier_name: str
+    reference_no: str
+    subtotal: Decimal
+    status: str
+    created_at: str  # ISO string
+
+
+class PurchaseDetailResponse(BaseModel):
+    purchase_id: str
+    purchase_no: str
+    purchase_date: str
+    supplier_id: str
+    supplier_name: str
+    reference_no: str
+    note: str
+    subtotal: Decimal
+    status: str
+    created_at: str
+    created_by_user_id: str
+    lines: list[PurchaseLineItemResponse]
+
+
+class PurchaseOrdersResponse(BaseModel):
+    items: list[PurchaseListItemResponse]
+
+
+class PurchaseCreateRequest(BaseModel):
+    purchase_date: str  # ISO string
+    supplier_id: str
+    reference_no: str
+    note: str = ""
+    payment_status: Literal['paid', 'unpaid', 'partial'] = 'unpaid'
+    lines: list[dict]  # We'll accept raw lines for now, or define a specific line input
+
+    @field_validator('lines')
+    @classmethod
+    def check_lines_not_empty(cls, v):
+        if not v:
+            raise ValueError('At least one line is required')
+        return v
+
+
+class PurchaseUpdateRequest(BaseModel):
+    purchase_date: Optional[str] = None
+    supplier_id: Optional[str] = None
+    reference_no: Optional[str] = None
+    note: Optional[str] = None
+    payment_status: Optional[Literal['paid', 'unpaid', 'partial']] = None
+    lines: Optional[list[dict]] = None
+
+# Purchase lookup schemas
+class PurchaseLookupProductResponse(BaseModel):
+    variant_id: str
+    product_id: str
+    label: str
+    current_stock: Decimal
+    default_purchase_price: Decimal | None
+    sku: str
+    barcode: str
+
+
+class PurchaseLookupSupplierResponse(BaseModel):
+    supplier_id: str
+    name: str

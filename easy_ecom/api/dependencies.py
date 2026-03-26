@@ -24,7 +24,9 @@ from easy_ecom.domain.services.commerce_service import (
 )
 from easy_ecom.domain.services.dashboard_service import DashboardAnalyticsService
 from easy_ecom.domain.services.overview_service import OverviewService
+from easy_ecom.domain.services.reports_service import ReportsService
 from easy_ecom.domain.services.sales_agent_service import SalesAgentService
+from easy_ecom.domain.services.transaction_service import TransactionService
 
 
 @dataclass(frozen=True)
@@ -46,6 +48,8 @@ class ServiceContainer:
         self.admin = AdminService(session_factory)
         self.dashboard = DashboardAnalyticsService(session_factory)
         self.overview = OverviewService(session_factory)
+        self.reports = ReportsService(session_factory)
+        self.transaction = TransactionService(session_factory)
         self.catalog = CatalogService(session_factory)
         self.inventory = InventoryService(session_factory)
         self.sales = SalesService(session_factory)

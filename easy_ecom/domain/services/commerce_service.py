@@ -1423,6 +1423,430 @@ class InventoryService(CommerceBaseService):
             }
 
 
+    def list_purchase_orders(self, user: AuthenticatedUser, *, status: str | None = None, query: str = '') -> list[dict[str, Any]]:
+        _require_page(user, "Purchases")
+        with self._session_factory() as session:
+            stmt = select(PurchaseModel).where(PurchaseModel.client_id == user.client_id)
+            if status:
+                stmt = stmt.where(PurchaseModel.status == status)
+            if query:
+                search_term = f"%{query}%"
+                stmt = stmt.where(
+                    or_(
+                        PurchaseModel.purchase_number.ilike(search_term),
+                        PurchaseModel.notes.ilike(search_term),
+                    )
+                )
+            stmt = stmt.order_by(PurchaseModel.created_at.desc())
+            purchases = session.execute(stmt).scalars().all()
+            return [
+                {
+                    "purchase_id": str(purchase.purchase_id),
+                    "purchase_no": purchase.purchase_number,
+                    "purchase_date": purchase.ordered_at.isoformat() if purchase.ordered_at else "",
+                    "supplier_id": str(purchase.supplier_id) if purchase.supplier_id else "",
+                    "supplier_name": self._get_supplier_name(session, purchase.supplier_id) if purchase.supplier_id else "",
+                    "reference_no": purchase.reference_no,
+                    "subtotal": purchase.subtotal_amount,
+                    "status": purchase.status,
+                    "created_at": purchase.created_at.isoformat() if purchase.created_at else "",
+                }
+                for purchase in purchases
+            ]
+
+    def get_purchase_order(self, user: AuthenticatedUser, purchase_order_id: str) -> dict[str, Any]:
+        _require_page(user, "Purchases")
+        with self._session_factory() as session:
+            purchase = session.execute(
+                select(PurchaseModel).where(
+                    PurchaseModel.client_id == user.client_id,
+                    PurchaseModel.purchase_id == purchase_order_id,
+                )
+            ).scalar_one_or_none()
+            _require(purchase is not None, message="Purchase order not found", code="NOT_FOUND", status_code=404)
+
+            # Get purchase items
+            purchase_items = session.execute(
+                select(PurchaseItemModel).where(PurchaseItemModel.purchase_id == purchase.purchase_id)
+            ).scalars().all()
+
+            # Get supplier name
+            supplier_name = self._get_supplier_name(session, purchase.supplier_id) if purchase.supplier_id else ""
+
+            return {
+                "purchase_id": str(purchase.purchase_id),
+                "purchase_no": purchase.purchase_number,
+                "purchase_date": purchase.ordered_at.isoformat() if purchase.ordered_at else "",
+                "supplier_id": str(purchase.supplier_id) if purchase.supplier_id else "",
+                "supplier_name": supplier_name,
+                "reference_no": purchase.reference_no,
+                "note": purchase.notes,
+                "subtotal": purchase.subtotal_amount,
+                "status": purchase.status,
+                "created_at": purchase.created_at.isoformat() if purchase.created_at else "",
+                "created_by_user_id": str(purchase.created_by_user_id) if purchase.created_by_user_id else "",
+                "lines": [
+                    {
+                        "line_id": str(item.purchase_item_id),
+                        "variant_id": str(item.variant_id),
+                        "product_id": str(item.variant.product_id) if item.variant else "",
+                        "product_name": item.variant.product.name if item.variant and item.variant.product else "",
+                        "qty": item.quantity,
+                        "unit_cost": item.unit_cost_amount,
+                        "line_total": item.line_total_amount,
+                    }
+                    for item in purchase_items
+                ],
+            }
+
+    def lookup_purchase_variants(self, user: AuthenticatedUser, *, query: str, location_id: str | None = None) -> list[dict[str, Any]]:
+        _require_page(user, "Purchases")
+        trimmed = query.strip()
+        if not trimmed:
+            return []
+
+        with self._session_factory() as session:
+            location_context = self._location_context(session, user.client_id, location_id)
+            rows = session.execute(self._apply_variant_search(self._base_variant_stmt(user.client_id), trimmed)).all()
+            on_hand_map, reserved_map = self._stock_maps(session, user.client_id, location_context.active_location_id)
+            results = []
+            for product, variant, supplier, category in rows:
+                if product.status != "active" or variant.status != "active":
+                    continue
+                on_hand = on_hand_map.get(str(variant.variant_id), ZERO)
+                reserved = reserved_map.get(str(variant.variant_id), ZERO)
+                available = on_hand - reserved
+                results.append(
+                    {
+                        "variant_id": str(variant.variant_id),
+                        "product_id": str(product.product_id),
+                        "label": build_variant_label(product.name, variant.title),
+                        "current_stock": available,
+                        "default_purchase_price": as_optional_decimal(variant.cost_amount),
+                        "sku": variant.sku,
+                        "barcode": variant.barcode,
+                    }
+                )
+            return results
+
+    def lookup_purchase_suppliers(self, user: AuthenticatedUser, *, query: str) -> list[dict[str, Any]]:
+        _require_page(user, "Purchases")
+        trimmed = query.strip()
+        if not trimmed:
+            return []
+
+        with self._session_factory() as session:
+            search_term = f"%{trimmed}%"
+            suppliers = session.execute(
+                select(SupplierModel)
+                .where(
+                    SupplierModel.client_id == user.client_id,
+                    SupplierModel.name.ilike(search_term),
+                )
+                .limit(20)
+            ).scalars().all()
+            return [
+                {
+                    "supplier_id": str(supplier.supplier_id),
+                    "name": supplier.name,
+                }
+                for supplier in suppliers
+            ]
+
+    def create_purchase_order(
+        self,
+        user: AuthenticatedUser,
+        *,
+        purchase_date: str,
+        supplier_id: str,
+        reference_no: str,
+        note: str,
+        payment_status: str,
+        lines: list[dict],
+    ) -> dict[str, Any]:
+        _require_page(user, "Purchases")
+        with self._session_factory() as session:
+            # Validate supplier exists
+            supplier = session.execute(
+                select(SupplierModel).where(
+                    SupplierModel.client_id == user.client_id,
+                    SupplierModel.supplier_id == supplier_id,
+                )
+            ).scalar_one_or_none()
+            _require(supplier is not None, message="Supplier not found", code="NOT_FOUND", status_code=404)
+
+            # Validate lines
+            _require(lines, message="At least one line is required", code="INVALID_REQUEST", status_code=400)
+
+            # Process each line to validate variant and calculate totals
+            processed_lines = []
+            subtotal = ZERO
+            for line in lines:
+                variant_id = str(line.get("variant_id", "")).strip()
+                qty = as_decimal(line.get("qty"))
+                unit_cost = as_decimal(line.get("unit_cost"))
+
+                _require(variant_id, message="Variant ID is required", code="INVALID_REQUEST", status_code=400)
+                _require(qty is not None and qty > ZERO, message="Quantity must be greater than zero", code="INVALID_REQUEST", status_code=400)
+                _require(unit_cost is not None and unit_cost >= ZERO, message="Unit cost must be greater than or equal to zero", code="INVALID_REQUEST", status_code=400)
+
+                variant = session.execute(
+                    select(ProductVariantModel).where(
+                        ProductVariantModel.client_id == user.client_id,
+                        ProductVariantModel.variant_id == variant_id,
+                    )
+                ).scalar_one_or_none()
+                _require(variant is not None, message="Variant not found", code="NOT_FOUND", status_code=404)
+
+                line_total = qty * unit_cost
+                subtotal += line_total
+
+                processed_lines.append({
+                    "variant_id": variant_id,
+                    "quantity": qty,
+                    "unit_cost": unit_cost,
+                    "line_total": line_total,
+                })
+
+            # Create purchase order
+            settings = self._client_settings(session, user.client_id)
+            prefix = settings.purchase_prefix if settings else "PO"
+            purchase_number = self._new_number(prefix)
+
+            purchase = PurchaseModel(
+                purchase_id=new_uuid(),
+                client_id=user.client_id,
+                supplier_id=supplier_id,
+                location_id=self._get_default_location_id(session, user.client_id),  # Use default location
+                purchase_number=purchase_number,
+                status="draft",  # Start as draft
+                ordered_at=datetime.fromisoformat(purchase_date.replace("Z", "+00:00")) if purchase_date else None,
+                received_at=None,
+                notes=note.strip(),
+                created_by_user_id=user.user_id,
+                subtotal_amount=subtotal,
+                total_amount=subtotal,
+            )
+            session.add(purchase)
+            session.flush()
+
+            # Create purchase items
+            for line in processed_lines:
+                purchase_item = PurchaseItemModel(
+                    purchase_item_id=new_uuid(),
+                    client_id=user.client_id,
+                    purchase_id=purchase.purchase_id,
+                    variant_id=line["variant_id"],
+                    quantity=line["quantity"],
+                    received_quantity=ZERO,  # Initially nothing received
+                    unit_cost_amount=line["unit_cost"],
+                    line_total_amount=line["line_total"],
+                    notes="",
+                )
+                session.add(purchase_item)
+
+            session.commit()
+
+            return self.get_purchase_order(user, str(purchase.purchase_id))
+
+    def update_purchase_order(
+        self,
+        user: AuthenticatedUser,
+        *,
+        purchase_order_id: str,
+        purchase_date: str | None = None,
+        supplier_id: str | None = None,
+        reference_no: str | None = None,
+        note: str | None = None,
+        payment_status: str | None = None,
+        lines: list[dict] | None = None,
+    ) -> dict[str, Any]:
+        _require_page(user, "Purchases")
+        with self._session_factory() as session:
+            purchase = session.execute(
+                select(PurchaseModel).where(
+                    PurchaseModel.client_id == user.client_id,
+                    PurchaseModel.purchase_id == purchase_order_id,
+                )
+            ).scalar_one_or_none()
+            _require(purchase is not None, message="Purchase order not found", code="NOT_FOUND", status_code=404)
+
+            # Only allow updates on draft or cancelled orders
+            _require(purchase.status in ["draft", "cancelled"], message="Can only update draft or cancelled purchase orders", code="INVALID_REQUEST", status_code=400)
+
+            # Update fields if provided
+            if purchase_date is not None:
+                purchase.ordered_at = datetime.fromisoformat(purchase_date.replace("Z", "+00:00")) if purchase_date else None
+            if supplier_id is not None:
+                # Validate supplier exists
+                supplier = session.execute(
+                    select(SupplierModel).where(
+                        SupplierModel.client_id == user.client_id,
+                        SupplierModel.supplier_id == supplier_id,
+                    )
+                ).scalar_one_or_none()
+                _require(supplier is not None, message="Supplier not found", code="NOT_FOUND", status_code=404)
+                purchase.supplier_id = supplier_id
+            if reference_no is not None:
+                purchase.reference_no = reference_no
+            if note is not None:
+                purchase.notes = note.strip()
+            if payment_status is not None:
+                # For now, we don't store payment_status separately, but we could add it to the model
+                pass
+
+            # Update lines if provided
+            if lines is not None:
+                _require(lines, message="At least one line is required", code="INVALID_REQUEST", status_code=400)
+
+                # Delete existing purchase items
+                session.execute(
+                    delete(PurchaseItemModel).where(PurchaseItemModel.purchase_id == purchase.purchase_id)
+                )
+
+                # Process new lines
+                processed_lines = []
+                subtotal = ZERO
+                for line in lines:
+                    variant_id = str(line.get("variant_id", "")).strip()
+                    qty = as_decimal(line.get("qty"))
+                    unit_cost = as_decimal(line.get("unit_cost"))
+
+                    _require(variant_id, message="Variant ID is required", code="INVALID_REQUEST", status_code=400)
+                    _require(qty is not None and qty > ZERO, message="Quantity must be greater than zero", code="INVALID_REQUEST", status_code=400)
+                    _require(unit_cost is not None and unit_cost >= ZERO, message="Unit cost must be greater than or equal to zero", code="INVALID_REQUEST", status_code=400)
+
+                    variant = session.execute(
+                        select(ProductVariantModel).where(
+                            ProductVariantModel.client_id == user.client_id,
+                            ProductVariantModel.variant_id == variant_id,
+                        )
+                ).scalar_one_or_none()
+                _require(variant is not None, message="Variant not found", code="NOT_FOUND", status_code=404)
+
+                line_total = qty * unit_cost
+                subtotal += line_total
+
+                processed_lines.append({
+                    "variant_id": variant_id,
+                    "quantity": qty,
+                    "unit_cost": unit_cost,
+                    "line_total": line_total,
+                })
+
+                # Create new purchase items
+                for line in processed_lines:
+                    purchase_item = PurchaseItemModel(
+                        purchase_item_id=new_uuid(),
+                        client_id=user.client_id,
+                        purchase_id=purchase.purchase_id,
+                        variant_id=line["variant_id"],
+                        quantity=line["quantity"],
+                        received_quantity=ZERO,  # Reset received quantity when lines change
+                        unit_cost_amount=line["unit_cost"],
+                        line_total_amount=line["line_total"],
+                        notes="",
+                    )
+                    session.add(purchase_item)
+
+                purchase.subtotal_amount = subtotal
+                purchase.total_amount = subtotal
+
+            session.commit()
+            return self.get_purchase_order(user, purchase_order_id)
+
+    def receive_purchase_order(self, user: AuthenticatedUser, *, purchase_order_id: str) -> dict[str, Any]:
+        _require_page(user, "Purchases")
+        with self._session_factory() as session:
+            purchase = session.execute(
+                select(PurchaseModel).where(
+                    PurchaseModel.client_id == user.client_id,
+                    PurchaseModel.purchase_id == purchase_order_id,
+                )
+            ).scalar_one_or_none()
+            _require(purchase is not None, message="Purchase order not found", code="NOT_FOUND", status_code=404)
+
+            # Only allow receiving draft orders
+            _require(purchase.status == "draft", message="Can only receive draft purchase orders", code="INVALID_REQUEST", status_code=400)
+
+            # Get purchase items to build lines for receive_stock
+            purchase_items = session.execute(
+                select(PurchaseItemModel).where(PurchaseItemModel.purchase_id == purchase.purchase_id)
+            ).scalars().all()
+
+            _require(purchase_items, message="Purchase order has no items", code="INVALID_REQUEST", status_code=400)
+
+            # Build lines for receive_stock
+            lines = []
+            for item in purchase_items:
+                lines.append({
+                    "variant_id": str(item.variant_id),
+                    "qty": item.quantity,
+                    "unit_cost": item.unit_cost_amount,
+                })
+
+            # Use receive_stock to process the receipt
+            result = self.receive_stock(
+                user,
+                action="receive_stock",
+                location_id=None,  # Use purchase's location or default
+                notes=purchase.notes or "Received via purchase order",
+                update_matched_product_details=False,
+                identity={
+                    "product_name": "Purchase Order Receipt",  # Dummy, not used when variant_id provided
+                    "sku_root": "",
+                },
+                lines=lines,
+            )
+
+            # Update purchase status to received
+            purchase.status = "received"
+            purchase.received_at = now_utc()
+            session.add(purchase)
+            session.commit()
+
+            return self.get_purchase_order(user, purchase_order_id)
+
+    def cancel_purchase_order(self, user: AuthenticatedUser, *, purchase_order_id: str, notes: str = "") -> dict[str, Any]:
+        _require_page(user, "Purchases")
+        with self._session_factory() as session:
+            purchase = session.execute(
+                select(PurchaseModel).where(
+                    PurchaseModel.client_id == user.client_id,
+                    PurchaseModel.purchase_id == purchase_order_id,
+                )
+            ).scalar_one_or_none()
+            _require(purchase is not None, message="Purchase order not found", code="NOT_FOUND", status_code=404)
+
+            # Only allow cancelling draft orders
+            _require(purchase.status == "draft", message="Can only cancel draft purchase orders", code="INVALID_REQUEST", status_code=400)
+
+            # Update status to cancelled
+            purchase.status = "cancelled"
+            if notes:
+                purchase.notes = f"{purchase.notes}\nCancelled: {notes}".strip()
+            session.add(purchase)
+            session.commit()
+
+            return self.get_purchase_order(user, purchase_order_id)
+
+    # Helper methods
+    def _get_supplier_name(self, session: Session, supplier_id: str | None) -> str:
+        if not supplier_id:
+            return ""
+        supplier = session.execute(
+            select(SupplierModel.name).where(SupplierModel.supplier_id == supplier_id)
+        ).scalar_one_or_none()
+        return supplier or ""
+
+    def _get_default_location_id(self, session: Session, client_id: str) -> str:
+        location = session.execute(
+            select(LocationModel.location_id)
+            .where(LocationModel.client_id == client_id)
+            .limit(1)
+        ).scalar_one_or_none()
+        _require(location is not None, message="No location found for client", code="INTERNAL_ERROR", status_code=500)
+        return location
 class SalesService(CommerceBaseService):
     def list_orders(self, user: AuthenticatedUser, *, status: str | None = None, query: str = "") -> list[dict[str, Any]]:
         _require_page(user, "Sales")
@@ -2189,5 +2613,47 @@ class ReturnsService(CommerceBaseService):
 
             return_record.subtotal_amount = subtotal
             return_record.refund_amount = refund_total
+            session.commit()
+            return self._return_payload(session, return_record)
+
+    def get_return(self, user: AuthenticatedUser, return_id: str) -> dict[str, Any] | None:
+        _require_page(user, "Returns")
+        with self._session_factory() as session:
+            stmt = select(SalesReturnModel).where(
+                SalesReturnModel.client_id == user.client_id,
+                SalesReturnModel.sales_return_id == return_id,
+            )
+            record = session.execute(stmt).scalar_one_or_none()
+            if record is None:
+                return None
+            return self._return_payload(session, record)
+
+    def update_return(
+        self,
+        user: AuthenticatedUser,
+        return_id: str,
+        payload: ReturnUpdateRequest | None,
+    ) -> dict[str, Any] | None:
+        _require_page(user, "Returns")
+        with self._session_factory() as session:
+            return_record = session.execute(
+                select(SalesReturnModel).where(
+                    SalesReturnModel.client_id == user.client_id,
+                    SalesReturnModel.sales_return_id == return_id,
+                )
+            ).scalar_one_or_none()
+            if return_record is None:
+                return None
+
+            # Update fields if provided
+            if payload is not None:
+                if payload.refund_status is not None:
+                    return_record.refund_status = payload.refund_status
+                if payload.notes is not None:
+                    return_record.notes = payload.notes.strip()
+                if payload.status is not None:
+                    return_record.status = payload.status
+
+            session.add(return_record)
             session.commit()
             return self._return_payload(session, return_record)
