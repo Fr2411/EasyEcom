@@ -379,9 +379,8 @@ function OpportunityMatrixRecharts({ items }: { items: DashboardProductOpportuni
     name: item.product_id,
     sales: numberFromString(String(item.sales_qty_per_day)),
     margin: numberFromString(String(item.estimated_margin_percent ?? 0)),
-    size: Math.max(8, Math.min(20, 8 + (numberFromString(String(item.inventory_cost_value ?? 0)) / 
-      Math.max(...items.map(i => numberFromString(String(i.inventory_cost_value ?? 0))), 1) * 12)),
-  }));
+    size: Math.max(8, Math.min(20, 8 + (numberFromString(String(item.inventory_cost_value ?? 0)) / Math.max(...items.map(i => numberFromString(String(i.inventory_cost_value ?? 0)))) * 12)),
+  }),
 
   return (
     <div className="dashboard-chart-shell">
