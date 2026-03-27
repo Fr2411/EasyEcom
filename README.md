@@ -118,3 +118,4 @@ Optional local CLI check through the same tunnel:
 ```bash
 ./scripts/db_psql.sh
 ```
+Update to trigger Amplify rebuild Fri Mar 27 17:23:03 +04 2026
