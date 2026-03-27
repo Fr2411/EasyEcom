@@ -78,9 +78,9 @@ What it does:
 - SSH into the EC2 app host
 - pull the latest code from `main`
 - install Python dependencies
-- run `python3 -m easy_ecom.scripts.migrate`
-- run `python3 -m easy_ecom.scripts.init_data`
-- restart `easy-ecom.service`
+- run database migrations
+- seed baseline data
+- restart the backend service
 
 Frontend deploy to AWS Amplify:
 ```bash
@@ -109,7 +109,7 @@ Then create a PostgreSQL connection in DBeaver with:
 - Port: `5433`
 - Database: `easyecom`
 - User: `easyecom_admin`
-- Password: use the current `POSTGRES_PASSWORD` from the EC2 `.env` or your AWS secret
+- Password: use the password from your AWS secret manager or EC2 environment
 - SSL: `require` or `preferred` without strict hostname verification
 
 Keep the gateway terminal open while DBeaver is connected.
