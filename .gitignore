@@ -13,3 +13,13 @@ frontend/package-lock.json
 .env.*
 !.env.example
 frontend/.env.local
+.DS_Store
+*.backup
+*.backup2
+*.backup3
+cookies.txt
+cookie.txt
+auth_cookie.txt
+easy_ecom.db
+.idea/
+.frontend/
