@@ -17,6 +17,7 @@ import {
   ComposedChart,
   ScatterChart,
   Scatter,
+  ZAxis,
 } from 'recharts';
 import type {
   DashboardAnalytics,
@@ -375,18 +376,17 @@ function OpportunityMatrixRecharts({ items }: { items: DashboardProductOpportuni
     return <div className="dashboard-chart-empty text-muted p-4">No data available</div>;
   }
 
-  const chartData = items.map(item => ({
-    name: item.product_id,
+  const chartData = items.map((item) => ({
+    name: item.product_name,
     sales: numberFromString(String(item.sales_qty_per_day)),
     margin: numberFromString(String(item.estimated_margin_percent ?? 0)),
-    size: Math.max(8, Math.min(20, 8 + (numberFromString(String(item.inventory_cost_value ?? 0)) / Math.max(...items.map(i => numberFromString(String(i.inventory_cost_value ?? 0)))) * 12)),
-  }),
+    inventoryCostValue: numberFromString(String(item.inventory_cost_value ?? 0)),
+  }));
 
   return (
     <div className="dashboard-chart-shell">
       <ResponsiveContainer width="100%" height={260}>
         <ScatterChart
-          data={chartData}
           margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
         >
           <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -400,10 +400,11 @@ function OpportunityMatrixRecharts({ items }: { items: DashboardProductOpportuni
             tick={{ fontSize: 12, fill: '#6b7280' }}
             label={{ value: 'Avg. margin %', position: 'insideLeft', offset: -40, angle: -90 }}
           />
+          <ZAxis dataKey="inventoryCostValue" range={[80, 400]} name="Inventory cost value" />
           <Tooltip
             labelFormatter={(value) => `${value}`}
             formatter={(value, name) => 
-              name === 'size' 
+              name === 'Inventory cost value' 
                 ? `$${Number(value).toLocaleString()}` 
                 : Number(value).toLocaleString()
             }
@@ -421,9 +422,8 @@ function OpportunityMatrixRecharts({ items }: { items: DashboardProductOpportuni
             labelStyle={{ fontSize: 12, fill: '#6b7280' }}
           />
           <Scatter
-            cx="sales"
-            cy="margin"
-            r={(props) => props.payload.size}
+            name="Products"
+            data={chartData}
             fill="#10b981" /* Green */
             opacity={0.6}
             stroke="#fff"
@@ -661,8 +661,13 @@ export function DashboardAnalyticsWorkspace() {
                 <p className="kpi-label text-xs text-muted">{metric.label}</p>
                 <h3 className="kpi-value text-2xl font-bold">{metricValue(metric)}</h3>
                 <span 
-                  className={`kpi-meta dashboard-kpi-meta text-sm font-medium mt-2 delta-${metric.delta_direction ?? 'flat'}`}
-                  className={metric.delta_direction === 'up' ? 'text-green-600' : metric.delta_direction === 'down' ? 'text-red-600' : 'text-muted'}
+                  className={`kpi-meta dashboard-kpi-meta mt-2 text-sm font-medium delta-${metric.delta_direction ?? 'flat'} ${
+                    metric.delta_direction === 'up'
+                      ? 'text-green-600'
+                      : metric.delta_direction === 'down'
+                        ? 'text-red-600'
+                        : 'text-muted'
+                  }`}
                 >
                   {metricDelta(metric)}
                 </span>
@@ -920,6 +925,7 @@ export function DashboardAnalyticsWorkspace() {
                       </tr>
                     ))}
                   </tbody>
+                  </table>
                 ) : (
                   <SectionEmpty
                     message="No revenue leaders to show yet."
@@ -950,11 +956,13 @@ export function DashboardAnalyticsWorkspace() {
                   <tbody>
                     {dashboard.tables.top_products_by_estimated_gross_profit.items.map((row) => (
                       <tr key={row.product_id} className="border-b">
+                        <td className="px-3 py-2">{row.product_name}</td>
                         <td className="px-3 py-2">{row.estimated_gross_profit !== null ? `$${formatMoney(row.estimated_gross_profit)}` : 'Not enough cost data'}</td>
                         <td className="px-3 py-2">{row.estimated_margin_percent !== null ? formatPercent(row.estimated_margin_percent) : 'Not enough cost data'}</td>
-                      </tr)
+                      </tr>
                     ))}
                   </tbody>
+                  </table>
                 ) : (
                   <SectionEmpty
                     message="Estimated gross profit will appear once fulfilled sales have cost data."
@@ -972,11 +980,11 @@ export function DashboardAnalyticsWorkspace() {
                 </div>
                 <Link href="/inventory" className="dashboard-inline-link text-primary font-medium hover:text-primary-dark transition-fast">Review stock</Link>
               </div>
-              {dashboard.tables.slow_movers.length ? (
-                <table className="top-products-table w-full border-collapse">
-                  <thead>
-                    <tr>
-                      <th className="px-3 py-2 text-xs font-medium text-muted uppercase tracking-wider border-b">Product</th>
+                {dashboard.tables.slow_movers.length ? (
+                  <table className="top-products-table w-full border-collapse">
+                    <thead>
+                      <tr>
+                        <th className="px-3 py-2 text-xs font-medium text-muted uppercase tracking-wider border-b">Product</th>
                       <th className="px-3 py-2 text-xs font-medium text-muted uppercase tracking-wider border-b">Available</th>
                       {financialVisible ? (
                         <th className="px-3 py-2 text-xs font-medium text-muted uppercase tracking-wider border-b">Cost value</th>
@@ -991,13 +999,13 @@ export function DashboardAnalyticsWorkspace() {
                         {financialVisible ? (
                           <td className="px-3 py-2">{compactMoney(row.inventory_cost_value)}</td>
                         ) : null}
-                      </tr)
+                      </tr>
                     ))}
-                  </tbody
-                )
-              ) : (
-                <SectionEmpty message="No slow movers in the selected range." />
-              )}
+                  </tbody>
+                  </table>
+                ) : (
+                  <SectionEmpty message="No slow movers in the selected range." />
+                )}
             </article>
 
             <article className="section-card dashboard-section-card bg-glass p-6 rounded-lg shadow-glass transition-normal hover:shadow-glass-hover">
