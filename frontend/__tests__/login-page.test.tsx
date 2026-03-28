@@ -13,6 +13,10 @@ vi.mock('@/lib/api/auth', () => ({
   login: vi.fn(async () => undefined)
 }));
 
+vi.mock('@/lib/api/signup', () => ({
+  signup: vi.fn(async () => undefined)
+}));
+
 vi.mock('@/components/auth/auth-provider', () => ({
   useAuth: () => useAuthMock()
 }));
@@ -30,7 +34,8 @@ describe('LoginPage', () => {
 
     expect(screen.getByRole('heading', { name: 'EasyEcom Login' })).toBeTruthy();
     expect(screen.getByRole('img', { name: 'Easy-Ecom' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Sign in' })).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Sign in' }).length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: 'Create account' })).toBeTruthy();
   });
 
   test('redirects authenticated users to dashboard with visible transition state', async () => {

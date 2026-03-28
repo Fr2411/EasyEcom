@@ -568,6 +568,75 @@ class AdminService:
         default_location_name: str | None = None,
         additional_users: list[dict[str, str]] | None = None,
     ) -> AdminOnboardResult:
+        return self._provision_client(
+            actor_user_id=actor.user_id,
+            request_id=request_id,
+            business_name=business_name,
+            contact_name=contact_name,
+            primary_email=primary_email,
+            primary_phone=primary_phone,
+            owner_name=owner_name,
+            owner_email=owner_email,
+            owner_password=owner_password,
+            address=address,
+            website_url=website_url,
+            facebook_url=facebook_url,
+            instagram_url=instagram_url,
+            whatsapp_number=whatsapp_number,
+            notes=notes,
+            timezone=timezone,
+            currency_code=currency_code,
+            currency_symbol=currency_symbol,
+            default_location_name=default_location_name,
+            additional_users=additional_users,
+        )
+
+    def signup_client(
+        self,
+        *,
+        request_id: str | None,
+        business_name: str,
+        owner_name: str,
+        owner_email: str,
+        owner_password: str,
+        primary_phone: str,
+    ) -> AdminOnboardResult:
+        return self._provision_client(
+            actor_user_id=None,
+            request_id=request_id,
+            business_name=business_name,
+            contact_name=owner_name,
+            primary_email=owner_email,
+            primary_phone=primary_phone,
+            owner_name=owner_name,
+            owner_email=owner_email,
+            owner_password=owner_password,
+        )
+
+    def _provision_client(
+        self,
+        *,
+        actor_user_id: str | None,
+        request_id: str | None,
+        business_name: str,
+        contact_name: str,
+        primary_email: str,
+        primary_phone: str,
+        owner_name: str,
+        owner_email: str,
+        owner_password: str,
+        address: str = "",
+        website_url: str = "",
+        facebook_url: str = "",
+        instagram_url: str = "",
+        whatsapp_number: str = "",
+        notes: str = "",
+        timezone: str | None = None,
+        currency_code: str | None = None,
+        currency_symbol: str | None = None,
+        default_location_name: str | None = None,
+        additional_users: list[dict[str, str]] | None = None,
+    ) -> AdminOnboardResult:
         normalized_business_name = business_name.strip()
         normalized_contact_name = self._normalize_name(contact_name)
         normalized_primary_email = self._normalize_email(primary_email)
@@ -694,7 +763,7 @@ class AdminService:
             self._log_audit(
                 session,
                 client_id=client_id,
-                actor_user_id=actor.user_id,
+                actor_user_id=actor_user_id,
                 entity_type="client",
                 entity_id=client_id,
                 action="client_created",
@@ -705,7 +774,7 @@ class AdminService:
                 self._log_audit(
                     session,
                     client_id=client_id,
-                    actor_user_id=actor.user_id,
+                    actor_user_id=actor_user_id,
                     entity_type="user",
                     entity_id=created_user.user_id,
                     action="user_created",
@@ -715,7 +784,7 @@ class AdminService:
                 self._log_audit(
                     session,
                     client_id=client_id,
-                    actor_user_id=actor.user_id,
+                    actor_user_id=actor_user_id,
                     entity_type="user",
                     entity_id=created_user.user_id,
                     action="password_set_by_admin",

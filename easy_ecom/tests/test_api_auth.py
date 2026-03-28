@@ -59,6 +59,49 @@ def test_invalid_password(monkeypatch, tmp_path: Path):
     assert response.status_code == 401
 
 
+def test_signup_creates_owner_session_and_tenant(monkeypatch, tmp_path: Path):
+    runtime = _setup_runtime(tmp_path)
+    monkeypatch.setattr(deps, "settings", runtime.settings)
+
+    client = TestClient(create_app())
+    response = client.post(
+        "/auth/signup",
+        json={
+            "business_name": "Acme Signup Store",
+            "name": "Asha Owner",
+            "email": "asha@example.com",
+            "phone": "+971500000001",
+            "password": "secret123",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.cookies.get("easy_ecom_session")
+    assert response.json()["email"] == "asha@example.com"
+    assert "Dashboard" in response.json()["allowed_pages"]
+
+
+def test_signup_rejects_existing_email(monkeypatch, tmp_path: Path):
+    runtime = _setup_runtime(tmp_path)
+    monkeypatch.setattr(deps, "settings", runtime.settings)
+    _append_user(runtime, password_hash=hash_password("secret"), role_code="CLIENT_OWNER")
+
+    client = TestClient(create_app())
+    response = client.post(
+        "/auth/signup",
+        json={
+            "business_name": "Duplicate Email Store",
+            "name": "User One",
+            "email": "u1@example.com",
+            "phone": "+971500000002",
+            "password": "secret123",
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "USER_EMAIL_ALREADY_EXISTS"
+
+
 def test_inactive_user_blocked(monkeypatch, tmp_path: Path):
     runtime = _setup_runtime(tmp_path)
     monkeypatch.setattr(deps, "settings", runtime.settings)
