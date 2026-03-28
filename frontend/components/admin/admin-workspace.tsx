@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, Fragment, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 
 import { useAuth } from '@/components/auth/auth-provider';
 import {
@@ -19,6 +20,7 @@ import {
 import { ApiError, ApiNetworkError } from '@/lib/api/client';
 import { getPublicEnv } from '@/lib/env';
 import { isSuperAdmin } from '@/lib/rbac';
+import type { SuggestedAction } from '@/types/guided-workflow';
 import type {
   AdminAuditItem,
   AdminClient,
@@ -27,6 +29,14 @@ import type {
   AdminUserAccess,
   AdminUserAccessUpdateInput,
 } from '@/types/admin';
+import {
+  DraftRecommendationCard,
+  IntentInput,
+  MatchGroupList,
+  StagedActionFooter,
+  SuggestedNextStep,
+  WorkspaceEmpty,
+} from '@/components/commerce/workspace-primitives';
 
 type UserDraft = {
   name: string;
@@ -77,6 +87,10 @@ const EMPTY_TEAM_USER_FORM = {
   role_code: 'CLIENT_STAFF',
   password: '',
 };
+
+function normalize(text: string) {
+  return text.trim().toLowerCase();
+}
 
 function formatDateTime(value: string | null | undefined) {
   if (!value) {
@@ -138,8 +152,105 @@ function formatAccessCodes(pageCodes: string[]) {
     .join(', ');
 }
 
+function seedOnboardFormFromQuery(query: string): AdminOnboardClientInput {
+  const trimmed = query.trim();
+  const seeded: AdminOnboardClientInput = {
+    ...EMPTY_ONBOARD_FORM,
+  };
+
+  if (!trimmed) {
+    return seeded;
+  }
+
+  if (trimmed.includes('@')) {
+    seeded.primary_email = trimmed;
+    seeded.owner_email = trimmed;
+    return seeded;
+  }
+
+  if (/^https?:\/\//i.test(trimmed) || (trimmed.includes('.') && !trimmed.includes(' '))) {
+    seeded.website_url = trimmed.startsWith('http') ? trimmed : `https://${trimmed}`;
+    return seeded;
+  }
+
+  if (/^\+?[0-9][0-9\s-]{5,}$/.test(trimmed)) {
+    seeded.primary_phone = trimmed;
+    seeded.whatsapp_number = trimmed;
+    return seeded;
+  }
+
+  seeded.business_name = trimmed;
+  return seeded;
+}
+
+function deriveAdminIntentSuggestion(
+  creatingClient: boolean,
+  query: string,
+  clients: AdminClient[]
+): SuggestedAction & { kind: 'idle' | 'existing' | 'new' } {
+  if (creatingClient) {
+    return {
+      kind: 'new',
+      title: 'New tenant draft ready',
+      detail: 'Complete the staged profile below, then create the tenant when the details are ready.',
+      actionLabel: 'Review before creating',
+      tone: 'success',
+    };
+  }
+
+  const trimmed = query.trim();
+  if (!trimmed) {
+    return {
+      kind: 'idle',
+      title: 'Start with one tenant clue',
+      detail: 'Type a business name, client code, contact name, email, phone, or website. The workspace will stage the right next step.',
+      actionLabel: 'Interpret tenant intent',
+      tone: 'info',
+    };
+  }
+
+  const lower = normalize(trimmed);
+  const exact = clients.find((client) =>
+    [client.business_name, client.client_code, client.contact_name, client.email, client.phone, client.website_url]
+      .filter(Boolean)
+      .some((value) => normalize(value) === lower)
+  );
+
+  if (exact) {
+    return {
+      kind: 'existing',
+      title: `Exact tenant found: ${exact.business_name}`,
+      detail: 'The workspace can open this tenant directly and keep the existing profile and team editable.',
+      actionLabel: 'Open tenant',
+      secondaryLabel: 'Review other matches',
+      tone: 'success',
+    };
+  }
+
+  if (clients.length > 0) {
+    return {
+      kind: 'existing',
+      title: `We found ${clients.length} likely tenant${clients.length === 1 ? '' : 's'}`,
+      detail: 'Review the closest tenant first. If none are correct, the workspace can stage a new onboarding draft from the typed clue.',
+      actionLabel: 'Open top match',
+      secondaryLabel: 'Start onboarding',
+      tone: 'warning',
+    };
+  }
+
+  return {
+    kind: 'new',
+    title: 'No existing tenant found',
+    detail: 'A new tenant draft can be staged with the typed clue prefilled into the onboarding form.',
+    actionLabel: 'Start onboarding',
+    tone: 'warning',
+  };
+}
+
 export function AdminWorkspace() {
   const { user, loading } = useAuth();
+  const searchParams = useSearchParams();
+  const searchKey = searchParams?.toString?.() ?? '';
   const [clients, setClients] = useState<AdminClient[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [selectedClient, setSelectedClient] = useState<AdminClient | null>(null);
@@ -153,7 +264,7 @@ export function AdminWorkspace() {
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [busyLabel, setBusyLabel] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [creatingClient, setCreatingClient] = useState(false);
+  const [creatingClient, setCreatingClient] = useState(() => searchParams?.get?.('mode') === 'create');
   const [onboardForm, setOnboardForm] = useState<AdminOnboardClientInput>(EMPTY_ONBOARD_FORM);
   const [teamUserForm, setTeamUserForm] = useState(EMPTY_TEAM_USER_FORM);
   const [activeAccessUserId, setActiveAccessUserId] = useState<string | null>(null);
@@ -161,7 +272,6 @@ export function AdminWorkspace() {
   const [accessDrafts, setAccessDrafts] = useState<Record<string, AccessState>>({});
   const [accessLoading, setAccessLoading] = useState(false);
   const [accessError, setAccessError] = useState<string | null>(null);
-
   async function loadClientDirectory(currentSearch = search) {
     const response = await listAdminClients(currentSearch);
     setClients(response.items);
@@ -209,8 +319,10 @@ export function AdminWorkspace() {
     try {
       const clientResponse = await listAdminClients();
       setClients(clientResponse.items);
-      if (!creatingClient && !selectedClientId && clientResponse.items[0]) {
-        setSelectedClientId(clientResponse.items[0].client_id);
+      const firstClientId = clientResponse.items[0]?.client_id ?? null;
+      if (!creatingClient && firstClientId) {
+        setSelectedClientId(firstClientId);
+        await loadSelectedClient(firstClientId);
       }
     } catch (error) {
       setWorkspaceError(adminErrorMessage(error, 'Unable to load the admin workspace.'));
@@ -234,12 +346,20 @@ export function AdminWorkspace() {
     void loadSelectedClient(selectedClientId);
   }, [creatingClient, selectedClientId, user]);
 
+  useEffect(() => {
+    const mode = searchParams?.get?.('mode');
+    if (mode !== 'create') {
+      return;
+    }
+    startCreateMode(seedOnboardFormFromQuery(searchParams?.get?.('intent') ?? searchParams?.get?.('q') ?? ''));
+  }, [searchKey]);
+
   function resetMessages() {
     setWorkspaceError(null);
     setSuccessMessage(null);
   }
 
-  function startCreateMode() {
+  function startCreateMode(seed?: Partial<AdminOnboardClientInput>) {
     resetMessages();
     setCreatingClient(true);
     setSelectedClientId(null);
@@ -249,7 +369,11 @@ export function AdminWorkspace() {
     setUserDrafts({});
     setPasswordDrafts({});
     setAuditItems([]);
-    setOnboardForm(EMPTY_ONBOARD_FORM);
+    setOnboardForm({
+      ...EMPTY_ONBOARD_FORM,
+      ...seed,
+      additional_users: [],
+    });
     setTeamUserForm(EMPTY_TEAM_USER_FORM);
     setActiveAccessUserId(null);
     setAccessRecord(null);
@@ -288,11 +412,40 @@ export function AdminWorkspace() {
     return requiredDetails && stagedUsersReady;
   }
 
-  async function handleSearchSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function runSearch(query: string) {
     resetMessages();
     try {
-      await loadClientDirectory(search);
+      const trimmed = query.trim();
+      const response = await listAdminClients(trimmed);
+      setClients(response.items);
+
+      if (!trimmed) {
+        if (response.items[0]) {
+          selectExistingClient(response.items[0].client_id);
+        }
+        return;
+      }
+
+      const exact = response.items.find((client) =>
+        [client.business_name, client.client_code, client.contact_name, client.email, client.phone, client.website_url]
+          .filter(Boolean)
+          .some((value) => normalize(value) === normalize(trimmed))
+      );
+
+      if (exact) {
+        selectExistingClient(exact.client_id);
+        setSuccessMessage(`Opened ${exact.business_name}.`);
+        return;
+      }
+
+      if (response.items.length) {
+        selectExistingClient(response.items[0].client_id);
+        setSuccessMessage(`Showing ${response.items.length} likely tenant${response.items.length === 1 ? '' : 's'}.`);
+        return;
+      }
+
+      startCreateMode(seedOnboardFormFromQuery(trimmed));
+      setSuccessMessage(`No tenant matched "${trimmed}". A new onboarding draft was staged.`);
     } catch (error) {
       setWorkspaceError(adminErrorMessage(error, 'Unable to refresh clients.'));
     }
@@ -520,6 +673,7 @@ export function AdminWorkspace() {
       client.website_url.toLowerCase() === onboardForm.website_url.trim().toLowerCase();
     return Boolean(businessMatch || emailMatch || websiteMatch);
   });
+  const adminSuggestion = deriveAdminIntentSuggestion(creatingClient, search, clients);
 
   if (loading || workspaceLoading) {
     return (
@@ -550,24 +704,37 @@ export function AdminWorkspace() {
       <section className="admin-card">
         <div className="admin-header-row">
           <div>
-            <p className="eyebrow">Client Directory</p>
-            <h3>Tenant list</h3>
+            <p className="eyebrow">Tenant command center</p>
+            <h3>Find or stage a tenant</h3>
           </div>
-          <div className="admin-toolbar-actions">
-            <form className="customers-toolbar" onSubmit={handleSearchSubmit}>
-              <input
-                type="search"
-                aria-label="Search clients"
-                placeholder="Search by business, code, contact, or email"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-              />
-              <button type="submit">Search</button>
-            </form>
-            <button type="button" onClick={startCreateMode}>
-              New Client
-            </button>
-          </div>
+        </div>
+        <IntentInput
+          label="Find an existing tenant or begin onboarding"
+          hint="Search by business name, code, contact, email, phone, or website. The workspace will stage the strongest existing tenant or a new tenant draft."
+          value={search}
+          placeholder="Business, code, contact, email, phone, or website"
+          submitLabel="Interpret tenant intent"
+          onChange={setSearch}
+          onSubmit={() => void runSearch(search)}
+        >
+          <span className="guided-assist-chip">Exact matches open the tenant directly</span>
+          <span className="guided-assist-chip">No match stages a new onboarding draft</span>
+        </IntentInput>
+        <SuggestedNextStep
+          suggestion={adminSuggestion}
+          onPrimary={() => {
+            if (potentialMatches[0]) {
+              selectExistingClient(potentialMatches[0].client_id);
+              return;
+            }
+            startCreateMode(seedOnboardFormFromQuery(search));
+          }}
+          onSecondary={() => startCreateMode(seedOnboardFormFromQuery(search))}
+        />
+        <div className="admin-toolbar-actions">
+          <button type="button" onClick={() => startCreateMode(seedOnboardFormFromQuery(search))}>
+            Start new tenant
+          </button>
         </div>
         <div className="admin-table-wrap">
           <table className="admin-table">
@@ -606,10 +773,10 @@ export function AdminWorkspace() {
               {!clients.length ? (
                 <tr>
                   <td colSpan={6}>
-                    <div className="reports-deferred">
-                      <h4>No clients found</h4>
-                      <p>Click New Client to open the onboarding workspace.</p>
-                    </div>
+                    <WorkspaceEmpty
+                      title="No tenants found"
+                      message="Use the intent bar above to stage a new tenant onboarding draft."
+                    />
                   </td>
                 </tr>
               ) : null}
@@ -623,11 +790,22 @@ export function AdminWorkspace() {
           <section className="admin-card">
             <div className="admin-header-row">
               <div>
-                <p className="eyebrow">Client Details</p>
-                <h3>New client workspace</h3>
+                <p className="eyebrow">Onboarding draft</p>
+                <h3>Stage new tenant</h3>
               </div>
-              <span className="page-shell-chip">Create Mode</span>
+              <span className="page-shell-chip">Guided mode</span>
             </div>
+            <DraftRecommendationCard
+              title={onboardForm.business_name || onboardForm.primary_email || onboardForm.primary_phone || 'New tenant draft'}
+              summary="Complete the staged profile below, then create the tenant only when every required field is ready."
+            >
+              <div className="settings-context">
+                <div><dt>Business</dt><dd>{onboardForm.business_name || 'Not provided'}</dd></div>
+                <div><dt>Owner</dt><dd>{onboardForm.owner_name || 'Not provided'}</dd></div>
+                <div><dt>Primary email</dt><dd>{onboardForm.primary_email || 'Not provided'}</dd></div>
+                <div><dt>Team users</dt><dd>{onboardForm.additional_users.length}</dd></div>
+              </div>
+            </DraftRecommendationCard>
             <form className="admin-form" onSubmit={handleCreateClient}>
               <div className="settings-grid">
                 <label>
@@ -836,22 +1014,25 @@ export function AdminWorkspace() {
                   onChange={(event) => setTeamUserForm({ ...teamUserForm, password: event.target.value })}
                 />
                 <button type="button" onClick={handleStageUser}>
-                  Add to team
+                  Stage user
                 </button>
               </div>
 
-              <div className="save-actions">
-                <button type="submit" disabled={!createClientReady()}>
-                  Create client
+              <StagedActionFooter summary="This action only creates the tenant when all required fields are complete.">
+                <button type="button" onClick={() => startCreateMode(seedOnboardFormFromQuery(search))}>
+                  Reset draft
                 </button>
-              </div>
+                <button type="submit" disabled={!createClientReady()}>
+                  Review before creating
+                </button>
+              </StagedActionFooter>
             </form>
           </section>
 
           <aside className="admin-stack">
             <section className="admin-card">
-              <p className="eyebrow">Create Summary</p>
-              <h3>Tenant shell preview</h3>
+              <p className="eyebrow">Tenant shell preview</p>
+              <h3>What will be created</h3>
               <div className="settings-context">
                 <div><dt>Business</dt><dd>{onboardForm.business_name || 'Not provided'}</dd></div>
                 <div><dt>Owner</dt><dd>{onboardForm.owner_name || 'Not provided'}</dd></div>
@@ -861,7 +1042,7 @@ export function AdminWorkspace() {
             </section>
 
             <section className="admin-card">
-              <p className="eyebrow">Duplicate Check</p>
+              <p className="eyebrow">Duplicate check</p>
               <h3>Potential matches</h3>
               {potentialMatches.length ? (
                 <ul className="admin-match-list">
@@ -872,7 +1053,7 @@ export function AdminWorkspace() {
                   ))}
                 </ul>
               ) : (
-                <p className="admin-muted">No close client match detected from the current business name, email, or website.</p>
+                <p className="admin-muted">No close tenant match detected from the current business name, email, or website.</p>
               )}
             </section>
           </aside>
@@ -1256,8 +1437,11 @@ export function AdminWorkspace() {
       ) : (
         <section className="admin-card">
           <p className="eyebrow">Workspace Ready</p>
-          <h3>Select a tenant or create a new one</h3>
-          <p className="admin-muted">Choose an existing tenant from the list to edit the client and team, or click New Client to open the create workspace.</p>
+          <h3>Select a tenant or start onboarding</h3>
+          <p className="admin-muted">Use the intent bar to open an existing tenant or stage a new one without choosing search versus create first.</p>
+          <button type="button" onClick={() => startCreateMode(seedOnboardFormFromQuery(search))}>
+            Start onboarding
+          </button>
         </section>
       )}
     </div>
