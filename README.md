@@ -1,24 +1,27 @@
 # Easy_Ecom
 
-EasyEcom is now in the first product-rebuild phase: the shared platform foundation is live again, and the business modules are being rebuilt intentionally on top of typed, tenant-safe tables.
+EasyEcom is in the platform foundation phase: the shared tenant-safe core is live, the main business workspaces are mounted, and the remaining placeholder surface is isolated instead of mixed into the core engine.
 
 ## Current runtime scope
 - Frontend: Next.js in `frontend/`
 - Backend: FastAPI in `easy_ecom/api`
 - Database: PostgreSQL via `DATABASE_URL`
-- Active backend routes: `/health`, `/auth/*`, `/session/me`, plus canonical overview routes for dashboard, catalog, inventory, purchases, customers, sales, returns, finance, reports, admin, and settings
-- Active frontend routes: pilot navigation for `Home`, `Dashboard`, `Catalog`, `Inventory`, `Purchases`, `Sales`, `Customers`, `Finance`, `Returns`, `Reports`, `Admin`, and `Settings`
+- Active backend routes: `/health`, `/auth/*`, `/session/me`, plus mounted business routers for dashboard, catalog, inventory, purchases, customers, sales, returns, finance, reports, integrations, sales agent, AI review, admin, and settings
+- Active frontend routes: `Home`, `Dashboard`, `Catalog`, `Inventory`, `Purchases`, `Sales`, `Customers`, `Finance`, `Returns`, `Reports`, `Integrations & Channels`, `Sales Agent`, `AI Review Inbox`, `Admin`, and `Settings`
+- `Automation` remains the only intentionally blank workspace
 
 ## What is rebuilt in this foundation pass
 - Versioned SQL migrations replace runtime-only schema drift for PostgreSQL
 - Typed core and business tables now exist in the SQLAlchemy model layer
 - Shared request ID middleware, structured API errors, and super-admin tenant onboarding are restored
-- Pilot information architecture is refined, and the legacy `/products-stock` route redirects to `/catalog`
+- Variant-first inventory, sales, returns, finance, reporting, integration, and AI review flows are wired through typed API clients and backend services
+- The legacy `/products-stock` route redirects to `/catalog`
 
 ## What remains on purpose
 - AWS connectivity contract for Amplify, EC2-based deployment flow, and RDS
 - Login/session flow and super-admin bootstrap
-- App shell, pilot sidebar navigation, branding, and shared auth/UI utilities
+- App shell, navigation, branding, and shared auth/UI utilities
+- The remaining placeholder route for `Automation`
 
 ## Local setup
 ```bash
@@ -57,6 +60,10 @@ If you want full local development, keep `.env.local` pointed at `http://localho
 - Frontend connectivity remains through Amplify config in `amplify.yml`
 - Backend connectivity remains through the existing startup entrypoint in `startup.sh`
 - Existing EC2 deployment helper is preserved in `scripts/deploy_prod.sh`
+
+## Repo Guardrails
+- Run `./scripts/check_repo_surface.sh` to fail fast on tracked local venvs, IDE state, backup/debug copies, logs, build metadata, and other files that should not reach production
+- Keep runtime deploys focused on source, migrations, and server scripts only
 
 ## Super Admin Password Flow
 

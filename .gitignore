@@ -1,6 +1,7 @@
 __pycache__/
 *.pyc
 .venv/
+.venv*/
 *.lock
 easy_ecom/data_files/*.csv
 archive/local-data/
@@ -14,9 +15,15 @@ frontend/package-lock.json
 !.env.example
 frontend/.env.local
 .DS_Store
+*.bak
+*.orig
+*.work
+*.debug
+*.log
 *.backup
 *.backup2
 *.backup3
+*.egg-info/
 cookies.txt
 cookie.txt
 auth_cookie.txt

@@ -1,8 +1,8 @@
 # Architecture Direction
 
 ## Current foundation
-- Frontend shell: Next.js placeholder application in `frontend/`
-- Backend shell: FastAPI auth/session/health service in `easy_ecom/api`
+- Frontend shell: Next.js app in `frontend/` with production workspaces for dashboard, catalog, inventory, purchases, sales, returns, finance, reports, integrations, sales agent, AI review, admin, and settings
+- Backend shell: FastAPI service in `easy_ecom/api` mounting auth, session, health, public webhook, and business routers
 - Runtime data source: PostgreSQL through `DATABASE_URL`
 - Bootstrap: `easy_ecom/scripts/init_data.py` seeds roles and an optional super-admin
 
@@ -12,10 +12,10 @@
 - RDS remains the database boundary
 - Existing env var names and startup entrypoints stay stable during the rebuild
 
-## Deliberately removed from runtime
-- Business write/read flows for catalog, inventory, sales, customers, finance, returns, purchases, reports, integrations, AI review, automation, admin, and settings
-- Business schema ownership outside the auth core
-- Business calculations and derived reporting logic
+## Current product boundary
+- Core commerce workflows are active and variant-first for inventory, sales, returns, and purchases
+- Customer access is currently embedded inside transaction flows rather than exposed as a standalone CRM shell
+- `Automation` remains the last intentionally blank module
 
 ## Rebuild rule
-- New features must be added back intentionally from this auth-only baseline instead of reviving deleted modules.
+- New features should extend the current mounted modules and typed services instead of reviving deleted legacy paths

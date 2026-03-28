@@ -94,6 +94,8 @@ run_post_check() {
 
 echo "[auth-smoke] API base: ${api_url}"
 run_check "health" "/health" "false"
+run_check "health-live" "/health/live" "false"
+run_check "health-ready" "/health/ready" "false"
 run_check "auth-me" "/auth/me" "true"
 run_check "session-me" "/session/me" "true"
 
