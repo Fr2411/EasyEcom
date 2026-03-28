@@ -48,7 +48,7 @@ class FinanceReport(BaseModel):
     expense_total: float
     expense_trend: List[dict]  # { period: str, amount: float }
     receivables_total: float
-    payables_total: float
+    payables_total: Optional[float]
     net_operating_snapshot: Optional[float]
     deferred_metrics: List[ReportDeferredMetric]
 

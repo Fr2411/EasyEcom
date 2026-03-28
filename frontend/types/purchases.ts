@@ -49,3 +49,7 @@ export type PurchaseCreatePayload = {
   payment_status: 'paid' | 'unpaid' | 'partial';
   lines: Array<{ variant_id: string; qty: number; unit_cost: number }>;
 };
+
+export type PurchaseOrdersResponse = {
+  items: PurchaseListItem[];
+};

@@ -80,6 +80,12 @@ class Settings:
     postgres_max_overflow: int = field(
         default_factory=lambda: _to_int(os.getenv("POSTGRES_MAX_OVERFLOW"), 10)
     )
+    postgres_pool_timeout_seconds: int = field(
+        default_factory=lambda: _to_int(os.getenv("POSTGRES_POOL_TIMEOUT_SECONDS"), 30)
+    )
+    postgres_pool_recycle_seconds: int = field(
+        default_factory=lambda: _to_int(os.getenv("POSTGRES_POOL_RECYCLE_SECONDS"), 1800)
+    )
     postgres_dsn_override: str = field(
         default_factory=lambda: os.getenv("POSTGRES_DSN", "").strip()
     )

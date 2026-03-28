@@ -44,7 +44,7 @@ export type FinanceReport = {
   expense_total: number;
   expense_trend: Array<{ period: string; amount: number }>;
   receivables_total: number;
-  payables_total: number;
+  payables_total: number | null;
   net_operating_snapshot: number | null;
   deferred_metrics: ReportDeferredMetric[];
 };
@@ -76,4 +76,3 @@ export type ReportsOverview = {
   returns_total: number;
   purchases_total: number;
 };
-

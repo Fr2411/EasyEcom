@@ -1156,33 +1156,69 @@ class SalesAgentService(CommerceBaseService):
             self._require(record is not None, message="Conversation not found", code="CONVERSATION_NOT_FOUND", status_code=404)
             latest_draft = self._latest_draft(session, record.conversation_id)
             linked_order = self._linked_order_payload(session, record.linked_draft_order_id)
-            messages = []
-            for message in session.execute(
-                select(ChannelMessageModel)
-                .where(
-                    ChannelMessageModel.client_id == user.client_id,
-                    ChannelMessageModel.conversation_id == conversation_id,
+            return self._conversation_detail_payload(
+                session,
+                user.client_id,
+                record,
+                linked_order=linked_order,
+                latest_draft=latest_draft,
+            )
+
+    def list_ai_review_drafts(
+        self,
+        user: AuthenticatedUser,
+        *,
+        query: str = "",
+        status: str | None = "needs_review",
+    ) -> list[dict[str, Any]]:
+        self._require_sales_agent_access(user)
+        with self._session_factory() as session:
+            stmt = (
+                select(AiReviewDraftModel, ChannelConversationModel)
+                .join(
+                    ChannelConversationModel,
+                    ChannelConversationModel.conversation_id == AiReviewDraftModel.conversation_id,
                 )
-                .order_by(ChannelMessageModel.occurred_at.asc(), ChannelMessageModel.created_at.asc())
-            ).scalars():
-                mentions = self._message_mentions_payload(session, message.message_id)
-                messages.append(
-                    {
-                        "message_id": str(message.message_id),
-                        "direction": message.direction,
-                        "message_text": message.message_text,
-                        "content_summary": message.content_summary,
-                        "occurred_at": message.occurred_at.isoformat(),
-                        "outbound_status": message.outbound_status,
-                        "provider_status": message.provider_status,
-                        "mentions": mentions,
-                    }
+                .where(AiReviewDraftModel.client_id == user.client_id)
+            )
+            if status:
+                stmt = stmt.where(AiReviewDraftModel.status == status)
+            trimmed = query.strip().lower()
+            if trimmed:
+                pattern = f"%{trimmed}%"
+                stmt = stmt.where(
+                    or_(
+                        func.lower(ChannelConversationModel.customer_name_snapshot).like(pattern),
+                        func.lower(ChannelConversationModel.customer_phone_snapshot).like(pattern),
+                        func.lower(ChannelConversationModel.external_sender_phone).like(pattern),
+                        func.lower(ChannelConversationModel.last_message_preview).like(pattern),
+                        func.lower(AiReviewDraftModel.ai_draft_text).like(pattern),
+                        func.lower(AiReviewDraftModel.final_text).like(pattern),
+                    )
                 )
+            rows = session.execute(
+                stmt.order_by(AiReviewDraftModel.created_at.desc(), AiReviewDraftModel.updated_at.desc())
+            ).all()
+            return [self._ai_review_queue_item_payload(draft, conversation) for draft, conversation in rows]
+
+    def get_ai_review_draft_detail(self, user: AuthenticatedUser, draft_id: str) -> dict[str, Any]:
+        self._require_sales_agent_access(user)
+        with self._session_factory() as session:
+            draft = self._draft_for_update(session, user.client_id, draft_id)
+            conversation = self._conversation_for_update(session, user.client_id, str(draft.conversation_id))
+            linked_order = self._linked_order_payload(session, conversation.linked_draft_order_id)
+            outbound_message = self._draft_outbound_message(session, draft)
             return {
-                **self._conversation_summary_payload(record, latest_draft, linked_order),
-                "messages": messages,
-                "latest_draft": self._draft_payload(latest_draft) if latest_draft else None,
-                "linked_order": linked_order,
+                "draft": self._draft_payload(draft),
+                "conversation": self._conversation_detail_payload(
+                    session,
+                    user.client_id,
+                    conversation,
+                    linked_order=linked_order,
+                    latest_draft=draft,
+                ),
+                "audit_trail": self._draft_audit_trail_payload(session, user.client_id, draft),
+                "outbound_message": self._message_payload(session, outbound_message) if outbound_message else None,
             }
 
     def handoff_conversation(self, user: AuthenticatedUser, conversation_id: str, *, notes: str = "") -> dict[str, Any]:
@@ -1212,13 +1248,13 @@ class SalesAgentService(CommerceBaseService):
     def approve_and_send_draft(self, user: AuthenticatedUser, draft_id: str, *, edited_text: str = "") -> dict[str, Any]:
         self._require_sales_agent_access(user)
         with self._session_factory() as session:
-            draft = session.execute(
-                select(AiReviewDraftModel).where(
-                    AiReviewDraftModel.client_id == user.client_id,
-                    AiReviewDraftModel.draft_id == draft_id,
-                )
-            ).scalar_one_or_none()
-            self._require(draft is not None, message="Draft not found", code="DRAFT_NOT_FOUND", status_code=404)
+            draft = self._draft_for_update(session, user.client_id, draft_id)
+            self._require(
+                draft.status == "needs_review",
+                message="Only drafts waiting for review can be approved and sent",
+                code="DRAFT_STATUS_INVALID",
+                status_code=409,
+            )
             conversation = self._conversation_for_update(session, user.client_id, str(draft.conversation_id))
             integration = session.execute(
                 select(ChannelIntegrationModel).where(
@@ -1245,18 +1281,27 @@ class SalesAgentService(CommerceBaseService):
                 message_text=outbound_text,
                 content_summary=self._summarize_text(outbound_text),
                 raw_payload_json=send_result,
+                ai_metadata_json={
+                    "review_draft_id": str(draft.draft_id),
+                    "approval_required": True,
+                    "approved_by_user_id": user.user_id,
+                },
                 occurred_at=now_utc(),
                 outbound_status="sent",
             )
             session.add(outbound_message)
             draft.edited_text = edited_text.strip()
             draft.final_text = outbound_text
+            approved_at = now_utc()
             draft.status = "sent"
             draft.approved_by_user_id = user.user_id
             draft.sent_by_user_id = user.user_id
-            draft.approved_at = now_utc()
-            draft.sent_at = draft.approved_at
-            draft.send_result_json = send_result
+            draft.approved_at = approved_at
+            draft.sent_at = approved_at
+            draft.send_result_json = {
+                **dict(send_result or {}),
+                "outbound_message_id": str(outbound_message.message_id),
+            }
             draft.human_modified = bool(edited_text.strip())
             conversation.status = "open"
             conversation.last_message_at = outbound_message.occurred_at
@@ -1268,8 +1313,24 @@ class SalesAgentService(CommerceBaseService):
                 actor_user_id=user.user_id,
                 entity_type="ai_review_draft",
                 entity_id=draft.draft_id,
+                action="ai_review_draft_approved",
+                metadata_json={
+                    "conversation_id": conversation.conversation_id,
+                    "outbound_message_id": outbound_message.message_id,
+                    "human_modified": draft.human_modified,
+                },
+            )
+            self._log_audit(
+                session,
+                client_id=user.client_id,
+                actor_user_id=user.user_id,
+                entity_type="ai_review_draft",
+                entity_id=draft.draft_id,
                 action="sales_agent_draft_sent",
-                metadata_json={"conversation_id": conversation.conversation_id},
+                metadata_json={
+                    "conversation_id": conversation.conversation_id,
+                    "outbound_message_id": outbound_message.message_id,
+                },
             )
             session.commit()
             return self._draft_payload(draft)
@@ -1277,17 +1338,27 @@ class SalesAgentService(CommerceBaseService):
     def reject_draft(self, user: AuthenticatedUser, draft_id: str, *, reason: str = "") -> dict[str, Any]:
         self._require_sales_agent_access(user)
         with self._session_factory() as session:
-            draft = session.execute(
-                select(AiReviewDraftModel).where(
-                    AiReviewDraftModel.client_id == user.client_id,
-                    AiReviewDraftModel.draft_id == draft_id,
-                )
-            ).scalar_one_or_none()
-            self._require(draft is not None, message="Draft not found", code="DRAFT_NOT_FOUND", status_code=404)
+            draft = self._draft_for_update(session, user.client_id, draft_id)
+            self._require(
+                draft.status == "needs_review",
+                message="Only drafts waiting for review can be rejected",
+                code="DRAFT_STATUS_INVALID",
+                status_code=409,
+            )
             draft.status = "rejected"
             draft.failed_reason = reason.strip() or None
             conversation = self._conversation_for_update(session, user.client_id, str(draft.conversation_id))
             conversation.status = "handoff"
+            conversation.handoff_requested_at = now_utc()
+            self._log_audit(
+                session,
+                client_id=user.client_id,
+                actor_user_id=user.user_id,
+                entity_type="ai_review_draft",
+                entity_id=draft.draft_id,
+                action="ai_review_draft_rejected",
+                metadata_json={"reason": reason.strip(), "conversation_id": conversation.conversation_id},
+            )
             self._log_audit(
                 session,
                 client_id=user.client_id,
@@ -1544,6 +1615,7 @@ class SalesAgentService(CommerceBaseService):
                     "send_failure": failed_reason or "",
                 },
                 reason_codes_json=list(reason_codes),
+                requested_by_user_id=self._agent_user_id(session, integration.client_id),
                 failed_reason=failed_reason,
             )
             session.add(draft)
@@ -3854,10 +3926,58 @@ class SalesAgentService(CommerceBaseService):
             "linked_order": linked_order,
         }
 
+    def _conversation_detail_payload(
+        self,
+        session: Session,
+        client_id: str,
+        record: ChannelConversationModel,
+        *,
+        linked_order: dict[str, Any] | None,
+        latest_draft: AiReviewDraftModel | None,
+    ) -> dict[str, Any]:
+        messages = []
+        for message in session.execute(
+            select(ChannelMessageModel)
+            .where(
+                ChannelMessageModel.client_id == client_id,
+                ChannelMessageModel.conversation_id == record.conversation_id,
+            )
+            .order_by(ChannelMessageModel.occurred_at.asc(), ChannelMessageModel.created_at.asc())
+        ).scalars():
+            messages.append(self._message_payload(session, message))
+        return {
+            **self._conversation_summary_payload(record, latest_draft, linked_order),
+            "messages": messages,
+            "latest_draft": self._draft_payload(latest_draft) if latest_draft else None,
+            "linked_order": linked_order,
+        }
+
+    def _message_payload(self, session: Session, message: ChannelMessageModel) -> dict[str, Any]:
+        return {
+            "message_id": str(message.message_id),
+            "direction": message.direction,
+            "message_text": message.message_text,
+            "content_summary": message.content_summary,
+            "occurred_at": message.occurred_at.isoformat(),
+            "outbound_status": message.outbound_status,
+            "provider_status": message.provider_status,
+            "mentions": self._message_mentions_payload(session, message.message_id),
+        }
+
     def _draft_payload(self, draft: AiReviewDraftModel) -> dict[str, Any]:
+        user_names = self._user_name_map(
+            session=None,
+            user_ids=[
+                draft.requested_by_user_id,
+                draft.approved_by_user_id,
+                draft.sent_by_user_id,
+            ],
+        )
+        send_result = dict(draft.send_result_json or {})
         return {
             "draft_id": str(draft.draft_id),
             "conversation_id": str(draft.conversation_id),
+            "inbound_message_id": str(draft.inbound_message_id),
             "linked_sales_order_id": str(draft.linked_sales_order_id) if draft.linked_sales_order_id else None,
             "status": draft.status,
             "ai_draft_text": draft.ai_draft_text,
@@ -3867,11 +3987,89 @@ class SalesAgentService(CommerceBaseService):
             "confidence": as_optional_decimal(draft.confidence),
             "grounding": draft.grounding_json or {},
             "reason_codes": list(draft.reason_codes_json or []),
+            "requested_by_user_id": str(draft.requested_by_user_id) if draft.requested_by_user_id else None,
+            "requested_by_name": user_names.get(str(draft.requested_by_user_id)) if draft.requested_by_user_id else None,
+            "approved_by_user_id": str(draft.approved_by_user_id) if draft.approved_by_user_id else None,
+            "approved_by_name": user_names.get(str(draft.approved_by_user_id)) if draft.approved_by_user_id else None,
+            "sent_by_user_id": str(draft.sent_by_user_id) if draft.sent_by_user_id else None,
+            "sent_by_name": user_names.get(str(draft.sent_by_user_id)) if draft.sent_by_user_id else None,
+            "created_at": draft.created_at.isoformat(),
+            "updated_at": draft.updated_at.isoformat(),
             "approved_at": draft.approved_at.isoformat() if draft.approved_at else None,
             "sent_at": draft.sent_at.isoformat() if draft.sent_at else None,
             "failed_reason": draft.failed_reason,
+            "send_result": send_result,
+            "outbound_message_id": str(send_result.get("outbound_message_id", "")).strip() or None,
             "human_modified": draft.human_modified,
         }
+
+    def _ai_review_queue_item_payload(
+        self,
+        draft: AiReviewDraftModel,
+        conversation: ChannelConversationModel,
+    ) -> dict[str, Any]:
+        send_result = dict(draft.send_result_json or {})
+        return {
+            "draft_id": str(draft.draft_id),
+            "conversation_id": str(draft.conversation_id),
+            "linked_sales_order_id": str(draft.linked_sales_order_id) if draft.linked_sales_order_id else None,
+            "customer_name": conversation.customer_name_snapshot,
+            "customer_phone": conversation.customer_phone_snapshot or conversation.external_sender_phone,
+            "external_sender_id": conversation.external_sender_id,
+            "conversation_status": conversation.status,
+            "draft_status": draft.status,
+            "latest_intent": conversation.latest_intent,
+            "last_message_preview": conversation.last_message_preview,
+            "last_message_at": conversation.last_message_at.isoformat() if conversation.last_message_at else None,
+            "reason_codes": list(draft.reason_codes_json or []),
+            "confidence": as_optional_decimal(draft.confidence),
+            "created_at": draft.created_at.isoformat(),
+            "updated_at": draft.updated_at.isoformat(),
+            "approved_at": draft.approved_at.isoformat() if draft.approved_at else None,
+            "sent_at": draft.sent_at.isoformat() if draft.sent_at else None,
+            "outbound_message_id": str(send_result.get("outbound_message_id", "")).strip() or None,
+        }
+
+    def _draft_outbound_message(self, session: Session, draft: AiReviewDraftModel) -> ChannelMessageModel | None:
+        outbound_message_id = str((draft.send_result_json or {}).get("outbound_message_id", "")).strip()
+        if not outbound_message_id:
+            return None
+        return session.execute(
+            select(ChannelMessageModel).where(
+                ChannelMessageModel.client_id == draft.client_id,
+                ChannelMessageModel.message_id == outbound_message_id,
+            )
+        ).scalar_one_or_none()
+
+    def _draft_audit_trail_payload(
+        self,
+        session: Session,
+        client_id: str,
+        draft: AiReviewDraftModel,
+    ) -> list[dict[str, Any]]:
+        rows = session.execute(
+            select(AuditLogModel)
+            .where(
+                AuditLogModel.client_id == client_id,
+                AuditLogModel.entity_type == "ai_review_draft",
+                AuditLogModel.entity_id == str(draft.draft_id),
+            )
+            .order_by(AuditLogModel.created_at.asc())
+        ).scalars().all()
+        user_names = self._user_name_map(session=session, user_ids=[row.actor_user_id for row in rows])
+        return [
+            {
+                "audit_log_id": str(row.audit_log_id),
+                "entity_type": row.entity_type,
+                "entity_id": row.entity_id,
+                "action": row.action,
+                "actor_user_id": str(row.actor_user_id) if row.actor_user_id else None,
+                "actor_name": user_names.get(str(row.actor_user_id)) if row.actor_user_id else None,
+                "created_at": row.created_at.isoformat(),
+                "metadata": row.metadata_json or {},
+            }
+            for row in rows
+        ]
 
     def _matched_variant_payload(self, item: MatchedVariant) -> dict[str, Any]:
         return {
@@ -4147,6 +4345,33 @@ class SalesAgentService(CommerceBaseService):
             roles=["CLIENT_OWNER"],
             allowed_pages=allowed_pages,
         )
+
+    def _user_name_map(
+        self,
+        *,
+        session: Session | None,
+        user_ids: list[object | None],
+    ) -> dict[str, str]:
+        normalized = [self._clean_uuid(value) for value in user_ids]
+        keys = [value for value in normalized if value]
+        if not keys:
+            return {}
+        if session is not None:
+            rows = session.execute(select(UserModel.user_id, UserModel.name).where(UserModel.user_id.in_(keys))).all()
+            return {str(user_id): name for user_id, name in rows}
+        with self._session_factory() as lookup_session:
+            rows = lookup_session.execute(select(UserModel.user_id, UserModel.name).where(UserModel.user_id.in_(keys))).all()
+            return {str(user_id): name for user_id, name in rows}
+
+    def _draft_for_update(self, session: Session, client_id: str, draft_id: str) -> AiReviewDraftModel:
+        draft = session.execute(
+            select(AiReviewDraftModel).where(
+                AiReviewDraftModel.client_id == client_id,
+                AiReviewDraftModel.draft_id == draft_id,
+            )
+        ).scalar_one_or_none()
+        self._require(draft is not None, message="Draft not found", code="DRAFT_NOT_FOUND", status_code=404)
+        return draft
 
     def _log_audit(
         self,

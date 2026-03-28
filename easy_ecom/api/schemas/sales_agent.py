@@ -142,6 +142,7 @@ class SalesAgentMessageResponse(BaseModel):
 class SalesAgentDraftResponse(BaseModel):
     draft_id: str
     conversation_id: str
+    inbound_message_id: str
     linked_sales_order_id: str | None
     status: str
     ai_draft_text: str
@@ -151,10 +152,63 @@ class SalesAgentDraftResponse(BaseModel):
     confidence: Decimal | None
     grounding: dict[str, object]
     reason_codes: list[str]
+    requested_by_user_id: str | None
+    requested_by_name: str | None
+    approved_by_user_id: str | None
+    approved_by_name: str | None
+    sent_by_user_id: str | None
+    sent_by_name: str | None
+    created_at: str
+    updated_at: str
     approved_at: str | None
     sent_at: str | None
     failed_reason: str | None
+    send_result: dict[str, object]
+    outbound_message_id: str | None
     human_modified: bool
+
+
+class AiReviewAuditEntryResponse(BaseModel):
+    audit_log_id: str
+    entity_type: str
+    entity_id: str
+    action: str
+    actor_user_id: str | None
+    actor_name: str | None
+    created_at: str
+    metadata: dict[str, object]
+
+
+class AiReviewQueueItemResponse(BaseModel):
+    draft_id: str
+    conversation_id: str
+    linked_sales_order_id: str | None
+    customer_name: str
+    customer_phone: str
+    external_sender_id: str
+    conversation_status: str
+    draft_status: str
+    latest_intent: str
+    last_message_preview: str
+    last_message_at: str | None
+    reason_codes: list[str]
+    confidence: Decimal | None
+    created_at: str
+    updated_at: str
+    approved_at: str | None
+    sent_at: str | None
+    outbound_message_id: str | None
+
+
+class AiReviewQueueResponse(BaseModel):
+    items: list[AiReviewQueueItemResponse]
+
+
+class AiReviewDetailResponse(BaseModel):
+    draft: SalesAgentDraftResponse
+    conversation: SalesAgentConversationDetailResponse
+    audit_trail: list[AiReviewAuditEntryResponse]
+    outbound_message: SalesAgentMessageResponse | None
 
 
 class SalesAgentConversationRowResponse(BaseModel):

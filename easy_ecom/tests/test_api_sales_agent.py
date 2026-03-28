@@ -1620,6 +1620,119 @@ def test_sales_agent_review_and_order_confirmation_flow(monkeypatch, tmp_path: P
         assert "sales_agent_order_confirmed" in audit_actions
 
 
+def test_ai_review_routes_expose_queue_detail_and_approval_audit(monkeypatch, tmp_path: Path) -> None:
+    runtime = _setup_runtime(tmp_path, monkeypatch)
+    _seed_variant(runtime, stock_qty=Decimal("10"))
+    client = _login_client()
+
+    monkeypatch.setattr(
+        SalesAgentService,
+        "_send_whatsapp_text",
+        lambda self, integration, recipient, text: {
+            "provider": "whatsapp",
+            "provider_event_id": "wamid-ai-review-1",
+            "response": {"messages": [{"id": "wamid-ai-review-1"}]},
+        },
+    )
+
+    _upsert_integration(
+        client,
+        verify_token="verify-ai-review",
+        access_token="meta-token",
+        app_secret="meta-secret",
+        auto_send_enabled=False,
+    )
+    webhook_key = _webhook_key(runtime)
+
+    response = _signed_webhook_request(client, webhook_key, _webhook_payload("wamid-ai-review-in-1", "Do you have Trail Runner 42 Black?"))
+    assert response.status_code == 200
+
+    queue_response = client.get("/ai-review/drafts")
+    assert queue_response.status_code == 200
+    queue_items = queue_response.json()["items"]
+    assert len(queue_items) == 1
+    assert queue_items[0]["draft_status"] == "needs_review"
+    draft_id = queue_items[0]["draft_id"]
+
+    detail_response = client.get(f"/ai-review/drafts/{draft_id}")
+    assert detail_response.status_code == 200
+    detail = detail_response.json()
+    assert detail["draft"]["draft_id"] == draft_id
+    assert detail["draft"]["requested_by_name"] == "Sales Agent"
+    assert detail["draft"]["approved_by_user_id"] is None
+    assert detail["conversation"]["latest_draft"]["draft_id"] == draft_id
+    assert detail["outbound_message"] is None
+    assert "sales_agent_draft_created" in {entry["action"] for entry in detail["audit_trail"]}
+
+    approve_response = client.post(
+        f"/ai-review/drafts/{draft_id}/approve-send",
+        json={"edited_text": "Confirmed. Trail Runner 42 Black is ready for you."},
+    )
+    assert approve_response.status_code == 200
+    approved = approve_response.json()
+    assert approved["status"] == "sent"
+    assert approved["approved_by_user_id"] == USER_ID
+    assert approved["approved_by_name"] == "Owner"
+    assert approved["sent_by_user_id"] == USER_ID
+    assert approved["outbound_message_id"] is not None
+
+    refreshed_detail = client.get(f"/ai-review/drafts/{draft_id}")
+    assert refreshed_detail.status_code == 200
+    refreshed = refreshed_detail.json()
+    assert refreshed["draft"]["approved_at"] is not None
+    assert refreshed["draft"]["outbound_message_id"] == approved["outbound_message_id"]
+    assert refreshed["outbound_message"]["message_id"] == approved["outbound_message_id"]
+    audit_actions = [entry["action"] for entry in refreshed["audit_trail"]]
+    assert "ai_review_draft_approved" in audit_actions
+    assert "sales_agent_draft_sent" in audit_actions
+
+    second_approve_response = client.post(f"/ai-review/drafts/{draft_id}/approve-send", json={"edited_text": "Send again"})
+    assert second_approve_response.status_code == 409
+
+
+def test_ai_review_reject_requires_pending_review_status(monkeypatch, tmp_path: Path) -> None:
+    runtime = _setup_runtime(tmp_path, monkeypatch)
+    _seed_variant(runtime, stock_qty=Decimal("10"))
+    client = _login_client()
+
+    monkeypatch.setattr(
+        SalesAgentService,
+        "_send_whatsapp_text",
+        lambda self, integration, recipient, text: {
+            "provider": "whatsapp",
+            "provider_event_id": "wamid-ai-review-reject-1",
+            "response": {"messages": [{"id": "wamid-ai-review-reject-1"}]},
+        },
+    )
+
+    _upsert_integration(
+        client,
+        verify_token="verify-ai-review-reject",
+        access_token="meta-token",
+        app_secret="meta-secret",
+        auto_send_enabled=False,
+    )
+    webhook_key = _webhook_key(runtime)
+
+    response = _signed_webhook_request(client, webhook_key, _webhook_payload("wamid-ai-review-reject-in-1", "Need help with Trail Runner 42 Black"))
+    assert response.status_code == 200
+
+    draft_id = client.get("/ai-review/drafts").json()["items"][0]["draft_id"]
+
+    reject_response = client.post(f"/ai-review/drafts/{draft_id}/reject", json={"reason": "Manual follow-up required"})
+    assert reject_response.status_code == 200
+    rejected = reject_response.json()
+    assert rejected["status"] == "rejected"
+    assert rejected["failed_reason"] == "Manual follow-up required"
+
+    detail = client.get(f"/ai-review/drafts/{draft_id}").json()
+    assert detail["conversation"]["status"] == "handoff"
+    assert "ai_review_draft_rejected" in {entry["action"] for entry in detail["audit_trail"]}
+
+    second_reject_response = client.post(f"/ai-review/drafts/{draft_id}/reject", json={"reason": "Again"})
+    assert second_reject_response.status_code == 409
+
+
 def test_sales_agent_conversation_routes_are_tenant_scoped(monkeypatch, tmp_path: Path) -> None:
     runtime = _setup_runtime(tmp_path, monkeypatch)
     seed_auth_user(
