@@ -6,6 +6,8 @@ from easy_ecom.api.routers import api_router
 from easy_ecom.core.config import settings
 from easy_ecom.core.errors import http_exception_response, unexpected_exception_response
 
+ALLOWED_WEB_ORIGIN_REGEX = r"https://(?:.*\.amplifyapp\.com|(?:www\.)?easy-ecom\.online)"
+
 
 def create_app() -> FastAPI:
     app = FastAPI(title="EasyEcom API", version="0.2.0")
@@ -13,7 +15,7 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(settings.cors_allow_origins),
-        allow_origin_regex=r"https://.*\.amplifyapp\.com",
+        allow_origin_regex=ALLOWED_WEB_ORIGIN_REGEX,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

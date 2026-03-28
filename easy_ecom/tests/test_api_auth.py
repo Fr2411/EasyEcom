@@ -1,9 +1,11 @@
+from dataclasses import replace
 from pathlib import Path
 
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 import pytest
 
+import easy_ecom.api.main as api_main
 from easy_ecom.api.main import create_app
 from easy_ecom.api import dependencies as deps
 from easy_ecom.core.security import hash_password
@@ -150,6 +152,27 @@ def test_me_requires_cookie(monkeypatch, tmp_path: Path):
     response = client.get("/auth/me")
 
     assert response.status_code == 401
+
+
+def test_cors_preflight_allows_www_easy_ecom_online(monkeypatch, tmp_path: Path):
+    runtime = _setup_runtime(tmp_path)
+    cors_settings = replace(runtime.settings, cors_allow_origins=("http://localhost:3000",))
+    monkeypatch.setattr(api_main, "settings", cors_settings)
+    monkeypatch.setattr(deps, "settings", cors_settings)
+
+    client = TestClient(api_main.create_app())
+    response = client.options(
+        "/auth/me",
+        headers={
+            "Origin": "https://www.easy-ecom.online",
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "https://www.easy-ecom.online"
+    assert response.headers["access-control-allow-credentials"] == "true"
 
 
 def test_me_backfills_business_name_for_older_session_cookie(monkeypatch, tmp_path: Path):
