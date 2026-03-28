@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { HoverHint } from '@/components/ui/hover-hint';
 
 const MODULES = [
   {
@@ -47,16 +48,19 @@ export function FoundationLaunchpad({ title, subtitle }: FoundationLaunchpadProp
   return (
     <section className="foundation-launchpad">
       <div className="foundation-hero">
-        <p className="eyebrow">Rebuild Foundation</p>
-        <h3>{title}</h3>
-        <p>{subtitle}</p>
+        <h3 className="workspace-heading">
+          {title}
+          <HoverHint text={subtitle} label={`${title} help`} />
+        </h3>
       </div>
       <div className="foundation-grid">
         {MODULES.map((module) => (
           <Link key={module.href} href={module.href} className="foundation-card">
             <p className="foundation-card-kicker">Core Module</p>
-            <h4>{module.title}</h4>
-            <p>{module.summary}</p>
+            <h4 className="workspace-heading">
+              {module.title}
+              <HoverHint text={module.summary} label={`${module.title} help`} />
+            </h4>
             <span>Open workspace</span>
           </Link>
         ))}
