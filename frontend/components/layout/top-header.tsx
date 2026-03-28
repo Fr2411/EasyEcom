@@ -172,10 +172,10 @@ function getHeaderContext(pathname: string): HeaderContext {
         section: 'System',
         title: 'Admin',
         subtitle: 'Tenant and platform',
-        summary: 'Manage platform-level controls and tenant-wide configuration from one place.',
+        summary: 'Find an existing tenant or stage a new onboarding draft from one intent bar.',
         searchScope: 'sales',
-        actionLabel: 'Open settings',
-        actionHref: '/settings',
+        actionLabel: 'Start onboarding',
+        actionHref: '/admin?mode=create',
       };
     case '/settings':
       return {

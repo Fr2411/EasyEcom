@@ -3,33 +3,140 @@
 import { FormEvent, useEffect, useState, useTransition } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { createSalesReturn, getEligibleReturnLines, getReturns, searchReturnOrders } from '@/lib/api/commerce';
+import type { SuggestedAction } from '@/types/guided-workflow';
 import type { ReturnCreatePayload, ReturnEligibleLines, ReturnLookupOrder, ReturnRecord } from '@/types/returns';
-import { WorkspaceEmpty, WorkspaceNotice, WorkspacePanel, WorkspaceTabs } from '@/components/commerce/workspace-primitives';
+import {
+  DraftRecommendationCard,
+  IntentInput,
+  MatchGroupList,
+  StagedActionFooter,
+  SuggestedNextStep,
+  WorkspaceEmpty,
+  WorkspaceNotice,
+  WorkspacePanel,
+  WorkspaceTabs,
+} from '@/components/commerce/workspace-primitives';
 import { formatDateTime, formatMoney, formatQuantity } from '@/lib/commerce-format';
-
 
 type ReturnsTab = 'create' | 'history';
 
+type ReturnsSuggestion = {
+  kind: 'idle' | 'likely' | 'exact' | 'draft';
+  title: string;
+  detail: string;
+  actionLabel?: string;
+  secondaryLabel?: string;
+  tone?: SuggestedAction['tone'];
+};
+
+function createEmptyDraft(): ReturnCreatePayload {
+  return {
+    sales_order_id: '',
+    notes: '',
+    refund_status: 'pending',
+    lines: [],
+  };
+}
+
+function normalizeLookupQuery(value: string) {
+  return value.trim().toLowerCase();
+}
+
+export function deriveReturnSuggestion(
+  query: string,
+  lookupOrders: ReturnLookupOrder[],
+  eligible: ReturnEligibleLines | null
+): ReturnsSuggestion {
+  const trimmed = query.trim();
+  if (eligible) {
+    return {
+      kind: 'draft',
+      title: `Return draft ready for ${eligible.order_number}`,
+      detail: 'Eligible lines are staged. Review quantities, restock amounts, and refund values before creating the return.',
+      actionLabel: 'Review before creating return',
+      tone: 'success',
+    };
+  }
+
+  if (!trimmed && !lookupOrders.length) {
+    return {
+      kind: 'idle',
+      title: 'Start with one completed order clue',
+      detail: 'Type an order number, customer phone, or email. The workspace will stage the most likely return candidate.',
+      actionLabel: 'Interpret order clue',
+      tone: 'info',
+    };
+  }
+
+  if (!lookupOrders.length) {
+    return {
+      kind: 'idle',
+      title: 'No completed order staged yet',
+      detail: 'Search a completed order first, then the workspace will open eligible lines for review.',
+      actionLabel: 'Interpret order clue',
+      tone: 'warning',
+    };
+  }
+
+  const exact = lookupOrders.find((order) => {
+    const normalized = normalizeLookupQuery(trimmed);
+    return (
+      order.order_number.toLowerCase() === normalized ||
+      order.customer_phone.toLowerCase() === normalized ||
+      order.customer_email.toLowerCase() === normalized
+    );
+  });
+
+  if (exact) {
+    return {
+      kind: 'exact',
+      title: `Exact order found: ${exact.order_number}`,
+      detail: 'Open the order to stage eligible return lines and review them before any write happens.',
+      actionLabel: 'Open eligible lines',
+      tone: 'success',
+    };
+  }
+
+  if (lookupOrders.length === 1) {
+    return {
+      kind: 'likely',
+      title: `One likely completed order found: ${lookupOrders[0].order_number}`,
+      detail: 'Use the staged order below to review eligible lines and continue to the return draft.',
+      actionLabel: 'Open eligible lines',
+      tone: 'success',
+    };
+  }
+
+  return {
+    kind: 'likely',
+    title: `We found ${lookupOrders.length} likely completed orders`,
+    detail: 'Pick the correct order from the list below. The UI will then stage the eligible return lines for review.',
+    actionLabel: 'Open eligible lines',
+    secondaryLabel: 'Search again',
+    tone: 'warning',
+  };
+}
 
 export function ReturnsWorkspace() {
   const searchParams = useSearchParams();
   const searchKey = searchParams.toString();
   const [activeTab, setActiveTab] = useState<ReturnsTab>('create');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [intentQuery, setIntentQuery] = useState('');
   const [lookupOrders, setLookupOrders] = useState<ReturnLookupOrder[]>([]);
+  const [selectedOrder, setSelectedOrder] = useState<ReturnLookupOrder | null>(null);
   const [eligible, setEligible] = useState<ReturnEligibleLines | null>(null);
+  const [historyQuery, setHistoryQuery] = useState('');
   const [history, setHistory] = useState<ReturnRecord[]>([]);
-  const [draft, setDraft] = useState<ReturnCreatePayload>({
-    sales_order_id: '',
-    notes: '',
-    refund_status: 'pending',
-    lines: [],
-  });
+  const [draft, setDraft] = useState<ReturnCreatePayload>(createEmptyDraft());
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
+  const [lookupPending, setLookupPending] = useState(false);
+  const [eligiblePending, setEligiblePending] = useState(false);
+  const [historyPending, setHistoryPending] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const loadHistory = (query = '') => {
+    setHistoryPending(true);
     startTransition(async () => {
       try {
         const payload = await getReturns(query);
@@ -37,39 +144,38 @@ export function ReturnsWorkspace() {
         setError('');
       } catch (loadError) {
         setError(loadError instanceof Error ? loadError.message : 'Unable to load returns.');
+      } finally {
+        setHistoryPending(false);
       }
     });
   };
 
   useEffect(() => {
     const query = searchParams.get('q') ?? '';
-    setSearchQuery(query);
+    setHistoryQuery(query);
     loadHistory(query);
   }, [searchKey]);
 
-  const onOrderSearch = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    try {
-      const payload = await searchReturnOrders(searchQuery.trim());
-      setLookupOrders(payload.items);
-      setError('');
-    } catch (searchError) {
-      setError(searchError instanceof Error ? searchError.message : 'Unable to search completed orders.');
-    }
+  const resetReturnDraft = () => {
+    setSelectedOrder(null);
+    setEligible(null);
+    setDraft(createEmptyDraft());
   };
 
-  const loadEligible = async (orderId: string) => {
+  const openEligibleLines = async (order: ReturnLookupOrder) => {
+    setSelectedOrder(order);
+    setEligiblePending(true);
     try {
-      const payload = await getEligibleReturnLines(orderId);
+      const payload = await getEligibleReturnLines(order.sales_order_id);
       setEligible(payload);
       setDraft({
-        sales_order_id: orderId,
+        sales_order_id: order.sales_order_id,
         notes: '',
         refund_status: 'pending',
         lines: payload.lines.map((line) => ({
           sales_order_item_id: line.sales_order_item_id,
-          quantity: '0',
-          restock_quantity: '0',
+          quantity: line.eligible_quantity === '0' ? '0' : line.eligible_quantity,
+          restock_quantity: line.eligible_quantity === '0' ? '0' : line.eligible_quantity,
           disposition: 'restock',
           unit_refund_amount: line.unit_price,
           reason: '',
@@ -78,32 +184,81 @@ export function ReturnsWorkspace() {
       setError('');
     } catch (detailError) {
       setError(detailError instanceof Error ? detailError.message : 'Unable to load returnable lines.');
+    } finally {
+      setEligiblePending(false);
+    }
+  };
+
+  const runOrderLookup = async (query: string) => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setLookupOrders([]);
+      setSelectedOrder(null);
+      setEligible(null);
+      setDraft(createEmptyDraft());
+      return;
+    }
+
+    setLookupPending(true);
+    try {
+      const payload = await searchReturnOrders(trimmed);
+      setLookupOrders(payload.items);
+      setError('');
+
+      const normalized = normalizeLookupQuery(trimmed);
+      const exact = payload.items.find((order) => {
+        return (
+          order.order_number.toLowerCase() === normalized ||
+          order.customer_phone.toLowerCase() === normalized ||
+          order.customer_email.toLowerCase() === normalized
+        );
+      });
+
+      if (exact) {
+        await openEligibleLines(exact);
+        return;
+      }
+
+      if (payload.items.length === 1) {
+        await openEligibleLines(payload.items[0]);
+      }
+    } catch (searchError) {
+      setError(searchError instanceof Error ? searchError.message : 'Unable to search completed orders.');
+    } finally {
+      setLookupPending(false);
     }
   };
 
   const submitReturn = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!eligible) {
+      setError('Open a completed order before creating a return.');
+      return;
+    }
+
+    const payloadLines = draft.lines.filter((line) => Number(line.quantity) > 0);
+    if (!payloadLines.length) {
+      setError('Add at least one return line before creating the return.');
+      return;
+    }
+
     setNotice('');
     setError('');
     try {
       const response = await createSalesReturn({
         ...draft,
-        lines: draft.lines.filter((line) => Number(line.quantity) > 0),
+        lines: payloadLines,
       });
       setNotice(`Return ${response.return_number} created.`);
-      setEligible(null);
-      setDraft({
-        sales_order_id: '',
-        notes: '',
-        refund_status: 'pending',
-        lines: [],
-      });
-      await loadHistory();
+      resetReturnDraft();
+      await loadHistory(historyQuery);
       setActiveTab('history');
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'Unable to create return.');
     }
   };
+
+  const suggestion = deriveReturnSuggestion(intentQuery, lookupOrders, eligible);
 
   return (
     <div className="workspace-stack">
@@ -118,55 +273,89 @@ export function ReturnsWorkspace() {
 
       <WorkspacePanel
         title="Return and restock control"
-        hint="Start from completed orders, validate eligible quantities, and restock only what becomes sellable again."
+        hint="Start from one completed-order clue, open eligible lines, and stage the return draft before any stock or refund write occurs."
       >
         {notice ? <WorkspaceNotice tone="success">{notice}</WorkspaceNotice> : null}
         {error ? <WorkspaceNotice tone="error">{error}</WorkspaceNotice> : null}
-        {isPending && !history.length ? <WorkspaceNotice>Loading returns workspace…</WorkspaceNotice> : null}
+        {(isPending || historyPending) && !history.length ? <WorkspaceNotice>Loading returns workspace…</WorkspaceNotice> : null}
 
         {activeTab === 'create' ? (
           <div className="workspace-stack">
-            <form className="workspace-search" onSubmit={onOrderSearch}>
-              <input
-                type="search"
-                value={searchQuery}
-                placeholder="Search completed orders by order number, phone, or email"
-                onChange={(event) => setSearchQuery(event.target.value)}
-              />
-              <button type="submit">Find orders</button>
-            </form>
+            <IntentInput
+              label="Which completed order is being returned?"
+              hint="Type one clue. The workspace will interpret an order number, phone number, or email and stage the eligible lines."
+              value={intentQuery}
+              placeholder="Order number, phone, or email"
+              pending={lookupPending || eligiblePending}
+              submitLabel="Interpret order clue"
+              onChange={setIntentQuery}
+              onSubmit={() => runOrderLookup(intentQuery)}
+            >
+              <span className="guided-assist-chip">Exact order numbers open eligible lines automatically</span>
+              <span className="guided-assist-chip">Manual searching is replaced by staged order selection</span>
+            </IntentInput>
 
-            {lookupOrders.length ? (
-              <div className="workspace-card-grid compact">
-                {lookupOrders.map((order) => (
-                  <button
-                    key={order.sales_order_id}
-                    type="button"
-                    className="selection-card"
-                    onClick={() => loadEligible(order.sales_order_id)}
-                  >
-                    <strong>{order.order_number}</strong>
-                    <span>{order.customer_name} · {order.customer_phone || order.customer_email}</span>
+            <SuggestedNextStep
+              suggestion={suggestion}
+              onPrimary={() => {
+                if (selectedOrder) {
+                  void openEligibleLines(selectedOrder);
+                  return;
+                }
+                if (lookupOrders[0]) {
+                  void openEligibleLines(lookupOrders[0]);
+                  return;
+                }
+                if (intentQuery.trim()) {
+                  void runOrderLookup(intentQuery);
+                }
+              }}
+              onSecondary={() => {
+                setLookupOrders([]);
+                setSelectedOrder(null);
+                setEligible(null);
+                setDraft(createEmptyDraft());
+              }}
+            />
+
+            <MatchGroupList
+              title="Likely completed orders"
+              description="Pick the correct order when there is more than one match."
+              items={lookupOrders}
+              emptyMessage="No completed order has been staged yet."
+              renderItem={(order) => (
+                <article key={order.sales_order_id} className="guided-match-item">
+                  <div className="guided-match-item-header">
+                    <div>
+                      <h5>{order.order_number}</h5>
+                      <p>{order.customer_name}</p>
+                    </div>
+                    <button type="button" onClick={() => void openEligibleLines(order)}>
+                      Open eligible lines
+                    </button>
+                  </div>
+                  <div className="guided-match-item-meta">
+                    <span>{order.customer_phone || order.customer_email}</span>
                     <span>{formatMoney(order.total_amount)}</span>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <WorkspaceEmpty
-                title="Find a completed order"
-                message="Returns begin with an order search, not a customer directory."
-              />
-            )}
+                    <span>{order.status}</span>
+                  </div>
+                </article>
+              )}
+            />
 
             {eligible ? (
-              <form className="workspace-form" onSubmit={submitReturn}>
-                <div className="workspace-subsection">
-                  <div className="workspace-subsection-header">
-                    <div>
-                      <h4>{eligible.order_number}</h4>
-                      <p>{eligible.customer_name} · {eligible.customer_phone}</p>
-                    </div>
+              <DraftRecommendationCard
+                title={eligible.order_number}
+                summary={`Eligible return lines are staged for ${eligible.customer_name}. Review quantities and refund values before creating the return.`}
+              >
+                <div className="workspace-form-grid compact">
+                  <div className="guided-match-item-meta">
+                    <span>Customer: {eligible.customer_name}</span>
+                    <span>{eligible.customer_phone}</span>
                   </div>
+                </div>
+
+                {eligible.lines.length ? (
                   <div className="table-scroll">
                     <table className="workspace-table">
                       <thead>
@@ -176,6 +365,7 @@ export function ReturnsWorkspace() {
                           <th>Return Qty</th>
                           <th>Restock Qty</th>
                           <th>Refund / Unit</th>
+                          <th>Reason</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -222,12 +412,32 @@ export function ReturnsWorkspace() {
                                 }
                               />
                             </td>
+                            <td>
+                              <input
+                                value={draft.lines[index]?.reason ?? ''}
+                                placeholder="Damaged, wrong size, changed mind"
+                                onChange={(event) =>
+                                  setDraft((current) => ({
+                                    ...current,
+                                    lines: current.lines.map((item, itemIndex) =>
+                                      itemIndex === index ? { ...item, reason: event.target.value } : item
+                                    ),
+                                  }))
+                                }
+                              />
+                            </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
-                </div>
+                ) : (
+                  <WorkspaceEmpty
+                    title="No eligible return lines"
+                    message="This completed order does not currently have returnable lines."
+                  />
+                )}
+
                 <label>
                   Return notes
                   <textarea
@@ -236,11 +446,28 @@ export function ReturnsWorkspace() {
                     onChange={(event) => setDraft((current) => ({ ...current, notes: event.target.value }))}
                   />
                 </label>
-                <div className="workspace-actions">
-                  <button type="submit">Create return</button>
-                </div>
-              </form>
-            ) : null}
+
+                <StagedActionFooter summary="The return will not be written until you explicitly create it.">
+                  <button type="submit">Review before creating return</button>
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => {
+                      resetReturnDraft();
+                      setLookupOrders([]);
+                      setIntentQuery('');
+                      setNotice('');
+                    }}
+                  >
+                    Reset return draft
+                  </button>
+                </StagedActionFooter>
+              </DraftRecommendationCard>
+            ) : (
+              <WorkspaceNotice>
+                Open a completed order and the workspace will stage its returnable lines for review.
+              </WorkspaceNotice>
+            )}
           </div>
         ) : (
           history.length ? (

@@ -11,8 +11,15 @@ import type {
   CatalogVariantInput,
   ProductIdentityInput,
   VariantOptions,
+  CatalogWorkspace,
 } from '@/types/catalog';
+import type { SuggestedAction } from '@/types/guided-workflow';
 import {
+  DraftRecommendationCard,
+  IntentInput,
+  MatchGroupList,
+  StagedActionFooter,
+  SuggestedNextStep,
   WorkspaceEmpty,
   WorkspaceHint,
   WorkspaceNotice,
@@ -36,6 +43,10 @@ type VariantGeneratorState = {
 };
 
 type VariantCombo = VariantOptionValues;
+
+type CatalogRecommendation = SuggestedAction & {
+  kind: 'idle' | 'exact' | 'likely' | 'new';
+};
 
 const EMPTY_IDENTITY: ProductIdentityInput = {
   product_name: '',
@@ -189,6 +200,78 @@ function cloneVariant(variant: CatalogVariantInput): CatalogVariantInput {
   return { ...variant };
 }
 
+function normalizeCatalogQuery(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function productMatchesExact(product: CatalogProduct, query: string) {
+  const normalized = normalizeCatalogQuery(query);
+  if (!normalized) return false;
+  if (product.name.toLowerCase() === normalized || product.sku_root.toLowerCase() === normalized) {
+    return true;
+  }
+  return product.variants.some((variant) =>
+    [variant.sku, variant.barcode, variant.label].some((value) => value.toLowerCase() === normalized)
+  );
+}
+
+function productMatchesLikely(product: CatalogProduct, query: string) {
+  const normalized = normalizeCatalogQuery(query);
+  if (!normalized) return false;
+  if (productMatchesExact(product, query)) return false;
+  if (product.name.toLowerCase().includes(normalized) || product.sku_root.toLowerCase().includes(normalized)) {
+    return true;
+  }
+  return product.variants.some((variant) =>
+    [variant.label, variant.sku, variant.barcode].some((value) => value.toLowerCase().includes(normalized))
+  );
+}
+
+export function deriveCatalogRecommendation(workspace: CatalogWorkspace | null): CatalogRecommendation {
+  const query = workspace?.query?.trim() ?? '';
+  if (!workspace || !query) {
+    return {
+      kind: 'idle',
+      title: 'Start with one product clue',
+      detail: 'Type a product name, SKU root, barcode, or variant code. The workspace will stage the best match or open a new product draft.',
+      actionLabel: 'Review next step',
+      tone: 'info',
+    };
+  }
+
+  const exact = workspace.items.find((product) => productMatchesExact(product, query));
+  if (exact) {
+    return {
+      kind: 'exact',
+      title: `Exact catalog match: ${exact.name}`,
+      detail: 'The matching product can be opened immediately for review or edit.',
+      actionLabel: 'Open product',
+      secondaryLabel: 'Start new product',
+      tone: 'success',
+    };
+  }
+
+  const likely = workspace.items.find((product) => productMatchesLikely(product, query));
+  if (likely) {
+    return {
+      kind: 'likely',
+      title: `Likely match: ${likely.name}`,
+      detail: 'Review this product first. If it is not the right catalog parent, continue with a new product draft.',
+      actionLabel: 'Review product',
+      secondaryLabel: 'Start new product',
+      tone: 'warning',
+    };
+  }
+
+  return {
+    kind: 'new',
+    title: `No catalog match for "${workspace.query}"`,
+    detail: 'A new product draft is ready with the typed clue preserved as the starting context.',
+    actionLabel: 'Start new product',
+    tone: 'warning',
+  };
+}
+
 
 export function CatalogWorkspace() {
   const searchParams = useSearchParams();
@@ -206,6 +289,7 @@ export function CatalogWorkspace() {
   const [notice, setNotice] = useState('');
   const [saveToast, setSaveToast] = useState('');
   const [isPending, startTransition] = useTransition();
+  const recommendation = deriveCatalogRecommendation(workspace);
 
   useEffect(() => {
     if (!saveToast) return undefined;
@@ -236,14 +320,12 @@ export function CatalogWorkspace() {
     loadWorkspace(query);
   }, [searchKey]);
 
-  const onSearch = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    loadWorkspace(queryInput.trim());
-  };
-
-  const setNewProductForm = () => {
+  const setNewProductForm = (seed?: string) => {
     setForm({
-      identity: { ...EMPTY_IDENTITY },
+      identity: {
+        ...EMPTY_IDENTITY,
+        product_name: seed ?? '',
+      },
       variants: [{ ...EMPTY_VARIANT }],
     });
     setSavedVariants([]);
@@ -261,6 +343,31 @@ export function CatalogWorkspace() {
     setActiveTab('edit');
     setNotice('');
     setError('');
+  };
+
+  const onWorkspaceIntent = async (query: string) => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setWorkspace(null);
+      setQueryInput('');
+      return;
+    }
+    setQueryInput(trimmed);
+    await loadWorkspace(trimmed);
+  };
+
+  const openRecommendedProduct = () => {
+    const exact = workspace?.items.find((product) => productMatchesExact(product, workspace.query));
+    const likely = workspace?.items.find((product) => productMatchesLikely(product, workspace.query));
+    const product = exact ?? likely;
+    if (product) {
+      onProductEdit(product);
+      return;
+    }
+    if (queryInput.trim()) {
+      void onWorkspaceIntent(queryInput);
+    }
+    setNewProductForm(queryInput.trim() || workspace?.query);
   };
 
   const generatedCombos = useMemo(() => buildVariantCombinations(generator), [generator]);
@@ -339,7 +446,7 @@ export function CatalogWorkspace() {
       <WorkspaceTabs
         tabs={[
           { id: 'products', label: 'Products' },
-          { id: 'edit', label: form.product_id ? 'Edit Product' : 'Add Product' },
+          { id: 'edit', label: form.product_id ? 'Edit Product' : 'Start New Product' },
         ]}
         activeTab={activeTab}
         onTabChange={setActiveTab}
@@ -347,89 +454,84 @@ export function CatalogWorkspace() {
 
       <WorkspacePanel
         title="Variant-first catalog"
-        hint="Search and manage products as parent records with saleable child variants."
+        hint="Use one product clue to open an existing catalog parent or stage a new product draft with its saleable variants."
         actions={
-          <div className="workspace-inline-actions">
-            <form className="workspace-search" onSubmit={onSearch}>
-              <input
-                type="search"
-                value={queryInput}
-                placeholder="Search by product, variant, SKU, barcode"
-                onChange={(event) => setQueryInput(event.target.value)}
-              />
-              <button type="submit">Search</button>
-            </form>
-          </div>
+          <IntentInput
+            label="What product are you working on?"
+            hint="Search by product name, SKU root, barcode, or a variant code. The best match will be staged first."
+            value={queryInput}
+            placeholder="Product, SKU root, barcode, or variant"
+            pending={isPending}
+            submitLabel="Interpret intent"
+            onChange={setQueryInput}
+            onSubmit={() => void onWorkspaceIntent(queryInput)}
+          >
+            <span className="guided-assist-chip">Exact product matches open the editor</span>
+            <span className="guided-assist-chip">No match stages a new product draft</span>
+          </IntentInput>
         }
       >
         {notice ? <WorkspaceNotice tone="success">{notice}</WorkspaceNotice> : null}
         {error ? <WorkspaceNotice tone="error">{error}</WorkspaceNotice> : null}
         {isPending && !workspace ? <WorkspaceNotice>Loading catalog…</WorkspaceNotice> : null}
 
+        <SuggestedNextStep
+          suggestion={recommendation}
+          onPrimary={openRecommendedProduct}
+          onSecondary={() => setNewProductForm(workspace?.query)}
+        />
+
         {activeTab === 'products' ? (
           workspace?.items.length ? (
-            <div className="workspace-card-grid">
-              {workspace.items.map((product) => (
-                <article key={product.product_id} className="commerce-card">
-                  <div className="commerce-card-header">
+            <MatchGroupList
+              title="Catalog parents"
+              description="Pick the strongest match first. Each product remains editable as a parent record with saleable child variants."
+              items={workspace.items}
+              renderItem={(product) => (
+                <article key={product.product_id} className="guided-match-item">
+                  <div className="guided-match-item-header">
                     <div>
-                      <p className="eyebrow">Catalog Parent</p>
-                      <h4>{product.name}</h4>
+                      <h5>{product.name}</h5>
                       <p>{product.brand || 'No brand'} · {product.category || 'Uncategorized'} · {product.supplier || 'No supplier'}</p>
                     </div>
-                    <button type="button" onClick={() => onProductEdit(product)}>Edit product</button>
+                    <button type="button" onClick={() => onProductEdit(product)}>
+                      Open product
+                    </button>
                   </div>
-                  <div className="commerce-card-meta">
+                  <div className="guided-match-item-meta">
                     <span>SKU Base: {product.sku_root || 'Generated from product name'}</span>
+                    <span>Variants: {product.variants.length}</span>
                     <span>Template Price: {formatMoney(product.default_price)}</span>
                     <span>Min Price: {formatMoney(product.min_price)}</span>
                     <span>Equivalent Max Discount: {formatPercent(product.max_discount_percent)}</span>
                   </div>
-                  <div className="table-scroll">
-                    <table className="workspace-table">
-                      <thead>
-                        <tr>
-                          <th>Variant</th>
-                          <th>SKU</th>
-                          <th>Available</th>
-                          <th>Reserved</th>
-                          <th>Price</th>
-                          <th>Min Price</th>
-                          <th>Reorder</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {product.variants.map((variant) => (
-                          <tr key={variant.variant_id}>
-                            <td>{variant.label}</td>
-                            <td>{variant.sku}</td>
-                            <td>{formatQuantity(variant.available_to_sell)}</td>
-                            <td>{formatQuantity(variant.reserved)}</td>
-                            <td>
-                              {formatMoney(variant.effective_unit_price)}
-                              {variant.is_price_inherited ? <div className="workspace-field-note">Inherited from product</div> : null}
-                            </td>
-                            <td>
-                              {formatMoney(variant.effective_min_price)}
-                              {variant.is_min_price_inherited ? <div className="workspace-field-note">Inherited from product</div> : null}
-                            </td>
-                            <td>{formatQuantity(variant.reorder_level)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
                 </article>
-              ))}
-            </div>
+              )}
+            />
           ) : (
             <WorkspaceEmpty
-              title="No active in-stock catalog items"
-              message="Use Add Product to create a parent product and its saleable variants."
+              title="No catalog items staged"
+              message="Use the intent bar above to open an existing product or start a new parent record."
             />
           )
         ) : (
-          <form className="workspace-form" onSubmit={onSave}>
+          <DraftRecommendationCard
+            title={form.product_id ? `Editing ${form.identity.product_name}` : 'New product draft'}
+            summary={form.product_id
+              ? 'Review or adjust the parent product and its variants before saving the updated catalog record.'
+              : 'Start with the typed clue. The editor keeps the parent product and variants visible before the final save.'}
+            actions={
+              <StagedActionFooter summary="The catalog only writes when you explicitly save the product.">
+                <button type="submit" form="catalog-product-form">
+                  {form.product_id ? 'Review before saving' : 'Create product'}
+                </button>
+                <button type="button" onClick={() => setNewProductForm(workspace?.query)}>
+                  Reset draft
+                </button>
+              </StagedActionFooter>
+            }
+          >
+          <form id="catalog-product-form" className="workspace-form" onSubmit={onSave}>
             <div className="workspace-subsection">
               <div className="workspace-subsection-header">
                 <h4 className="workspace-heading">
@@ -870,7 +972,7 @@ export function CatalogWorkspace() {
 
             <div className="workspace-actions">
               <button type="submit">{form.product_id ? 'Update product' : 'Create product'}</button>
-              <button type="button" onClick={setNewProductForm}>Reset form</button>
+              <button type="button" onClick={() => setNewProductForm(workspace?.query)}>Reset form</button>
             </div>
 
             <datalist id="catalog-suppliers">
@@ -880,6 +982,7 @@ export function CatalogWorkspace() {
               {workspace?.categories.map((category) => <option key={category.category_id} value={category.name} />)}
             </datalist>
           </form>
+          </DraftRecommendationCard>
         )}
       </WorkspacePanel>
     </div>

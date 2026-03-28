@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { AdminWorkspace } from '@/components/admin/admin-workspace';
 
@@ -9,9 +9,14 @@ const getAdminClientMock = vi.fn();
 const listAdminUsersMock = vi.fn();
 const listAdminAuditMock = vi.fn();
 const getAdminUserAccessMock = vi.fn();
+let searchParamsValue = new URLSearchParams();
 
 vi.mock('@/components/auth/auth-provider', () => ({
   useAuth: () => useAuthMock(),
+}));
+
+vi.mock('next/navigation', () => ({
+  useSearchParams: () => searchParamsValue,
 }));
 
 vi.mock('@/lib/api/admin', () => ({
@@ -29,8 +34,13 @@ vi.mock('@/lib/api/admin', () => ({
 }));
 
 describe('AdminWorkspace', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
+    searchParamsValue = new URLSearchParams();
     useAuthMock.mockReturnValue({
       user: { roles: ['SUPER_ADMIN'], allowed_pages: ['Admin'] },
       loading: false,
@@ -110,22 +120,22 @@ describe('AdminWorkspace', () => {
     });
   });
 
-  test('opens create mode inside the reused detail workspace', async () => {
+  test('opens create mode from the guided onboarding route', async () => {
+    searchParamsValue = new URLSearchParams('mode=create');
     render(<AdminWorkspace />);
 
-    await waitFor(() => expect(screen.getByText('Tenant list')).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: 'New Client' }));
+    await waitFor(() => expect(screen.getByText('Find or stage a tenant')).toBeTruthy());
 
-    expect(screen.getByText('New client workspace')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Create client' })).toBeTruthy();
-    expect(screen.queryByText('Change history')).toBeNull();
+    expect(screen.getByText('Stage new tenant')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Review before creating' })).toBeTruthy();
+    expect(screen.getByText('Tenant shell preview')).toBeTruthy();
   });
 
   test('opens inline access details for an existing tenant user', async () => {
     render(<AdminWorkspace />);
 
     await waitFor(() => expect(screen.getByText('User management')).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: 'Access Details' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Access Details' })[0]);
 
     await waitFor(() => expect(screen.getByText('Access details for Staff User')).toBeTruthy());
     expect(screen.getByText('Default pages')).toBeTruthy();

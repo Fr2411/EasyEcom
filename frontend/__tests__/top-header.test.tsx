@@ -2,9 +2,10 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 const pushMock = vi.fn();
+let pathname = '/dashboard';
 
 vi.mock('next/navigation', () => ({
-  usePathname: () => '/dashboard',
+  usePathname: () => pathname,
   useRouter: () => ({ push: pushMock }),
 }));
 
@@ -13,6 +14,7 @@ import { TopHeader } from '@/components/layout/top-header';
 describe('TopHeader', () => {
   beforeEach(() => {
     pushMock.mockReset();
+    pathname = '/dashboard';
   });
 
   afterEach(() => {
@@ -36,5 +38,15 @@ describe('TopHeader', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 
     expect(pushMock).not.toHaveBeenCalled();
+  });
+
+  test('shows a guided admin action on the admin route', () => {
+    pathname = '/admin';
+
+    render(<TopHeader />);
+
+    expect(screen.getByRole('button', { name: 'Start onboarding' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Start onboarding' }));
+    expect(pushMock).toHaveBeenCalledWith('/admin?mode=create');
   });
 });
