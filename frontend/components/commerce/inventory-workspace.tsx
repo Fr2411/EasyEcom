@@ -42,6 +42,32 @@ type IntakeGeneratorState = {
   reorder_level: string;
 };
 
+type IntakeRecommendation =
+  | {
+      kind: 'idle';
+      title: string;
+      summary: string;
+      actionLabel: string;
+    }
+  | {
+      kind: 'exact';
+      title: string;
+      summary: string;
+      actionLabel: string;
+    }
+  | {
+      kind: 'product';
+      title: string;
+      summary: string;
+      actionLabel: string;
+    }
+  | {
+      kind: 'new';
+      title: string;
+      summary: string;
+      actionLabel: string;
+    };
+
 const EMPTY_IDENTITY: InventoryIntakeIdentityInput = {
   product_name: '',
   product_id: '',
@@ -207,6 +233,52 @@ function advancedCatalogAllowed(roles: string[] | undefined) {
   return Boolean(roles?.includes('SUPER_ADMIN') || roles?.includes('CLIENT_OWNER'));
 }
 
+export function deriveIntakeRecommendation(results: Awaited<ReturnType<typeof getInventoryIntakeLookup>> | null): IntakeRecommendation {
+  if (!results) {
+    return {
+      kind: 'idle',
+      title: 'Start with one item',
+      summary: 'Scan a barcode, SKU, product name, or variant and the workspace will stage the best match.',
+      actionLabel: 'Review next step',
+    };
+  }
+
+  const exact = results.exact_variants[0];
+  if (exact) {
+    return {
+      kind: 'exact',
+      title: `Exact match: ${exact.variant.label}`,
+      summary: `Matched by ${exact.match_reason}. The workspace has already focused this variant for receiving.`,
+      actionLabel: 'Continue receiving',
+    };
+  }
+
+  const product = results.product_matches[0];
+  if (product) {
+    const variantCount = product.variants.length;
+    return {
+      kind: 'product',
+      title: `Existing product: ${product.name}`,
+      summary: `${variantCount} saved variant${variantCount === 1 ? '' : 's'} found. Review the product and choose the line you want to receive.`,
+      actionLabel: 'Review product',
+    };
+  }
+
+  const suggestion = results.suggested_new_product;
+  return {
+    kind: 'new',
+    title: suggestion ? `No match found: ${suggestion.product_name}` : 'No match found',
+    summary: suggestion
+      ? 'A new product draft is staged with the best available identity hints.'
+      : 'Start a new item draft with the typed intent details.',
+    actionLabel: 'Start new product',
+  };
+}
+
+function productVariantCount(product: CatalogProduct) {
+  return product.variants.length;
+}
+
 export function InventoryWorkspace() {
   const { user } = useAuth();
   const searchParams = useSearchParams();
@@ -225,6 +297,16 @@ export function InventoryWorkspace() {
   const [lookupPending, setLookupPending] = useState(false);
   const [submitPending, setSubmitPending] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const intakeRecommendation = deriveIntakeRecommendation(intakeResults);
+  const exactVariantMatches = intakeResults?.exact_variants ?? [];
+  const visibleProductMatches = useMemo(() => {
+    if (!intakeResults?.product_matches.length) {
+      return [];
+    }
+    const exactProductIds = new Set((intakeResults.exact_variants ?? []).map((match) => match.product.product_id));
+    return intakeResults.product_matches.filter((product) => !exactProductIds.has(product.product_id));
+  }, [intakeResults]);
+  const newProductSuggestion = intakeResults?.suggested_new_product ?? null;
 
   const loadWorkspace = (query = '') => {
     startTransition(async () => {
@@ -315,7 +397,24 @@ export function InventoryWorkspace() {
 
   const onIntakeSearch = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    await runIntakeLookup(intakeQuery);
+    const payload = await runIntakeLookup(intakeQuery);
+    if (!payload) {
+      return;
+    }
+    const exact = payload.exact_variants[0];
+    if (exact) {
+      openExactVariantMatch(exact);
+      setActiveTab('receive');
+      return;
+    }
+    const product = payload.product_matches[0];
+    if (product) {
+      beginExistingProduct(product, productVariantCount(product) === 1 ? [lineFromExistingVariant(product.variants[0])] : []);
+      setActiveTab('receive');
+      return;
+    }
+    beginNewProduct(payload.suggested_new_product ?? null);
+    setActiveTab('receive');
   };
 
   const addExistingVariantLine = (variant: CatalogVariant) => {
@@ -348,7 +447,8 @@ export function InventoryWorkspace() {
       return;
     }
     if (payload.product_matches[0]) {
-      beginExistingProduct(payload.product_matches[0]);
+      const product = payload.product_matches[0];
+      beginExistingProduct(product, productVariantCount(product) === 1 ? [lineFromExistingVariant(product.variants[0])] : []);
       setIntakeQuery(lookupValue);
       setActiveTab('receive');
     }
@@ -563,10 +663,10 @@ export function InventoryWorkspace() {
             <section className="workspace-subsection">
               <div className="workspace-subsection-header">
                 <h4 className="workspace-heading">
-                  Find or Create Item
+                  What are you receiving?
                   <WorkspaceHint
-                    label="Find or create item help"
-                    text="Search by barcode, SKU, product name, or product plus variant text before creating anything new. Existing matches stay separate until you choose one."
+                    label="Inventory intake help"
+                    text="Scan or type one item intent. The workspace will stage the best existing match first and only open a new draft when nothing exists."
                   />
                 </h4>
                 {showAdvancedCatalog ? (
@@ -580,26 +680,35 @@ export function InventoryWorkspace() {
                 <input
                   type="search"
                   value={intakeQuery}
-                  placeholder="Search barcode, SKU, or product / variant"
+                  placeholder="Scan barcode, SKU, product, or variant"
                   onChange={(event) => setIntakeQuery(event.target.value)}
                 />
                 <button type="submit" disabled={lookupPending}>
-                  {lookupPending ? 'Searching…' : 'Find item'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => beginNewProduct(intakeResults?.suggested_new_product ?? null)}
-                  disabled={!intakeQuery.trim() && !intakeResults?.suggested_new_product}
-                >
-                  Create new item
+                  {lookupPending ? 'Reviewing…' : intakeRecommendation.actionLabel}
                 </button>
               </form>
 
-              {intakeResults?.exact_variants.length ? (
+              {intakeResults ? (
+                <WorkspaceNotice tone={intakeRecommendation.kind === 'new' ? 'info' : 'success'}>
+                  <div className="workspace-stack">
+                    <strong>{intakeRecommendation.title}</strong>
+                    <span>{intakeRecommendation.summary}</span>
+                  </div>
+                </WorkspaceNotice>
+              ) : (
+                <WorkspaceNotice>
+                  <div className="workspace-stack">
+                    <strong>{intakeRecommendation.title}</strong>
+                    <span>{intakeRecommendation.summary}</span>
+                  </div>
+                </WorkspaceNotice>
+              )}
+
+              {exactVariantMatches.length ? (
                 <div className="workspace-stack">
                   <p className="eyebrow">Exact Variant Matches</p>
                   <div className="workspace-card-grid compact">
-                    {intakeResults.exact_variants.map((match) => (
+                    {exactVariantMatches.map((match) => (
                       <article key={`${match.variant.variant_id}-${match.match_reason}`} className="commerce-card compact">
                         <div className="commerce-card-header">
                           <div>
@@ -609,7 +718,7 @@ export function InventoryWorkspace() {
                             </p>
                           </div>
                           <button type="button" onClick={() => openExactVariantMatch(match)}>
-                            Use variant
+                            Use exact variant
                           </button>
                         </div>
                       </article>
@@ -618,11 +727,11 @@ export function InventoryWorkspace() {
                 </div>
               ) : null}
 
-              {intakeResults?.product_matches.length ? (
+              {visibleProductMatches.length ? (
                 <div className="workspace-stack">
                   <p className="eyebrow">Existing Products</p>
                   <div className="workspace-card-grid compact">
-                    {intakeResults.product_matches.map((product) => (
+                    {visibleProductMatches.map((product) => (
                       <article key={product.product_id} className="commerce-card compact">
                         <div className="commerce-card-header">
                           <div>
@@ -631,8 +740,16 @@ export function InventoryWorkspace() {
                               {product.variants.length} saved variants · Supplier {product.supplier || 'Not set'} · Category {product.category || 'Not set'}
                             </p>
                           </div>
-                          <button type="button" onClick={() => beginExistingProduct(product)}>
-                            Use product
+                          <button
+                            type="button"
+                            onClick={() =>
+                              beginExistingProduct(
+                                product,
+                                productVariantCount(product) === 1 ? [lineFromExistingVariant(product.variants[0])] : []
+                              )
+                            }
+                          >
+                            Review product
                           </button>
                         </div>
                       </article>
@@ -641,16 +758,16 @@ export function InventoryWorkspace() {
                 </div>
               ) : null}
 
-              {intakeResults?.suggested_new_product ? (
+              {newProductSuggestion ? (
                 <article className="commerce-card compact">
                   <div className="commerce-card-header">
                     <div>
                       <p className="eyebrow">Create New Product</p>
-                      <h4>{intakeResults.suggested_new_product.product_name}</h4>
+                      <h4>{newProductSuggestion.product_name}</h4>
                       <p>We did not attach this automatically. Start a new item only if the existing matches above are not correct.</p>
                     </div>
-                    <button type="button" onClick={() => beginNewProduct(intakeResults.suggested_new_product)}>
-                      Start new item
+                    <button type="button" onClick={() => beginNewProduct(newProductSuggestion)}>
+                      Start new product
                     </button>
                   </div>
                 </article>

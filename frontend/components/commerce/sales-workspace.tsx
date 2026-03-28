@@ -13,7 +13,18 @@ import {
   searchSaleVariants,
 } from '@/lib/api/commerce';
 import type { EmbeddedCustomer, SaleLookupVariant, SalesOrder, SalesOrderLineInput, SalesOrderPayload } from '@/types/sales';
-import { WorkspaceEmpty, WorkspaceNotice, WorkspacePanel, WorkspaceTabs } from '@/components/commerce/workspace-primitives';
+import type { LookupOutcome, SuggestedAction } from '@/types/guided-workflow';
+import {
+  DraftRecommendationCard,
+  IntentInput,
+  MatchGroupList,
+  StagedActionFooter,
+  SuggestedNextStep,
+  WorkspaceEmpty,
+  WorkspaceNotice,
+  WorkspacePanel,
+  WorkspaceTabs,
+} from '@/components/commerce/workspace-primitives';
 import { formatDateTime, formatMoney, formatQuantity } from '@/lib/commerce-format';
 
 
@@ -33,12 +44,65 @@ type DraftLine = SalesOrderLineInput & {
   min_price: string | null;
 };
 
+type SalesIntentSuggestion = {
+  kind: 'variant' | 'customer' | 'manual';
+  title: string;
+  detail: string;
+  actionLabel?: string;
+  secondaryLabel?: string;
+  tone?: SuggestedAction['tone'];
+};
+
 const EMPTY_CUSTOMER: DraftCustomer = {
   name: '',
   phone: '',
   email: '',
   address: '',
 };
+
+export function deriveSalesIntentSuggestion(
+  intentLookup: LookupOutcome<SaleLookupVariant, SaleLookupVariant | EmbeddedCustomer, { name: string; phone: string; email: string }> | null
+): SalesIntentSuggestion {
+  if (!intentLookup) {
+    return {
+      kind: 'manual',
+      title: 'Start with one customer, order, or product clue',
+      detail: 'Type a phone number, email, SKU, barcode, or product name. The workspace will stage likely matches and suggest the next step.',
+      actionLabel: 'Stage manual customer',
+      tone: 'info',
+    };
+  }
+
+  if (intentLookup.state === 'exact' && intentLookup.exact[0]) {
+    const variant = intentLookup.exact[0];
+    return {
+      kind: 'variant',
+      title: `Exact variant found: ${variant.label}`,
+      detail: 'The item has already been staged into the order draft. Review quantity, price, and customer before confirming.',
+      actionLabel: 'Add one more',
+      secondaryLabel: 'Stage customer',
+      tone: 'success',
+    };
+  }
+
+  if (intentLookup.state === 'likely' && intentLookup.likely.length) {
+    return {
+      kind: 'customer',
+      title: `We found ${intentLookup.likely.length} likely matches`,
+      detail: 'Pick the best customer or variant below. If none are correct, continue with a manual customer and keep building the draft.',
+      actionLabel: 'Stage manual customer',
+      tone: 'warning',
+    };
+  }
+
+  return {
+    kind: 'manual',
+    title: 'No direct match found',
+    detail: 'Continue with a manual customer and use the suggested product results below if they fit the request.',
+    actionLabel: 'Stage manual customer',
+    tone: 'warning',
+  };
+}
 
 
 function buildOrderPayload(
@@ -75,11 +139,12 @@ export function SalesWorkspace() {
   const searchParams = useSearchParams();
   const searchKey = searchParams.toString();
   const [activeTab, setActiveTab] = useState<SalesTab>('new');
-  const [variantQuery, setVariantQuery] = useState('');
   const [variantResults, setVariantResults] = useState<SaleLookupVariant[]>([]);
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
   const [customerResults, setCustomerResults] = useState<EmbeddedCustomer[]>([]);
+  const [intentQuery, setIntentQuery] = useState('');
+  const [intentLookup, setIntentLookup] = useState<LookupOutcome<SaleLookupVariant, SaleLookupVariant | EmbeddedCustomer, { name: string; phone: string; email: string }> | null>(null);
   const [customer, setCustomer] = useState<DraftCustomer>({ ...EMPTY_CUSTOMER });
   const [draftLines, setDraftLines] = useState<DraftLine[]>([]);
   const [notes, setNotes] = useState('');
@@ -88,6 +153,7 @@ export function SalesWorkspace() {
   const [orderQuery, setOrderQuery] = useState('');
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
+  const [lookupPending, setLookupPending] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const loadOrders = (query = '') => {
@@ -124,26 +190,115 @@ export function SalesWorkspace() {
     return true;
   });
 
-  const onVariantSearch = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const addVariantToDraft = (variant: SaleLookupVariant) => {
+    setDraftLines((current) => {
+      const existing = current.find((item) => item.variant_id === variant.variant_id);
+      if (existing) {
+        return current.map((item) =>
+          item.variant_id === variant.variant_id
+            ? {
+                ...item,
+                quantity: String(Number(item.quantity) + 1),
+              }
+            : item
+        );
+      }
+      return [
+        ...current,
+        {
+          variant_id: variant.variant_id,
+          label: variant.label,
+          sku: variant.sku,
+          min_price: variant.min_price,
+          quantity: '1',
+          unit_price: variant.unit_price,
+          discount_amount: '0',
+        },
+      ];
+    });
+  };
+
+  const runIntentLookup = async (query: string) => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setIntentLookup(null);
+      setVariantResults([]);
+      setCustomerResults([]);
+      return;
+    }
+
+    setLookupPending(true);
     try {
-      const payload = await searchSaleVariants({ q: variantQuery.trim() });
-      setVariantResults(payload.items);
+      const [variantsPayload, customersPayload] = await Promise.all([
+        searchSaleVariants({ q: trimmed }),
+        searchEmbeddedCustomers({
+          phone: trimmed,
+          email: trimmed.includes('@') ? trimmed : undefined,
+        }),
+      ]);
+
+      const exactVariants = variantsPayload.items.filter((item) => {
+        const lower = trimmed.toLowerCase();
+        return item.sku.toLowerCase() === lower || item.barcode.toLowerCase() === lower;
+      });
+
+      const likely = [
+        ...variantsPayload.items.filter((item) => !exactVariants.some((exact) => exact.variant_id === item.variant_id)),
+        ...customersPayload.items,
+      ];
+
+      const suggestion: LookupOutcome<SaleLookupVariant, SaleLookupVariant | EmbeddedCustomer, { name: string; phone: string; email: string }> = {
+        state:
+          exactVariants.length
+            ? 'exact'
+            : likely.length
+              ? 'likely'
+              : 'new',
+        query: trimmed,
+        exact: exactVariants,
+        likely,
+        suggestedNew: {
+          name: '',
+          phone: trimmed.includes('@') ? '' : trimmed,
+          email: trimmed.includes('@') ? trimmed : '',
+        },
+      };
+
+      setVariantResults(variantsPayload.items);
+      setCustomerResults(customersPayload.items);
+      setIntentLookup(suggestion);
       setError('');
-    } catch (searchError) {
-      setError(searchError instanceof Error ? searchError.message : 'Unable to search saleable variants.');
+
+      if (exactVariants[0]) {
+        addVariantToDraft(exactVariants[0]);
+        setNotice(`Added ${exactVariants[0].label} to the draft. Review quantity and customer details before saving.`);
+      }
+    } catch (lookupError) {
+      setError(lookupError instanceof Error ? lookupError.message : 'Unable to interpret the sales intent.');
+    } finally {
+      setLookupPending(false);
     }
   };
 
-  const onCustomerSearch = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    try {
-      const payload = await searchEmbeddedCustomers({ phone: customerPhone, email: customerEmail });
-      setCustomerResults(payload.items);
-      setError('');
-    } catch (searchError) {
-      setError(searchError instanceof Error ? searchError.message : 'Unable to search customers.');
-    }
+  const useCustomer = (item: EmbeddedCustomer) => {
+    setCustomer({
+      customer_id: item.customer_id,
+      name: item.name,
+      phone: item.phone,
+      email: item.email,
+      address: '',
+    });
+    setNotice(`Customer ${item.name} is staged for this order.`);
+  };
+
+  const stageManualCustomer = () => {
+    setCustomerResults([]);
+    setCustomer((current) => ({
+      ...current,
+      phone: current.phone || (intentLookup?.suggestedNew?.phone ?? customerPhone),
+      email: current.email || (intentLookup?.suggestedNew?.email ?? customerEmail),
+    }));
+    setNotice('Manual customer entry is ready. Complete the customer details and review the draft.');
   };
 
   const submitOrder = async (action: SalesOrderPayload['action']) => {
@@ -185,7 +340,8 @@ export function SalesWorkspace() {
       setCustomerEmail('');
       setCustomerResults([]);
       setVariantResults([]);
-      setVariantQuery('');
+      setIntentQuery('');
+      setIntentLookup(null);
       setNotes('');
       await loadOrders(orderQuery.trim());
       setActiveTab(action === 'confirm_and_fulfill' ? 'completed' : 'open');
@@ -225,6 +381,8 @@ export function SalesWorkspace() {
       setError(actionError instanceof Error ? actionError.message : 'Unable to update order.');
     }
   };
+
+  const intentSuggestion = deriveSalesIntentSuggestion(intentLookup);
 
   return (
     <div className="workspace-stack">
@@ -266,57 +424,104 @@ export function SalesWorkspace() {
         {activeTab === 'new' ? (
           <div className="workspace-two-column">
             <div className="workspace-stack">
-              <WorkspacePanel
-                title="Customer"
-                hint="Lookup by phone or email, or capture a new customer inline."
+              <IntentInput
+                label="Who is buying or what do they want?"
+                hint="Use one clue. A phone number, email, SKU, barcode, or product text is enough for the workspace to stage the next likely action."
+                value={intentQuery}
+                placeholder="Phone, email, order clue, SKU, barcode, or product"
+                pending={lookupPending}
+                submitLabel="Interpret intent"
+                onChange={setIntentQuery}
+                onSubmit={() => runIntentLookup(intentQuery)}
               >
-                <form className="workspace-form" onSubmit={onCustomerSearch}>
-                  <div className="workspace-form-grid compact">
-                    <label>
-                      Phone
-                      <input value={customerPhone} onChange={(event) => setCustomerPhone(event.target.value)} />
-                    </label>
-                    <label>
-                      Email
-                      <input value={customerEmail} onChange={(event) => setCustomerEmail(event.target.value)} />
-                    </label>
-                  </div>
-                  <div className="workspace-inline-actions">
-                    <button type="submit">Find customer</button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCustomerResults([]);
-                        setCustomer({ ...EMPTY_CUSTOMER, phone: customerPhone, email: customerEmail });
-                      }}
-                    >
-                      Enter manually
-                    </button>
-                  </div>
-                </form>
-                {customerResults.length ? (
-                  <div className="workspace-stack">
-                    {customerResults.map((item) => (
-                      <button
-                        key={item.customer_id}
-                        type="button"
-                        className="selection-card"
-                        onClick={() =>
-                          setCustomer({
-                            customer_id: item.customer_id,
-                            name: item.name,
-                            phone: item.phone,
-                            email: item.email,
-                            address: '',
-                          })
-                        }
-                      >
-                        <strong>{item.name}</strong>
-                        <span>{item.phone || item.email}</span>
+                <span className="guided-assist-chip">Exact SKU or barcode auto-stages the variant</span>
+                <span className="guided-assist-chip">Customer clues prefill manual entry when no account matches</span>
+              </IntentInput>
+
+              <SuggestedNextStep
+                suggestion={intentSuggestion}
+                onPrimary={() => {
+                  if (intentSuggestion.kind === 'variant' && intentLookup?.exact[0]) {
+                    addVariantToDraft(intentLookup.exact[0]);
+                    return;
+                  }
+                  stageManualCustomer();
+                }}
+                onSecondary={() => {
+                  if (intentLookup?.query) {
+                    setCustomerPhone(intentLookup.suggestedNew?.phone ?? '');
+                    setCustomerEmail(intentLookup.suggestedNew?.email ?? '');
+                  }
+                  stageManualCustomer();
+                }}
+              />
+
+              <MatchGroupList
+                title="Likely customer matches"
+                description="Use an existing customer when one is clearly correct. Otherwise continue with the staged manual entry."
+                items={customerResults}
+                emptyMessage="No customer account matched yet."
+                renderItem={(item) => (
+                  <article key={item.customer_id} className="guided-match-item">
+                    <div className="guided-match-item-header">
+                      <div>
+                        <h5>{item.name}</h5>
+                        <p>{item.phone || item.email || 'No contact details'}</p>
+                      </div>
+                      <button type="button" onClick={() => useCustomer(item)}>
+                        Use customer
                       </button>
-                    ))}
-                  </div>
-                ) : null}
+                    </div>
+                  </article>
+                )}
+              />
+
+              <MatchGroupList
+                title="Likely saleable items"
+                description="Only variants with saleable stock are shown here."
+                items={variantResults}
+                emptyMessage="No sellable variants matched the current clue yet."
+                renderItem={(variant) => (
+                  <article key={variant.variant_id} className="guided-match-item">
+                    <div className="guided-match-item-header">
+                      <div>
+                        <h5>{variant.label}</h5>
+                        <p>{variant.sku}</p>
+                      </div>
+                      <button type="button" onClick={() => addVariantToDraft(variant)}>
+                        Add to draft order
+                      </button>
+                    </div>
+                    <div className="guided-match-item-meta">
+                      <span>Available {formatQuantity(variant.available_to_sell)}</span>
+                      <span>Price {formatMoney(variant.unit_price)}</span>
+                      <span>Min {formatMoney(variant.min_price)}</span>
+                    </div>
+                  </article>
+                )}
+              />
+
+              <DraftRecommendationCard
+                title="Customer staging"
+                summary={customer.customer_id
+                  ? `Existing customer ${customer.name} is staged for this order.`
+                  : customer.name || customer.phone || customer.email
+                    ? 'A manual customer draft is staged. Complete any missing details before confirming.'
+                    : 'No customer is staged yet. The intent bar above can prefill this area for you.'}
+              >
+                <div className="workspace-inline-actions">
+                  <label>
+                    Phone
+                    <input value={customerPhone} onChange={(event) => setCustomerPhone(event.target.value)} />
+                  </label>
+                  <label>
+                    Email
+                    <input value={customerEmail} onChange={(event) => setCustomerEmail(event.target.value)} />
+                  </label>
+                  <button type="button" onClick={() => void runIntentLookup(customerPhone || customerEmail)}>
+                    Refresh customer clues
+                  </button>
+                </div>
                 <div className="workspace-form-grid compact">
                   <label>
                     Name
@@ -342,81 +547,14 @@ export function SalesWorkspace() {
                     />
                   </label>
                 </div>
-              </WorkspacePanel>
-
-              <WorkspacePanel
-                title="Add sellable variants"
-                hint="Only available stock appears in the search results."
-              >
-                <form className="workspace-search" onSubmit={onVariantSearch}>
-                  <input
-                    type="search"
-                    value={variantQuery}
-                    placeholder="Search product, variant, SKU, barcode"
-                    onChange={(event) => setVariantQuery(event.target.value)}
-                  />
-                  <button type="submit">Find variants</button>
-                </form>
-                {variantResults.length ? (
-                  <div className="workspace-card-grid compact">
-                    {variantResults.map((variant) => (
-                      <article key={variant.variant_id} className="commerce-card compact">
-                        <div className="commerce-card-header">
-                          <div>
-                            <h4>{variant.label}</h4>
-                            <p>
-                              {variant.sku} · Available {formatQuantity(variant.available_to_sell)} ·
-                              {' '}Price {formatMoney(variant.unit_price)} · Min {formatMoney(variant.min_price)}
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setDraftLines((current) => {
-                                const existing = current.find((item) => item.variant_id === variant.variant_id);
-                                if (existing) {
-                                  return current.map((item) =>
-                                    item.variant_id === variant.variant_id
-                                      ? {
-                                          ...item,
-                                          quantity: String(Number(item.quantity) + 1),
-                                        }
-                                      : item
-                                  );
-                                }
-                                return [
-                                  ...current,
-                                  {
-                                    variant_id: variant.variant_id,
-                                    label: variant.label,
-                                    sku: variant.sku,
-                                    min_price: variant.min_price,
-                                    quantity: '1',
-                                    unit_price: variant.unit_price,
-                                    discount_amount: '0',
-                                  },
-                                ];
-                              })
-                            }
-                          >
-                            Add
-                          </button>
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                ) : (
-                  <WorkspaceEmpty
-                    title="Search for saleable stock"
-                    message="Use the search above to find variants by product, option, SKU, or barcode."
-                  />
-                )}
-              </WorkspacePanel>
+              </DraftRecommendationCard>
             </div>
 
-            <WorkspacePanel
+            <DraftRecommendationCard
               title="Order draft"
-              hint="Draft, confirm, or fulfill the whole order from one workspace."
+              summary={draftLines.length
+                ? `${draftLines.length} line${draftLines.length === 1 ? '' : 's'} staged. Review pricing, customer, and notes before the final confirmation step.`
+                : 'The draft is empty. Use the intent bar to stage a customer, a variant, or both.'}
             >
               {draftLines.length ? (
                 <div className="table-scroll">
@@ -482,7 +620,7 @@ export function SalesWorkspace() {
                               type="button"
                               onClick={() => setDraftLines((current) => current.filter((item) => item.variant_id !== line.variant_id))}
                             >
-                              Remove
+                              Remove line
                             </button>
                           </td>
                         </tr>
@@ -500,9 +638,9 @@ export function SalesWorkspace() {
                 Order notes
                 <textarea rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} />
               </label>
-              <div className="workspace-actions">
+              <StagedActionFooter summary="The workspace will only write when you explicitly choose draft, confirm, or confirm and fulfill.">
                 <button type="button" onClick={() => submitOrder('save_draft')} disabled={!draftLines.length}>
-                  Save Draft
+                  Review before saving
                 </button>
                 <button type="button" onClick={() => submitOrder('confirm')} disabled={!draftLines.length}>
                   Confirm
@@ -510,8 +648,8 @@ export function SalesWorkspace() {
                 <button type="button" onClick={() => submitOrder('confirm_and_fulfill')} disabled={!draftLines.length}>
                   Confirm & Fulfill
                 </button>
-              </div>
-            </WorkspacePanel>
+              </StagedActionFooter>
+            </DraftRecommendationCard>
           </div>
         ) : (
           <div className="workspace-two-column">
