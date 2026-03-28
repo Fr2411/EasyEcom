@@ -75,42 +75,73 @@ export default function LoginPage() {
     <AuthRouteGuard mode="public-only">
       <main className="login-page">
         <section className="login-hero">
-          <p className="login-eyebrow">EasyEcom Platform</p>
-          <div className="login-hero-logo">
-            <EasyEcomLogo
-              className="easyecom-logo easyecom-logo-hero"
-              imageClassName="easyecom-logo-image easyecom-logo-hero"
-            />
+          <div className="login-hero-content">
+            <p className="login-eyebrow">EasyEcom Commerce OS</p>
+            <div className="login-hero-logo">
+              <EasyEcomLogo
+                className="easyecom-logo easyecom-logo-hero"
+                imageClassName="easyecom-logo-image easyecom-logo-hero"
+              />
+            </div>
+            <h1>Run inventory, sales, returns, and finance from one cleaner workspace.</h1>
+            <p>
+              EasyEcom is built for operational teams who need trustworthy stock, faster order handling,
+              and clearer day-to-day control across the business.
+            </p>
+            <div className="login-hero-points">
+              <span>Variant-aware stock truth</span>
+              <span>Tenant-safe team access</span>
+              <span>Operational dashboards</span>
+            </div>
+            <div className="login-hero-proof-grid" aria-label="Platform highlights">
+              <div className="login-proof-card">
+                <strong>Live operations</strong>
+                <p>Track sales, inventory, returns, and reviews without switching tools.</p>
+              </div>
+              <div className="login-proof-card">
+                <strong>Faster onboarding</strong>
+                <p>Open a workspace with business identity first, then grow into advanced modules.</p>
+              </div>
+              <div className="login-proof-card">
+                <strong>Commerce-ready controls</strong>
+                <p>Purpose-built for merchants, not a generic back-office template.</p>
+              </div>
+            </div>
           </div>
-          <h1>Welcome to your operations command center.</h1>
-          <p>Monitor inventory, sales, finance, and automation workflows in one premium workspace.</p>
-          <div className="login-hero-points">
-            <span>Variant-aware stock truth</span>
-            <span>Fast operational workflows</span>
-            <span>Role-aware business access</span>
-          </div>
-          <p className="login-hero-signup">
-            New to EasyEcom? Create your owner account with a valid business email and start in a fresh tenant workspace.
-          </p>
         </section>
         <form className="login-card" onSubmit={onSubmit}>
           <h1 className="login-title">EasyEcom Login</h1>
-          <div className="workspace-tabs">
-            <button type="button" className={mode === 'login' ? 'workspace-tab active' : 'workspace-tab'} onClick={() => setMode('login')}>
-              Sign in
-            </button>
-            <button type="button" className={mode === 'signup' ? 'workspace-tab active' : 'workspace-tab'} onClick={() => setMode('signup')}>
-              Create account
-            </button>
+          <div className="login-card-header">
+            <div>
+              <p className="login-card-kicker">{mode === 'login' ? 'Welcome back' : 'Start your workspace'}</p>
+              <h2>{mode === 'login' ? 'Sign in' : 'Create your account'}</h2>
+              <p className="muted login-card-subtitle">
+                {mode === 'login'
+                  ? 'Use your EasyEcom account to continue into your business workspace.'
+                  : 'Create a new tenant workspace with a valid business email and owner details.'}
+              </p>
+            </div>
+            <div className="workspace-tabs" aria-label="Authentication mode">
+              <button type="button" className={mode === 'login' ? 'workspace-tab active' : 'workspace-tab'} onClick={() => setMode('login')}>
+                Sign in
+              </button>
+              <button type="button" className={mode === 'signup' ? 'workspace-tab active' : 'workspace-tab'} onClick={() => setMode('signup')}>
+                Create account
+              </button>
+            </div>
           </div>
-          <h2>{mode === 'login' ? 'Sign in' : 'Create your account'}</h2>
-          <p className="muted">
-            {mode === 'login'
-              ? 'Use your EasyEcom account to continue.'
-              : 'Open a new tenant workspace with your business email, owner name, and password.'}
-          </p>
+          <div className="login-card-section">
+            <div className="login-card-note">
+              <strong>{mode === 'login' ? 'Returning user' : 'New tenant'}</strong>
+              <span>
+                {mode === 'login'
+                  ? 'Access your existing operational workspace.'
+                  : 'Your signup creates an owner account and a fresh tenant workspace.'}
+              </span>
+            </div>
+          </div>
           {mode === 'signup' ? (
-            <>
+            <div className="login-form-grid login-form-grid-signup">
               <label>
                 Business name
                 <input value={businessName} onChange={(event) => setBusinessName(event.target.value)} required disabled={submitting} />
@@ -123,27 +154,53 @@ export default function LoginPage() {
                 Phone
                 <input value={phone} onChange={(event) => setPhone(event.target.value)} required disabled={submitting} />
               </label>
-            </>
-          ) : null}
-          <label>
-            Email
-            <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required disabled={submitting} />
-          </label>
-          <label>
-            Password
-            <input
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              required
-              disabled={submitting}
-            />
-          </label>
-          {success ? <p className="auth-success">{success}</p> : null}
-          {error ? <p className="login-error">{error}</p> : null}
-          <button type="submit" disabled={submitting}>
-            {submitting ? (mode === 'login' ? 'Signing in…' : 'Creating account…') : mode === 'login' ? 'Sign in' : 'Create account'}
-          </button>
+              <label>
+                Email
+                <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required disabled={submitting} />
+              </label>
+              <label className="login-form-field-full">
+                Password
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  required
+                  disabled={submitting}
+                />
+              </label>
+            </div>
+          ) : (
+            <div className="login-form-grid">
+              <label>
+                Email
+                <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required disabled={submitting} />
+              </label>
+              <label>
+                Password
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  required
+                  disabled={submitting}
+                />
+              </label>
+            </div>
+          )}
+          <div className="login-card-status">
+            {success ? <p className="auth-success">{success}</p> : null}
+            {error ? <p className="login-error">{error}</p> : null}
+          </div>
+          <div className="login-card-actions">
+            <button type="submit" disabled={submitting}>
+              {submitting ? (mode === 'login' ? 'Signing in…' : 'Creating account…') : mode === 'login' ? 'Sign in' : 'Create account'}
+            </button>
+            <p className="login-card-footnote">
+              {mode === 'login'
+                ? 'Use the owner or assigned team credentials for this workspace.'
+                : 'Only valid business emails should be used for new tenant creation.'}
+            </p>
+          </div>
         </form>
       </main>
     </AuthRouteGuard>

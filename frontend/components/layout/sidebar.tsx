@@ -1,7 +1,7 @@
 'use client';
 
 import { Building2, Mail, PanelLeftClose, PanelLeftOpen, UserRound } from 'lucide-react';
-import { NAV_ITEMS } from '@/types/navigation';
+import { NAV_GROUP_ORDER, NAV_ITEMS } from '@/types/navigation';
 import { NavItem } from '@/components/ui/nav-item';
 import { SidebarLogoutButton } from '@/components/layout/sidebar-logout-button';
 import { EasyEcomLogo } from '@/components/branding/easy-ecom-logo';
@@ -22,23 +22,21 @@ export function Sidebar({
     }
     return canAccessPage(user?.roles, item.label, user?.allowed_pages);
   });
-  const groupedNavigation = visibleItems.reduce<Record<string, typeof NAV_ITEMS>>((acc, item) => {
-    if (!acc[item.group]) {
-      acc[item.group] = [];
-    }
-    acc[item.group].push(item);
-    return acc;
-  }, {});
+  const groupedNavigation = NAV_GROUP_ORDER.map((group) => ({
+    group,
+    items: visibleItems.filter((item) => item.group === group),
+  })).filter(({ items }) => items.length > 0);
   const workspaceName = user?.business_name?.trim() || (user?.roles?.includes('SUPER_ADMIN') ? 'Easy-Ecom Internal' : 'Business workspace');
   const primaryRole = user?.roles?.[0]?.replaceAll('_', ' ') || 'Workspace user';
   const quickStatus = user?.roles?.includes('SUPER_ADMIN') ? 'Platform control' : 'Tenant workspace';
+  const navCount = visibleItems.length;
 
   return (
     <aside className={collapsed ? 'sidebar sidebar-collapsed' : 'sidebar'} aria-label="Primary">
       <div className="brand-block">
         <div className="brand-badge-row">
           <span className="brand-badge">{quickStatus}</span>
-          <span className="brand-badge muted">2026 UI</span>
+          <span className="brand-badge muted">{navCount} modules</span>
         </div>
         <div className="brand-top-row">
           <div className="brand-logo-wrap">
@@ -58,7 +56,7 @@ export function Sidebar({
           </button>
         </div>
         <h1 className="brand-title">Operations Hub</h1>
-        <p className="brand-subtitle">Unified commerce command center with faster daily workflows.</p>
+        <p className="brand-subtitle">Unified commerce command center for daily operations, control, and exceptions.</p>
         <div className="sidebar-user-card">
           <div className="sidebar-user-row">
             <Building2 size={15} aria-hidden="true" />
@@ -85,7 +83,7 @@ export function Sidebar({
         </div>
       </div>
       <nav className="sidebar-nav">
-        {Object.entries(groupedNavigation).map(([group, items]) => (
+        {groupedNavigation.map(({ group, items }) => (
           <section key={group} className="nav-group" aria-label={group}>
             <h2>{group}</h2>
             <ul className="nav-list">
@@ -101,7 +99,7 @@ export function Sidebar({
       <footer className="sidebar-footer">
         <p className="eyebrow">Workspace</p>
         <strong>Production Mode</strong>
-        <p className="sidebar-footer-copy">Designed for high-volume operations with tenant-safe workflows.</p>
+        <p className="sidebar-footer-copy">Tenant-safe workflows, variant-level stock truth, and auditable actions.</p>
         <SidebarLogoutButton />
       </footer>
     </aside>
