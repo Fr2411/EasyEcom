@@ -52,6 +52,7 @@ export default function LoginPage() {
     <AuthRouteGuard mode="public-only">
       <main className="login-page">
         <section className="login-hero">
+          <p className="login-eyebrow">EasyEcom Platform</p>
           <div className="login-hero-logo">
             <EasyEcomLogo
               className="easyecom-logo easyecom-logo-hero"
@@ -60,6 +61,11 @@ export default function LoginPage() {
           </div>
           <h1>Welcome to your operations command center.</h1>
           <p>Monitor inventory, sales, finance, and automation workflows in one premium workspace.</p>
+          <div className="login-hero-points">
+            <span>Variant-aware stock truth</span>
+            <span>Fast operational workflows</span>
+            <span>Role-aware business access</span>
+          </div>
         </section>
         <form className="login-card" onSubmit={onSubmit}>
           <h1 className="login-title">EasyEcom Login</h1>

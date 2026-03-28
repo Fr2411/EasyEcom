@@ -31,10 +31,15 @@ export function Sidebar({
   }, {});
   const workspaceName = user?.business_name?.trim() || (user?.roles?.includes('SUPER_ADMIN') ? 'Easy-Ecom Internal' : 'Business workspace');
   const primaryRole = user?.roles?.[0]?.replaceAll('_', ' ') || 'Workspace user';
+  const quickStatus = user?.roles?.includes('SUPER_ADMIN') ? 'Platform control' : 'Tenant workspace';
 
   return (
     <aside className={collapsed ? 'sidebar sidebar-collapsed' : 'sidebar'} aria-label="Primary">
       <div className="brand-block">
+        <div className="brand-badge-row">
+          <span className="brand-badge">{quickStatus}</span>
+          <span className="brand-badge muted">2026 UI</span>
+        </div>
         <div className="brand-top-row">
           <div className="brand-logo-wrap">
             <EasyEcomLogo
@@ -53,7 +58,7 @@ export function Sidebar({
           </button>
         </div>
         <h1 className="brand-title">Operations Hub</h1>
-        <p className="brand-subtitle">Business Command Center</p>
+        <p className="brand-subtitle">Unified commerce command center with faster daily workflows.</p>
         <div className="sidebar-user-card">
           <div className="sidebar-user-row">
             <Building2 size={15} aria-hidden="true" />
@@ -96,6 +101,7 @@ export function Sidebar({
       <footer className="sidebar-footer">
         <p className="eyebrow">Workspace</p>
         <strong>Production Mode</strong>
+        <p className="sidebar-footer-copy">Designed for high-volume operations with tenant-safe workflows.</p>
         <SidebarLogoutButton />
       </footer>
     </aside>
