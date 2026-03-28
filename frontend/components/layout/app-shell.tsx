@@ -21,11 +21,7 @@ function writeSidebarPreference(collapsed: boolean) {
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-
-  useEffect(() => {
-    setSidebarCollapsed(readSidebarPreference());
-  }, []);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => readSidebarPreference());
 
   useEffect(() => {
     writeSidebarPreference(sidebarCollapsed);

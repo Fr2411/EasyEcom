@@ -32,7 +32,7 @@ describe('Sidebar role filtering', () => {
 
     expect(screen.getByRole('link', { name: 'Inventory' })).toBeTruthy();
     expect(screen.queryByRole('link', { name: 'Customers' })).toBeNull();
-    expect(screen.queryByRole('link', { name: 'Purchases' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Purchases' })).toBeTruthy();
     expect(screen.queryByRole('link', { name: 'Admin' })).toBeNull();
     expect(screen.queryByRole('link', { name: 'Finance' })).toBeNull();
   });

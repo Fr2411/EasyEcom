@@ -48,12 +48,13 @@ export function NavItem({
   collapsed?: boolean;
 }) {
   const pathname = usePathname();
-  const isActive = pathname === item.href;
+  const isActive = item.href === '/' ? pathname === item.href : pathname === item.href || pathname.startsWith(`${item.href}/`);
   const Icon = ICONS[item.icon];
 
   return (
     <Link
       href={item.href}
+      aria-current={isActive ? 'page' : undefined}
       className={collapsed ? `${isActive ? 'nav-link active' : 'nav-link'} collapsed` : isActive ? 'nav-link active' : 'nav-link'}
       aria-label={item.label}
       title={collapsed ? item.label : undefined}
