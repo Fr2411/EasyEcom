@@ -273,6 +273,7 @@ def _seed_reporting_fixture(runtime, *, base_at: datetime) -> None:
             client_id=CLIENT_ID,
             sales_order_id=sales_order.sales_order_id,
             status="completed",
+            direction="in",
             method="cash",
             amount=Decimal("250"),
             paid_at=sale_at,
@@ -316,6 +317,7 @@ def _seed_reporting_fixture(runtime, *, base_at: datetime) -> None:
                 client_id=CLIENT_ID,
                 sales_return_id=sales_return.sales_return_id,
                 status="completed",
+                direction="out",
                 method="cash",
                 amount=Decimal("60"),
                 paid_at=return_at,
@@ -589,14 +591,9 @@ def test_reports_reconcile_from_variant_first_sources(monkeypatch, tmp_path: Pat
     finance_payload = finance.json()
     assert finance_payload["expense_total"] == 50.0
     assert finance_payload["receivables_total"] == 50.0
-    assert finance_payload["payables_total"] is None
+    assert finance_payload["payables_total"] == 20.0
     assert finance_payload["net_operating_snapshot"] == -350.0
-    assert finance_payload["deferred_metrics"] == [
-        {
-            "metric": "payables_total",
-            "reason": "Disabled until supplier payment settlement is tracked canonically.",
-        }
-    ]
+    assert finance_payload["deferred_metrics"] == []
 
 
 def test_finance_overview_is_tenant_scoped_and_cash_reconciled(monkeypatch, tmp_path: Path) -> None:
@@ -610,20 +607,145 @@ def test_finance_overview_is_tenant_scoped_and_cash_reconciled(monkeypatch, tmp_
         "sales_revenue": 300.0,
         "expense_total": 50.0,
         "receivables": 50.0,
-        "payables": None,
+        "payables": 20.0,
         "cash_in": 250.0,
         "cash_out": 90.0,
         "net_operating": 160.0,
     }
 
 
-def test_static_finance_helper_routes_are_frozen(monkeypatch, tmp_path: Path) -> None:
+def test_finance_helper_routes_return_derived_snapshots(monkeypatch, tmp_path: Path) -> None:
     runtime = _setup_runtime(tmp_path, monkeypatch)
     _seed_reporting_fixture(runtime, base_at=datetime.utcnow().replace(microsecond=0))
     client = _login_client()
 
     accounts = client.get("/finance/accounts")
-    assert accounts.status_code == 503
+    assert accounts.status_code == 200
+    accounts_payload = accounts.json()
+    assert accounts_payload[0]["account_code"] == "cash_movement"
+    assert accounts_payload[1]["balance"] == 50.0
+    assert accounts_payload[2]["balance"] == 20.0
 
     reports = client.get("/finance/reports")
-    assert reports.status_code == 503
+    assert reports.status_code == 200
+    reports_payload = reports.json()
+    assert reports_payload[0]["report_code"] == "working_capital"
+    assert reports_payload[0]["payables"] == 20.0
+
+
+def test_finance_workspace_surfaces_recent_activity_and_subledgers(monkeypatch, tmp_path: Path) -> None:
+    runtime = _setup_runtime(tmp_path, monkeypatch)
+    _seed_reporting_fixture(runtime, base_at=datetime.utcnow().replace(microsecond=0))
+    client = _login_client()
+
+    response = client.get("/finance/workspace")
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["overview"]["receivables"] == 50.0
+    assert payload["overview"]["payables"] == 20.0
+    assert payload["transactions"][0]["entry_type"] in {"payment", "expense"}
+    assert payload["receivables"] == [
+        {
+            "sale_id": payload["receivables"][0]["sale_id"],
+            "sale_no": "SO-1001",
+            "customer_id": payload["receivables"][0]["customer_id"],
+            "customer_name": "Amina Buyer",
+            "sale_date": payload["receivables"][0]["sale_date"],
+            "grand_total": 300.0,
+            "amount_paid": 250.0,
+            "outstanding_balance": 50.0,
+            "payment_status": "partial",
+        }
+    ]
+    assert payload["payables"] == [
+        {
+            "expense_id": payload["payables"][0]["expense_id"],
+            "expense_number": "EXP-1002",
+            "vendor_name": "Utility",
+            "category": "utilities",
+            "expense_date": payload["payables"][0]["expense_date"],
+            "amount": 20.0,
+            "payment_status": "unpaid",
+            "note": "Power bill accrued",
+        }
+    ]
+
+
+def test_finance_transactions_are_writable_and_audited(monkeypatch, tmp_path: Path) -> None:
+    runtime = _setup_runtime(tmp_path, monkeypatch)
+    base_at = datetime.utcnow().replace(microsecond=0)
+    _seed_reporting_fixture(runtime, base_at=base_at)
+    client = _login_client()
+
+    payment_response = client.post(
+        "/finance/transactions",
+        json={
+            "entry_type": "payment",
+            "entry_date": base_at.isoformat(),
+            "category": "bank transfer",
+            "amount": 125.5,
+            "direction": "in",
+            "reference": "RCPT-2001",
+            "note": "Customer deposit",
+            "payment_status": "completed",
+        },
+    )
+    assert payment_response.status_code == 201
+    payment_payload = payment_response.json()
+    assert payment_payload["entry_type"] == "payment"
+    assert payment_payload["direction"] == "in"
+    assert payment_payload["payment_status"] == "completed"
+
+    expense_response = client.post(
+        "/finance/transactions",
+        json={
+            "entry_type": "expense",
+            "entry_date": (base_at + timedelta(seconds=1)).isoformat(),
+            "category": "shipping",
+            "amount": 75,
+            "direction": "out",
+            "reference": "BILL-2001",
+            "note": "Courier invoice",
+            "vendor_name": "FastShip",
+            "payment_status": "unpaid",
+        },
+    )
+    assert expense_response.status_code == 201
+    expense_payload = expense_response.json()
+    assert expense_payload["entry_type"] == "expense"
+    assert expense_payload["direction"] == "out"
+    assert expense_payload["vendor_name"] == "FastShip"
+    assert expense_payload["payment_status"] == "unpaid"
+
+    journal = client.get("/finance/transactions", params={"limit": 10})
+    assert journal.status_code == 200
+    journal_payload = journal.json()
+    assert journal_payload["total"] == 6
+    assert journal_payload["transactions"][0]["entry_id"] == expense_payload["entry_id"]
+    assert journal_payload["transactions"][0]["vendor_name"] == "FastShip"
+
+    update_response = client.put(
+        f"/finance/transactions/{payment_payload['entry_id']}",
+        json={
+            "entry_type": "payment",
+            "entry_date": base_at.isoformat(),
+            "category": "cash",
+            "amount": 95,
+            "direction": "in",
+            "reference": "RCPT-2001-REV",
+            "note": "Refunded amount",
+            "payment_status": "completed",
+        },
+    )
+    assert update_response.status_code == 200
+    updated_payload = update_response.json()
+    assert updated_payload["direction"] == "in"
+    assert updated_payload["amount"] == 95.0
+    assert updated_payload["reference"] == "RCPT-2001-REV"
+
+    audit = runtime.store.read("audit_log.csv")
+    finance_audit = audit[audit["entity_type"] == "finance_transaction"]
+    assert "payment_created" in set(finance_audit["action"].tolist())
+    assert "expense_created" in set(finance_audit["action"].tolist())
+    assert "payment_updated" in set(finance_audit["action"].tolist())

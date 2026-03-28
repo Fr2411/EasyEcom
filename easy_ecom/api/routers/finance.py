@@ -7,6 +7,7 @@ from easy_ecom.api.schemas.finance import (
     CreateTransactionRequest,
     FinanceOverviewResponse,
     FinanceTransaction,
+    FinanceWorkspaceResponse,
     TransactionListResponse,
     UpdateTransactionRequest,
 )
@@ -14,8 +15,6 @@ from easy_ecom.domain.models.auth import AuthenticatedUser
 from easy_ecom.domain.services.transaction_service import TransactionContext
 
 router = APIRouter(prefix="/finance", tags=["finance"])
-
-FROZEN_FINANCE_DETAIL = "This finance endpoint is temporarily disabled while reporting is rebuilt on canonical ledger-backed data."
 
 
 def _transaction_context(user: AuthenticatedUser) -> TransactionContext:
@@ -31,6 +30,21 @@ def finance_overview(
     return container.reports.get_finance_overview(user)
 
 
+@router.get("/workspace", response_model=FinanceWorkspaceResponse)
+def finance_workspace(
+    user: AuthenticatedUser = Depends(get_authenticated_user),
+    container: ServiceContainer = Depends(get_container),
+) -> FinanceWorkspaceResponse:
+    require_page_access(user, "Finance")
+    context = _transaction_context(user)
+    return FinanceWorkspaceResponse(
+        overview=container.reports.get_finance_overview(user),
+        transactions=container.transaction.get_transactions(context, limit=12, offset=0),
+        receivables=container.reports.list_finance_receivables(user, limit=8),
+        payables=container.reports.list_finance_payables(user, limit=8),
+    )
+
+
 @router.get("/transactions", response_model=TransactionListResponse)
 def list_transactions(
     transaction_type: Optional[str] = Query(None, description="Filter by transaction type: payment or expense"),
@@ -40,6 +54,8 @@ def list_transactions(
     container: ServiceContainer = Depends(get_container),
 ) -> TransactionListResponse:
     require_page_access(user, "Finance")
+    if transaction_type not in (None, "payment", "expense"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="transaction_type must be payment or expense")
     context = _transaction_context(user)
     transactions = container.transaction.get_transactions(
         context,
@@ -113,17 +129,92 @@ def update_transaction(
 
 @router.get("/accounts", response_model=List[dict])
 def list_accounts(
+    container: ServiceContainer = Depends(get_container),
     user: AuthenticatedUser = Depends(get_authenticated_user),
 ) -> List[dict]:
     require_page_access(user, "Finance")
-    raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=FROZEN_FINANCE_DETAIL)
+    overview = container.reports.get_finance_overview(user)
+    report = container.reports.get_finance_report(user)
+    return [
+        {
+            "account_code": "cash_movement",
+            "account_name": "Cash movement",
+            "balance": (overview.cash_in or 0) - (overview.cash_out or 0),
+            "status": "net_inflow" if (overview.cash_in or 0) >= (overview.cash_out or 0) else "net_outflow",
+            "note": "Current-window cash in and cash out from payments, refunds, and paid expenses.",
+        },
+        {
+            "account_code": "receivables",
+            "account_name": "Accounts receivable",
+            "balance": overview.receivables or report.receivables_total,
+            "status": "open" if (overview.receivables or 0) > 0 else "clear",
+            "note": "Open customer balances awaiting collection.",
+        },
+        {
+            "account_code": "payables",
+            "account_name": "Accounts payable",
+            "balance": overview.payables or report.payables_total or 0,
+            "status": "open" if (overview.payables or report.payables_total or 0) > 0 else "clear",
+            "note": "Unpaid supplier or operating expenses in the current window.",
+        },
+        {
+            "account_code": "sales_revenue",
+            "account_name": "Sales revenue",
+            "balance": overview.sales_revenue or 0,
+            "status": "active",
+            "note": "Confirmed sales revenue in the current operating window.",
+        },
+        {
+            "account_code": "expenses",
+            "account_name": "Expenses",
+            "balance": overview.expense_total or report.expense_total,
+            "status": "active",
+            "note": "Operational expense total captured by the finance journal.",
+        },
+    ]
 
 
 @router.get("/reports", response_model=List[dict])
 def list_financial_reports(
     report_type: Optional[str] = Query(None, description="Type of financial report"),
+    container: ServiceContainer = Depends(get_container),
     user: AuthenticatedUser = Depends(get_authenticated_user),
 ) -> List[dict]:
-    del report_type
     require_page_access(user, "Finance")
-    raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=FROZEN_FINANCE_DETAIL)
+    report = container.reports.get_finance_report(user)
+    overview = container.reports.get_finance_overview(user)
+
+    if report_type == "trend":
+        return [
+            {
+                "report_code": "expense_trend",
+                "title": "Expense trend",
+                "items": report.expense_trend,
+            },
+            {
+                "report_code": "cash_position",
+                "title": "Cash position",
+                "cash_in": overview.cash_in or 0,
+                "cash_out": overview.cash_out or 0,
+                "net_operating": overview.net_operating or report.net_operating_snapshot or 0,
+            },
+        ]
+
+    return [
+        {
+            "report_code": "working_capital",
+            "title": "Working capital snapshot",
+            "receivables": report.receivables_total,
+            "payables": report.payables_total or 0,
+            "net_operating_snapshot": report.net_operating_snapshot or 0,
+            "deferred_metrics": [metric.model_dump() for metric in report.deferred_metrics],
+        },
+        {
+            "report_code": "cash_visibility",
+            "title": "Cash visibility",
+            "cash_in": overview.cash_in or 0,
+            "cash_out": overview.cash_out or 0,
+            "sales_revenue": overview.sales_revenue or 0,
+            "expenses": overview.expense_total or 0,
+        },
+    ]

@@ -543,6 +543,7 @@ class PaymentModel(TenantMixin, TimestampMixin, Base):
     sales_order_id: Mapped[str | None] = mapped_column(GUID(), ForeignKey("sales_orders.sales_order_id", ondelete="SET NULL"))
     sales_return_id: Mapped[str | None] = mapped_column(GUID(), ForeignKey("sales_returns.sales_return_id", ondelete="SET NULL"))
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending", index=True)
+    direction: Mapped[str] = mapped_column(String(8), nullable=False, default="in", index=True)
     method: Mapped[str] = mapped_column(String(64), nullable=False, default="manual")
     amount: Mapped[Decimal] = mapped_column(Amount, nullable=False, default=Decimal("0"))
     paid_at: Mapped[datetime | None] = mapped_column(Timestamp)
