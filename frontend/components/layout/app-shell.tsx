@@ -33,6 +33,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className={sidebarCollapsed ? 'shell sidebar-collapsed' : 'shell'}>
+      <div className="shell-backdrop" aria-hidden="true">
+        <span className="shell-orb shell-orb-a" />
+        <span className="shell-orb shell-orb-b" />
+        <span className="shell-grid" />
+      </div>
       <Sidebar
         collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed((current) => !current)}

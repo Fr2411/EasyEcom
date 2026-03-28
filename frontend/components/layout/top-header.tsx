@@ -3,6 +3,7 @@
 import { FormEvent, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useRouter } from 'next/navigation';
+import { Command, Search, Sparkles } from 'lucide-react';
 import { NAV_ITEMS } from '@/types/navigation';
 
 const DEFAULT_TITLE = 'Operations Workspace';
@@ -33,12 +34,21 @@ export function TopHeader() {
 
   return (
     <header className="top-header">
-      <div>
-        <p className="eyebrow">EasyEcom / {matchedRoute?.group ?? 'Overview'}</p>
+      <div className="header-copy">
+        <div className="header-kicker-row">
+          <p className="eyebrow">EasyEcom / {matchedRoute?.group ?? 'Overview'}</p>
+          <span className="header-kicker-pill">
+            <Sparkles size={14} aria-hidden="true" />
+            Live workspace
+          </span>
+        </div>
         <p className="header-title">{matchedRoute?.label ?? DEFAULT_TITLE}</p>
         <p className="header-subtitle">Operations Workspace</p>
       </div>
       <form className="header-search" aria-label="Global search" onSubmit={onSubmit}>
+        <span className="header-search-icon" aria-hidden="true">
+          <Search size={16} />
+        </span>
         <select
           aria-label="Search scope"
           className="header-search-scope"
@@ -60,8 +70,11 @@ export function TopHeader() {
         <button type="submit" className="header-search-button">Search</button>
       </form>
       <div className="header-utilities">
+        <div className="header-command-chip">
+          <Command size={14} aria-hidden="true" />
+          Quick actions
+        </div>
         <button type="button" className="header-btn">+ New</button>
-        <div className="header-pill">Live Workspace</div>
       </div>
     </header>
   );
