@@ -13,12 +13,25 @@ cleanup() {
 trap cleanup EXIT
 
 if [[ -z "${OUTPUT_PATH}" ]]; then
-  OUTPUT_PATH="$(mktemp "/tmp/easyecom-backend-${DEPLOY_SHA:0:12}-XXXXXX.tar.gz")"
+  OUTPUT_DIR="$(mktemp -d "/tmp/easyecom-backend-${DEPLOY_SHA:0:12}-XXXXXX")"
+  OUTPUT_PATH="${OUTPUT_DIR}/backend-release.tar.gz"
 fi
 
-git ls-tree -r --name-only "${DEPLOY_SHA}" -- pyproject.toml startup.sh easy_ecom \
-  | grep -Ev '(^|/).*\.(bak|backup|backup2|orig|work|debug)$' > "${FILE_LIST}"
+{
+  printf '%s\n' "pyproject.toml" "startup.sh"
+  find easy_ecom -type f \
+    ! -path '*/__pycache__/*' \
+    ! -name '*.pyc' \
+    ! -name '*.pyo' \
+    ! -name '._*' \
+    ! -name '*.bak' \
+    ! -name '*.backup' \
+    ! -name '*.backup2' \
+    ! -name '*.orig' \
+    ! -name '*.work' \
+    ! -name '*.debug'
+} | LC_ALL=C sort > "${FILE_LIST}"
 
-tar -czf "${OUTPUT_PATH}" -T "${FILE_LIST}"
+COPYFILE_DISABLE=1 tar -czf "${OUTPUT_PATH}" -T "${FILE_LIST}"
 
 echo "${OUTPUT_PATH}"

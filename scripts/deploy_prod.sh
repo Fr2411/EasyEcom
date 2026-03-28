@@ -63,6 +63,9 @@ rsync -a --delete \
   --exclude '__pycache__/' \
   "$RELEASE_DIR"/ "$PROJECT_DIR"/
 
+echo "[remote] Removing AppleDouble metadata artifacts from backend tree"
+find "$PROJECT_DIR/easy_ecom" -name '._*' -type f -delete
+
 echo "[remote] Recording deployed backend release"
 printf '%s\n' "$DEPLOY_SHA" > "$PROJECT_DIR/CURRENT_BACKEND_RELEASE"
 

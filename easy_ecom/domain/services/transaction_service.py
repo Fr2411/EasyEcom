@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import List, Optional, Union
 from uuid import UUID
 
-from sqlalchemy import select, update, delete, and_
+from sqlalchemy import and_, func, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from easy_ecom.data.store.postgres_models import (
@@ -46,7 +46,7 @@ class TransactionService:
             "entry_type": "payment",
             "category": payment.method,
             "amount": float(payment.amount),
-            "direction": "in",  # Assuming all payments are incoming (received from customers)
+            "direction": "out" if payment.sales_return_id else "in",
             "reference": payment.reference,
             "note": payment.notes,
         }
@@ -92,6 +92,29 @@ class TransactionService:
             # Sort by entry_date descending
             transactions.sort(key=lambda x: x["entry_date"], reverse=True)
             return transactions[offset:offset+limit]
+
+    def count_transactions(
+        self,
+        context: TransactionContext,
+        transaction_type: Optional[str] = None,
+    ) -> int:
+        with self._session_factory() as session:
+            total = 0
+            if transaction_type in [None, "payment"]:
+                total += int(
+                    session.execute(
+                        select(func.count()).select_from(PaymentModel).where(self._get_payment_filters(context))
+                    ).scalar_one()
+                    or 0
+                )
+            if transaction_type in [None, "expense"]:
+                total += int(
+                    session.execute(
+                        select(func.count()).select_from(ExpenseModel).where(self._get_expense_filters(context))
+                    ).scalar_one()
+                    or 0
+                )
+            return total
 
     def get_transaction(
         self,

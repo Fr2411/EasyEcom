@@ -1,5 +1,13 @@
-import { redirect } from 'next/navigation';
+import { PageShell } from '@/components/ui/page-shell';
+import { PurchasesWorkspace } from '@/components/purchases/purchases-workspace';
 
 export default function PurchasesPage() {
-  redirect('/inventory?tab=receive');
+  return (
+    <PageShell
+      title="Purchases"
+      description="Manage purchase-order visibility here while inventory receipt remains inside the canonical variant-level receive-stock workflow."
+    >
+      <PurchasesWorkspace />
+    </PageShell>
+  );
 }

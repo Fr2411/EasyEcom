@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Iterator
 
-from fastapi import Cookie, Depends
+from fastapi import Cookie, Depends, Request
+from sqlalchemy.engine import Engine
+from sqlalchemy.orm import Session, sessionmaker
 
 from easy_ecom.core.config import settings
 from easy_ecom.core.errors import ApiException
@@ -24,8 +27,8 @@ from easy_ecom.domain.services.commerce_service import (
 )
 from easy_ecom.domain.services.dashboard_service import DashboardAnalyticsService
 from easy_ecom.domain.services.overview_service import OverviewService
-from easy_ecom.domain.services.reports_service import ReportsService
 from easy_ecom.domain.services.sales_agent_service import SalesAgentService
+from easy_ecom.domain.services.settings_service import SettingsService
 from easy_ecom.domain.services.transaction_service import TransactionService
 
 
@@ -40,15 +43,26 @@ class SessionUserPayload:
     business_name: str | None
 
 
+class RequestSessionFactory:
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    @contextmanager
+    def __call__(self) -> Iterator[Session]:
+        yield self._session
+
+
 class ServiceContainer:
-    def __init__(self) -> None:
-        engine = build_runtime_engine(settings)
-        session_factory = build_session_factory(engine)
+    def __init__(self, session: Session) -> None:
+        session_factory = RequestSessionFactory(session)
+        self._session = session
+        self._session_factory = session_factory
         self.auth = AuthService(PostgresAuthRepo(session_factory))
         self.admin = AdminService(session_factory)
         self.dashboard = DashboardAnalyticsService(session_factory)
         self.overview = OverviewService(session_factory)
-        self.reports = ReportsService(session_factory)
+        self._reports = None
+        self.settings = SettingsService(session_factory)
         self.transaction = TransactionService(session_factory)
         self.catalog = CatalogService(session_factory)
         self.inventory = InventoryService(session_factory)
@@ -56,13 +70,50 @@ class ServiceContainer:
         self.returns = ReturnsService(session_factory)
         self.sales_agent = SalesAgentService(session_factory)
 
+    @property
+    def reports(self):
+        if self._reports is None:
+            from easy_ecom.domain.services.reports_service import ReportsService
+
+            self._reports = ReportsService(self._session_factory)
+        return self._reports
+
 
 def _signer() -> SessionSigner:
     return SessionSigner(settings.session_secret)
 
 
-def get_container() -> ServiceContainer:
-    return ServiceContainer()
+def _ensure_runtime_state(request: Request) -> tuple[Engine, sessionmaker[Session]]:
+    engine = getattr(request.app.state, "db_engine", None)
+    session_factory = getattr(request.app.state, "db_session_factory", None)
+    if engine is None or session_factory is None:
+        engine = build_runtime_engine(settings)
+        session_factory = build_session_factory(engine)
+        request.app.state.db_engine = engine
+        request.app.state.db_session_factory = session_factory
+    return engine, session_factory
+
+
+def get_engine(request: Request) -> Engine:
+    engine, _ = _ensure_runtime_state(request)
+    return engine
+
+
+def get_session_factory(request: Request) -> sessionmaker[Session]:
+    _, session_factory = _ensure_runtime_state(request)
+    return session_factory
+
+
+def get_db_session(session_factory: sessionmaker[Session] = Depends(get_session_factory)) -> Iterator[Session]:
+    session = session_factory()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+def get_container(session: Session = Depends(get_db_session)) -> ServiceContainer:
+    return ServiceContainer(session)
 
 
 def build_session_token(user: AuthenticatedUser) -> str:

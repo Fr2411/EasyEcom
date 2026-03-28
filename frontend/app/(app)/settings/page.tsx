@@ -1,5 +1,5 @@
 import { PageShell } from '@/components/ui/page-shell';
-import { ResetPlaceholder } from '@/components/ui/reset-placeholder';
+import { SettingsWorkspace } from '@/components/settings/settings-workspace';
 
 export default function SettingsPage() {
   return (
@@ -7,7 +7,7 @@ export default function SettingsPage() {
       title="Settings"
       description="Business profile, operational preferences, and tenant configuration controls."
     >
-      <ResetPlaceholder moduleName="Settings" />
+      <SettingsWorkspace />
     </PageShell>
   );
 }

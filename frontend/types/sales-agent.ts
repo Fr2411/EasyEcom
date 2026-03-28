@@ -26,6 +26,7 @@ export type SalesAgentMessage = {
 export type SalesAgentDraft = {
   draft_id: string;
   conversation_id: string;
+  inbound_message_id: string;
   linked_sales_order_id: string | null;
   status: string;
   ai_draft_text: string;
@@ -35,9 +36,19 @@ export type SalesAgentDraft = {
   confidence: string | null;
   grounding: Record<string, unknown>;
   reason_codes: string[];
+  requested_by_user_id: string | null;
+  requested_by_name: string | null;
+  approved_by_user_id: string | null;
+  approved_by_name: string | null;
+  sent_by_user_id: string | null;
+  sent_by_name: string | null;
+  created_at: string;
+  updated_at: string;
   approved_at: string | null;
   sent_at: string | null;
   failed_reason: string | null;
+  send_result: Record<string, unknown>;
+  outbound_message_id: string | null;
   human_modified: boolean;
 };
 
