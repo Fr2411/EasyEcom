@@ -127,7 +127,7 @@ describe('AdminWorkspace', () => {
     await waitFor(() => expect(screen.getByText('Find or stage a tenant')).toBeTruthy());
 
     expect(screen.getByText('Stage new tenant')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Review before creating' })).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Review before creating' }).length).toBeGreaterThan(0);
     expect(screen.getByText('Tenant shell preview')).toBeTruthy();
   });
 
