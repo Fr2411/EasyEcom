@@ -8,7 +8,7 @@ from typing import Optional
 from sqlalchemy import and_, case, func, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from easy_ecom.api.schemas.finance import FinanceOverviewResponse
+from easy_ecom.api.schemas.finance import FinanceOverviewResponse, FinancePayable, FinanceReceivable
 from easy_ecom.api.schemas.reports import (
     FinanceReport,
     InventoryReport,
@@ -235,6 +235,18 @@ class ReportsService:
         ).scalar_one()
         return _as_decimal(value)
 
+    def _payables_total(self, session: Session, context: ReportContext, date_range: DateRange) -> Decimal:
+        expense_event = self._expense_event_expr()
+        value = session.execute(
+            select(func.coalesce(func.sum(ExpenseModel.amount), 0)).where(
+                *self._tenant_filters(context, ExpenseModel),
+                ExpenseModel.payment_status.notin_(PAID_EXPENSE_STATUSES),
+                expense_event >= date_range.start,
+                expense_event < date_range.end_exclusive,
+            )
+        ).scalar_one()
+        return _as_decimal(value)
+
     def _receivables_total(self, session: Session, context: ReportContext, date_range: DateRange) -> Decimal:
         payment_event = self._payment_event_expr()
         payments_subquery = (
@@ -275,6 +287,124 @@ class ReportsService:
                 outstanding += balance
         return outstanding
 
+    def list_finance_receivables(
+        self,
+        user: AuthenticatedUser,
+        *,
+        limit: int = 10,
+    ) -> list[FinanceReceivable]:
+        context = ReportContext(user)
+        date_range = self._date_range(None, None)
+        payment_event = self._payment_event_expr()
+        sales_event = self._sales_event_expr()
+
+        with self._session_factory() as session:
+            payments_subquery = (
+                select(
+                    PaymentModel.sales_order_id.label("sales_order_id"),
+                    func.coalesce(func.sum(PaymentModel.amount), 0).label("paid_amount"),
+                )
+                .where(
+                    *self._tenant_filters(context, PaymentModel),
+                    PaymentModel.sales_order_id.is_not(None),
+                    PaymentModel.status.in_(COMPLETED_PAYMENT_STATUSES),
+                    payment_event < date_range.end_exclusive,
+                )
+                .group_by(PaymentModel.sales_order_id)
+                .subquery()
+            )
+
+            rows = session.execute(
+                select(
+                    SalesOrderModel.sales_order_id,
+                    SalesOrderModel.order_number,
+                    SalesOrderModel.customer_id,
+                    CustomerModel.name,
+                    sales_event.label("sale_date"),
+                    SalesOrderModel.total_amount,
+                    payments_subquery.c.paid_amount,
+                    SalesOrderModel.payment_status,
+                )
+                .select_from(SalesOrderModel)
+                .outerjoin(payments_subquery, payments_subquery.c.sales_order_id == SalesOrderModel.sales_order_id)
+                .outerjoin(CustomerModel, CustomerModel.customer_id == SalesOrderModel.customer_id)
+                .where(
+                    *self._tenant_filters(context, SalesOrderModel),
+                    SalesOrderModel.status.in_(OPEN_ORDER_STATUSES),
+                    sales_event >= date_range.start,
+                    sales_event < date_range.end_exclusive,
+                )
+                .order_by(sales_event.desc(), SalesOrderModel.order_number.desc())
+                .limit(limit)
+            ).all()
+
+            items: list[FinanceReceivable] = []
+            for row in rows:
+                outstanding = _as_decimal(row.total_amount) - _as_decimal(row.paid_amount)
+                if outstanding <= ZERO:
+                    continue
+                sale_date = row.sale_date.isoformat() if hasattr(row.sale_date, "isoformat") else str(row.sale_date)
+                items.append(
+                    FinanceReceivable(
+                        sale_id=str(row.sales_order_id),
+                        sale_no=str(row.order_number),
+                        customer_id=str(row.customer_id) if row.customer_id else None,
+                        customer_name=str(row.name or "Walk-in customer"),
+                        sale_date=sale_date,
+                        grand_total=_as_float(row.total_amount),
+                        amount_paid=_as_float(row.paid_amount),
+                        outstanding_balance=_as_float(outstanding),
+                        payment_status=str(row.payment_status or "unpaid"),
+                    )
+                )
+            return items
+
+    def list_finance_payables(
+        self,
+        user: AuthenticatedUser,
+        *,
+        limit: int = 10,
+    ) -> list[FinancePayable]:
+        context = ReportContext(user)
+        date_range = self._date_range(None, None)
+        expense_event = self._expense_event_expr()
+
+        with self._session_factory() as session:
+            rows = session.execute(
+                select(
+                    ExpenseModel.expense_id,
+                    ExpenseModel.expense_number,
+                    ExpenseModel.vendor_name,
+                    ExpenseModel.category,
+                    expense_event.label("expense_date"),
+                    ExpenseModel.amount,
+                    ExpenseModel.payment_status,
+                    ExpenseModel.description,
+                )
+                .where(
+                    *self._tenant_filters(context, ExpenseModel),
+                    ExpenseModel.payment_status.notin_(PAID_EXPENSE_STATUSES),
+                    expense_event >= date_range.start,
+                    expense_event < date_range.end_exclusive,
+                )
+                .order_by(expense_event.desc(), ExpenseModel.expense_number.desc())
+                .limit(limit)
+            ).all()
+
+            return [
+                FinancePayable(
+                    expense_id=str(row.expense_id),
+                    expense_number=str(row.expense_number),
+                    vendor_name=str(row.vendor_name or "Unassigned vendor"),
+                    category=str(row.category),
+                    expense_date=row.expense_date.isoformat() if hasattr(row.expense_date, "isoformat") else str(row.expense_date),
+                    amount=_as_float(row.amount),
+                    payment_status=str(row.payment_status),
+                    note=str(row.description or ""),
+                )
+                for row in rows
+            ]
+
     def get_finance_overview(self, user: AuthenticatedUser) -> FinanceOverviewResponse:
         context = ReportContext(user)
         date_range = self._date_range(None, None)
@@ -285,6 +415,7 @@ class ReportsService:
             sales_summary = self._sales_summary(session, context, date_range)
             expense_total = self._expense_total(session, context, date_range)
             receivables = self._receivables_total(session, context, date_range)
+            payables = self._payables_total(session, context, date_range)
 
             cash_in = _as_decimal(
                 session.execute(
@@ -326,7 +457,7 @@ class ReportsService:
                 sales_revenue=_as_float(sales_summary.revenue_total),
                 expense_total=_as_float(expense_total),
                 receivables=_as_float(receivables),
-                payables=None,
+                payables=_as_float(payables),
                 cash_in=_as_float(cash_in),
                 cash_out=_as_float(cash_out),
                 net_operating=_as_float(cash_in - cash_out),
@@ -639,6 +770,7 @@ class ReportsService:
             return_summary = self._return_summary(session, context, date_range)
             expense_total = self._expense_total(session, context, date_range)
             receivables_total = self._receivables_total(session, context, date_range)
+            payables_total = self._payables_total(session, context, date_range)
 
             expense_trend_rows = session.execute(
                 select(
@@ -663,16 +795,11 @@ class ReportsService:
                     for row in expense_trend_rows
                 ],
                 receivables_total=_as_float(receivables_total),
-                payables_total=None,
+                payables_total=_as_float(payables_total),
                 net_operating_snapshot=_as_float(
                     sales_summary.revenue_total - expense_total - purchase_summary.subtotal - return_summary.amount_total
                 ),
-                deferred_metrics=[
-                    ReportDeferredMetric(
-                        metric="payables_total",
-                        reason="Disabled until supplier payment settlement is tracked canonically.",
-                    )
-                ],
+                deferred_metrics=[],
             )
 
     def get_returns_report(self, user: AuthenticatedUser, from_date: Optional[str] = None, to_date: Optional[str] = None) -> ReturnsReport:
