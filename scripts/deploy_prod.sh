@@ -34,45 +34,43 @@ ssh -T \
   -o IPQoS=throughput \
   -o IdentitiesOnly=yes \
   -i "$SSH_KEY" \
-  "${EC2_USER}@${EC2_HOST}" <<REMOTE
+  "${EC2_USER}@${EC2_HOST}" \
+  "DEPLOY_SHA='${DEPLOY_SHA}' REMOTE_ARTIFACT='${REMOTE_ARTIFACT}' bash -s" <<'REMOTE'
 set -euo pipefail
-
-export DEPLOY_SHA="${DEPLOY_SHA}"
-export REMOTE_ARTIFACT="${REMOTE_ARTIFACT}"
 
 PROJECT_DIR="/home/ec2-user/EasyEcom"
 VENV_DIR="$PROJECT_DIR/.venv"
 SERVICE_NAME="easy-ecom.service"
-RELEASE_DIR="\$(mktemp -d /tmp/easyecom-release-XXXXXX)"
+RELEASE_DIR="$(mktemp -d /tmp/easyecom-release-XXXXXX)"
 
 cleanup() {
-  rm -rf "\$RELEASE_DIR"
-  rm -f "\$REMOTE_ARTIFACT"
+  rm -rf "$RELEASE_DIR"
+  rm -f "$REMOTE_ARTIFACT"
 }
 trap cleanup EXIT
 
 echo "[remote] Entering project directory"
-cd "\$PROJECT_DIR"
+cd "$PROJECT_DIR"
 
-echo "[remote] Release SHA: ${DEPLOY_SHA}"
+echo "[remote] Release SHA: $DEPLOY_SHA"
 echo "[remote] Extracting backend artifact"
-tar -xzf "\$REMOTE_ARTIFACT" -C "\$RELEASE_DIR"
+tar -xzf "$REMOTE_ARTIFACT" -C "$RELEASE_DIR"
 
 echo "[remote] Syncing backend runtime files into project directory"
 rsync -a --delete \
   --exclude '.env' \
   --exclude '.venv/' \
   --exclude '__pycache__/' \
-  "\$RELEASE_DIR"/ "\$PROJECT_DIR"/
+  "$RELEASE_DIR"/ "$PROJECT_DIR"/
 
 echo "[remote] Recording deployed backend release"
-printf '%s\n' "$DEPLOY_SHA" > "\$PROJECT_DIR/CURRENT_BACKEND_RELEASE"
+printf '%s\n' "$DEPLOY_SHA" > "$PROJECT_DIR/CURRENT_BACKEND_RELEASE"
 
 echo "[remote] Activating virtual environment"
-if [[ ! -d "\$VENV_DIR" ]]; then
-  python3 -m venv "\$VENV_DIR"
+if [[ ! -d "$VENV_DIR" ]]; then
+  python3 -m venv "$VENV_DIR"
 fi
-source "\$VENV_DIR/bin/activate"
+source "$VENV_DIR/bin/activate"
 
 echo "[remote] Installing dependencies"
 pip install --upgrade pip
@@ -85,10 +83,10 @@ echo "[remote] Seeding baseline data if needed"
 python3 -m easy_ecom.scripts.init_data
 
 echo "[remote] Restarting backend service"
-sudo systemctl restart "\$SERVICE_NAME"
+sudo systemctl restart "$SERVICE_NAME"
 
 echo "[remote] Service status"
-sudo systemctl status "\$SERVICE_NAME" --no-pager
+sudo systemctl status "$SERVICE_NAME" --no-pager
 
 echo "[remote] Deployment completed successfully"
 echo "[remote] Next checks:"
