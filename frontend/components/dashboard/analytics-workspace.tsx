@@ -19,6 +19,7 @@ import {
   Scatter,
   ZAxis,
 } from 'recharts';
+import { HoverHint } from '@/components/ui/hover-hint';
 import type {
   DashboardAnalytics,
   DashboardInsightCard,
@@ -550,11 +551,13 @@ export function DashboardAnalyticsWorkspace() {
       <section className="section-card dashboard-hero-card bg-glass p-6 rounded-lg shadow-glass transition-normal hover:shadow-glass-hover">
         <div className="foundation-hero">
           <p className="eyebrow text-xs text-muted uppercase tracking-wider">Business Analytics Dashboard</p>
-          <h3 className="text-lg font-semibold mt-2">MTD by default, with product, stock, and margin intelligence built from transactional truth.</h3>
-          <p className="text-sm text-muted mt-2">
-            This view blends completed sales, returns, purchase receipts, and variant-level inventory ledger movement so
-            owners can spot growth, pressure, and product opportunities early.
-          </p>
+          <h3 className="workspace-heading text-lg font-semibold mt-2">
+            Dashboard controls
+            <HoverHint
+              text="This dashboard blends completed sales, returns, purchase receipts, and variant-level inventory ledger movement so owners can monitor growth, pressure, and product opportunities."
+              label="Dashboard controls help"
+            />
+          </h3>
         </div>
         <div className="dashboard-toolbar flex flex-wrap items-end justify-between gap-4 mt-4">
           <div className="dashboard-filters flex flex-wrap items-end gap-4">

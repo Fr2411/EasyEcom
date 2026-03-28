@@ -45,6 +45,8 @@ export function WorkspacePanel({
   actions?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const helpText = [description, hint].filter(Boolean).join(' ');
+
   return (
     <section className="workspace-panel">
       <header className="workspace-panel-header">
@@ -53,13 +55,12 @@ export function WorkspacePanel({
             {typeof title === 'string' ? (
               <span className="workspace-heading">
                 {title}
-                {hint ? <HoverHint text={hint} label={hintLabel} /> : null}
+                {helpText ? <HoverHint text={helpText} label={hintLabel ?? `${title} help`} /> : null}
               </span>
             ) : (
               title
             )}
           </h3>
-          {description ? <p>{description}</p> : null}
         </div>
         {actions ? <div className="workspace-panel-actions">{actions}</div> : null}
       </header>

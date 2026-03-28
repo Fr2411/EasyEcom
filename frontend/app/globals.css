@@ -2074,6 +2074,7 @@ button:hover {
   margin-top: 0.15rem;
   color: var(--text-muted);
   font-size: 0.86rem;
+  display: none;
 }
 
 .header-search {
@@ -2200,23 +2201,7 @@ button:hover {
 
 .page-shell-copy {
   display: grid;
-  gap: 0.3rem;
-}
-
-.page-shell-eyebrow {
-  margin: 0;
-  color: var(--primary-strong);
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.page-shell-description {
-  max-width: 72ch;
-  margin: 0;
-  color: var(--text-muted);
-  line-height: 1.6;
+  gap: 0.1rem;
 }
 
 .page-shell-body,
@@ -2263,7 +2248,6 @@ button:hover {
   border-bottom: 1px solid rgba(126, 148, 142, 0.12);
 }
 
-.workspace-panel-header p,
 .workspace-subsection-header p,
 .workspace-empty p,
 .commerce-card-header p,
@@ -2272,6 +2256,12 @@ button:hover {
 .admin-muted,
 .settings-muted {
   color: var(--text-muted);
+}
+
+.foundation-hero .eyebrow,
+.foundation-card p,
+.page-shell-chip {
+  display: none;
 }
 
 .workspace-notice,
