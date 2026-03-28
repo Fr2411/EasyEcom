@@ -32,7 +32,6 @@ import type {
 import {
   DraftRecommendationCard,
   IntentInput,
-  MatchGroupList,
   StagedActionFooter,
   SuggestedNextStep,
   WorkspaceEmpty,
@@ -272,21 +271,6 @@ export function AdminWorkspace() {
   const [accessDrafts, setAccessDrafts] = useState<Record<string, AccessState>>({});
   const [accessLoading, setAccessLoading] = useState(false);
   const [accessError, setAccessError] = useState<string | null>(null);
-  async function loadClientDirectory(currentSearch = search) {
-    const response = await listAdminClients(currentSearch);
-    setClients(response.items);
-    if (!creatingClient && !selectedClientId && response.items[0]) {
-      setSelectedClientId(response.items[0].client_id);
-    }
-    if (
-      !creatingClient &&
-      selectedClientId &&
-      !response.items.some((item) => item.client_id === selectedClientId)
-    ) {
-      setSelectedClientId(response.items[0]?.client_id ?? null);
-    }
-  }
-
   async function loadSelectedClient(clientId: string) {
     const [client, users, audit] = await Promise.all([
       getAdminClient(clientId),
@@ -733,7 +717,7 @@ export function AdminWorkspace() {
         />
         <div className="admin-toolbar-actions">
           <button type="button" onClick={() => startCreateMode(seedOnboardFormFromQuery(search))}>
-            Start new tenant
+            Start onboarding
           </button>
         </div>
         <div className="admin-table-wrap">
