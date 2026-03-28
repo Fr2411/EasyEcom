@@ -2,7 +2,13 @@
 
 import { FormEvent, useEffect, useState, useTransition } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { createSalesReturn, getEligibleReturnLines, getReturns, searchReturnOrders } from '@/lib/api/commerce';
+import {
+  createSalesReturn,
+  getEligibleReturnLines,
+  getReturns,
+  recordSalesReturnRefund,
+  searchReturnOrders,
+} from '@/lib/api/commerce';
 import type { SuggestedAction } from '@/types/guided-workflow';
 import type { ReturnCreatePayload, ReturnEligibleLines, ReturnLookupOrder, ReturnRecord } from '@/types/returns';
 import {
@@ -29,12 +35,42 @@ type ReturnsSuggestion = {
   tone?: SuggestedAction['tone'];
 };
 
+type ReturnRefundDraft = {
+  refund_date: string;
+  amount: string;
+  method: string;
+  reference: string;
+  note: string;
+};
+
+function currentLocalDateTime() {
+  const now = new Date();
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 16);
+}
+
 function createEmptyDraft(): ReturnCreatePayload {
   return {
     sales_order_id: '',
     notes: '',
     refund_status: 'pending',
     lines: [],
+  };
+}
+
+function buildRefundDraft(record?: ReturnRecord | null): ReturnRefundDraft {
+  const outstanding = record?.refund_outstanding_amount ? Number(record.refund_outstanding_amount) : NaN;
+  const defaultAmount =
+    record && !Number.isNaN(outstanding) && outstanding > 0
+      ? record.refund_outstanding_amount
+      : record?.refund_amount ?? '';
+
+  return {
+    refund_date: currentLocalDateTime(),
+    amount: String(defaultAmount ?? ''),
+    method: 'bank transfer',
+    reference: record?.return_number ?? '',
+    note: record ? `Refund payment for ${record.return_number}` : '',
   };
 }
 
@@ -127,6 +163,8 @@ export function ReturnsWorkspace() {
   const [eligible, setEligible] = useState<ReturnEligibleLines | null>(null);
   const [historyQuery, setHistoryQuery] = useState('');
   const [history, setHistory] = useState<ReturnRecord[]>([]);
+  const [selectedReturn, setSelectedReturn] = useState<ReturnRecord | null>(null);
+  const [refundDraft, setRefundDraft] = useState<ReturnRefundDraft>(buildRefundDraft());
   const [draft, setDraft] = useState<ReturnCreatePayload>(createEmptyDraft());
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
@@ -160,6 +198,11 @@ export function ReturnsWorkspace() {
     setSelectedOrder(null);
     setEligible(null);
     setDraft(createEmptyDraft());
+  };
+
+  const openReturnDetails = (record: ReturnRecord) => {
+    setSelectedReturn(record);
+    setRefundDraft(buildRefundDraft(record));
   };
 
   const openEligibleLines = async (order: ReturnLookupOrder) => {
@@ -229,8 +272,8 @@ export function ReturnsWorkspace() {
     }
   };
 
-  const submitReturn = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const submitReturn = async (event?: FormEvent<HTMLFormElement>) => {
+    event?.preventDefault();
     if (!eligible) {
       setError('Open a completed order before creating a return.');
       return;
@@ -252,9 +295,41 @@ export function ReturnsWorkspace() {
       setNotice(`Return ${response.return_number} created.`);
       resetReturnDraft();
       await loadHistory(historyQuery);
+      setSelectedReturn(response);
+      setRefundDraft(buildRefundDraft(response));
       setActiveTab('history');
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'Unable to create return.');
+    }
+  };
+
+  const submitRefund = async (event?: FormEvent<HTMLFormElement>) => {
+    event?.preventDefault();
+    if (!selectedReturn) {
+      setError('Select a return before recording a refund.');
+      return;
+    }
+    if (!refundDraft.amount.trim() || Number(refundDraft.amount) <= 0) {
+      setError('Refund amount must be greater than zero.');
+      return;
+    }
+
+    setNotice('');
+    setError('');
+    try {
+      const response = await recordSalesReturnRefund(selectedReturn.sales_return_id, {
+        refund_date: new Date(refundDraft.refund_date).toISOString(),
+        amount: refundDraft.amount,
+        method: refundDraft.method.trim(),
+        reference: refundDraft.reference.trim(),
+        note: refundDraft.note.trim(),
+      });
+      setNotice(`Refund recorded for ${response.return_number}.`);
+      setSelectedReturn(response);
+      setRefundDraft(buildRefundDraft(response));
+      await loadHistory(historyQuery);
+    } catch (refundError) {
+      setError(refundError instanceof Error ? refundError.message : 'Unable to record refund payment.');
     }
   };
 
@@ -448,7 +523,13 @@ export function ReturnsWorkspace() {
                 </label>
 
                 <StagedActionFooter summary="The return will not be written until you explicitly create it.">
-                  <button type="submit">Review before creating return</button>
+                  <button
+                    type="button"
+                    onClick={() => void submitReturn()}
+                    disabled={!eligible || eligiblePending || lookupPending}
+                  >
+                    Review before creating return
+                  </button>
                   <button
                     type="button"
                     className="secondary"
@@ -471,46 +552,167 @@ export function ReturnsWorkspace() {
           </div>
         ) : (
           history.length ? (
-            <div className="workspace-card-grid">
-              {history.map((item) => (
-                <article key={item.sales_return_id} className="commerce-card">
-                  <div className="commerce-card-header">
-                    <div>
-                      <p className="eyebrow">Return</p>
-                      <h4>{item.return_number}</h4>
-                      <p>{item.customer_name} · {item.order_number}</p>
+            <div className="returns-history-layout">
+              <div className="workspace-card-grid">
+                {history.map((item) => (
+                  <article
+                    key={item.sales_return_id}
+                    className={selectedReturn?.sales_return_id === item.sales_return_id ? 'commerce-card selected' : 'commerce-card'}
+                  >
+                    <div className="commerce-card-header">
+                      <div>
+                        <p className="eyebrow">Return</p>
+                        <h4>{item.return_number}</h4>
+                        <p>{item.customer_name} · {item.order_number}</p>
+                      </div>
+                      <span className="status-pill">{item.status}</span>
                     </div>
-                    <span className="status-pill">{item.status}</span>
+                    <div className="commerce-card-meta">
+                      <span>Requested: {formatDateTime(item.requested_at)}</span>
+                      <span>Refund: {formatMoney(item.refund_amount)}</span>
+                      <span>Paid: {formatMoney(item.refund_paid_amount ?? '0')}</span>
+                      <span>Outstanding: {formatMoney(item.refund_outstanding_amount ?? '0')}</span>
+                    </div>
+                    <div className="workspace-actions">
+                      <button type="button" className="secondary" onClick={() => openReturnDetails(item)}>
+                        Open refund details
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+
+              <WorkspacePanel
+                title={selectedReturn ? selectedReturn.return_number : 'Refund recording'}
+                description="Refunds are recorded separately from the return itself. Pick a return, then post each refund payment explicitly."
+              >
+                {selectedReturn ? (
+                  <div className="workspace-stack">
+                    <DraftRecommendationCard
+                      title={selectedReturn.return_number}
+                      summary={`Refund status: ${selectedReturn.refund_status}. Finance status: ${selectedReturn.finance_status ?? 'not_posted'}.`}
+                    >
+                      <div className="guided-match-item-meta">
+                        <span>Customer: {selectedReturn.customer_name}</span>
+                        <span>Order: {selectedReturn.order_number}</span>
+                        <span>Requested: {formatDateTime(selectedReturn.requested_at)}</span>
+                        <span>Paid: {formatMoney(selectedReturn.refund_paid_amount ?? '0')}</span>
+                        <span>Outstanding: {formatMoney(selectedReturn.refund_outstanding_amount ?? '0')}</span>
+                      </div>
+                      {selectedReturn.recent_refunds?.length ? (
+                        <div className="finance-row-list">
+                          {selectedReturn.recent_refunds.map((refund) => (
+                            <article key={refund.transaction_id} className="finance-row-card finance-row-readonly">
+                              <div className="finance-row-card-head">
+                                <div>
+                                  <span className="finance-origin-pill">Refund payment</span>
+                                  <strong>{refund.reference}</strong>
+                                  <p>{refund.note || 'Refund payment posted'}</p>
+                                </div>
+                                <strong className="delta-negative">-{formatMoney(refund.amount)}</strong>
+                              </div>
+                              <div className="finance-row-meta">
+                                <span>{formatDateTime(refund.posted_at)}</span>
+                              </div>
+                            </article>
+                          ))}
+                        </div>
+                      ) : (
+                        <WorkspaceEmpty
+                          title="No refund payments recorded yet"
+                          message="The return is staged, but no cash has been posted out yet."
+                        />
+                      )}
+                    </DraftRecommendationCard>
+
+                    <form
+                      className="workspace-stack"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        void submitRefund(event);
+                      }}
+                    >
+                      <div className="workspace-form-grid compact">
+                        <label>
+                          Refund date
+                          <input
+                            type="datetime-local"
+                            value={refundDraft.refund_date}
+                            onChange={(event) =>
+                              setRefundDraft((current) => ({ ...current, refund_date: event.target.value }))
+                            }
+                          />
+                        </label>
+                        <label>
+                          Amount
+                          <input
+                            inputMode="decimal"
+                            value={refundDraft.amount}
+                            onChange={(event) =>
+                              setRefundDraft((current) => ({ ...current, amount: event.target.value }))
+                            }
+                            placeholder="0.00"
+                          />
+                        </label>
+                        <label>
+                          Method
+                          <input
+                            value={refundDraft.method}
+                            onChange={(event) =>
+                              setRefundDraft((current) => ({ ...current, method: event.target.value }))
+                            }
+                            placeholder="Cash, bank transfer, card reversal"
+                          />
+                        </label>
+                        <label>
+                          Reference
+                          <input
+                            value={refundDraft.reference}
+                            onChange={(event) =>
+                              setRefundDraft((current) => ({ ...current, reference: event.target.value }))
+                            }
+                            placeholder="Refund receipt or transfer id"
+                          />
+                        </label>
+                        <label className="workspace-form-wide">
+                          Note
+                          <textarea
+                            rows={3}
+                            value={refundDraft.note}
+                            onChange={(event) =>
+                              setRefundDraft((current) => ({ ...current, note: event.target.value }))
+                            }
+                            placeholder="Add a short audit note"
+                          />
+                        </label>
+                      </div>
+
+                      <StagedActionFooter summary="Refund cash posts only when you record the payment. The return itself stays separate from finance.">
+                      <button
+                        type="button"
+                        className="btn-primary"
+                        disabled={!selectedReturn || eligiblePending || lookupPending}
+                        onClick={() => void submitRefund()}
+                      >
+                        Record refund payment
+                      </button>
+                        <button
+                          type="button"
+                          className="secondary"
+                          onClick={() => setRefundDraft(buildRefundDraft(selectedReturn))}
+                        >
+                          Reset refund draft
+                        </button>
+                      </StagedActionFooter>
+                    </form>
                   </div>
-                  <div className="commerce-card-meta">
-                    <span>Requested: {formatDateTime(item.requested_at)}</span>
-                    <span>Refund: {formatMoney(item.refund_amount)}</span>
-                    <span>Lines: {item.lines.length}</span>
-                  </div>
-                  <div className="table-scroll">
-                    <table className="workspace-table">
-                      <thead>
-                        <tr>
-                          <th>Variant</th>
-                          <th>Qty</th>
-                          <th>Restocked</th>
-                          <th>Refund</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {item.lines.map((line) => (
-                          <tr key={line.sales_return_item_id}>
-                            <td>{line.label}</td>
-                            <td>{formatQuantity(line.quantity)}</td>
-                            <td>{formatQuantity(line.restock_quantity)}</td>
-                            <td>{formatMoney(line.line_total)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </article>
-              ))}
+                ) : (
+                  <WorkspaceEmpty
+                    title="Select a return to record refund payments"
+                    message="Open any return from the history list to review refund balances and post cash out events."
+                  />
+                )}
+              </WorkspacePanel>
             </div>
           ) : (
             <WorkspaceEmpty

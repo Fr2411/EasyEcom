@@ -6,6 +6,7 @@ from easy_ecom.api.schemas.commerce import (
     ReturnCreateRequest,
     ReturnEligibleLinesResponse,
     ReturnLookupOrdersResponse,
+    ReturnRefundPaymentRequest,
     ReturnResponse,
     ReturnsResponse,
     ReturnUpdateRequest,
@@ -99,6 +100,31 @@ def update_return(
     """Update an existing return (e.g., refund status, notes)."""
     require_page_access(user, "Returns")
     return_record = container.returns.update_return(user, return_id, payload)
+    if not return_record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Return not found"
+        )
+    return ReturnResponse.model_validate(return_record)
+
+
+@router.post("/{return_id}/record-refund", response_model=ReturnResponse)
+def record_refund(
+    return_id: str = Path(..., description="The return ID"),
+    payload: ReturnRefundPaymentRequest = None,
+    user: AuthenticatedUser = Depends(get_authenticated_user),
+    container: ServiceContainer = Depends(get_container),
+) -> ReturnResponse:
+    require_page_access(user, "Returns")
+    return_record = container.returns.record_refund_payment(
+        user,
+        return_id=return_id,
+        refund_date=payload.refund_date,
+        amount=payload.amount,
+        method=payload.method,
+        reference=payload.reference,
+        note=payload.note,
+    )
     if not return_record:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

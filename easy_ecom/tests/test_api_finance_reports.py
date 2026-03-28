@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from easy_ecom.api import dependencies as deps
 from easy_ecom.api.main import create_app
@@ -14,32 +14,24 @@ from easy_ecom.core.security import hash_password
 from easy_ecom.data.store.postgres_models import (
     CategoryModel,
     ClientSettingsModel,
-    CustomerModel,
-    ExpenseModel,
-    InventoryLedgerModel,
+    FinanceTransactionLinkModel,
+    FinanceTransactionModel,
     LocationModel,
-    PaymentModel,
     ProductModel,
     ProductVariantModel,
-    PurchaseItemModel,
-    PurchaseModel,
-    SalesOrderItemModel,
-    SalesOrderModel,
-    SalesReturnItemModel,
-    SalesReturnModel,
     SupplierModel,
+    InventoryLedgerModel,
 )
 from easy_ecom.tests.support.sqlite_runtime import build_sqlite_runtime, seed_auth_user
 
 CLIENT_ID = "22222222-2222-2222-2222-222222222222"
 OTHER_CLIENT_ID = "99999999-9999-9999-9999-999999999999"
 LOCATION_ID = "33333333-3333-3333-3333-333333333333"
-OTHER_LOCATION_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
 USER_ID = "11111111-1111-1111-1111-111111111111"
 
 
 def _setup_runtime(tmp_path: Path, monkeypatch):
-    runtime = build_sqlite_runtime(tmp_path, "finance_reports.db")
+    runtime = build_sqlite_runtime(tmp_path, "finance_events.db")
     monkeypatch.setattr(deps, "settings", runtime.settings)
     seed_auth_user(
         runtime.session_factory,
@@ -59,6 +51,17 @@ def _setup_runtime(tmp_path: Path, monkeypatch):
         password_hash=hash_password("secret"),
         role_code="CLIENT_OWNER",
     )
+    return runtime
+
+
+def _login_client() -> TestClient:
+    client = TestClient(create_app())
+    response = client.post("/auth/login", json={"email": "owner@example.com", "password": "secret"})
+    assert response.status_code == 200
+    return client
+
+
+def _seed_sales_fixture(runtime) -> dict[str, str]:
     with runtime.session_factory() as session:
         session.add(
             ClientSettingsModel(
@@ -73,43 +76,14 @@ def _setup_runtime(tmp_path: Path, monkeypatch):
                 return_prefix="RT",
             )
         )
-        session.add(
-            LocationModel(
-                location_id=LOCATION_ID,
-                client_id=CLIENT_ID,
-                name="Main Warehouse",
-                code="MAIN",
-                is_default=True,
-                status="active",
-            )
+        location = LocationModel(
+            location_id=LOCATION_ID,
+            client_id=CLIENT_ID,
+            name="Main Warehouse",
+            code="MAIN",
+            is_default=True,
+            status="active",
         )
-        session.add(
-            LocationModel(
-                location_id=OTHER_LOCATION_ID,
-                client_id=OTHER_CLIENT_ID,
-                name="Noise Warehouse",
-                code="NOISE",
-                is_default=True,
-                status="active",
-            )
-        )
-        session.commit()
-    return runtime
-
-
-def _login_client() -> TestClient:
-    client = TestClient(create_app())
-    response = client.post("/auth/login", json={"email": "owner@example.com", "password": "secret"})
-    assert response.status_code == 200
-    return client
-
-
-def _seed_reporting_fixture(runtime, *, base_at: datetime) -> None:
-    purchase_at = base_at - timedelta(days=2)
-    sale_at = base_at - timedelta(days=1)
-    return_at = base_at
-
-    with runtime.session_factory() as session:
         supplier = SupplierModel(
             supplier_id=new_uuid(),
             client_id=CLIENT_ID,
@@ -124,18 +98,10 @@ def _seed_reporting_fixture(runtime, *, base_at: datetime) -> None:
             slug="footwear",
             status="active",
         )
-        customer = CustomerModel(
-            customer_id=new_uuid(),
-            client_id=CLIENT_ID,
-            code="CUST-001",
-            name="Amina Buyer",
-            email="amina@example.com",
-            status="active",
-        )
-        session.add_all([supplier, category, customer])
+        session.add_all([location, supplier, category])
         session.flush()
 
-        product_a = ProductModel(
+        product = ProductModel(
             product_id=new_uuid(),
             client_id=CLIENT_ID,
             supplier_id=supplier.supplier_id,
@@ -148,604 +114,288 @@ def _seed_reporting_fixture(runtime, *, base_at: datetime) -> None:
             default_price_amount=Decimal("100"),
             min_price_amount=Decimal("90"),
         )
-        product_b = ProductModel(
-            product_id=new_uuid(),
-            client_id=CLIENT_ID,
-            supplier_id=supplier.supplier_id,
-            category_id=category.category_id,
-            name="City Runner",
-            slug="city-runner",
-            sku_root="CITY",
-            brand="Easy Brand",
-            status="active",
-            default_price_amount=Decimal("50"),
-            min_price_amount=Decimal("45"),
-        )
-        session.add_all([product_a, product_b])
+        session.add(product)
         session.flush()
 
-        variant_a = ProductVariantModel(
+        variant = ProductVariantModel(
             variant_id=new_uuid(),
             client_id=CLIENT_ID,
-            product_id=product_a.product_id,
+            product_id=product.product_id,
             title="42 / Black",
             sku="TRAIL-42-BLK",
+            barcode="BAR-TRAIL-42",
             status="active",
             cost_amount=Decimal("40"),
             price_amount=Decimal("100"),
             min_price_amount=Decimal("90"),
             reorder_level=Decimal("2"),
         )
-        variant_b = ProductVariantModel(
-            variant_id=new_uuid(),
-            client_id=CLIENT_ID,
-            product_id=product_b.product_id,
-            title="41 / White",
-            sku="CITY-41-WHT",
-            status="active",
-            cost_amount=Decimal("25"),
-            price_amount=Decimal("50"),
-            min_price_amount=Decimal("45"),
-            reorder_level=Decimal("5"),
-        )
-        session.add_all([variant_a, variant_b])
+        session.add(variant)
         session.flush()
 
-        purchase = PurchaseModel(
-            purchase_id=new_uuid(),
-            client_id=CLIENT_ID,
-            supplier_id=supplier.supplier_id,
-            location_id=LOCATION_ID,
-            purchase_number="PO-1001",
-            status="received",
-            ordered_at=purchase_at,
-            received_at=purchase_at,
-            subtotal_amount=Decimal("500"),
-            total_amount=Decimal("500"),
-            created_by_user_id=USER_ID,
-        )
-        session.add(purchase)
-        session.flush()
-        purchase_item_a = PurchaseItemModel(
-            purchase_item_id=new_uuid(),
-            client_id=CLIENT_ID,
-            purchase_id=purchase.purchase_id,
-            variant_id=variant_a.variant_id,
-            quantity=Decimal("10"),
-            received_quantity=Decimal("10"),
-            unit_cost_amount=Decimal("40"),
-            line_total_amount=Decimal("400"),
-        )
-        purchase_item_b = PurchaseItemModel(
-            purchase_item_id=new_uuid(),
-            client_id=CLIENT_ID,
-            purchase_id=purchase.purchase_id,
-            variant_id=variant_b.variant_id,
-            quantity=Decimal("4"),
-            received_quantity=Decimal("4"),
-            unit_cost_amount=Decimal("25"),
-            line_total_amount=Decimal("100"),
-        )
-        session.add_all([purchase_item_a, purchase_item_b])
-
-        sales_order = SalesOrderModel(
-            sales_order_id=new_uuid(),
-            client_id=CLIENT_ID,
-            customer_id=customer.customer_id,
-            location_id=LOCATION_ID,
-            order_number="SO-1001",
-            status="completed",
-            payment_status="partial",
-            shipment_status="fulfilled",
-            ordered_at=sale_at,
-            confirmed_at=sale_at,
-            subtotal_amount=Decimal("300"),
-            total_amount=Decimal("300"),
-            paid_amount=Decimal("250"),
-            created_by_user_id=USER_ID,
-        )
-        session.add(sales_order)
-        session.flush()
-        sales_item_a = SalesOrderItemModel(
-            sales_order_item_id=new_uuid(),
-            client_id=CLIENT_ID,
-            sales_order_id=sales_order.sales_order_id,
-            variant_id=variant_a.variant_id,
-            quantity=Decimal("2"),
-            quantity_fulfilled=Decimal("2"),
-            unit_price_amount=Decimal("100"),
-            line_total_amount=Decimal("200"),
-        )
-        sales_item_b = SalesOrderItemModel(
-            sales_order_item_id=new_uuid(),
-            client_id=CLIENT_ID,
-            sales_order_id=sales_order.sales_order_id,
-            variant_id=variant_b.variant_id,
-            quantity=Decimal("2"),
-            quantity_fulfilled=Decimal("2"),
-            unit_price_amount=Decimal("50"),
-            line_total_amount=Decimal("100"),
-        )
-        session.add_all([sales_item_a, sales_item_b])
-
-        sales_payment = PaymentModel(
-            payment_id=new_uuid(),
-            client_id=CLIENT_ID,
-            sales_order_id=sales_order.sales_order_id,
-            status="completed",
-            direction="in",
-            method="cash",
-            amount=Decimal("250"),
-            paid_at=sale_at,
-            reference="PAY-1001",
-            created_by_user_id=USER_ID,
-        )
-        session.add(sales_payment)
-
-        sales_return = SalesReturnModel(
-            sales_return_id=new_uuid(),
-            client_id=CLIENT_ID,
-            sales_order_id=sales_order.sales_order_id,
-            customer_id=customer.customer_id,
-            return_number="RT-1001",
-            status="received",
-            refund_status="partial",
-            requested_at=return_at,
-            received_at=return_at,
-            subtotal_amount=Decimal("100"),
-            refund_amount=Decimal("100"),
-            created_by_user_id=USER_ID,
-        )
-        session.add(sales_return)
-        session.flush()
         session.add(
-            SalesReturnItemModel(
-                sales_return_item_id=new_uuid(),
+            InventoryLedgerModel(
+                entry_id=new_uuid(),
                 client_id=CLIENT_ID,
-                sales_return_id=sales_return.sales_return_id,
-                sales_order_item_id=sales_item_a.sales_order_item_id,
-                variant_id=variant_a.variant_id,
-                quantity=Decimal("1"),
-                restock_quantity=Decimal("1"),
-                unit_refund_amount=Decimal("100"),
-                disposition="restock",
-            )
-        )
-        session.add(
-            PaymentModel(
-                payment_id=new_uuid(),
-                client_id=CLIENT_ID,
-                sales_return_id=sales_return.sales_return_id,
-                status="completed",
-                direction="out",
-                method="cash",
-                amount=Decimal("60"),
-                paid_at=return_at,
-                reference="RF-1001",
+                variant_id=variant.variant_id,
+                location_id=location.location_id,
+                movement_type="stock_received",
+                reference_type="seed",
+                reference_id=str(product.product_id),
+                reference_line_id=None,
+                quantity_delta=Decimal("5"),
+                unit_cost_amount=Decimal("40"),
+                unit_price_amount=Decimal("100"),
+                reason="Seed stock",
                 created_by_user_id=USER_ID,
             )
         )
-
-        session.add_all(
-            [
-                ExpenseModel(
-                    expense_id=new_uuid(),
-                    client_id=CLIENT_ID,
-                    expense_number="EXP-1001",
-                    category="rent",
-                    description="Rent paid",
-                    vendor_name="Landlord",
-                    amount=Decimal("30"),
-                    incurred_at=return_at,
-                    payment_status="paid",
-                    created_by_user_id=USER_ID,
-                ),
-                ExpenseModel(
-                    expense_id=new_uuid(),
-                    client_id=CLIENT_ID,
-                    expense_number="EXP-1002",
-                    category="utilities",
-                    description="Power bill accrued",
-                    vendor_name="Utility",
-                    amount=Decimal("20"),
-                    incurred_at=return_at,
-                    payment_status="unpaid",
-                    created_by_user_id=USER_ID,
-                ),
-            ]
-        )
-
-        session.add_all(
-            [
-                InventoryLedgerModel(
-                    entry_id=new_uuid(),
-                    client_id=CLIENT_ID,
-                    variant_id=variant_a.variant_id,
-                    location_id=LOCATION_ID,
-                    movement_type="stock_received",
-                    reference_type="purchase",
-                    reference_id=str(purchase.purchase_id),
-                    reference_line_id=str(purchase_item_a.purchase_item_id),
-                    quantity_delta=Decimal("10"),
-                    unit_cost_amount=Decimal("40"),
-                    unit_price_amount=Decimal("100"),
-                    reason="Purchase receipt",
-                    created_by_user_id=USER_ID,
-                    created_at=purchase_at,
-                ),
-                InventoryLedgerModel(
-                    entry_id=new_uuid(),
-                    client_id=CLIENT_ID,
-                    variant_id=variant_b.variant_id,
-                    location_id=LOCATION_ID,
-                    movement_type="stock_received",
-                    reference_type="purchase",
-                    reference_id=str(purchase.purchase_id),
-                    reference_line_id=str(purchase_item_b.purchase_item_id),
-                    quantity_delta=Decimal("4"),
-                    unit_cost_amount=Decimal("25"),
-                    unit_price_amount=Decimal("50"),
-                    reason="Purchase receipt",
-                    created_by_user_id=USER_ID,
-                    created_at=purchase_at,
-                ),
-                InventoryLedgerModel(
-                    entry_id=new_uuid(),
-                    client_id=CLIENT_ID,
-                    variant_id=variant_a.variant_id,
-                    location_id=LOCATION_ID,
-                    movement_type="sale_fulfilled",
-                    reference_type="sales_order",
-                    reference_id=str(sales_order.sales_order_id),
-                    reference_line_id=str(sales_item_a.sales_order_item_id),
-                    quantity_delta=Decimal("-2"),
-                    unit_cost_amount=Decimal("40"),
-                    unit_price_amount=Decimal("100"),
-                    reason="Order fulfilled",
-                    created_by_user_id=USER_ID,
-                    created_at=sale_at,
-                ),
-                InventoryLedgerModel(
-                    entry_id=new_uuid(),
-                    client_id=CLIENT_ID,
-                    variant_id=variant_b.variant_id,
-                    location_id=LOCATION_ID,
-                    movement_type="sale_fulfilled",
-                    reference_type="sales_order",
-                    reference_id=str(sales_order.sales_order_id),
-                    reference_line_id=str(sales_item_b.sales_order_item_id),
-                    quantity_delta=Decimal("-2"),
-                    unit_cost_amount=Decimal("25"),
-                    unit_price_amount=Decimal("50"),
-                    reason="Order fulfilled",
-                    created_by_user_id=USER_ID,
-                    created_at=sale_at,
-                ),
-                InventoryLedgerModel(
-                    entry_id=new_uuid(),
-                    client_id=CLIENT_ID,
-                    variant_id=variant_a.variant_id,
-                    location_id=LOCATION_ID,
-                    movement_type="sales_return_restock",
-                    reference_type="sales_return",
-                    reference_id=str(sales_return.sales_return_id),
-                    reference_line_id=None,
-                    quantity_delta=Decimal("1"),
-                    unit_cost_amount=Decimal("40"),
-                    unit_price_amount=Decimal("100"),
-                    reason="Restocked return",
-                    created_by_user_id=USER_ID,
-                    created_at=return_at,
-                ),
-            ]
-        )
-
-        noise_supplier = SupplierModel(
-            supplier_id=new_uuid(),
-            client_id=OTHER_CLIENT_ID,
-            name="Noise Supplier",
-            code="SUP-NOISE",
-            status="active",
-        )
-        noise_category = CategoryModel(
-            category_id=new_uuid(),
-            client_id=OTHER_CLIENT_ID,
-            name="Noise",
-            slug="noise",
-            status="active",
-        )
-        session.add_all([noise_supplier, noise_category])
-        session.flush()
-        noise_product = ProductModel(
-            product_id=new_uuid(),
-            client_id=OTHER_CLIENT_ID,
-            supplier_id=noise_supplier.supplier_id,
-            category_id=noise_category.category_id,
-            name="Noise Product",
-            slug="noise-product",
-            sku_root="NOISE",
-            brand="Noise",
-            status="active",
-            default_price_amount=Decimal("9999"),
-        )
-        session.add(noise_product)
-        session.flush()
-        noise_variant = ProductVariantModel(
-            variant_id=new_uuid(),
-            client_id=OTHER_CLIENT_ID,
-            product_id=noise_product.product_id,
-            title="One Size",
-            sku="NOISE-001",
-            status="active",
-            cost_amount=Decimal("1"),
-            price_amount=Decimal("9999"),
-            reorder_level=Decimal("1"),
-        )
-        session.add(noise_variant)
-        session.flush()
-        noise_order = SalesOrderModel(
-            sales_order_id=new_uuid(),
-            client_id=OTHER_CLIENT_ID,
-            location_id=OTHER_LOCATION_ID,
-            order_number="SO-NOISE",
-            status="completed",
-            payment_status="paid",
-            shipment_status="fulfilled",
-            ordered_at=sale_at,
-            confirmed_at=sale_at,
-            subtotal_amount=Decimal("9999"),
-            total_amount=Decimal("9999"),
-            paid_amount=Decimal("9999"),
-        )
-        session.add(noise_order)
-        session.flush()
-        session.add(
-            SalesOrderItemModel(
-                sales_order_item_id=new_uuid(),
-                client_id=OTHER_CLIENT_ID,
-                sales_order_id=noise_order.sales_order_id,
-                variant_id=noise_variant.variant_id,
-                quantity=Decimal("1"),
-                quantity_fulfilled=Decimal("1"),
-                unit_price_amount=Decimal("9999"),
-                line_total_amount=Decimal("9999"),
-            )
-        )
         session.commit()
+        return {
+            "location_id": str(location.location_id),
+            "variant_id": str(variant.variant_id),
+        }
 
 
-def test_reports_reconcile_from_variant_first_sources(monkeypatch, tmp_path: Path) -> None:
+def _create_and_fulfill_order(client: TestClient, *, location_id: str, variant_id: str) -> dict:
+    response = client.post(
+        "/sales/orders",
+        json={
+            "location_id": location_id,
+            "customer": {
+                "name": "Amina Buyer",
+                "phone": "+971500000111",
+                "email": "amina@example.com",
+                "address": "Dubai",
+            },
+            "payment_status": "unpaid",
+            "shipment_status": "pending",
+            "notes": "Fulfill for finance posting",
+            "lines": [
+                {
+                    "variant_id": variant_id,
+                    "quantity": "2",
+                    "unit_price": "100",
+                    "discount_amount": "0",
+                }
+            ],
+            "action": "confirm_and_fulfill",
+        },
+    )
+    assert response.status_code == 200, response.text
+    return response.json()["order"]
+
+
+def test_fulfilling_sales_orders_posts_finance_once_and_updates_overview(monkeypatch, tmp_path: Path) -> None:
     runtime = _setup_runtime(tmp_path, monkeypatch)
-    base_at = datetime.utcnow().replace(microsecond=0)
-    _seed_reporting_fixture(runtime, base_at=base_at)
+    fixture = _seed_sales_fixture(runtime)
     client = _login_client()
-    from_date = (base_at - timedelta(days=2)).date().isoformat()
-    to_date = base_at.date().isoformat()
 
-    overview = client.get("/reports/overview", params={"from_date": from_date, "to_date": to_date})
+    order = _create_and_fulfill_order(client, **fixture)
+    assert order["status"] == "completed"
+    assert order["shipment_status"] == "fulfilled"
+    assert order["finance_status"] == "posted"
+    assert float(order["finance_summary"]["amount"]) == 200.0
+
+    with runtime.session_factory() as session:
+        transaction_count = session.execute(
+            select(func.count()).select_from(FinanceTransactionModel).where(
+                FinanceTransactionModel.client_id == CLIENT_ID,
+                FinanceTransactionModel.origin_type == "sale_fulfillment",
+                FinanceTransactionModel.origin_id == order["sales_order_id"],
+            )
+        ).scalar_one()
+        link_count = session.execute(
+            select(func.count()).select_from(FinanceTransactionLinkModel).where(
+                FinanceTransactionLinkModel.client_id == CLIENT_ID,
+                FinanceTransactionLinkModel.origin_type == "sale_fulfillment",
+                FinanceTransactionLinkModel.origin_id == order["sales_order_id"],
+            )
+        ).scalar_one()
+        assert transaction_count == 1
+        assert link_count == 1
+
+    refetched = client.get(f"/sales/orders/{order['sales_order_id']}")
+    assert refetched.status_code == 200
+
+    with runtime.session_factory() as session:
+        transaction_count = session.execute(
+            select(func.count()).select_from(FinanceTransactionModel).where(
+                FinanceTransactionModel.client_id == CLIENT_ID,
+                FinanceTransactionModel.origin_type == "sale_fulfillment",
+                FinanceTransactionModel.origin_id == order["sales_order_id"],
+            )
+        ).scalar_one()
+        assert transaction_count == 1
+
+    overview = client.get("/finance/overview")
     assert overview.status_code == 200
     assert overview.json() == {
-        "from_date": from_date,
-        "to_date": to_date,
-        "sales_revenue_total": 300.0,
-        "sales_count": 1,
-        "expense_total": 50.0,
-        "returns_total": 1,
-        "purchases_total": 500.0,
-    }
-
-    sales = client.get("/reports/sales", params={"from_date": from_date, "to_date": to_date})
-    assert sales.status_code == 200
-    sales_payload = sales.json()
-    assert sales_payload["sales_count"] == 1
-    assert sales_payload["revenue_total"] == 300.0
-    assert sales_payload["top_products"][0] == {
-        "product_id": sales_payload["top_products"][0]["product_id"],
-        "product_name": "Trail Runner",
-        "qty_sold": 2,
         "revenue": 200.0,
-    }
-    assert sales_payload["top_customers"] == [
-        {
-            "customer_id": sales_payload["top_customers"][0]["customer_id"],
-            "customer_name": "Amina Buyer",
-            "sales_count": 1,
-            "revenue": 300.0,
-        }
-    ]
-
-    inventory = client.get("/reports/inventory", params={"from_date": from_date, "to_date": to_date})
-    assert inventory.status_code == 200
-    inventory_payload = inventory.json()
-    assert inventory_payload["total_skus_with_stock"] == 2
-    assert inventory_payload["total_stock_units"] == 11
-    assert inventory_payload["inventory_value"] == 410.0
-    assert inventory_payload["low_stock_items"] == [
-        {
-            "product_id": inventory_payload["low_stock_items"][0]["product_id"],
-            "product_name": "City Runner",
-            "variant_id": inventory_payload["low_stock_items"][0]["variant_id"],
-            "variant_label": "41 / White",
-            "sku": "CITY-41-WHT",
-            "current_qty": 2,
-        }
-    ]
-
-    purchases = client.get("/reports/purchases", params={"from_date": from_date, "to_date": to_date})
-    assert purchases.status_code == 200
-    assert purchases.json()["purchases_subtotal"] == 500.0
-    assert purchases.json()["purchases_count"] == 1
-
-    returns = client.get("/reports/returns", params={"from_date": from_date, "to_date": to_date})
-    assert returns.status_code == 200
-    assert returns.json()["returns_count"] == 1
-    assert returns.json()["return_qty_total"] == 1
-    assert returns.json()["return_amount_total"] == 100.0
-
-    products = client.get("/reports/products", params={"from_date": from_date, "to_date": to_date})
-    assert products.status_code == 200
-    assert products.json()["highest_selling"][0]["product_name"] == "Trail Runner"
-
-    finance = client.get("/reports/finance", params={"from_date": from_date, "to_date": to_date})
-    assert finance.status_code == 200
-    finance_payload = finance.json()
-    assert finance_payload["expense_total"] == 50.0
-    assert finance_payload["receivables_total"] == 50.0
-    assert finance_payload["payables_total"] == 20.0
-    assert finance_payload["net_operating_snapshot"] == -350.0
-    assert finance_payload["deferred_metrics"] == []
-
-
-def test_finance_overview_is_tenant_scoped_and_cash_reconciled(monkeypatch, tmp_path: Path) -> None:
-    runtime = _setup_runtime(tmp_path, monkeypatch)
-    _seed_reporting_fixture(runtime, base_at=datetime.utcnow().replace(microsecond=0))
-    client = _login_client()
-
-    response = client.get("/finance/overview")
-    assert response.status_code == 200
-    assert response.json() == {
-        "sales_revenue": 300.0,
-        "expense_total": 50.0,
-        "receivables": 50.0,
-        "payables": 20.0,
-        "cash_in": 250.0,
-        "cash_out": 90.0,
-        "net_operating": 160.0,
+        "cash_collected": 0.0,
+        "refunds_paid": 0.0,
+        "expenses": 0.0,
+        "receivables": 200.0,
+        "payables": 0.0,
+        "cash_in": 0.0,
+        "cash_out": 0.0,
+        "net_operating": 0.0,
     }
 
 
-def test_finance_helper_routes_return_derived_snapshots(monkeypatch, tmp_path: Path) -> None:
+def test_order_payments_reduce_receivables_without_changing_recognized_revenue(monkeypatch, tmp_path: Path) -> None:
     runtime = _setup_runtime(tmp_path, monkeypatch)
-    _seed_reporting_fixture(runtime, base_at=datetime.utcnow().replace(microsecond=0))
+    fixture = _seed_sales_fixture(runtime)
     client = _login_client()
 
-    accounts = client.get("/finance/accounts")
-    assert accounts.status_code == 200
-    accounts_payload = accounts.json()
-    assert accounts_payload[0]["account_code"] == "cash_movement"
-    assert accounts_payload[1]["balance"] == 50.0
-    assert accounts_payload[2]["balance"] == 20.0
-
-    reports = client.get("/finance/reports")
-    assert reports.status_code == 200
-    reports_payload = reports.json()
-    assert reports_payload[0]["report_code"] == "working_capital"
-    assert reports_payload[0]["payables"] == 20.0
-
-
-def test_finance_workspace_surfaces_recent_activity_and_subledgers(monkeypatch, tmp_path: Path) -> None:
-    runtime = _setup_runtime(tmp_path, monkeypatch)
-    _seed_reporting_fixture(runtime, base_at=datetime.utcnow().replace(microsecond=0))
-    client = _login_client()
-
-    response = client.get("/finance/workspace")
-    assert response.status_code == 200
-    payload = response.json()
-
-    assert payload["overview"]["receivables"] == 50.0
-    assert payload["overview"]["payables"] == 20.0
-    assert payload["transactions"][0]["entry_type"] in {"payment", "expense"}
-    assert payload["receivables"] == [
-        {
-            "sale_id": payload["receivables"][0]["sale_id"],
-            "sale_no": "SO-1001",
-            "customer_id": payload["receivables"][0]["customer_id"],
-            "customer_name": "Amina Buyer",
-            "sale_date": payload["receivables"][0]["sale_date"],
-            "grand_total": 300.0,
-            "amount_paid": 250.0,
-            "outstanding_balance": 50.0,
-            "payment_status": "partial",
-        }
-    ]
-    assert payload["payables"] == [
-        {
-            "expense_id": payload["payables"][0]["expense_id"],
-            "expense_number": "EXP-1002",
-            "vendor_name": "Utility",
-            "category": "utilities",
-            "expense_date": payload["payables"][0]["expense_date"],
-            "amount": 20.0,
-            "payment_status": "unpaid",
-            "note": "Power bill accrued",
-        }
-    ]
-
-
-def test_finance_transactions_are_writable_and_audited(monkeypatch, tmp_path: Path) -> None:
-    runtime = _setup_runtime(tmp_path, monkeypatch)
-    base_at = datetime.utcnow().replace(microsecond=0)
-    _seed_reporting_fixture(runtime, base_at=base_at)
-    client = _login_client()
-
+    order = _create_and_fulfill_order(client, **fixture)
     payment_response = client.post(
-        "/finance/transactions",
+        f"/sales/orders/{order['sales_order_id']}/record-payment",
         json={
-            "entry_type": "payment",
-            "entry_date": base_at.isoformat(),
-            "category": "bank transfer",
-            "amount": 125.5,
-            "direction": "in",
-            "reference": "RCPT-2001",
-            "note": "Customer deposit",
-            "payment_status": "completed",
+            "payment_date": datetime.utcnow().isoformat(),
+            "amount": "75",
+            "method": "cash",
+            "reference": "PAY-1001",
+            "note": "Partial collection",
         },
     )
-    assert payment_response.status_code == 201
-    payment_payload = payment_response.json()
-    assert payment_payload["entry_type"] == "payment"
-    assert payment_payload["direction"] == "in"
-    assert payment_payload["payment_status"] == "completed"
+    assert payment_response.status_code == 200, payment_response.text
+    updated_order = payment_response.json()["order"]
+    assert updated_order["payment_status"] == "partial"
+    assert float(updated_order["paid_amount"]) == 75.0
 
-    expense_response = client.post(
+    overview = client.get("/finance/overview")
+    assert overview.status_code == 200
+    assert overview.json()["revenue"] == 200.0
+    assert overview.json()["cash_collected"] == 75.0
+    assert overview.json()["receivables"] == 125.0
+
+
+def test_returns_post_finance_only_when_refund_is_paid(monkeypatch, tmp_path: Path) -> None:
+    runtime = _setup_runtime(tmp_path, monkeypatch)
+    fixture = _seed_sales_fixture(runtime)
+    client = _login_client()
+
+    order = _create_and_fulfill_order(client, **fixture)
+    return_response = client.post(
+        "/returns",
+        json={
+            "sales_order_id": order["sales_order_id"],
+            "notes": "Customer returned one pair",
+            "refund_status": "pending",
+            "lines": [
+                {
+                    "sales_order_item_id": order["lines"][0]["sales_order_item_id"],
+                    "quantity": "1",
+                    "restock_quantity": "1",
+                    "disposition": "restock",
+                    "unit_refund_amount": "100",
+                    "reason": "Damaged box",
+                }
+            ],
+        },
+    )
+    assert return_response.status_code == 200, return_response.text
+    sales_return = return_response.json()
+    assert sales_return["finance_status"] == "not_posted"
+    assert float(sales_return["refund_paid_amount"]) == 0.0
+    assert float(sales_return["refund_outstanding_amount"]) == 100.0
+
+    with runtime.session_factory() as session:
+        refund_transactions = session.execute(
+            select(func.count()).select_from(FinanceTransactionModel).where(
+                FinanceTransactionModel.client_id == CLIENT_ID,
+                FinanceTransactionModel.origin_type == "return_refund",
+                FinanceTransactionModel.origin_id == sales_return["sales_return_id"],
+            )
+        ).scalar_one()
+        assert refund_transactions == 0
+
+    refund_one = client.post(
+        f"/returns/{sales_return['sales_return_id']}/record-refund",
+        json={
+            "refund_date": datetime.utcnow().isoformat(),
+            "amount": "40",
+            "method": "bank transfer",
+            "reference": "RF-1001",
+            "note": "First refund payout",
+        },
+    )
+    assert refund_one.status_code == 200, refund_one.text
+    refund_payload = refund_one.json()
+    assert refund_payload["refund_status"] == "partial"
+    assert refund_payload["finance_status"] == "posted"
+    assert float(refund_payload["refund_paid_amount"]) == 40.0
+    assert float(refund_payload["refund_outstanding_amount"]) == 60.0
+    assert len(refund_payload["recent_refunds"]) == 1
+
+    refund_two = client.post(
+        f"/returns/{sales_return['sales_return_id']}/record-refund",
+        json={
+            "refund_date": datetime.utcnow().isoformat(),
+            "amount": "60",
+            "method": "cash",
+            "reference": "RF-1002",
+            "note": "Final refund payout",
+        },
+    )
+    assert refund_two.status_code == 200, refund_two.text
+    refund_payload = refund_two.json()
+    assert refund_payload["refund_status"] == "paid"
+    assert float(refund_payload["refund_paid_amount"]) == 100.0
+    assert float(refund_payload["refund_outstanding_amount"]) == 0.0
+    assert len(refund_payload["recent_refunds"]) == 2
+
+    with runtime.session_factory() as session:
+        refund_transactions = session.execute(
+            select(func.count()).select_from(FinanceTransactionModel).where(
+                FinanceTransactionModel.client_id == CLIENT_ID,
+                FinanceTransactionModel.origin_type == "return_refund",
+                FinanceTransactionModel.origin_id == sales_return["sales_return_id"],
+            )
+        ).scalar_one()
+        refund_links = session.execute(
+            select(func.count()).select_from(FinanceTransactionLinkModel).where(
+                FinanceTransactionLinkModel.client_id == CLIENT_ID,
+                FinanceTransactionLinkModel.origin_type == "return_refund",
+                FinanceTransactionLinkModel.origin_id == sales_return["sales_return_id"],
+            )
+        ).scalar_one()
+        assert refund_transactions == 2
+        assert refund_links == 2
+
+
+def test_finance_workspace_splits_commerce_and_manual_transactions(monkeypatch, tmp_path: Path) -> None:
+    runtime = _setup_runtime(tmp_path, monkeypatch)
+    fixture = _seed_sales_fixture(runtime)
+    client = _login_client()
+
+    order = _create_and_fulfill_order(client, **fixture)
+    manual_response = client.post(
         "/finance/transactions",
         json={
-            "entry_type": "expense",
-            "entry_date": (base_at + timedelta(seconds=1)).isoformat(),
-            "category": "shipping",
-            "amount": 75,
+            "origin_type": "manual_expense",
+            "occurred_at": datetime.utcnow().isoformat(),
+            "amount": 35,
             "direction": "out",
-            "reference": "BILL-2001",
-            "note": "Courier invoice",
-            "vendor_name": "FastShip",
-            "payment_status": "unpaid",
+            "status": "unpaid",
+            "reference": "EXP-2001",
+            "note": "Courier bill",
+            "counterparty_name": "FastShip",
+            "counterparty_type": "vendor",
         },
     )
-    assert expense_response.status_code == 201
-    expense_payload = expense_response.json()
-    assert expense_payload["entry_type"] == "expense"
-    assert expense_payload["direction"] == "out"
-    assert expense_payload["vendor_name"] == "FastShip"
-    assert expense_payload["payment_status"] == "unpaid"
+    assert manual_response.status_code == 201, manual_response.text
 
-    journal = client.get("/finance/transactions", params={"limit": 10})
-    assert journal.status_code == 200
-    journal_payload = journal.json()
-    assert journal_payload["total"] == 6
-    assert journal_payload["transactions"][0]["entry_id"] == expense_payload["entry_id"]
-    assert journal_payload["transactions"][0]["vendor_name"] == "FastShip"
+    workspace = client.get("/finance/workspace")
+    assert workspace.status_code == 200
+    payload = workspace.json()
 
-    update_response = client.put(
-        f"/finance/transactions/{payment_payload['entry_id']}",
-        json={
-            "entry_type": "payment",
-            "entry_date": base_at.isoformat(),
-            "category": "cash",
-            "amount": 95,
-            "direction": "in",
-            "reference": "RCPT-2001-REV",
-            "note": "Refunded amount",
-            "payment_status": "completed",
-        },
-    )
-    assert update_response.status_code == 200
-    updated_payload = update_response.json()
-    assert updated_payload["direction"] == "in"
-    assert updated_payload["amount"] == 95.0
-    assert updated_payload["reference"] == "RCPT-2001-REV"
-
-    audit = runtime.store.read("audit_log.csv")
-    finance_audit = audit[audit["entity_type"] == "finance_transaction"]
-    assert "payment_created" in set(finance_audit["action"].tolist())
-    assert "expense_created" in set(finance_audit["action"].tolist())
-    assert "payment_updated" in set(finance_audit["action"].tolist())
+    assert payload["overview"]["revenue"] == 200.0
+    assert payload["overview"]["expenses"] == 35.0
+    assert payload["overview"]["payables"] == 35.0
+    assert {item["origin_type"] for item in payload["commerce_transactions"]} == {"sale_fulfillment"}
+    assert {item["origin_type"] for item in payload["manual_transactions"]} == {"manual_expense"}
+    assert payload["commerce_transactions"][0]["editable"] is False
+    assert payload["manual_transactions"][0]["editable"] is True
+    assert payload["receivables"][0]["sale_id"] == order["sales_order_id"]

@@ -725,6 +725,10 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
   gap: 1rem;
   grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
 }
+.finance-side-stack {
+  display: grid;
+  gap: 1rem;
+}
 .finance-bridge {
   display: grid;
   gap: 0.9rem;
@@ -748,6 +752,34 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
 .finance-ledger-block > header p { margin: 0.25rem 0 0; color: var(--text-muted); }
 .finance-row-list { display: grid; gap: 0.65rem; }
 .finance-row-list-tight { gap: 0.55rem; }
+.finance-row-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.85rem;
+  align-items: flex-start;
+}
+.finance-row-card-head strong {
+  white-space: nowrap;
+}
+.finance-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.7rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+.finance-origin-pill {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  border: 1px solid #b7e5db;
+  background: #edf9f5;
+  color: #0f766e;
+  border-radius: 999px;
+  padding: 0.14rem 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
 .finance-row-card,
 .finance-transaction-card {
   border: 1px solid var(--border);
@@ -756,6 +788,9 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
   padding: 0.8rem;
   display: grid;
   gap: 0.75rem;
+}
+.finance-row-readonly {
+  background: linear-gradient(180deg, #fbfefe 0%, #f6fbfa 100%);
 }
 .finance-row-card strong,
 .finance-transaction-card strong { display: block; }
@@ -780,6 +815,9 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
 .finance-row-card dd,
 .finance-transaction-card dd { margin: 0; }
 .finance-row-note { color: var(--text-muted); font-size: 0.84rem; }
+.finance-source-link {
+  width: fit-content;
+}
 .finance-transaction-type {
   display: inline-flex;
   width: fit-content;
@@ -1289,6 +1327,12 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 
+.returns-history-layout {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.95fr);
+}
+
 .commerce-card,
 .selection-card {
   border: 1px solid var(--border);
@@ -1308,6 +1352,12 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
 .selection-card:hover {
   border-color: #8bdccf;
   background: #f3fffc;
+}
+
+.commerce-card.selected {
+  border-color: #8ad3c8;
+  box-shadow: 0 8px 24px rgba(15, 118, 110, 0.08);
+  background: #f8fdfc;
 }
 
 .commerce-card-header {

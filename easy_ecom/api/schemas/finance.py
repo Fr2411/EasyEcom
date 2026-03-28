@@ -3,22 +3,28 @@ from __future__ import annotations
 from typing import List, Literal, Optional
 from pydantic import BaseModel, Field
 
-TransactionType = Literal["payment", "expense"]
+FinanceOriginType = Literal["sale_fulfillment", "return_refund", "manual_payment", "manual_expense"]
 PaymentDirection = Literal["in", "out"]
-PaymentStatus = Literal["paid", "unpaid", "partial", "completed", "pending", "succeeded"]
+FinanceStatus = Literal["posted", "paid", "unpaid", "partial", "pending", "completed", "reversed"]
+CounterpartyType = Literal["customer", "vendor", "internal"]
 
 
 class FinanceTransaction(BaseModel):
-    entry_id: str
-    entry_date: str
-    entry_type: TransactionType
+    transaction_id: str
+    origin_type: FinanceOriginType
+    origin_id: Optional[str] = None
+    occurred_at: str
     direction: PaymentDirection
-    category: str
+    status: FinanceStatus
     amount: float
+    currency_code: str
     reference: str
     note: str
-    payment_status: Optional[PaymentStatus] = None
-    vendor_name: Optional[str] = None
+    counterparty_type: Optional[CounterpartyType] = None
+    counterparty_id: Optional[str] = None
+    counterparty_name: str
+    editable: bool = False
+    source_label: str = ""
 
 
 class TransactionListResponse(BaseModel):
@@ -29,32 +35,36 @@ class TransactionListResponse(BaseModel):
 
 
 class CreateTransactionRequest(BaseModel):
-    entry_type: TransactionType = Field(..., description="Type of transaction: 'payment' or 'expense'")
-    entry_date: Optional[str] = Field(None, description="Date of transaction (ISO format)")
-    category: str = Field(..., description="Category of transaction")
+    origin_type: Literal["manual_payment", "manual_expense"] = Field(..., description="Manual finance transaction type")
+    occurred_at: Optional[str] = Field(None, description="Date of transaction (ISO format)")
     amount: float = Field(..., gt=0, description="Amount of transaction")
-    direction: PaymentDirection = Field(..., description="Direction: 'in' for income, 'out' for expense")
+    direction: PaymentDirection = Field(..., description="Direction: 'in' for inflow, 'out' for outflow")
+    status: Optional[FinanceStatus] = Field(None, description="Settlement status for the manual transaction")
+    currency_code: Optional[str] = Field(None, description="Currency code")
     reference: str = Field("", description="Reference number or identifier")
     note: str = Field("", description="Additional notes")
-    vendor_name: Optional[str] = Field(None, description="Vendor name (for expenses)")
-    payment_status: Optional[PaymentStatus] = Field(None, description="Payment status (for expenses)")
+    counterparty_name: Optional[str] = Field(None, description="Customer, vendor, or internal counterparty name")
+    counterparty_type: Optional[CounterpartyType] = Field(None, description="Counterparty type")
 
 
 class UpdateTransactionRequest(BaseModel):
-    entry_type: TransactionType = Field(..., description="Type of transaction: 'payment' or 'expense'")
-    entry_date: Optional[str] = Field(None, description="Date of transaction (ISO format)")
-    category: Optional[str] = Field(None, description="Category of transaction")
+    origin_type: Literal["manual_payment", "manual_expense"] = Field(..., description="Manual finance transaction type")
+    occurred_at: Optional[str] = Field(None, description="Date of transaction (ISO format)")
     amount: Optional[float] = Field(None, gt=0, description="Amount of transaction")
-    direction: Optional[PaymentDirection] = Field(None, description="Direction: 'in' for income, 'out' for expense")
+    direction: Optional[PaymentDirection] = Field(None, description="Direction: 'in' for inflow, 'out' for outflow")
+    status: Optional[FinanceStatus] = Field(None, description="Settlement status for the manual transaction")
+    currency_code: Optional[str] = Field(None, description="Currency code")
     reference: Optional[str] = Field(None, description="Reference number or identifier")
     note: Optional[str] = Field(None, description="Additional notes")
-    vendor_name: Optional[str] = Field(None, description="Vendor name (for expenses)")
-    payment_status: Optional[PaymentStatus] = Field(None, description="Payment status (for expenses)")
+    counterparty_name: Optional[str] = Field(None, description="Customer, vendor, or internal counterparty name")
+    counterparty_type: Optional[CounterpartyType] = Field(None, description="Counterparty type")
 
 
 class FinanceOverviewResponse(BaseModel):
-    sales_revenue: Optional[float] = None
-    expense_total: Optional[float] = None
+    revenue: Optional[float] = None
+    cash_collected: Optional[float] = None
+    refunds_paid: Optional[float] = None
+    expenses: Optional[float] = None
     receivables: Optional[float] = None
     payables: Optional[float] = None
     cash_in: Optional[float] = None
@@ -75,18 +85,20 @@ class FinanceReceivable(BaseModel):
 
 
 class FinancePayable(BaseModel):
-    expense_id: str
-    expense_number: str
+    transaction_id: str
+    reference: str
     vendor_name: str
-    category: str
-    expense_date: str
+    origin_type: FinanceOriginType
+    occurred_at: str
     amount: float
-    payment_status: str
+    status: str
     note: str
 
 
 class FinanceWorkspaceResponse(BaseModel):
     overview: FinanceOverviewResponse
-    transactions: List[FinanceTransaction]
+    commerce_transactions: List[FinanceTransaction]
+    manual_transactions: List[FinanceTransaction]
     receivables: List[FinanceReceivable]
     payables: List[FinancePayable]
+    recent_refunds: List[FinanceTransaction]
