@@ -27,8 +27,10 @@ export const NAV_ITEMS: NavigationItem[] = [
   { href: '/inventory', label: 'Inventory', group: 'Commerce', icon: 'inventory' },
   { href: '/sales', label: 'Sales', group: 'Commerce', icon: 'sales' },
   { href: '/sales-agent', label: 'Sales Agent', group: 'Commerce', icon: 'ai' },
+  { href: '/ai-review', label: 'AI Review', group: 'Commerce', icon: 'ai' },
   { href: '/finance', label: 'Finance', group: 'Operations', icon: 'finance' },
   { href: '/returns', label: 'Returns', group: 'Operations', icon: 'returns' },
+  { href: '/automation', label: 'Automation', group: 'System', icon: 'automation' },
   { href: '/admin', label: 'Admin', group: 'System', icon: 'admin' },
   { href: '/settings', label: 'Settings', group: 'System', icon: 'settings' }
 ];

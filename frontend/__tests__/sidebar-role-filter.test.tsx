@@ -52,6 +52,21 @@ describe('Sidebar role filtering', () => {
     expect(screen.queryByRole('link', { name: 'Catalog' })).toBeNull();
   });
 
+  test('shows automation when the session explicitly allows it', () => {
+    useAuthMock.mockReturnValue({
+      user: {
+        roles: ['FINANCE_STAFF'],
+        allowed_pages: ['Home', 'Dashboard', 'Automation', 'Finance', 'Reports', 'Settings'],
+      },
+      clearAuth: vi.fn(),
+    });
+
+    render(<Sidebar />);
+
+    expect(screen.getByRole('link', { name: 'Automation' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Finance' })).toBeTruthy();
+  });
+
   test('keeps catalog hidden from normal tenant navigation even for owners', () => {
     useAuthMock.mockReturnValue({
       user: {
