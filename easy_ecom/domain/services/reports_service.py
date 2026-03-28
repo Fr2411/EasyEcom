@@ -23,6 +23,7 @@ from easy_ecom.api.schemas.reports import (
 from easy_ecom.data.store.postgres_models import (
     CustomerModel,
     ExpenseModel,
+    FinanceTransactionModel,
     InventoryLedgerModel,
     PaymentModel,
     ProductModel,
@@ -42,6 +43,8 @@ OPEN_ORDER_STATUSES = ("confirmed", "completed")
 RECEIVED_PURCHASE_STATUSES = ("received",)
 COMPLETED_PAYMENT_STATUSES = ("completed", "paid", "succeeded")
 PAID_EXPENSE_STATUSES = ("paid", "completed")
+MANUAL_EXPENSE_ORIGINS = ("manual_expense",)
+MANUAL_PAYMENT_ORIGINS = ("manual_payment",)
 
 
 def _as_decimal(value: object | None) -> Decimal:
@@ -225,24 +228,35 @@ class ReportsService:
         )
 
     def _expense_total(self, session: Session, context: ReportContext, date_range: DateRange) -> Decimal:
-        expense_event = self._expense_event_expr()
         value = session.execute(
-            select(func.coalesce(func.sum(ExpenseModel.amount), 0)).where(
-                *self._tenant_filters(context, ExpenseModel),
-                expense_event >= date_range.start,
-                expense_event < date_range.end_exclusive,
+            select(func.coalesce(func.sum(FinanceTransactionModel.amount), 0)).where(
+                *self._tenant_filters(context, FinanceTransactionModel),
+                FinanceTransactionModel.origin_type.in_(MANUAL_EXPENSE_ORIGINS),
+                FinanceTransactionModel.occurred_at >= date_range.start,
+                FinanceTransactionModel.occurred_at < date_range.end_exclusive,
+            )
+        ).scalar_one()
+        return _as_decimal(value)
+
+    def _revenue_total(self, session: Session, context: ReportContext, date_range: DateRange) -> Decimal:
+        value = session.execute(
+            select(func.coalesce(func.sum(FinanceTransactionModel.amount), 0)).where(
+                *self._tenant_filters(context, FinanceTransactionModel),
+                FinanceTransactionModel.origin_type == "sale_fulfillment",
+                FinanceTransactionModel.occurred_at >= date_range.start,
+                FinanceTransactionModel.occurred_at < date_range.end_exclusive,
             )
         ).scalar_one()
         return _as_decimal(value)
 
     def _payables_total(self, session: Session, context: ReportContext, date_range: DateRange) -> Decimal:
-        expense_event = self._expense_event_expr()
         value = session.execute(
-            select(func.coalesce(func.sum(ExpenseModel.amount), 0)).where(
-                *self._tenant_filters(context, ExpenseModel),
-                ExpenseModel.payment_status.notin_(PAID_EXPENSE_STATUSES),
-                expense_event >= date_range.start,
-                expense_event < date_range.end_exclusive,
+            select(func.coalesce(func.sum(FinanceTransactionModel.amount), 0)).where(
+                *self._tenant_filters(context, FinanceTransactionModel),
+                FinanceTransactionModel.origin_type.in_(MANUAL_EXPENSE_ORIGINS),
+                FinanceTransactionModel.status.notin_(PAID_EXPENSE_STATUSES),
+                FinanceTransactionModel.occurred_at >= date_range.start,
+                FinanceTransactionModel.occurred_at < date_range.end_exclusive,
             )
         ).scalar_one()
         return _as_decimal(value)
@@ -264,19 +278,18 @@ class ReportsService:
             .subquery()
         )
 
-        sales_event = self._sales_event_expr()
         rows = session.execute(
             select(
-                SalesOrderModel.total_amount,
+                FinanceTransactionModel.amount,
                 payments_subquery.c.paid_amount,
             )
-            .select_from(SalesOrderModel)
-            .outerjoin(payments_subquery, payments_subquery.c.sales_order_id == SalesOrderModel.sales_order_id)
+            .select_from(FinanceTransactionModel)
+            .outerjoin(payments_subquery, payments_subquery.c.sales_order_id == FinanceTransactionModel.origin_id)
             .where(
-                *self._tenant_filters(context, SalesOrderModel),
-                SalesOrderModel.status.in_(OPEN_ORDER_STATUSES),
-                sales_event >= date_range.start,
-                sales_event < date_range.end_exclusive,
+                *self._tenant_filters(context, FinanceTransactionModel),
+                FinanceTransactionModel.origin_type == "sale_fulfillment",
+                FinanceTransactionModel.occurred_at >= date_range.start,
+                FinanceTransactionModel.occurred_at < date_range.end_exclusive,
             )
         ).all()
 
@@ -296,8 +309,6 @@ class ReportsService:
         context = ReportContext(user)
         date_range = self._date_range(None, None)
         payment_event = self._payment_event_expr()
-        sales_event = self._sales_event_expr()
-
         with self._session_factory() as session:
             payments_subquery = (
                 select(
@@ -320,21 +331,22 @@ class ReportsService:
                     SalesOrderModel.order_number,
                     SalesOrderModel.customer_id,
                     CustomerModel.name,
-                    sales_event.label("sale_date"),
-                    SalesOrderModel.total_amount,
+                    FinanceTransactionModel.occurred_at.label("sale_date"),
+                    FinanceTransactionModel.amount.label("total_amount"),
                     payments_subquery.c.paid_amount,
                     SalesOrderModel.payment_status,
                 )
-                .select_from(SalesOrderModel)
+                .select_from(FinanceTransactionModel)
+                .join(SalesOrderModel, SalesOrderModel.sales_order_id == FinanceTransactionModel.origin_id)
                 .outerjoin(payments_subquery, payments_subquery.c.sales_order_id == SalesOrderModel.sales_order_id)
                 .outerjoin(CustomerModel, CustomerModel.customer_id == SalesOrderModel.customer_id)
                 .where(
-                    *self._tenant_filters(context, SalesOrderModel),
-                    SalesOrderModel.status.in_(OPEN_ORDER_STATUSES),
-                    sales_event >= date_range.start,
-                    sales_event < date_range.end_exclusive,
+                    *self._tenant_filters(context, FinanceTransactionModel, SalesOrderModel),
+                    FinanceTransactionModel.origin_type == "sale_fulfillment",
+                    FinanceTransactionModel.occurred_at >= date_range.start,
+                    FinanceTransactionModel.occurred_at < date_range.end_exclusive,
                 )
-                .order_by(sales_event.desc(), SalesOrderModel.order_number.desc())
+                .order_by(FinanceTransactionModel.occurred_at.desc(), SalesOrderModel.order_number.desc())
                 .limit(limit)
             ).all()
 
@@ -372,35 +384,36 @@ class ReportsService:
         with self._session_factory() as session:
             rows = session.execute(
                 select(
-                    ExpenseModel.expense_id,
-                    ExpenseModel.expense_number,
-                    ExpenseModel.vendor_name,
-                    ExpenseModel.category,
-                    expense_event.label("expense_date"),
-                    ExpenseModel.amount,
-                    ExpenseModel.payment_status,
-                    ExpenseModel.description,
+                    FinanceTransactionModel.transaction_id,
+                    FinanceTransactionModel.reference,
+                    FinanceTransactionModel.counterparty_name,
+                    FinanceTransactionModel.origin_type,
+                    FinanceTransactionModel.occurred_at,
+                    FinanceTransactionModel.amount,
+                    FinanceTransactionModel.status,
+                    FinanceTransactionModel.note,
                 )
                 .where(
-                    *self._tenant_filters(context, ExpenseModel),
-                    ExpenseModel.payment_status.notin_(PAID_EXPENSE_STATUSES),
-                    expense_event >= date_range.start,
-                    expense_event < date_range.end_exclusive,
+                    *self._tenant_filters(context, FinanceTransactionModel),
+                    FinanceTransactionModel.origin_type.in_(MANUAL_EXPENSE_ORIGINS),
+                    FinanceTransactionModel.status.notin_(PAID_EXPENSE_STATUSES),
+                    FinanceTransactionModel.occurred_at >= date_range.start,
+                    FinanceTransactionModel.occurred_at < date_range.end_exclusive,
                 )
-                .order_by(expense_event.desc(), ExpenseModel.expense_number.desc())
+                .order_by(FinanceTransactionModel.occurred_at.desc(), FinanceTransactionModel.reference.desc())
                 .limit(limit)
             ).all()
 
             return [
                 FinancePayable(
-                    expense_id=str(row.expense_id),
-                    expense_number=str(row.expense_number),
-                    vendor_name=str(row.vendor_name or "Unassigned vendor"),
-                    category=str(row.category),
-                    expense_date=row.expense_date.isoformat() if hasattr(row.expense_date, "isoformat") else str(row.expense_date),
+                    transaction_id=str(row.transaction_id),
+                    reference=str(row.reference or ""),
+                    vendor_name=str(row.counterparty_name or "Unassigned vendor"),
+                    origin_type=str(row.origin_type),
+                    occurred_at=row.occurred_at.isoformat() if hasattr(row.occurred_at, "isoformat") else str(row.occurred_at),
                     amount=_as_float(row.amount),
-                    payment_status=str(row.payment_status),
-                    note=str(row.description or ""),
+                    status=str(row.status),
+                    note=str(row.note or ""),
                 )
                 for row in rows
             ]
@@ -408,54 +421,65 @@ class ReportsService:
     def get_finance_overview(self, user: AuthenticatedUser) -> FinanceOverviewResponse:
         context = ReportContext(user)
         date_range = self._date_range(None, None)
-        payment_event = self._payment_event_expr()
-        expense_event = self._expense_event_expr()
-
         with self._session_factory() as session:
-            sales_summary = self._sales_summary(session, context, date_range)
+            revenue_total = self._revenue_total(session, context, date_range)
             expense_total = self._expense_total(session, context, date_range)
             receivables = self._receivables_total(session, context, date_range)
             payables = self._payables_total(session, context, date_range)
 
-            cash_in = _as_decimal(
+            cash_collected = _as_decimal(
                 session.execute(
                     select(func.coalesce(func.sum(PaymentModel.amount), 0)).where(
                         *self._tenant_filters(context, PaymentModel),
                         PaymentModel.status.in_(COMPLETED_PAYMENT_STATUSES),
                         PaymentModel.sales_order_id.is_not(None),
-                        payment_event >= date_range.start,
-                        payment_event < date_range.end_exclusive,
+                        self._payment_event_expr() >= date_range.start,
+                        self._payment_event_expr() < date_range.end_exclusive,
                     )
                 ).scalar_one()
             )
 
             refund_cash_out = _as_decimal(
                 session.execute(
-                    select(func.coalesce(func.sum(PaymentModel.amount), 0)).where(
-                        *self._tenant_filters(context, PaymentModel),
-                        PaymentModel.status.in_(COMPLETED_PAYMENT_STATUSES),
-                        PaymentModel.sales_return_id.is_not(None),
-                        payment_event >= date_range.start,
-                        payment_event < date_range.end_exclusive,
+                    select(func.coalesce(func.sum(FinanceTransactionModel.amount), 0)).where(
+                        *self._tenant_filters(context, FinanceTransactionModel),
+                        FinanceTransactionModel.origin_type == "return_refund",
+                        FinanceTransactionModel.occurred_at >= date_range.start,
+                        FinanceTransactionModel.occurred_at < date_range.end_exclusive,
+                    )
+                ).scalar_one()
+            )
+
+            manual_cash_in = _as_decimal(
+                session.execute(
+                    select(func.coalesce(func.sum(FinanceTransactionModel.amount), 0)).where(
+                        *self._tenant_filters(context, FinanceTransactionModel),
+                        FinanceTransactionModel.origin_type == "manual_payment",
+                        FinanceTransactionModel.occurred_at >= date_range.start,
+                        FinanceTransactionModel.occurred_at < date_range.end_exclusive,
                     )
                 ).scalar_one()
             )
 
             paid_expenses = _as_decimal(
                 session.execute(
-                    select(func.coalesce(func.sum(ExpenseModel.amount), 0)).where(
-                        *self._tenant_filters(context, ExpenseModel),
-                        ExpenseModel.payment_status.in_(PAID_EXPENSE_STATUSES),
-                        expense_event >= date_range.start,
-                        expense_event < date_range.end_exclusive,
+                    select(func.coalesce(func.sum(FinanceTransactionModel.amount), 0)).where(
+                        *self._tenant_filters(context, FinanceTransactionModel),
+                        FinanceTransactionModel.origin_type == "manual_expense",
+                        FinanceTransactionModel.status.in_(PAID_EXPENSE_STATUSES),
+                        FinanceTransactionModel.occurred_at >= date_range.start,
+                        FinanceTransactionModel.occurred_at < date_range.end_exclusive,
                     )
                 ).scalar_one()
             )
 
+            cash_in = cash_collected + manual_cash_in
             cash_out = refund_cash_out + paid_expenses
             return FinanceOverviewResponse(
-                sales_revenue=_as_float(sales_summary.revenue_total),
-                expense_total=_as_float(expense_total),
+                revenue=_as_float(revenue_total),
+                cash_collected=_as_float(cash_collected),
+                refunds_paid=_as_float(refund_cash_out),
+                expenses=_as_float(expense_total),
                 receivables=_as_float(receivables),
                 payables=_as_float(payables),
                 cash_in=_as_float(cash_in),
@@ -762,28 +786,57 @@ class ReportsService:
     def get_finance_report(self, user: AuthenticatedUser, from_date: Optional[str] = None, to_date: Optional[str] = None) -> FinanceReport:
         context = ReportContext(user)
         date_range = self._date_range(from_date, to_date)
-        expense_event = self._expense_event_expr()
 
         with self._session_factory() as session:
-            sales_summary = self._sales_summary(session, context, date_range)
-            purchase_summary = self._purchase_summary(session, context, date_range)
-            return_summary = self._return_summary(session, context, date_range)
+            revenue_total = self._revenue_total(session, context, date_range)
             expense_total = self._expense_total(session, context, date_range)
             receivables_total = self._receivables_total(session, context, date_range)
             payables_total = self._payables_total(session, context, date_range)
+            refunds_paid = _as_decimal(
+                session.execute(
+                    select(func.coalesce(func.sum(FinanceTransactionModel.amount), 0)).where(
+                        *self._tenant_filters(context, FinanceTransactionModel),
+                        FinanceTransactionModel.origin_type == "return_refund",
+                        FinanceTransactionModel.occurred_at >= date_range.start,
+                        FinanceTransactionModel.occurred_at < date_range.end_exclusive,
+                    )
+                ).scalar_one()
+            )
+            cash_collected = _as_decimal(
+                session.execute(
+                    select(func.coalesce(func.sum(PaymentModel.amount), 0)).where(
+                        *self._tenant_filters(context, PaymentModel),
+                        PaymentModel.sales_order_id.is_not(None),
+                        PaymentModel.status.in_(COMPLETED_PAYMENT_STATUSES),
+                        self._payment_event_expr() >= date_range.start,
+                        self._payment_event_expr() < date_range.end_exclusive,
+                    )
+                ).scalar_one()
+            )
+            manual_cash_in = _as_decimal(
+                session.execute(
+                    select(func.coalesce(func.sum(FinanceTransactionModel.amount), 0)).where(
+                        *self._tenant_filters(context, FinanceTransactionModel),
+                        FinanceTransactionModel.origin_type == "manual_payment",
+                        FinanceTransactionModel.occurred_at >= date_range.start,
+                        FinanceTransactionModel.occurred_at < date_range.end_exclusive,
+                    )
+                ).scalar_one()
+            )
 
             expense_trend_rows = session.execute(
                 select(
-                    func.date(expense_event).label("period"),
-                    func.coalesce(func.sum(ExpenseModel.amount), 0).label("amount"),
+                    func.date(FinanceTransactionModel.occurred_at).label("period"),
+                    func.coalesce(func.sum(FinanceTransactionModel.amount), 0).label("amount"),
                 )
                 .where(
-                    *self._tenant_filters(context, ExpenseModel),
-                    expense_event >= date_range.start,
-                    expense_event < date_range.end_exclusive,
+                    *self._tenant_filters(context, FinanceTransactionModel),
+                    FinanceTransactionModel.origin_type == "manual_expense",
+                    FinanceTransactionModel.occurred_at >= date_range.start,
+                    FinanceTransactionModel.occurred_at < date_range.end_exclusive,
                 )
-                .group_by(func.date(expense_event))
-                .order_by(func.date(expense_event))
+                .group_by(func.date(FinanceTransactionModel.occurred_at))
+                .order_by(func.date(FinanceTransactionModel.occurred_at))
             ).all()
 
             return FinanceReport(
@@ -797,7 +850,7 @@ class ReportsService:
                 receivables_total=_as_float(receivables_total),
                 payables_total=_as_float(payables_total),
                 net_operating_snapshot=_as_float(
-                    sales_summary.revenue_total - expense_total - purchase_summary.subtotal - return_summary.amount_total
+                    cash_collected + manual_cash_in - refunds_paid - expense_total
                 ),
                 deferred_metrics=[],
             )

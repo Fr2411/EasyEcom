@@ -629,3 +629,45 @@ class ExpenseModel(TenantMixin, TimestampMixin, Base):
     incurred_at: Mapped[datetime] = mapped_column(Timestamp, nullable=False, server_default=func.now())
     payment_status: Mapped[str] = mapped_column(String(32), nullable=False, default="unpaid", index=True)
     created_by_user_id: Mapped[str | None] = mapped_column(GUID(), ForeignKey("users.user_id", ondelete="SET NULL"))
+
+
+class FinanceTransactionModel(TenantMixin, TimestampMixin, Base):
+    __tablename__ = "finance_transactions"
+
+    transaction_id: Mapped[str] = mapped_column(GUID(), primary_key=True)
+    origin_type: Mapped[str] = mapped_column(String(64), nullable=False, default="manual_payment", index=True)
+    origin_id: Mapped[str | None] = mapped_column(GUID(), nullable=True, index=True)
+    direction: Mapped[str] = mapped_column(String(8), nullable=False, default="in", index=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="posted", index=True)
+    occurred_at: Mapped[datetime] = mapped_column(Timestamp, nullable=False, server_default=func.now(), index=True)
+    amount: Mapped[Decimal] = mapped_column(Amount, nullable=False, default=Decimal("0"))
+    currency_code: Mapped[str] = mapped_column(String(16), nullable=False, default="USD")
+    reference: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    note: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    counterparty_type: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    counterparty_id: Mapped[str | None] = mapped_column(GUID(), nullable=True)
+    counterparty_name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    created_by_user_id: Mapped[str | None] = mapped_column(GUID(), ForeignKey("users.user_id", ondelete="SET NULL"))
+
+
+class FinanceTransactionLinkModel(TenantMixin, TimestampMixin, Base):
+    __tablename__ = "finance_transaction_links"
+    __table_args__ = (
+        UniqueConstraint(
+            "client_id",
+            "origin_type",
+            "origin_id",
+            "transaction_id",
+            name="uq_finance_transaction_links_origin_transaction",
+        ),
+    )
+
+    finance_transaction_link_id: Mapped[str] = mapped_column(GUID(), primary_key=True)
+    transaction_id: Mapped[str] = mapped_column(
+        GUID(),
+        ForeignKey("finance_transactions.transaction_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    origin_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    origin_id: Mapped[str] = mapped_column(GUID(), nullable=False, index=True)

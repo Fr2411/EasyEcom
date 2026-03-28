@@ -56,6 +56,14 @@ export type SalesOrder = {
   source_channel_id: string | null;
   source_conversation_id: string | null;
   source_agent_draft_id: string | null;
+  finance_status?: 'not_posted' | 'posted' | 'reversed' | null;
+  finance_posted_at?: string | null;
+  finance_summary?: {
+    transaction_id?: string | null;
+    amount?: string;
+    posted_at?: string | null;
+    counterparty_name?: string | null;
+  } | null;
   lines: SalesOrderLine[];
 };
 
@@ -80,4 +88,12 @@ export type SalesOrderPayload = {
   notes: string;
   lines: SalesOrderLineInput[];
   action: 'save_draft' | 'confirm' | 'confirm_and_fulfill';
+};
+
+export type SalesOrderPaymentPayload = {
+  payment_date?: string;
+  amount: string;
+  method: string;
+  reference: string;
+  note: string;
 };

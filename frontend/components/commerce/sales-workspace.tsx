@@ -60,6 +60,20 @@ const EMPTY_CUSTOMER: DraftCustomer = {
   address: '',
 };
 
+function financeStatusLabel(order: SalesOrder) {
+  if (order.finance_status === 'posted') return 'Posted to finance';
+  if (order.finance_status === 'reversed') return 'Finance reversed';
+  if (order.finance_status === 'not_posted') return 'Not posted to finance';
+  return 'Finance not yet posted';
+}
+
+function financeSummaryText(order: SalesOrder) {
+  if (!order.finance_summary) return '';
+  const amount = order.finance_summary.amount ? formatMoney(order.finance_summary.amount) : formatMoney(order.total_amount);
+  const postedAt = order.finance_summary.posted_at ? ` at ${formatDateTime(order.finance_summary.posted_at)}` : '';
+  return `${amount}${postedAt}`;
+}
+
 export function deriveSalesIntentSuggestion(
   intentLookup: LookupOutcome<SaleLookupVariant, SaleLookupVariant | EmbeddedCustomer, { name: string; phone: string; email: string }> | null
 ): SalesIntentSuggestion {
@@ -332,7 +346,9 @@ export function SalesWorkspace() {
           ? 'Draft order saved.'
           : action === 'confirm'
             ? 'Order confirmed and stock reserved.'
-            : 'Order confirmed and fulfilled.'
+            : response.order.finance_status === 'posted'
+              ? `Order fulfilled and ${financeStatusLabel(response.order).toLowerCase()}.`
+              : 'Order confirmed and fulfilled.'
       );
       setDraftLines([]);
       setCustomer({ ...EMPTY_CUSTOMER });
@@ -664,6 +680,7 @@ export function SalesWorkspace() {
                   >
                     <strong>{order.order_number}</strong>
                     <span>{order.customer_name} · {order.status} · {formatMoney(order.total_amount)}</span>
+                    {order.finance_status ? <span className="status-pill">{financeStatusLabel(order)}</span> : null}
                   </button>
                 ))
               ) : (
@@ -684,6 +701,11 @@ export function SalesWorkspace() {
                     <span>Customer: {selectedOrder.customer_phone || selectedOrder.customer_email}</span>
                     <span>Ordered: {formatDateTime(selectedOrder.ordered_at)}</span>
                     <span>Total: {formatMoney(selectedOrder.total_amount)}</span>
+                  </div>
+                  <div className="workspace-inline-actions">
+                    <span className="status-pill">{financeStatusLabel(selectedOrder)}</span>
+                    {selectedOrder.finance_summary ? <span>{financeSummaryText(selectedOrder)}</span> : null}
+                    {selectedOrder.payment_status ? <span>Payment {selectedOrder.payment_status}</span> : null}
                   </div>
                   <div className="table-scroll">
                     <table className="workspace-table">

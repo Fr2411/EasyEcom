@@ -6,6 +6,7 @@ from easy_ecom.api.schemas.commerce import (
     SaleVariantLookupResponse,
     SalesOrderActionRequest,
     SalesOrderActionResponse,
+    SalesOrderPaymentRequest,
     SalesOrderResponse,
     SalesOrderUpsertRequest,
     SalesOrdersResponse,
@@ -141,4 +142,24 @@ def cancel_order(
 ) -> SalesOrderActionResponse:
     return SalesOrderActionResponse(
         order=container.sales.cancel_order(user, sales_order_id, notes=payload.notes)
+    )
+
+
+@router.post("/orders/{sales_order_id}/record-payment", response_model=SalesOrderActionResponse)
+def record_order_payment(
+    sales_order_id: str,
+    payload: SalesOrderPaymentRequest,
+    user: AuthenticatedUser = Depends(get_authenticated_user),
+    container: ServiceContainer = Depends(get_container),
+) -> SalesOrderActionResponse:
+    return SalesOrderActionResponse(
+        order=container.sales.record_order_payment(
+            user,
+            sales_order_id=sales_order_id,
+            payment_date=payload.payment_date,
+            amount=payload.amount,
+            method=payload.method,
+            reference=payload.reference,
+            note=payload.note,
+        )
     )

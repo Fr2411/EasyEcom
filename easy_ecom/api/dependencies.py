@@ -26,6 +26,7 @@ from easy_ecom.domain.services.commerce_service import (
     SalesService,
 )
 from easy_ecom.domain.services.dashboard_service import DashboardAnalyticsService
+from easy_ecom.domain.services.finance_posting_service import FinancePostingService
 from easy_ecom.domain.services.overview_service import OverviewService
 from easy_ecom.domain.services.sales_agent_service import SalesAgentService
 from easy_ecom.domain.services.settings_service import SettingsService
@@ -63,6 +64,7 @@ class ServiceContainer:
         self.overview = OverviewService(session_factory)
         self._reports = None
         self.settings = SettingsService(session_factory)
+        self.finance_posting = FinancePostingService()
         self.transaction = TransactionService(session_factory)
         self.catalog = CatalogService(session_factory)
         self.inventory = InventoryService(session_factory)

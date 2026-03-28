@@ -12,8 +12,8 @@ import type {
   ReceiveStockPayload,
   ReceiveStockResponse,
 } from '@/types/inventory';
-import type { ReturnCreatePayload, ReturnEligibleLines, ReturnLookupOrder, ReturnRecord } from '@/types/returns';
-import type { EmbeddedCustomer, SaleLookupVariant, SalesOrder, SalesOrderPayload } from '@/types/sales';
+import type { ReturnCreatePayload, ReturnEligibleLines, ReturnLookupOrder, ReturnRefundPayload, ReturnRecord } from '@/types/returns';
+import type { EmbeddedCustomer, SaleLookupVariant, SalesOrder, SalesOrderPayload, SalesOrderPaymentPayload } from '@/types/sales';
 
 
 function buildQuery(params: Record<string, string | boolean | undefined>) {
@@ -151,6 +151,13 @@ export async function fulfillSalesOrder(orderId: string) {
   });
 }
 
+export async function recordSalesOrderPayment(orderId: string, payload: SalesOrderPaymentPayload) {
+  return apiClient<{ order: SalesOrder }>(`/sales/orders/${orderId}/record-payment`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 
 export async function cancelSalesOrder(orderId: string, notes = '') {
   return apiClient<{ order: SalesOrder }>(`/sales/orders/${orderId}/cancel`, {
@@ -177,6 +184,13 @@ export async function getEligibleReturnLines(orderId: string) {
 
 export async function createSalesReturn(payload: ReturnCreatePayload) {
   return apiClient<ReturnRecord>('/returns', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function recordSalesReturnRefund(returnId: string, payload: ReturnRefundPayload) {
+  return apiClient<ReturnRecord>(`/returns/${returnId}/record-refund`, {
     method: 'POST',
     body: JSON.stringify(payload),
   });

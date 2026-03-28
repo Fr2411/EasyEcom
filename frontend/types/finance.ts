@@ -1,12 +1,23 @@
 export type FinanceOverview = {
-  sales_revenue: number | null;
-  expense_total: number | null;
+  revenue: number | null;
+  cash_collected: number | null;
+  refunds_paid: number | null;
+  expenses: number | null;
   receivables: number | null;
   payables: number | null;
   cash_in: number | null;
   cash_out: number | null;
   net_operating: number | null;
 };
+
+export type FinanceTransactionDirection = 'in' | 'out';
+export type FinanceTransactionStatus = 'posted' | 'pending' | 'reversed' | 'completed' | 'paid' | 'unpaid' | 'partial';
+export type FinanceTransactionOriginType =
+  | 'sale_fulfillment'
+  | 'return_refund'
+  | 'manual_payment'
+  | 'manual_expense';
+export type FinanceCounterpartyType = 'customer' | 'vendor' | 'internal';
 
 export type FinanceReport = {
   from_date: string;
@@ -43,13 +54,13 @@ export type Receivable = {
 };
 
 export type Payable = {
-  expense_id: string;
-  expense_number: string;
+  transaction_id: string;
+  reference: string;
   vendor_name: string;
-  category: string;
-  expense_date: string;
+  origin_type: FinanceTransactionOriginType;
+  occurred_at: string;
   amount: number;
-  payment_status: string;
+  status: string;
   note: string;
 };
 
@@ -57,16 +68,22 @@ export type FinanceReceivable = Receivable;
 export type FinancePayable = Payable;
 
 export type FinanceTransaction = {
-  entry_id: string;
-  entry_date: string;
-  entry_type: 'payment' | 'expense';
-  direction: 'in' | 'out';
-  category: string;
+  transaction_id: string;
+  occurred_at: string;
+  origin_type: FinanceTransactionOriginType;
+  origin_id: string | null;
+  direction: FinanceTransactionDirection;
+  status: FinanceTransactionStatus;
+  currency_code: string;
   amount: number;
   reference: string;
   note: string;
-  payment_status?: string | null;
-  vendor_name?: string | null;
+  counterparty_type: FinanceCounterpartyType | null;
+  counterparty_id: string | null;
+  counterparty_name: string;
+  finance_posted_at?: string | null;
+  editable: boolean;
+  source_label: string;
 };
 
 export type FinanceTransactionList = {
@@ -78,19 +95,30 @@ export type FinanceTransactionList = {
 
 export type FinanceWorkspace = {
   overview: FinanceOverview;
-  transactions: FinanceTransaction[];
+  commerce_transactions: FinanceTransaction[];
+  manual_transactions: FinanceTransaction[];
+  recent_refunds: FinanceTransaction[];
   receivables: Receivable[];
   payables: Payable[];
 };
 
 export type FinanceTransactionInput = {
-  entry_type: 'payment' | 'expense';
-  entry_date?: string;
-  category: string;
+  origin_type: 'manual_payment' | 'manual_expense';
+  occurred_at?: string;
   amount: number;
-  direction: 'in' | 'out';
+  direction: FinanceTransactionDirection;
+  status?: FinanceTransactionStatus;
+  currency_code?: string;
   reference: string;
   note: string;
-  vendor_name?: string;
-  payment_status?: string;
+  counterparty_name?: string;
+  counterparty_type?: FinanceCounterpartyType;
+};
+
+export type FinanceRefundInput = {
+  refund_date?: string;
+  amount: number;
+  method: string;
+  reference: string;
+  note: string;
 };

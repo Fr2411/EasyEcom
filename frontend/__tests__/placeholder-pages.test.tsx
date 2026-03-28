@@ -67,6 +67,7 @@ vi.mock('@/lib/api/commerce', () => ({
   searchReturnOrders: vi.fn(async () => ({ items: [] })),
   getEligibleReturnLines: vi.fn(),
   createSalesReturn: vi.fn(),
+  recordSalesReturnRefund: vi.fn(),
 }));
 
 vi.mock('@/lib/api/dashboard', () => ({
@@ -509,7 +510,7 @@ const cases = [
   ['Purchases', PurchasesPage, /trusted supplier/i],
   ['Sales', SalesPage, /order-first sales workspace/i],
   ['Sales Agent', SalesAgentPage, /no pending agent orders/i],
-  ['Finance', FinancePage, /record money movement/i],
+  ['Finance', FinancePage, 'Record manual finance entry'],
   ['Returns', ReturnsPage, /return and restock control/i],
   ['Integrations & Channels', IntegrationsPage, /whatsapp meta channel/i],
   ['AI Review Inbox', AiReviewPage, /choose a draft from the queue/i],

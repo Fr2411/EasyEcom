@@ -39,23 +39,27 @@ def finance_workspace(
     context = _transaction_context(user)
     return FinanceWorkspaceResponse(
         overview=container.reports.get_finance_overview(user),
-        transactions=container.transaction.get_transactions(context, limit=12, offset=0),
+        commerce_transactions=container.transaction.get_transactions(context, limit=8, offset=0, transaction_type="sale_fulfillment")
+        + container.transaction.get_transactions(context, limit=8, offset=0, transaction_type="return_refund"),
+        manual_transactions=container.transaction.get_transactions(context, limit=12, offset=0, transaction_type="manual_payment")
+        + container.transaction.get_transactions(context, limit=12, offset=0, transaction_type="manual_expense"),
         receivables=container.reports.list_finance_receivables(user, limit=8),
         payables=container.reports.list_finance_payables(user, limit=8),
+        recent_refunds=container.transaction.get_transactions(context, limit=8, offset=0, transaction_type="return_refund"),
     )
 
 
 @router.get("/transactions", response_model=TransactionListResponse)
 def list_transactions(
-    transaction_type: Optional[str] = Query(None, description="Filter by transaction type: payment or expense"),
+    transaction_type: Optional[str] = Query(None, description="Filter by finance origin type"),
     limit: int = Query(100, ge=1, le=1000, description="Number of items to return"),
     offset: int = Query(0, ge=0, description="Number of items to skip"),
     user: AuthenticatedUser = Depends(get_authenticated_user),
     container: ServiceContainer = Depends(get_container),
 ) -> TransactionListResponse:
     require_page_access(user, "Finance")
-    if transaction_type not in (None, "payment", "expense"):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="transaction_type must be payment or expense")
+    if transaction_type not in (None, "sale_fulfillment", "return_refund", "manual_payment", "manual_expense"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported transaction_type")
     context = _transaction_context(user)
     transactions = container.transaction.get_transactions(
         context,
@@ -96,7 +100,7 @@ def create_transaction(
     require_page_access(user, "Finance")
     return container.transaction.create_transaction(
         _transaction_context(user),
-        transaction_type=transaction_data.entry_type,
+        transaction_type=transaction_data.origin_type,
         data=transaction_data.model_dump(exclude_unset=True),
     )
 
@@ -110,9 +114,9 @@ def update_transaction(
 ) -> FinanceTransaction:
     require_page_access(user, "Finance")
     payload = transaction_data.model_dump(exclude_unset=True)
-    transaction_type = payload.pop("entry_type", None)
+    transaction_type = payload.pop("origin_type", None)
     if not transaction_type:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="entry_type is required for update")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="origin_type is required for update")
     try:
         return container.transaction.update_transaction(
             _transaction_context(user),
@@ -160,14 +164,14 @@ def list_accounts(
         {
             "account_code": "sales_revenue",
             "account_name": "Sales revenue",
-            "balance": overview.sales_revenue or 0,
+            "balance": overview.revenue or 0,
             "status": "active",
-            "note": "Confirmed sales revenue in the current operating window.",
+            "note": "Recognized revenue from fulfilled sales in the current operating window.",
         },
         {
             "account_code": "expenses",
             "account_name": "Expenses",
-            "balance": overview.expense_total or report.expense_total,
+            "balance": overview.expenses or report.expense_total,
             "status": "active",
             "note": "Operational expense total captured by the finance journal.",
         },
@@ -214,7 +218,7 @@ def list_financial_reports(
             "title": "Cash visibility",
             "cash_in": overview.cash_in or 0,
             "cash_out": overview.cash_out or 0,
-            "sales_revenue": overview.sales_revenue or 0,
-            "expenses": overview.expense_total or 0,
+            "sales_revenue": overview.revenue or 0,
+            "expenses": overview.expenses or 0,
         },
     ]

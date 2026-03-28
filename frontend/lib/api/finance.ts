@@ -8,7 +8,7 @@ import type {
   FinanceWorkspace,
 } from '@/types/finance';
 
-function buildFinanceQuery(params: { transactionType?: 'payment' | 'expense'; limit?: number; offset?: number } = {}) {
+function buildFinanceQuery(params: { transactionType?: FinanceTransaction['origin_type']; limit?: number; offset?: number } = {}) {
   const search = new URLSearchParams();
   if (params.transactionType) {
     search.set('transaction_type', params.transactionType);
@@ -43,7 +43,7 @@ export async function getFinanceWorkspace() {
   return apiClient<FinanceWorkspace>('/finance/workspace');
 }
 
-export async function getFinanceTransactions(params: { transactionType?: 'payment' | 'expense'; limit?: number; offset?: number } = {}) {
+export async function getFinanceTransactions(params: { transactionType?: FinanceTransaction['origin_type']; limit?: number; offset?: number } = {}) {
   return apiClient<FinanceTransactionList>(`/finance/transactions${buildFinanceQuery(params)}`);
 }
 

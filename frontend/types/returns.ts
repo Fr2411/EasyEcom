@@ -57,6 +57,22 @@ export type ReturnRecord = {
   refund_amount: string;
   requested_at: string | null;
   received_at: string | null;
+  refund_paid_amount?: string;
+  refund_outstanding_amount?: string;
+  finance_status?: 'not_posted' | 'posted' | 'reversed' | null;
+  finance_posted_at?: string | null;
+  finance_summary?: {
+    transaction_id?: string | null;
+    amount?: string;
+    posted_at?: string | null;
+  } | null;
+  recent_refunds?: Array<{
+    transaction_id: string;
+    amount: string;
+    reference: string;
+    note: string;
+    posted_at: string | null;
+  }>;
   lines: ReturnLine[];
 };
 
@@ -72,4 +88,12 @@ export type ReturnCreatePayload = {
     unit_refund_amount: string;
     reason: string;
   }>;
+};
+
+export type ReturnRefundPayload = {
+  refund_date?: string;
+  amount: string;
+  method: string;
+  reference: string;
+  note: string;
 };

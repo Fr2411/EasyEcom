@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import Select, func, or_, select
+from sqlalchemy import Select, delete, func, or_, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from easy_ecom.core.errors import ApiException
@@ -16,12 +17,15 @@ from easy_ecom.data.store.postgres_models import (
     CategoryModel,
     ClientSettingsModel,
     CustomerModel,
+    FinanceTransactionModel,
     InventoryLedgerModel,
     LocationModel,
+    PaymentModel,
     ProductModel,
     ProductVariantModel,
     PurchaseItemModel,
     PurchaseModel,
+    RefundModel,
     SalesOrderItemModel,
     SalesOrderModel,
     SalesReturnItemModel,
@@ -30,6 +34,7 @@ from easy_ecom.data.store.postgres_models import (
     SupplierModel,
 )
 from easy_ecom.domain.models.auth import AuthenticatedUser
+from easy_ecom.domain.services.finance_posting_service import FinancePostingService
 
 
 ZERO = Decimal("0")
@@ -145,6 +150,7 @@ class LocationContext:
 class CommerceBaseService:
     def __init__(self, session_factory: sessionmaker[Session]) -> None:
         self._session_factory = session_factory
+        self._finance_posting = FinancePostingService()
 
     def _active_locations(self, session: Session, client_id: str) -> list[LocationModel]:
         return list(
@@ -551,6 +557,15 @@ class CommerceBaseService:
                     "line_total": as_decimal(item.line_total_amount),
                 }
             )
+        finance_transaction = session.execute(
+            select(FinanceTransactionModel)
+            .where(
+                FinanceTransactionModel.client_id == order.client_id,
+                FinanceTransactionModel.origin_type == "sale_fulfillment",
+                FinanceTransactionModel.origin_id == order.sales_order_id,
+            )
+            .order_by(FinanceTransactionModel.occurred_at.desc())
+        ).scalars().first()
         return {
             "sales_order_id": str(order.sales_order_id),
             "order_number": order.order_number,
@@ -574,6 +589,17 @@ class CommerceBaseService:
             "source_channel_id": str(order.source_channel_id) if order.source_channel_id else None,
             "source_conversation_id": str(order.source_conversation_id) if order.source_conversation_id else None,
             "source_agent_draft_id": str(order.source_agent_draft_id) if order.source_agent_draft_id else None,
+            "finance_status": "posted" if finance_transaction else "not_posted",
+            "finance_summary": (
+                {
+                    "transaction_id": str(finance_transaction.transaction_id),
+                    "origin_type": finance_transaction.origin_type,
+                    "amount": as_decimal(finance_transaction.amount),
+                    "posted_at": finance_transaction.occurred_at.isoformat(),
+                }
+                if finance_transaction
+                else None
+            ),
             "lines": lines,
         }
 
@@ -622,6 +648,29 @@ class CommerceBaseService:
                     "line_total": quantity * unit_refund_amount,
                 }
             )
+        refunded_total = self._finance_posting.refunded_total(
+            session,
+            client_id=str(record.client_id),
+            sales_return_id=str(record.sales_return_id),
+        )
+        finance_transaction = session.execute(
+            select(FinanceTransactionModel)
+            .where(
+                FinanceTransactionModel.client_id == record.client_id,
+                FinanceTransactionModel.origin_type == "return_refund",
+                FinanceTransactionModel.origin_id == record.sales_return_id,
+            )
+            .order_by(FinanceTransactionModel.occurred_at.desc())
+        ).scalars().first()
+        recent_refunds = session.execute(
+            select(FinanceTransactionModel)
+            .where(
+                FinanceTransactionModel.client_id == record.client_id,
+                FinanceTransactionModel.origin_type == "return_refund",
+                FinanceTransactionModel.origin_id == record.sales_return_id,
+            )
+            .order_by(FinanceTransactionModel.occurred_at.desc(), FinanceTransactionModel.transaction_id.desc())
+        ).scalars().all()
         return {
             "sales_return_id": str(record.sales_return_id),
             "return_number": record.return_number,
@@ -634,8 +683,21 @@ class CommerceBaseService:
             "notes": record.notes,
             "subtotal_amount": as_decimal(record.subtotal_amount),
             "refund_amount": as_decimal(record.refund_amount),
+            "refund_paid_amount": refunded_total,
+            "refund_outstanding_amount": max(ZERO, as_decimal(record.refund_amount) - refunded_total),
+            "finance_status": "posted" if finance_transaction else "not_posted",
             "requested_at": record.requested_at.isoformat() if record.requested_at else None,
             "received_at": record.received_at.isoformat() if record.received_at else None,
+            "recent_refunds": [
+                {
+                    "transaction_id": str(transaction.transaction_id),
+                    "amount": as_decimal(transaction.amount),
+                    "reference": transaction.reference,
+                    "note": transaction.note,
+                    "posted_at": transaction.occurred_at.isoformat() if transaction.occurred_at else None,
+                }
+                for transaction in recent_refunds
+            ],
             "lines": lines,
         }
 
@@ -2257,6 +2319,21 @@ class SalesService(CommerceBaseService):
             notes="Whole-order fulfillment",
         )
         session.add(shipment)
+        customer_name = ""
+        if order.customer_id:
+            customer = session.execute(
+                select(CustomerModel).where(
+                    CustomerModel.client_id == user.client_id,
+                    CustomerModel.customer_id == order.customer_id,
+                )
+            ).scalar_one_or_none()
+            customer_name = customer.name if customer else ""
+        self._finance_posting.post_sale_fulfillment(
+            session,
+            user=user,
+            order=order,
+            customer_name=customer_name,
+        )
 
     def create_order(
         self,
@@ -2350,6 +2427,55 @@ class SalesService(CommerceBaseService):
             ).scalar_one_or_none()
             _require(order is not None, message="Order not found", code="ORDER_NOT_FOUND", status_code=404)
             self._fulfill_order(session, user, order)
+            session.commit()
+            return self._sales_order_payload(session, order)
+
+    def record_order_payment(
+        self,
+        user: AuthenticatedUser,
+        *,
+        sales_order_id: str,
+        payment_date: str,
+        amount: Decimal,
+        method: str,
+        reference: str,
+        note: str,
+    ) -> dict[str, Any]:
+        _require_page(user, "Sales")
+        with self._session_factory() as session:
+            order = session.execute(
+                select(SalesOrderModel).where(
+                    SalesOrderModel.client_id == user.client_id,
+                    SalesOrderModel.sales_order_id == sales_order_id,
+                )
+            ).scalar_one_or_none()
+            _require(order is not None, message="Order not found", code="ORDER_NOT_FOUND", status_code=404)
+            amount_decimal = as_decimal(amount)
+            _require(amount_decimal > ZERO, message="Payment amount must be greater than zero")
+            outstanding = max(ZERO, as_decimal(order.total_amount) - as_decimal(order.paid_amount))
+            _require(outstanding > ZERO, message="Order is already fully paid")
+            _require(amount_decimal <= outstanding, message="Payment amount exceeds outstanding balance")
+            payment = PaymentModel(
+                payment_id=new_uuid(),
+                client_id=user.client_id,
+                sales_order_id=order.sales_order_id,
+                status="completed",
+                direction="in",
+                method=method.strip() or "manual",
+                amount=amount_decimal,
+                paid_at=datetime.fromisoformat(payment_date.replace("Z", "+00:00")),
+                reference=reference.strip(),
+                notes=note.strip(),
+                created_by_user_id=user.user_id,
+            )
+            session.add(payment)
+            order.paid_amount = as_decimal(order.paid_amount) + amount_decimal
+            if order.paid_amount >= as_decimal(order.total_amount):
+                order.payment_status = "paid"
+            elif order.paid_amount > ZERO:
+                order.payment_status = "partial"
+            else:
+                order.payment_status = "unpaid"
             session.commit()
             return self._sales_order_payload(session, order)
 
@@ -2654,6 +2780,71 @@ class ReturnsService(CommerceBaseService):
                 if payload.status is not None:
                     return_record.status = payload.status
 
+            session.add(return_record)
+            session.commit()
+            return self._return_payload(session, return_record)
+
+    def record_refund_payment(
+        self,
+        user: AuthenticatedUser,
+        *,
+        return_id: str,
+        refund_date: str,
+        amount: Decimal,
+        method: str,
+        reference: str,
+        note: str,
+    ) -> dict[str, Any] | None:
+        _require_page(user, "Returns")
+        with self._session_factory() as session:
+            return_record = session.execute(
+                select(SalesReturnModel).where(
+                    SalesReturnModel.client_id == user.client_id,
+                    SalesReturnModel.sales_return_id == return_id,
+                )
+            ).scalar_one_or_none()
+            if return_record is None:
+                return None
+            refund_amount = as_decimal(amount)
+            _require(refund_amount > ZERO, message="Refund amount must be greater than zero")
+            refunded_total = self._finance_posting.refunded_total(
+                session,
+                client_id=user.client_id,
+                sales_return_id=str(return_record.sales_return_id),
+            )
+            outstanding = max(ZERO, as_decimal(return_record.refund_amount) - refunded_total)
+            _require(outstanding > ZERO, message="Return is already fully refunded")
+            _require(refund_amount <= outstanding, message="Refund amount exceeds outstanding refund")
+
+            customer_name = ""
+            if return_record.customer_id:
+                customer = session.execute(
+                    select(CustomerModel).where(
+                        CustomerModel.client_id == user.client_id,
+                        CustomerModel.customer_id == return_record.customer_id,
+                    )
+                ).scalar_one_or_none()
+                customer_name = customer.name if customer else ""
+
+            occurred_at = datetime.fromisoformat(refund_date.replace("Z", "+00:00"))
+            self._finance_posting.record_return_refund(
+                session,
+                user=user,
+                return_record=return_record,
+                customer_name=customer_name,
+                amount=refund_amount,
+                occurred_at=occurred_at,
+                method=method,
+                reference=reference,
+                note=note,
+            )
+            next_refunded_total = refunded_total + refund_amount
+            if next_refunded_total >= as_decimal(return_record.refund_amount):
+                return_record.refund_status = "paid"
+            elif next_refunded_total > ZERO:
+                return_record.refund_status = "partial"
+            else:
+                return_record.refund_status = "pending"
             session.add(return_record)
             session.commit()
             return self._return_payload(session, return_record)

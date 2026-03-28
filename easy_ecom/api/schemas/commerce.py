@@ -356,6 +356,8 @@ class SalesOrderResponse(BaseModel):
     source_channel_id: str | None
     source_conversation_id: str | None
     source_agent_draft_id: str | None
+    finance_status: Literal["not_posted", "posted", "reversed"]
+    finance_summary: dict | None = None
     lines: list[SalesOrderLineResponse]
 
 
@@ -382,6 +384,14 @@ class SalesOrderActionRequest(BaseModel):
     payment_status: str | None = None
     shipment_status: str | None = None
     notes: str | None = None
+
+
+class SalesOrderPaymentRequest(BaseModel):
+    payment_date: str
+    amount: Decimal = Field(gt=Decimal("0"))
+    method: str = "manual"
+    reference: str = ""
+    note: str = ""
 
 
 class ReturnLookupOrderResponse(BaseModel):
@@ -449,6 +459,14 @@ class ReturnLineResponse(BaseModel):
     line_total: Decimal
 
 
+class ReturnRefundEventResponse(BaseModel):
+    transaction_id: str
+    amount: Decimal
+    reference: str
+    note: str
+    posted_at: str | None
+
+
 class ReturnResponse(BaseModel):
     sales_return_id: str
     return_number: str
@@ -461,8 +479,12 @@ class ReturnResponse(BaseModel):
     notes: str
     subtotal_amount: Decimal
     refund_amount: Decimal
+    refund_paid_amount: Decimal
+    refund_outstanding_amount: Decimal
+    finance_status: Literal["not_posted", "posted", "reversed"]
     requested_at: str | None
     received_at: str | None
+    recent_refunds: list[ReturnRefundEventResponse] = Field(default_factory=list)
     lines: list[ReturnLineResponse]
 
 
@@ -474,6 +496,14 @@ class ReturnUpdateRequest(BaseModel):
     refund_status: str | None = None
     notes: str | None = None
     status: str | None = None
+
+
+class ReturnRefundPaymentRequest(BaseModel):
+    refund_date: str
+    amount: Decimal = Field(gt=Decimal("0"))
+    method: str = "manual"
+    reference: str = ""
+    note: str = ""
 
 
 # Purchase Order Schemas
