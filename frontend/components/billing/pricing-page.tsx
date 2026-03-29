@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { BadgeCheck, Sparkles } from 'lucide-react';
+import { PublicSiteChrome } from '@/components/marketing/public-site-chrome';
 import { ApiError } from '@/lib/api/client';
 import { createBillingCheckoutSession, getPublicBillingPlans } from '@/lib/api/billing';
 import { redirectToExternalUrl } from '@/lib/navigation';
@@ -109,54 +110,56 @@ export function PricingPage() {
   };
 
   return (
-    <main className="pricing-page">
-      <section className="pricing-hero">
-        <p className="pricing-eyebrow">EasyEcom billing</p>
-        <h1>Choose the plan that matches how your team actually operates.</h1>
-        <p className="pricing-lead">
-          Billing stays light because Stripe hosts checkout and card handling. EasyEcom only unlocks paid access after verified webhook events confirm payment.
-        </p>
-        <div className="pricing-hero-actions">
-          <Link href="/login?mode=signup" className="button-link btn-primary">
-            Start free
-          </Link>
-          <Link href="/billing" className="button-link secondary">
-            Open billing workspace
-          </Link>
-        </div>
-        {error ? <p className="pricing-error" role="alert">{error}</p> : null}
-      </section>
-
-      {loading ? (
-        <section className="pricing-grid" aria-label="Plan comparison">
-          <article className="pricing-card">
-            <p>Loading plans…</p>
-          </article>
+    <PublicSiteChrome>
+      <main className="pricing-page">
+        <section className="pricing-hero">
+          <p className="pricing-eyebrow">Pricing</p>
+          <h1>Simple pricing that grows with you</h1>
+          <p className="pricing-lead">
+            Start free, upgrade when you grow, and keep billing simple with Stripe-hosted checkout and verified subscription access.
+          </p>
+          <div className="pricing-hero-actions">
+            <Link href="/login?mode=signup" className="button-link btn-primary">
+              Start Free
+            </Link>
+            <Link href="/login" className="button-link secondary">
+              Login
+            </Link>
+          </div>
+          {error ? <p className="pricing-error" role="alert">{error}</p> : null}
         </section>
-      ) : (
-        <section className="pricing-grid" aria-label="Plan comparison">
-          {plans.map((plan) => (
-            <PricingAction
-              key={plan.plan_code}
-              plan={plan}
-              busy={busyPlan === plan.plan_code}
-              onClick={startCheckout}
-            />
-          ))}
-        </section>
-      )}
 
-      <section className="pricing-footnote-card">
-        <div>
-          <p className="eyebrow">How billing works</p>
-          <h2>Checkout, plan changes, and cancellation are Stripe-hosted. Success and cancel pages only reflect verified backend state.</h2>
-        </div>
-        <div className="pricing-footnote-points">
-          <span>Owner-managed billing portal</span>
-          <span>Webhook-driven paid activation</span>
-          <span>No card data stored in EasyEcom</span>
-        </div>
-      </section>
-    </main>
+        {loading ? (
+          <section className="pricing-grid" aria-label="Plan comparison">
+            <article className="pricing-card">
+              <p>Loading plans…</p>
+            </article>
+          </section>
+        ) : (
+          <section className="pricing-grid" aria-label="Plan comparison">
+            {plans.map((plan) => (
+              <PricingAction
+                key={plan.plan_code}
+                plan={plan}
+                busy={busyPlan === plan.plan_code}
+                onClick={startCheckout}
+              />
+            ))}
+          </section>
+        )}
+
+        <section className="pricing-footnote-card">
+          <div>
+            <p className="eyebrow">Billing flow</p>
+            <h2>EasyEcom unlocks paid access only after verified Stripe webhook events confirm subscription state.</h2>
+          </div>
+          <div className="pricing-footnote-points">
+            <span>Stripe-hosted checkout</span>
+            <span>Webhook-driven activation</span>
+            <span>No card data stored in EasyEcom</span>
+          </div>
+        </section>
+      </main>
+    </PublicSiteChrome>
   );
 }
