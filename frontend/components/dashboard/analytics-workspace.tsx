@@ -432,10 +432,12 @@ function OpportunityMatrixRecharts({ items }: { items: DashboardProductOpportuni
           />
         </ScatterChart>
       </ResponsiveContainer>
-      <p className="muted text-sm mt-2">
-        Bubble size represents current inventory cost value. High-cover, high-margin products are the best
-        price-test candidates.
-      </p>
+      <div className="mt-2">
+        <HoverHint
+          text="Bubble size represents current inventory cost value. High-cover, high-margin products are the best price-test candidates."
+          label="Opportunity matrix help"
+        />
+      </div>
     </div>
   );
 }
@@ -686,10 +688,14 @@ export function DashboardAnalyticsWorkspace() {
               >
                 <div className="flex flex-col justify-between h-full">
                   <div>
-                    <p className="eyebrow text-xs text-muted uppercase tracking-wider">{insight.title}</p>
-                    <h4 className="text-sm font-medium mt-2">{insight.metric_label}</h4>
+                    <h4 className="text-sm font-medium">{insight.metric_label}</h4>
                     <strong className="insight-metric-value text-xl font-bold block mt-2">{insight.metric_value}</strong>
-                    <p className="insight-summary text-sm text-muted mt-2 line-tight">{insight.unavailable_reason ?? insight.summary}</p>
+                    <div className="mt-2">
+                      <HoverHint
+                        text={insight.unavailable_reason ?? insight.summary}
+                        label={`${insight.metric_label} explanation`}
+                      />
+                    </div>
                     {insight.entity_name ? (
                       <span className="dashboard-insight-entity text-xs text-muted mt-2 block">{insight.entity_name}</span>
                     ) : null}
@@ -813,19 +819,12 @@ export function DashboardAnalyticsWorkspace() {
               <article className="section-card dashboard-section-card bg-glass p-6 rounded-lg shadow-glass transition-normal hover:shadow-glass-hover">
                 <div className="dashboard-section-head flex items-start justify-between gap-4">
                   <div>
-                    <p className="eyebrow text-xs text-muted uppercase tracking-wider">Opportunity Matrix</p>
-                    <h3 className="text-lg font-semibold mt-2">Sales qty/day vs avg. margin</h3>
+                    <h3 className="text-lg font-semibold">Sales qty/day vs avg. margin</h3>
                   </div>
                   <Link href="/reports" className="dashboard-inline-link text-primary font-medium hover:text-primary-dark transition-fast">Reports</Link>
                 </div>
                 {opportunityMatrix.length ? (
-                  <>
-                    <OpportunityMatrixRecharts items={opportunityMatrix.slice(0, 12)} />
-                    <p className="muted text-sm mt-2">
-                      Bubble size represents current inventory cost value. High-cover, high-margin products are the best
-                      price-test candidates.
-                    </p>
-                  </>
+                  <OpportunityMatrixRecharts items={opportunityMatrix.slice(0, 12)} />
                 ) : (
                   <SectionEmpty
                     message="Complete a few fulfilled sales with cost data to unlock the opportunity matrix."
@@ -840,8 +839,7 @@ export function DashboardAnalyticsWorkspace() {
             <article className="section-card dashboard-section-card bg-glass p-6 rounded-lg shadow-glass transition-normal hover:shadow-glass-hover">
               <div className="dashboard-section-head flex items-start justify-between gap-4">
                 <div>
-                  <p className="eyebrow text-xs text-muted uppercase tracking-wider">Low Stock</p>
-                  <h3 className="text-lg font-semibold mt-2">Variants needing attention</h3>
+                  <h3 className="text-lg font-semibold">Variants needing attention</h3>
                 </div>
                 <Link href="/inventory?tab=low-stock" className="dashboard-inline-link text-primary font-medium hover:text-primary-dark transition-fast">Open low stock</Link>
               </div>
@@ -872,8 +870,7 @@ export function DashboardAnalyticsWorkspace() {
             <article className="section-card dashboard-section-card bg-glass p-6 rounded-lg shadow-glass transition-normal hover:shadow-glass-hover">
               <div className="dashboard-section-head flex items-start justify-between gap-4">
                 <div>
-                  <p className="eyebrow text-xs text-muted uppercase tracking-wider">Volume Leaders</p>
-                  <h3 className="text-lg font-semibold mt-2">Top products by units sold</h3>
+                  <h3 className="text-lg font-semibold">Top products by units sold</h3>
                 </div>
                 <Link href="/sales" className="dashboard-inline-link text-primary font-medium hover:text-primary-dark transition-fast">Open sales</Link>
               </div>
@@ -905,8 +902,7 @@ export function DashboardAnalyticsWorkspace() {
               <article className="section-card dashboard-section-card bg-glass p-6 rounded-lg shadow-glass transition-normal hover:shadow-glass-hover">
                 <div className="dashboard-section-head flex items-start justify-between gap-4">
                   <div>
-                    <p className="eyebrow text-xs text-muted uppercase tracking-wider">Revenue Leaders</p>
-                    <h3 className="text-lg font-semibold mt-2">Top products by revenue</h3>
+                    <h3 className="text-lg font-semibold">Top products by revenue</h3>
                   </div>
                   <Link href="/reports" className="dashboard-inline-link text-primary font-medium hover:text-primary-dark transition-fast">More analytics</Link>
                 </div>
@@ -942,8 +938,7 @@ export function DashboardAnalyticsWorkspace() {
               <article className="section-card dashboard-section-card bg-glass p-6 rounded-lg shadow-glass transition-normal hover:shadow-glass-hover">
                 <div className="dashboard-section-head flex items-start justify-between gap-4">
                   <div>
-                    <p className="eyebrow text-xs text-muted uppercase tracking-wider">Margin Leaders</p>
-                    <h3 className="text-lg font-semibold mt-2">Top products by estimated gross profit</h3>
+                    <h3 className="text-lg font-semibold">Top products by estimated gross profit</h3>
                   </div>
                   <Link href="/catalog" className="dashboard-inline-link text-primary font-medium hover:text-primary-dark transition-fast">Catalog & pricing</Link>
                 </div>
@@ -978,8 +973,7 @@ export function DashboardAnalyticsWorkspace() {
             <article className="section-card dashboard-section-card bg-glass p-6 rounded-lg shadow-glass transition-normal hover:shadow-glass-hover">
               <div className="dashboard-section-head flex items-start justify-between gap-4">
                 <div>
-                  <p className="eyebrow text-xs text-muted uppercase tracking-wider">Slow Movers</p>
-                  <h3 className="text-lg font-semibold mt-2">Products with stock but no sales</h3>
+                  <h3 className="text-lg font-semibold">Products with stock but no sales</h3>
                 </div>
                 <Link href="/inventory" className="dashboard-inline-link text-primary font-medium hover:text-primary-dark transition-fast">Review stock</Link>
               </div>
@@ -1014,8 +1008,7 @@ export function DashboardAnalyticsWorkspace() {
             <article className="section-card dashboard-section-card bg-glass p-6 rounded-lg shadow-glass transition-normal hover:shadow-glass-hover">
               <div className="dashboard-section-head flex items-start justify-between gap-4">
                 <div>
-                  <p className="eyebrow text-xs text-muted uppercase tracking-wider">Recent Activity</p>
-                  <h3 className="text-lg font-semibold mt-2">Latest inventory and fulfillment events</h3>
+                  <h3 className="text-lg font-semibold">Latest inventory and fulfillment events</h3>
                 </div>
                 <Link href="/inventory" className="dashboard-inline-link text-primary font-medium hover:text-primary-dark transition-fast">Open inventory</Link>
               </div>

@@ -141,9 +141,10 @@ export function IntentInput({
   return (
     <section className="guided-intent">
       <div className="guided-intent-copy">
-        <p className="eyebrow">Intent-first workflow</p>
-        <h4>{label}</h4>
-        {hint ? <p>{hint}</p> : null}
+        <h4 className="workspace-heading">
+          {label}
+          {hint ? <HoverHint text={hint} label={`${label} help`} /> : null}
+        </h4>
       </div>
       <form
         className="guided-intent-form"
@@ -179,9 +180,10 @@ export function SuggestedNextStep({
   return (
     <div className={`guided-next-step ${suggestion.tone ?? 'info'}`}>
       <div>
-        <p className="eyebrow">Recommended next step</p>
         <strong>{suggestion.title}</strong>
-        <p>{suggestion.detail}</p>
+        <div className="mt-2">
+          <HoverHint text={suggestion.detail} label={`${suggestion.title} details`} />
+        </div>
       </div>
       {suggestion.actionLabel || suggestion.secondaryLabel ? (
         <div className="guided-next-step-actions">
@@ -218,11 +220,13 @@ export function MatchGroupList<T>({
     return emptyMessage ? (
       <div className="guided-match-group">
         <div className="guided-match-group-header">
-          <h4>{title}</h4>
-          {description ? <p>{description}</p> : null}
+          <h4 className="workspace-heading">
+            {title}
+            {description ? <HoverHint text={description} label={`${title} help`} /> : null}
+          </h4>
         </div>
         <div className="workspace-empty compact">
-          <p>{emptyMessage}</p>
+          <HoverHint text={emptyMessage} label={`${title} empty state help`} />
         </div>
       </div>
     ) : null;
@@ -231,8 +235,10 @@ export function MatchGroupList<T>({
   return (
     <section className="guided-match-group">
       <div className="guided-match-group-header">
-        <h4>{title}</h4>
-        {description ? <p>{description}</p> : null}
+        <h4 className="workspace-heading">
+          {title}
+          {description ? <HoverHint text={description} label={`${title} help`} /> : null}
+        </h4>
       </div>
       <div className="guided-match-list">{items.map(renderItem)}</div>
     </section>
@@ -242,11 +248,13 @@ export function MatchGroupList<T>({
 export function DraftRecommendationCard({
   title,
   summary,
+  summaryHint,
   actions,
   children,
 }: {
   title: string;
   summary: string;
+  summaryHint?: string;
   actions?: React.ReactNode;
   children?: React.ReactNode;
 }) {
@@ -254,8 +262,10 @@ export function DraftRecommendationCard({
     <section className="guided-draft-card">
       <div className="guided-draft-card-header">
         <div>
-          <p className="eyebrow">Staged draft</p>
-          <h4>{title}</h4>
+          <h4 className="workspace-heading">
+            {title}
+            {summaryHint ? <HoverHint text={summaryHint} label={`${title} help`} /> : null}
+          </h4>
           <p>{summary}</p>
         </div>
         {actions ? <div className="guided-draft-card-actions">{actions}</div> : null}

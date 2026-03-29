@@ -27,16 +27,10 @@ export function Sidebar({
   })).filter(({ items }) => items.length > 0);
   const workspaceName = user?.business_name?.trim() || (user?.roles?.includes('SUPER_ADMIN') ? 'Easy-Ecom Internal' : 'Business workspace');
   const primaryRole = user?.roles?.[0]?.replaceAll('_', ' ') || 'Workspace user';
-  const quickStatus = user?.roles?.includes('SUPER_ADMIN') ? 'Platform control' : 'Tenant workspace';
-  const navCount = visibleItems.length;
 
   return (
     <aside className={collapsed ? `sidebar sidebar-collapsed ${mobileOpen ? 'mobile-open' : ''}` : `sidebar ${mobileOpen ? 'mobile-open' : ''}`} aria-label="Primary">
       <div className="brand-block">
-        <div className="brand-badge-row">
-          <span className="brand-badge">{quickStatus}</span>
-          <span className="brand-badge muted">{navCount} modules</span>
-        </div>
         <div className="brand-top-row">
           <div className="brand-logo-wrap">
             <EasyEcomLogo
@@ -66,7 +60,6 @@ export function Sidebar({
           </div>
         </div>
         <h1 className="brand-title">Operations Hub</h1>
-        <p className="brand-subtitle">Unified commerce command center for daily operations, control, and exceptions.</p>
         <div className="sidebar-user-card">
           <div className="sidebar-user-row">
             <Building2 size={15} aria-hidden="true" />
@@ -107,9 +100,6 @@ export function Sidebar({
         ))}
       </nav>
       <footer className="sidebar-footer">
-        <p className="eyebrow">Workspace</p>
-        <strong>Production Mode</strong>
-        <p className="sidebar-footer-copy">Tenant-safe workflows, variant-level stock truth, and auditable actions.</p>
         <SidebarLogoutButton />
       </footer>
     </aside>

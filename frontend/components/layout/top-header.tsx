@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { ArrowRight, Command, Menu, Search, Sparkles } from 'lucide-react';
+import { ArrowRight, Menu, Search } from 'lucide-react';
 import { NAV_ITEMS } from '@/types/navigation';
 
 const DEFAULT_TITLE = 'Operations Workspace';
@@ -263,17 +263,8 @@ export function TopHeader({ onOpenNavigation }: { onOpenNavigation?: () => void 
         <Menu size={18} aria-hidden="true" />
       </button>
       <div className="header-copy">
-        <div className="header-kicker-row">
-          <p className="eyebrow">EasyEcom / {pageContext.section}</p>
-          <span className="header-kicker-pill">
-            <Sparkles size={14} aria-hidden="true" />
-            Live workspace
-          </span>
-        </div>
         <p className="header-title">{pageContext.title ?? matchedRoute?.label ?? DEFAULT_TITLE}</p>
-        <p className="header-subtitle">
-          {pageContext.subtitle}. {pageContext.summary}
-        </p>
+        <p className="header-subtitle">{pageContext.subtitle}</p>
       </div>
       <form className="header-search" aria-label="Global search" onSubmit={onSubmit}>
         <span className="header-search-icon" aria-hidden="true">
@@ -300,10 +291,6 @@ export function TopHeader({ onOpenNavigation }: { onOpenNavigation?: () => void 
         <button type="submit" className="header-search-button">Search</button>
       </form>
       <div className="header-utilities">
-        <div className="header-command-chip">
-          <Command size={14} aria-hidden="true" />
-          Quick actions
-        </div>
         <button
           type="button"
           className="header-btn"

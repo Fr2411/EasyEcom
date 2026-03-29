@@ -570,7 +570,8 @@ export function SalesWorkspace() {
               title="Order draft"
               summary={draftLines.length
                 ? `${draftLines.length} line${draftLines.length === 1 ? '' : 's'} staged. Review pricing, customer, and notes before the final confirmation step.`
-                : 'The draft is empty. Use the intent bar to stage a customer, a variant, or both.'}
+                : 'No lines staged yet.'}
+              summaryHint={!draftLines.length ? 'The draft is empty. Use the intent bar to stage a customer, a variant, or both.' : undefined}
             >
               {draftLines.length ? (
                 <div className="table-scroll">

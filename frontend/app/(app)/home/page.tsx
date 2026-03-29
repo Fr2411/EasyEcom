@@ -5,11 +5,11 @@ export default function WorkspaceHomePage() {
   return (
     <PageShell
       title="Home"
-      description="The application shell is preserved while business workflows are rebuilt from a clean, tenant-safe foundation."
+      description="Quick access to the core workspaces."
     >
       <FoundationLaunchpad
-        title="The product foundation is live again."
-        subtitle="This workspace now reflects the canonical module structure for the pilot release. Each module can be rebuilt intentionally without reviving the old calculation bugs."
+        title="Core workspaces"
+        subtitle="Quick links to the main operating modules."
       />
     </PageShell>
   );
