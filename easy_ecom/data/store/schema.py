@@ -21,3 +21,48 @@ CORE_MODULES = [
     "admin",
     "settings",
 ]
+
+BILLING_PLANS_SEED = [
+    {
+        "plan_code": "free",
+        "display_name": "Free",
+        "is_paid": False,
+        "stripe_price_id": None,
+        "currency_code": "USD",
+        "interval": "month",
+        "sort_order": 1,
+        "public_description": "Core commerce workspace for early-stage tenants.",
+        "feature_flags_json": {
+            "tier": "free",
+            "full_access": False,
+        },
+    },
+    {
+        "plan_code": "growth",
+        "display_name": "Growth",
+        "is_paid": True,
+        "stripe_price_id": None,
+        "currency_code": "USD",
+        "interval": "month",
+        "sort_order": 2,
+        "public_description": "Full operating stack for growing businesses.",
+        "feature_flags_json": {
+            "tier": "growth",
+            "full_access": True,
+        },
+    },
+    {
+        "plan_code": "scale",
+        "display_name": "Scale",
+        "is_paid": True,
+        "stripe_price_id": None,
+        "currency_code": "USD",
+        "interval": "month",
+        "sort_order": 3,
+        "public_description": "Advanced commercial plan for larger operators.",
+        "feature_flags_json": {
+            "tier": "scale",
+            "full_access": True,
+        },
+    },
+]

@@ -113,6 +113,13 @@ class Settings:
     openai_base_url: str = field(default_factory=lambda: os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").strip() or "https://api.openai.com/v1")
     openai_timeout_seconds: int = field(default_factory=lambda: _to_int(os.getenv("OPENAI_TIMEOUT_SECONDS"), 20))
     whatsapp_graph_version: str = field(default_factory=lambda: os.getenv("WHATSAPP_GRAPH_VERSION", "v23.0").strip() or "v23.0")
+    app_base_url: str = field(default_factory=lambda: os.getenv("APP_BASE_URL", "http://localhost:3000").strip() or "http://localhost:3000")
+    stripe_secret_key: str = field(default_factory=lambda: os.getenv("STRIPE_SECRET_KEY", "").strip())
+    stripe_webhook_secret: str = field(default_factory=lambda: os.getenv("STRIPE_WEBHOOK_SECRET", "").strip())
+    stripe_price_growth_monthly: str = field(default_factory=lambda: os.getenv("STRIPE_PRICE_GROWTH_MONTHLY", "").strip())
+    stripe_price_scale_monthly: str = field(default_factory=lambda: os.getenv("STRIPE_PRICE_SCALE_MONTHLY", "").strip())
+    stripe_portal_configuration_id: str = field(default_factory=lambda: os.getenv("STRIPE_PORTAL_CONFIGURATION_ID", "").strip())
+    stripe_publishable_key: str = field(default_factory=lambda: os.getenv("STRIPE_PUBLISHABLE_KEY", "").strip())
 
     @property
     def postgres_dsn(self) -> str:

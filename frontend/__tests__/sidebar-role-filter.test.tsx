@@ -71,7 +71,7 @@ describe('Sidebar role filtering', () => {
     useAuthMock.mockReturnValue({
       user: {
         roles: ['CLIENT_OWNER'],
-        allowed_pages: ['Home', 'Dashboard', 'Catalog', 'Inventory', 'Sales', 'Settings'],
+        allowed_pages: ['Home', 'Dashboard', 'Catalog', 'Inventory', 'Sales', 'Billing', 'Settings'],
       },
       clearAuth: vi.fn(),
     });
@@ -80,6 +80,7 @@ describe('Sidebar role filtering', () => {
 
     expect(screen.getByRole('link', { name: 'Inventory' })).toBeTruthy();
     expect(screen.queryByRole('link', { name: 'Catalog' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Billing' })).toBeTruthy();
   });
 
   test('shows workspace identity under the logo when session details are available', () => {

@@ -52,6 +52,10 @@ def login(payload: LoginRequest, response: Response, container: ServiceContainer
         allowed_pages=user.allowed_pages,
         name=user.name,
         email=user.email,
+        billing_plan_code=user.billing_plan_code,
+        billing_status=user.billing_status,
+        billing_access_state=user.billing_access_state,
+        billing_grace_until=user.billing_grace_until,
     )
 
 
@@ -87,6 +91,10 @@ def signup(
         allowed_pages=user.allowed_pages,
         name=user.name,
         email=user.email,
+        billing_plan_code=user.billing_plan_code,
+        billing_status=user.billing_status,
+        billing_access_state=user.billing_access_state,
+        billing_grace_until=user.billing_grace_until,
     )
 
 
@@ -121,4 +129,8 @@ def me(
         roles=user.roles,
         allowed_pages=user.allowed_pages,
         is_authenticated=True,
+        billing_plan_code=user.billing_plan_code,
+        billing_status=user.billing_status,
+        billing_access_state=user.billing_access_state,
+        billing_grace_until=user.billing_grace_until,
     )

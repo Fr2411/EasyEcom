@@ -9,6 +9,10 @@ export type SessionUser = {
   client_id: string | null;
   roles: string[];
   allowed_pages: string[];
+  billing_plan_code?: string | null;
+  billing_status?: string | null;
+  billing_access_state?: string | null;
+  billing_grace_until?: string | null;
   is_authenticated: boolean;
 };
 

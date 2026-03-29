@@ -21,6 +21,10 @@ class LoginResponse(BaseModel):
     allowed_pages: list[str]
     name: str
     email: str
+    billing_plan_code: str = "free"
+    billing_status: str = "free"
+    billing_access_state: str = "free_active"
+    billing_grace_until: str | None = None
 
 
 class CurrentUserResponse(BaseModel):
@@ -33,3 +37,7 @@ class CurrentUserResponse(BaseModel):
     roles: list[str]
     allowed_pages: list[str]
     is_authenticated: bool
+    billing_plan_code: str = "free"
+    billing_status: str = "free"
+    billing_access_state: str = "free_active"
+    billing_grace_until: str | None = None

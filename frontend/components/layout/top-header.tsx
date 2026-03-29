@@ -154,8 +154,8 @@ function getHeaderContext(pathname: string): HeaderContext {
         subtitle: 'Cash and reconciliation',
         summary: 'Monitor money movement, reconciliation, and financial visibility from the same workspace.',
         searchScope: 'sales',
-        actionLabel: 'Open reports',
-        actionHref: '/reports',
+        actionLabel: 'Open billing',
+        actionHref: '/billing',
       };
     case '/returns':
       return {
@@ -166,6 +166,36 @@ function getHeaderContext(pathname: string): HeaderContext {
         searchScope: 'returns',
         actionLabel: 'Open inventory',
         actionHref: '/inventory',
+      };
+    case '/billing':
+      return {
+        section: 'Operations',
+        title: 'Billing',
+        subtitle: 'Subscription state',
+        summary: 'Trust backend subscription state and manage checkout, portal, and cancellation from one owner-only workspace.',
+        searchScope: 'sales',
+        actionLabel: 'View pricing',
+        actionHref: '/pricing',
+      };
+    case '/billing/success':
+      return {
+        section: 'Operations',
+        title: 'Billing success',
+        subtitle: 'Stripe return',
+        summary: 'Review the live backend subscription state after checkout returns you to the app.',
+        searchScope: 'sales',
+        actionLabel: 'Open billing',
+        actionHref: '/billing',
+      };
+    case '/billing/cancel':
+      return {
+        section: 'Operations',
+        title: 'Billing cancelled',
+        subtitle: 'Stripe return',
+        summary: 'The app uses backend subscription state, so cancelled checkout flows still show the actual account state.',
+        searchScope: 'sales',
+        actionLabel: 'Open billing',
+        actionHref: '/billing',
       };
     case '/admin':
       return {

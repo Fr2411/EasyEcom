@@ -49,4 +49,14 @@ describe('TopHeader', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Start onboarding' }));
     expect(pushMock).toHaveBeenCalledWith('/admin?mode=create');
   });
+
+  test('shows a billing action on the billing route', () => {
+    pathname = '/billing';
+
+    render(<TopHeader />);
+
+    expect(screen.getByRole('button', { name: 'View pricing' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'View pricing' }));
+    expect(pushMock).toHaveBeenCalledWith('/pricing');
+  });
 });

@@ -183,6 +183,10 @@ def test_login_then_me_returns_authenticated_user(monkeypatch, tmp_path: Path):
             "Admin",
             "Settings",
         ],
+        "billing_plan_code": "free",
+        "billing_status": "free",
+        "billing_access_state": "free_active",
+        "billing_grace_until": None,
         "is_authenticated": True,
     }
 
