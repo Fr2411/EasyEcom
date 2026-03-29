@@ -8,7 +8,7 @@ import DashboardPage from '@/app/(app)/dashboard/page';
 import FinancePage from '@/app/(app)/finance/page';
 import IntegrationsPage from '@/app/(app)/integrations/page';
 import InventoryPage from '@/app/(app)/inventory/page';
-import HomePage from '@/app/(app)/page';
+import HomePage from '@/app/(app)/home/page';
 import ProductsStockPage from '@/app/(app)/products-stock/page';
 import PurchasesPage from '@/app/(app)/purchases/page';
 import ReportsPage from '@/app/(app)/reports/page';

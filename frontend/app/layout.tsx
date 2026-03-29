@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Script from 'next/script';
 import './globals.css';
 import { AuthProvider } from '@/components/auth/auth-provider';
+import { ThemeProvider } from '@/components/theme/theme-provider';
 
 export const metadata: Metadata = {
   title: 'EasyEcom Frontend',
@@ -14,8 +15,25 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
+        <Script id="theme-preference-init" strategy="beforeInteractive">
+          {`
+            (function () {
+              try {
+                var stored = window.localStorage.getItem('easyecom-theme-preference') || 'system';
+                var resolved = stored === 'system'
+                  ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+                  : stored;
+                document.documentElement.dataset.theme = resolved;
+                document.documentElement.dataset.themePreference = stored;
+              } catch (error) {
+                document.documentElement.dataset.theme = 'light';
+                document.documentElement.dataset.themePreference = 'system';
+              }
+            })();
+          `}
+        </Script>
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-TJ4YFZFF9L"
           strategy="afterInteractive"
@@ -30,7 +48,9 @@ export default function RootLayout({
         </Script>
       </head>
       <body>
-        <AuthProvider>{children}</AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>{children}</AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
