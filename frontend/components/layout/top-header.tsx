@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { ArrowRight, Command, Search, Sparkles } from 'lucide-react';
+import { ArrowRight, Command, Menu, Search, Sparkles } from 'lucide-react';
 import { NAV_ITEMS } from '@/types/navigation';
 
 const DEFAULT_TITLE = 'Operations Workspace';
@@ -28,6 +28,7 @@ const SEARCH_SCOPE_ROUTES: Record<SearchScope, string> = {
 function getHeaderContext(pathname: string): HeaderContext {
   switch (pathname) {
     case '/':
+    case '/home':
       return {
         section: 'Today',
         title: 'Home',
@@ -230,7 +231,7 @@ function getHeaderContext(pathname: string): HeaderContext {
   }
 }
 
-export function TopHeader() {
+export function TopHeader({ onOpenNavigation }: { onOpenNavigation?: () => void }) {
   const router = useRouter();
   const pathname = usePathname();
   const matchedRoute = NAV_ITEMS.find((item) => item.href === pathname);
@@ -253,6 +254,14 @@ export function TopHeader() {
 
   return (
     <header className="top-header">
+      <button
+        type="button"
+        className="header-mobile-menu"
+        onClick={onOpenNavigation}
+        aria-label="Open navigation"
+      >
+        <Menu size={18} aria-hidden="true" />
+      </button>
       <div className="header-copy">
         <div className="header-kicker-row">
           <p className="eyebrow">EasyEcom / {pageContext.section}</p>

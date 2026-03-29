@@ -1,27 +1,26 @@
 'use client';
 
-import { Building2, Mail, PanelLeftClose, PanelLeftOpen, UserRound } from 'lucide-react';
-import { NAV_GROUP_ORDER, NAV_ITEMS } from '@/types/navigation';
+import { Building2, Mail, PanelLeftClose, PanelLeftOpen, UserRound, X } from 'lucide-react';
+import { NAV_GROUP_ORDER } from '@/types/navigation';
 import { NavItem } from '@/components/ui/nav-item';
 import { SidebarLogoutButton } from '@/components/layout/sidebar-logout-button';
 import { EasyEcomLogo } from '@/components/branding/easy-ecom-logo';
 import { useAuth } from '@/components/auth/auth-provider';
-import { canAccessPage } from '@/lib/rbac';
+import { getVisibleNavigationItems } from '@/lib/navigation';
 
 export function Sidebar({
   collapsed = false,
+  mobileOpen = false,
   onToggle,
+  onClose,
 }: {
   collapsed?: boolean;
+  mobileOpen?: boolean;
   onToggle?: () => void;
+  onClose?: () => void;
 }) {
   const { user } = useAuth();
-  const visibleItems = NAV_ITEMS.filter((item) => {
-    if (item.label === 'Catalog' && !user?.roles?.includes('SUPER_ADMIN')) {
-      return false;
-    }
-    return canAccessPage(user?.roles, item.label, user?.allowed_pages);
-  });
+  const visibleItems = getVisibleNavigationItems(user);
   const groupedNavigation = NAV_GROUP_ORDER.map((group) => ({
     group,
     items: visibleItems.filter((item) => item.group === group),
@@ -32,7 +31,7 @@ export function Sidebar({
   const navCount = visibleItems.length;
 
   return (
-    <aside className={collapsed ? 'sidebar sidebar-collapsed' : 'sidebar'} aria-label="Primary">
+    <aside className={collapsed ? `sidebar sidebar-collapsed ${mobileOpen ? 'mobile-open' : ''}` : `sidebar ${mobileOpen ? 'mobile-open' : ''}`} aria-label="Primary">
       <div className="brand-block">
         <div className="brand-badge-row">
           <span className="brand-badge">{quickStatus}</span>
@@ -45,15 +44,26 @@ export function Sidebar({
               imageClassName="easyecom-logo-image easyecom-logo-sidebar"
             />
           </div>
-          <button
-            type="button"
-            className="sidebar-toggle"
-            onClick={onToggle}
-            aria-label={collapsed ? 'Open sidebar' : 'Minimize sidebar'}
-            title={collapsed ? 'Open sidebar' : 'Minimize sidebar'}
-          >
-            {collapsed ? <PanelLeftOpen size={16} aria-hidden="true" /> : <PanelLeftClose size={16} aria-hidden="true" />}
-          </button>
+          <div className="sidebar-actions">
+            <button
+              type="button"
+              className="sidebar-close-mobile"
+              onClick={onClose}
+              aria-label="Close navigation"
+              title="Close navigation"
+            >
+              <X size={16} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className="sidebar-toggle"
+              onClick={onToggle}
+              aria-label={collapsed ? 'Open sidebar' : 'Minimize sidebar'}
+              title={collapsed ? 'Open sidebar' : 'Minimize sidebar'}
+            >
+              {collapsed ? <PanelLeftOpen size={16} aria-hidden="true" /> : <PanelLeftClose size={16} aria-hidden="true" />}
+            </button>
+          </div>
         </div>
         <h1 className="brand-title">Operations Hub</h1>
         <p className="brand-subtitle">Unified commerce command center for daily operations, control, and exceptions.</p>
@@ -89,7 +99,7 @@ export function Sidebar({
             <ul className="nav-list">
               {items.map((item) => (
                 <li key={item.href}>
-                  <NavItem item={item} collapsed={collapsed} />
+                  <NavItem item={item} collapsed={collapsed} onSelect={onClose} />
                 </li>
               ))}
             </ul>
