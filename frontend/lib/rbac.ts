@@ -37,6 +37,26 @@ export function canAccessPage(
   return userRoles.some((role) => ROLE_PAGE_ACCESS[role]?.includes(pageLabel));
 }
 
+export function canSeePageInNavigation(
+  userRoles: string[] | undefined,
+  pageLabel: string,
+) {
+  if (pageLabel === 'AI Review') {
+    return userRoles?.some((role) => ROLE_PAGE_ACCESS[role]?.includes('AI Review') || ROLE_PAGE_ACCESS[role]?.includes('Sales Agent')) ?? false;
+  }
+
+  const mandatoryPages = userRoles?.flatMap((role) => MANDATORY_ROLE_PAGE_ACCESS[role] ?? []) ?? [];
+  if (mandatoryPages.includes(pageLabel)) {
+    return true;
+  }
+
+  if (!userRoles?.length) {
+    return false;
+  }
+
+  return userRoles.some((role) => ROLE_PAGE_ACCESS[role]?.includes(pageLabel));
+}
+
 export function isSuperAdmin(userRoles: string[] | undefined) {
   return Boolean(userRoles?.includes('SUPER_ADMIN'));
 }

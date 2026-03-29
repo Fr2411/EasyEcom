@@ -1,5 +1,5 @@
 import type { SessionUser } from '@/lib/api/auth';
-import { canAccessPage } from '@/lib/rbac';
+import { canSeePageInNavigation } from '@/lib/rbac';
 import { NAV_ITEMS } from '@/types/navigation';
 
 export function redirectToExternalUrl(url: string) {
@@ -15,7 +15,7 @@ export function getVisibleNavigationItems(user: SessionUser | null | undefined) 
     if (item.label === 'Catalog' && !user?.roles?.includes('SUPER_ADMIN')) {
       return false;
     }
-    return canAccessPage(user?.roles, item.label, user?.allowed_pages);
+    return canSeePageInNavigation(user?.roles, item.label);
   });
 }
 
