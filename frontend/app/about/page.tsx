@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { PublicSiteChrome } from '@/components/marketing/public-site-chrome';
+import { PublicLayout } from '@/components/layout/public-layout';
 
 export const metadata: Metadata = {
   title: 'About | EasyEcom',
@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 export default function AboutPage() {
   return (
-    <PublicSiteChrome>
+    <PublicLayout>
       <section className="marketing-section compact-public-page">
         <div className="landing-section-heading">
           <p className="marketing-kicker">About</p>
@@ -30,10 +30,10 @@ export default function AboutPage() {
             making organized.
           </p>
           <p>
-            <Link href="/login?mode=signup" className="button-link btn-primary">Start Free</Link>
+            <Link href="/signup" className="button-link btn-primary">Start Free</Link>
           </p>
         </div>
       </section>
-    </PublicSiteChrome>
+    </PublicLayout>
   );
 }

@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { PublicSiteChrome } from '@/components/marketing/public-site-chrome';
+import { PublicLayout } from '@/components/layout/public-layout';
 
 export const metadata: Metadata = {
   title: 'Contact | EasyEcom',
@@ -10,7 +10,7 @@ const contactEmail = 'support@easy-ecom.online';
 
 export default function ContactPage() {
   return (
-    <PublicSiteChrome>
+    <PublicLayout>
       <section className="marketing-section compact-public-page">
         <div className="landing-section-heading">
           <p className="marketing-kicker">Contact</p>
@@ -37,6 +37,6 @@ export default function ContactPage() {
           </div>
         </div>
       </section>
-    </PublicSiteChrome>
+    </PublicLayout>
   );
 }

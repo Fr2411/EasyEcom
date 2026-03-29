@@ -1,8 +1,23 @@
-'use client';
-
 import Link from 'next/link';
 import { ArrowRight, Bot, Boxes, ChartColumnIncreasing, MessageSquareText, PackageCheck, ShoppingCart, Sparkles } from 'lucide-react';
-import { PublicSiteChrome } from '@/components/marketing/public-site-chrome';
+import type { Metadata } from 'next';
+import { CTASection } from '@/components/marketing/cta-section';
+import { FeatureGrid } from '@/components/marketing/feature-grid';
+import { HeroSection } from '@/components/marketing/hero-section';
+import { PricingPreview } from '@/components/marketing/pricing-preview';
+import { ProblemCards } from '@/components/marketing/problem-cards';
+import { PublicLayout } from '@/components/layout/public-layout';
+import { PrimaryButton } from '@/components/ui/primary-button';
+import { SecondaryButton } from '@/components/ui/secondary-button';
+
+export const metadata: Metadata = {
+  title: 'EasyEcom | Turn customer chats into sales automatically',
+  description: 'EasyEcom is your AI-powered sales and operations platform for replying faster, managing inventory, and running your business from one place.',
+  openGraph: {
+    title: 'EasyEcom | Turn customer chats into sales automatically',
+    description: 'Reply instantly, manage inventory, and run your business from one platform.',
+  },
+};
 
 const problems = [
   {
@@ -164,30 +179,19 @@ function HeroMockup() {
 
 export default function PublicLandingPage() {
   return (
-    <PublicSiteChrome ctaLabel="Start Free" ctaHref="/login?mode=signup">
-      <section className="marketing-hero landing-hero">
-        <div className="landing-hero-grid">
-          <div className="landing-copy">
-            <h1>Turn customer chats into sales — automatically</h1>
-            <p className="landing-subheadline">
-              EasyEcom is your AI-powered sales and operations system.
-              Reply instantly, manage inventory, and run your business — all from one platform.
-            </p>
-            <div className="landing-cta-row">
-              <Link href="/login?mode=signup" className="button-link btn-primary">
-                Start Free — No Credit Card
-              </Link>
-              <Link href="/#how-it-works" className="button-link secondary">
-                See How It Works
-              </Link>
-            </div>
-            <p className="landing-trust-line">
-              Used by growing businesses to handle sales, inventory, and operations in one place.
-            </p>
-          </div>
-          <HeroMockup />
-        </div>
-      </section>
+    <PublicLayout ctaLabel="Start Free" ctaHref="/signup">
+      <HeroSection
+        title="Turn customer chats into sales — automatically"
+        description="EasyEcom is your AI-powered sales and operations system. Reply instantly, manage inventory, and run your business — all from one platform."
+        trustLine="Used by growing businesses to handle sales, inventory, and operations in one place."
+        actions={
+          <>
+            <PrimaryButton href="/signup">Start Free — No Credit Card</PrimaryButton>
+            <SecondaryButton href="/#how-it-works">See How It Works</SecondaryButton>
+          </>
+        }
+        visual={<HeroMockup />}
+      />
 
       <section className="marketing-section landing-section" id="features">
         <div className="landing-section-heading">
@@ -195,15 +199,7 @@ export default function PublicLandingPage() {
           <h2>Running your business shouldn’t feel like chaos</h2>
           <p>Most small businesses struggle with the same problems:</p>
         </div>
-        <div className="landing-problem-grid">
-          {problems.map((problem, index) => (
-            <article key={problem.title} className="landing-problem-card">
-              <span className="landing-card-number">0{index + 1}</span>
-              <h3>{problem.title}</h3>
-              <p>{problem.body}</p>
-            </article>
-          ))}
-        </div>
+        <ProblemCards items={problems} />
       </section>
 
       <section className="marketing-section landing-section landing-section-contrast">
@@ -212,20 +208,7 @@ export default function PublicLandingPage() {
           <h2>EasyEcom fixes this — automatically</h2>
           <p>One system to manage your entire business, powered by AI.</p>
         </div>
-        <div className="landing-solution-grid">
-          {solutions.map((solution) => {
-            const Icon = solution.icon;
-            return (
-              <article key={solution.title} className="landing-solution-card">
-                <div className="landing-solution-icon">
-                  <Icon size={20} aria-hidden="true" />
-                </div>
-                <h3>{solution.title}</h3>
-                <p>{solution.body}</p>
-              </article>
-            );
-          })}
-        </div>
+        <FeatureGrid items={solutions} />
       </section>
 
       <section className="marketing-section landing-section">
@@ -286,43 +269,22 @@ export default function PublicLandingPage() {
           <p className="marketing-kicker">Pricing</p>
           <h2>Simple pricing that grows with you</h2>
         </div>
-        <div className="landing-pricing-grid">
-          {pricingPreview.map((plan) => (
-            <article key={plan.title} className="landing-pricing-card">
-              <h3>{plan.title}</h3>
-              <p>{plan.body}</p>
-              <ul>
-                {plan.points.map((point) => (
-                  <li key={point}>{point}</li>
-                ))}
-              </ul>
-            </article>
-          ))}
-        </div>
+        <PricingPreview plans={pricingPreview} />
         <div className="landing-section-actions">
-          <Link href="/pricing" className="button-link secondary">
-            View Full Pricing
-          </Link>
+          <SecondaryButton href="/pricing">View Full Pricing</SecondaryButton>
         </div>
       </section>
 
-      <section className="marketing-section landing-section">
-        <div className="landing-final-cta">
-          <div>
-            <p className="marketing-kicker">Start today</p>
-            <h2>Start building a smarter business today</h2>
-            <p>No setup hassle. No risk. Start free and upgrade when you grow.</p>
-          </div>
-          <div className="landing-cta-row">
-            <Link href="/login?mode=signup" className="button-link btn-primary">
-              Start Free
-            </Link>
-            <Link href="/login" className="button-link secondary">
-              Login
-            </Link>
-          </div>
-        </div>
-      </section>
-    </PublicSiteChrome>
+      <CTASection
+        title="Start building a smarter business today"
+        description="No setup hassle. No risk. Start free and upgrade when you grow."
+        actions={
+          <>
+            <PrimaryButton href="/signup">Start Free</PrimaryButton>
+            <SecondaryButton href="/login">Login</SecondaryButton>
+          </>
+        }
+      />
+    </PublicLayout>
   );
 }

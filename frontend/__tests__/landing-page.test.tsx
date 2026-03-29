@@ -2,10 +2,6 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import PublicLandingPage from '@/app/page';
 
-vi.mock('@/components/auth/auth-route-guard', () => ({
-  AuthRouteGuard: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-}));
-
 vi.mock('@/components/theme/theme-toggle', () => ({
   ThemeToggle: () => <div>Theme toggle</div>,
 }));
@@ -23,7 +19,7 @@ describe('PublicLandingPage', () => {
     render(<PublicLandingPage />);
 
     expect(screen.getByRole('heading', { name: 'Turn customer chats into sales — automatically' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Start Free — No Credit Card' }).getAttribute('href')).toBe('/login?mode=signup');
+    expect(screen.getByRole('link', { name: 'Start Free — No Credit Card' }).getAttribute('href')).toBe('/signup');
     expect(screen.getByRole('link', { name: 'See How It Works' }).getAttribute('href')).toBe('/#how-it-works');
     expect(screen.getByText('Used by growing businesses to handle sales, inventory, and operations in one place.')).toBeTruthy();
   });
