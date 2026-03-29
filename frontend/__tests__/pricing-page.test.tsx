@@ -18,10 +18,6 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: pushMock }),
 }));
 
-vi.mock('@/components/auth/auth-route-guard', () => ({
-  AuthRouteGuard: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-}));
-
 vi.mock('@/components/theme/theme-toggle', () => ({
   ThemeToggle: () => <div>Theme toggle</div>,
 }));
@@ -78,7 +74,7 @@ describe('PricingPage', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Start free' })).toBeTruthy());
 
     fireEvent.click(screen.getByRole('button', { name: 'Start free' }));
-    expect(pushMock).toHaveBeenCalledWith('/login?mode=signup');
+    expect(pushMock).toHaveBeenCalledWith('/signup');
 
     fireEvent.click(screen.getByRole('button', { name: 'Start Growth' }));
 

@@ -1179,6 +1179,167 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
   font-size: 0.78rem;
 }
 
+.auth-page {
+  width: min(1180px, calc(100vw - 2rem));
+  margin: 0 auto;
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 0.95fr);
+  gap: 1.25rem;
+  align-items: center;
+  padding: 1.25rem 0 2rem;
+}
+
+.auth-hero,
+.auth-card {
+  border: 1px solid var(--marketing-border);
+  background: var(--marketing-surface);
+  box-shadow: var(--marketing-shadow);
+  backdrop-filter: blur(16px);
+  border-radius: 1.8rem;
+}
+
+.auth-hero {
+  padding: clamp(1.6rem, 3vw, 2.5rem);
+}
+
+.auth-hero-logo {
+  margin-bottom: 1rem;
+}
+
+.auth-hero-eyebrow,
+.auth-card-eyebrow,
+.auth-field-label {
+  display: block;
+  margin: 0 0 0.45rem;
+  color: var(--marketing-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.auth-hero h2,
+.auth-card h1 {
+  margin: 0;
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+}
+
+.auth-hero h2 {
+  font-size: clamp(2.2rem, 4vw, 3.6rem);
+  max-width: 11ch;
+}
+
+.auth-hero-copy,
+.auth-card-header p,
+.auth-inline-links,
+.auth-inline-links a,
+.auth-inline-links span {
+  color: var(--marketing-muted);
+}
+
+.auth-hero-copy {
+  margin: 1rem 0 0;
+  max-width: 34rem;
+  line-height: 1.7;
+}
+
+.auth-hero-points {
+  list-style: none;
+  margin: 1.1rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.auth-hero-points li {
+  border: 1px solid var(--marketing-border);
+  background: rgba(255, 255, 255, 0.58);
+  border-radius: 999px;
+  padding: 0.65rem 0.9rem;
+  font-weight: 600;
+}
+
+.auth-card {
+  padding: 1.5rem;
+}
+
+.auth-card-header {
+  display: grid;
+  gap: 0.45rem;
+  margin-bottom: 1.15rem;
+}
+
+.auth-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.auth-field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.auth-input-wrap {
+  position: relative;
+}
+
+.auth-input-wrap input {
+  width: 100%;
+  min-height: 2.9rem;
+  padding-right: 2.9rem;
+}
+
+.auth-input-wrap.has-error input {
+  border-color: #dc5d5d;
+}
+
+.auth-password-toggle {
+  position: absolute;
+  right: 0.45rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+.auth-field-error,
+.auth-form-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 0.85rem;
+}
+
+.auth-form-actions {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.auth-form-actions .btn-primary,
+.auth-form-actions .secondary,
+.auth-form-actions .button-link {
+  width: 100%;
+  justify-content: center;
+}
+
+.auth-inline-links {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  font-size: 0.92rem;
+}
+
+.auth-inline-links a {
+  text-decoration: none;
+  color: var(--marketing-accent);
+  font-weight: 600;
+}
+
 .billing-module,
 .billing-status-page {
   display: grid;
@@ -3308,6 +3469,9 @@ body {
 }
 
 .marketing-nav {
+  position: sticky;
+  top: 0.75rem;
+  z-index: 20;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -3344,6 +3508,15 @@ body {
   gap: 1rem;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.marketing-mobile-toggle {
+  display: none;
+  width: 2.5rem;
+  height: 2.5rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
 }
 
 .marketing-theme-wrap {
@@ -3791,6 +3964,10 @@ body {
   .marketing-nav-links {
     justify-content: space-between;
   }
+
+  .auth-page {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 640px) {
@@ -3835,14 +4012,41 @@ body {
     justify-content: center;
   }
 
+  .marketing-mobile-toggle {
+    display: inline-flex;
+  }
+
+  .marketing-nav-actions {
+    align-items: stretch;
+  }
+
   .marketing-nav-links {
+    display: none;
+    width: 100%;
+    grid-template-columns: 1fr;
+  }
+
+  .marketing-nav-links.mobile-open {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .landing-benefit-grid,
   .hero-dashboard-grid {
     grid-template-columns: 1fr;
+  }
+
+  .auth-page {
+    width: min(100vw - 1rem, 1180px);
+  }
+
+  .auth-hero,
+  .auth-card {
+    border-radius: 1.2rem;
+  }
+
+  .auth-hero h2,
+  .auth-card h1 {
+    font-size: clamp(1.9rem, 9vw, 2.6rem);
   }
 }
 

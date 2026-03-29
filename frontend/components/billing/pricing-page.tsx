@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { BadgeCheck, Sparkles } from 'lucide-react';
-import { PublicSiteChrome } from '@/components/marketing/public-site-chrome';
+import { PublicLayout } from '@/components/layout/public-layout';
 import { ApiError } from '@/lib/api/client';
 import { createBillingCheckoutSession, getPublicBillingPlans } from '@/lib/api/billing';
 import { redirectToExternalUrl } from '@/lib/navigation';
@@ -89,7 +89,7 @@ export function PricingPage() {
 
   const startCheckout = async (planCode: BillingPlanCode) => {
     if (planCode === 'free') {
-      router.push('/login?mode=signup');
+      router.push('/signup');
       return;
     }
 
@@ -100,7 +100,7 @@ export function PricingPage() {
       redirectToExternalUrl(checkout_url);
     } catch (checkoutError) {
       if (checkoutError instanceof ApiError && checkoutError.status === 401) {
-        router.push('/login?mode=signup');
+        router.push('/signup');
         return;
       }
       setError(checkoutError instanceof Error ? checkoutError.message : 'Unable to start checkout right now.');
@@ -110,7 +110,7 @@ export function PricingPage() {
   };
 
   return (
-    <PublicSiteChrome>
+    <PublicLayout>
       <main className="pricing-page">
         <section className="pricing-hero">
           <p className="pricing-eyebrow">Pricing</p>
@@ -119,7 +119,7 @@ export function PricingPage() {
             Start free, upgrade when you grow, and keep billing simple with Stripe-hosted checkout and verified subscription access.
           </p>
           <div className="pricing-hero-actions">
-            <Link href="/login?mode=signup" className="button-link btn-primary">
+            <Link href="/signup" className="button-link btn-primary">
               Start Free
             </Link>
             <Link href="/login" className="button-link secondary">
@@ -160,6 +160,6 @@ export function PricingPage() {
           </div>
         </section>
       </main>
-    </PublicSiteChrome>
+    </PublicLayout>
   );
 }
