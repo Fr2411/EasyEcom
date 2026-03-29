@@ -1,6 +1,6 @@
 'use client';
-import { FormEvent, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { FormEvent, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { login } from '@/lib/api/auth';
 import { signup } from '@/lib/api/signup';
 import { AuthRouteGuard } from '@/components/auth/auth-route-guard';
@@ -10,8 +10,9 @@ import { EasyEcomLogo } from '@/components/branding/easy-ecom-logo';
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { refreshAuth } = useAuth();
-  const [mode, setMode] = useState<'login' | 'signup'>('login');
+  const [mode, setMode] = useState<'login' | 'signup'>(searchParams.get('mode') === 'signup' ? 'signup' : 'login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [businessName, setBusinessName] = useState('');
@@ -20,6 +21,10 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    setMode(searchParams.get('mode') === 'signup' ? 'signup' : 'login');
+  }, [searchParams]);
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();

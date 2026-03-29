@@ -60,6 +60,11 @@ class ClientModel(TimestampMixin, Base):
     whatsapp_number: Mapped[str] = mapped_column(String(64), nullable=False, default="")
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="active", index=True)
     notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    billing_plan_code: Mapped[str] = mapped_column(String(32), nullable=False, default="free", index=True)
+    billing_status: Mapped[str] = mapped_column(String(32), nullable=False, default="free", index=True)
+    billing_access_state: Mapped[str] = mapped_column(String(32), nullable=False, default="free_active", index=True)
+    billing_grace_until: Mapped[datetime | None] = mapped_column(Timestamp)
+    billing_updated_at: Mapped[datetime | None] = mapped_column(Timestamp)
 
 
 class ClientSettingsModel(TenantMixin, TimestampMixin, Base):
@@ -629,6 +634,85 @@ class ExpenseModel(TenantMixin, TimestampMixin, Base):
     incurred_at: Mapped[datetime] = mapped_column(Timestamp, nullable=False, server_default=func.now())
     payment_status: Mapped[str] = mapped_column(String(32), nullable=False, default="unpaid", index=True)
     created_by_user_id: Mapped[str | None] = mapped_column(GUID(), ForeignKey("users.user_id", ondelete="SET NULL"))
+
+
+class BillingPlanModel(TimestampMixin, Base):
+    __tablename__ = "billing_plans"
+
+    plan_code: Mapped[str] = mapped_column(String(32), primary_key=True)
+    display_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    is_paid: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    stripe_price_id: Mapped[str | None] = mapped_column(String(128), unique=True)
+    currency_code: Mapped[str] = mapped_column(String(16), nullable=False, default="USD")
+    interval: Mapped[str] = mapped_column(String(16), nullable=False, default="month")
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    public_description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    feature_flags_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+
+
+class BillingCustomerModel(TenantMixin, TimestampMixin, Base):
+    __tablename__ = "billing_customers"
+    __table_args__ = (
+        UniqueConstraint("client_id", name="uq_billing_customers_client"),
+        UniqueConstraint("stripe_customer_id", name="uq_billing_customers_stripe_customer"),
+    )
+
+    billing_customer_id: Mapped[str] = mapped_column(GUID(), primary_key=True)
+    stripe_customer_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    email: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+
+
+class SubscriptionModel(TenantMixin, TimestampMixin, Base):
+    __tablename__ = "subscriptions"
+    __table_args__ = (
+        UniqueConstraint("client_id", name="uq_subscriptions_client"),
+        UniqueConstraint("stripe_subscription_id", name="uq_subscriptions_stripe_subscription"),
+    )
+
+    subscription_id: Mapped[str] = mapped_column(GUID(), primary_key=True)
+    plan_code: Mapped[str] = mapped_column(String(32), ForeignKey("billing_plans.plan_code"), nullable=False, default="free")
+    stripe_subscription_id: Mapped[str | None] = mapped_column(String(128), index=True)
+    stripe_customer_id: Mapped[str | None] = mapped_column(String(128), index=True)
+    stripe_price_id: Mapped[str | None] = mapped_column(String(128), index=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="free", index=True)
+    cancel_at_period_end: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    current_period_start: Mapped[datetime | None] = mapped_column(Timestamp)
+    current_period_end: Mapped[datetime | None] = mapped_column(Timestamp)
+    grace_until: Mapped[datetime | None] = mapped_column(Timestamp)
+    last_invoice_id: Mapped[str | None] = mapped_column(String(128))
+    last_checkout_session_id: Mapped[str | None] = mapped_column(String(128))
+    updated_from_event_id: Mapped[str | None] = mapped_column(String(128))
+
+
+class PaymentEventModel(TimestampMixin, Base):
+    __tablename__ = "payment_events"
+    __table_args__ = (
+        UniqueConstraint("stripe_event_id", name="uq_payment_events_stripe_event"),
+    )
+
+    payment_event_id: Mapped[str] = mapped_column(GUID(), primary_key=True)
+    client_id: Mapped[str | None] = mapped_column(GUID(), ForeignKey("clients.client_id", ondelete="CASCADE"), index=True)
+    stripe_event_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    stripe_object_id: Mapped[str] = mapped_column(String(128), nullable=False, default="", index=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="received", index=True)
+    processed_at: Mapped[datetime | None] = mapped_column(Timestamp)
+    payload_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    error_message: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+
+class UsageCounterModel(TenantMixin, TimestampMixin, Base):
+    __tablename__ = "usage_counters"
+    __table_args__ = (
+        UniqueConstraint("client_id", "metric_code", "period_start", "period_end", name="uq_usage_counters_client_metric_period"),
+    )
+
+    usage_counter_id: Mapped[str] = mapped_column(GUID(), primary_key=True)
+    metric_code: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    period_start: Mapped[datetime] = mapped_column(Timestamp, nullable=False)
+    period_end: Mapped[datetime] = mapped_column(Timestamp, nullable=False)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
 class FinanceTransactionModel(TenantMixin, TimestampMixin, Base):

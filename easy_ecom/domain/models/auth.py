@@ -12,6 +12,10 @@ class AuthenticatedUser:
     business_name: str | None
     roles: list[str]
     allowed_pages: list[str]
+    billing_plan_code: str = "free"
+    billing_status: str = "free"
+    billing_access_state: str = "free_active"
+    billing_grace_until: str | None = None
 
     @property
     def roles_csv(self) -> str:

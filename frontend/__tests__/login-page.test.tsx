@@ -6,7 +6,8 @@ const replaceMock = vi.fn();
 const useAuthMock = vi.fn();
 
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ replace: replaceMock })
+  useRouter: () => ({ replace: replaceMock }),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 vi.mock('@/lib/api/auth', () => ({

@@ -7,6 +7,7 @@ import {
   Bot,
   Boxes,
   ClipboardList,
+  BadgeDollarSign,
   Gauge,
   HandCoins,
   Handshake,
@@ -37,6 +38,7 @@ const ICONS = {
   ai: Bot,
   automation: ClipboardList,
   purchases: Receipt,
+  billing: BadgeDollarSign,
   settings: Settings
 } as const;
 

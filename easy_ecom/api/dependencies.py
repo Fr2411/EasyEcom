@@ -19,6 +19,7 @@ from easy_ecom.data.store.runtime import build_runtime_engine
 from easy_ecom.domain.models.auth import AuthenticatedUser
 from easy_ecom.domain.services.admin_service import AdminService
 from easy_ecom.domain.services.auth_service import AuthService
+from easy_ecom.domain.services.billing_service import BillingService
 from easy_ecom.domain.services.commerce_service import (
     CatalogService,
     InventoryService,
@@ -42,6 +43,10 @@ class SessionUserPayload:
     email: str
     name: str
     business_name: str | None
+    billing_plan_code: str | None
+    billing_status: str | None
+    billing_access_state: str | None
+    billing_grace_until: str | None
 
 
 class RequestSessionFactory:
@@ -60,6 +65,7 @@ class ServiceContainer:
         self._session_factory = session_factory
         self.auth = AuthService(PostgresAuthRepo(session_factory))
         self.admin = AdminService(session_factory)
+        self.billing = BillingService(session_factory)
         self.dashboard = DashboardAnalyticsService(session_factory)
         self.overview = OverviewService(session_factory)
         self._reports = None
@@ -128,6 +134,10 @@ def build_session_token(user: AuthenticatedUser) -> str:
             "email": user.email,
             "name": user.name,
             "business_name": user.business_name,
+            "billing_plan_code": user.billing_plan_code,
+            "billing_status": user.billing_status,
+            "billing_access_state": user.billing_access_state,
+            "billing_grace_until": user.billing_grace_until,
         }
     )
 
@@ -163,6 +173,10 @@ def _parse_session_user(token: str | None) -> SessionUserPayload:
     name = str(payload.get("name", "")).strip()
     raw_business_name = payload.get("business_name")
     business_name = str(raw_business_name).strip() if raw_business_name is not None else None
+    raw_billing_plan_code = payload.get("billing_plan_code")
+    raw_billing_status = payload.get("billing_status")
+    raw_billing_access_state = payload.get("billing_access_state")
+    raw_billing_grace_until = payload.get("billing_grace_until")
     roles = _parse_roles(payload.get("roles"))
     allowed_pages = _parse_roles(payload.get("allowed_pages")) or []
 
@@ -182,22 +196,46 @@ def _parse_session_user(token: str | None) -> SessionUserPayload:
         email=email,
         name=name,
         business_name=business_name or None,
+        billing_plan_code=str(raw_billing_plan_code).strip() if raw_billing_plan_code is not None else None,
+        billing_status=str(raw_billing_status).strip() if raw_billing_status is not None else None,
+        billing_access_state=str(raw_billing_access_state).strip() if raw_billing_access_state is not None else None,
+        billing_grace_until=str(raw_billing_grace_until).strip() if raw_billing_grace_until is not None else None,
     )
 
 
 def get_authenticated_user(
     session_token: str | None = Cookie(default=None, alias=settings.session_cookie_name),
+    request: Request = None,
+    session: Session = Depends(get_db_session),
 ) -> AuthenticatedUser:
     session_user = _parse_session_user(session_token)
-    return AuthenticatedUser(
+    billing_service = BillingService(RequestSessionFactory(session))
+    billing_snapshot = billing_service.snapshot_for_request(
+        session,
+        client_id=session_user.client_id,
+        roles=session_user.roles,
+    )
+    billing_user = AuthenticatedUser(
         user_id=session_user.user_id,
         client_id=session_user.client_id,
         roles=session_user.roles,
-        allowed_pages=session_user.allowed_pages,
+        allowed_pages=billing_snapshot.allowed_pages,
         email=session_user.email,
         name=session_user.name,
         business_name=session_user.business_name,
+        billing_plan_code=billing_snapshot.plan_code,
+        billing_status=billing_snapshot.billing_status,
+        billing_access_state=billing_snapshot.billing_access_state,
+        billing_grace_until=billing_snapshot.grace_until.isoformat() if billing_snapshot.grace_until else None,
     )
+    if request is not None:
+        billing_service.enforce_request_access(
+            user=billing_user,
+            request_method=request.method,
+            request_path=request.url.path,
+        )
+        session.commit()
+    return billing_user
 
 
 def get_tenant_context(user: AuthenticatedUser = Depends(get_authenticated_user)) -> TenantContext:

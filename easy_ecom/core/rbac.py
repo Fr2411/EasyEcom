@@ -15,6 +15,7 @@ PAGE_CODE_TO_NAME: dict[str, str] = {
     "SALES_AGENT": "Sales Agent",
     "AI_REVIEW": "AI Review",
     "AUTOMATION": "Automation",
+    "BILLING": "Billing",
     "SETTINGS": "Settings",
 }
 PAGE_NAME_TO_CODE = {name: code for code, name in PAGE_CODE_TO_NAME.items()}
@@ -33,6 +34,7 @@ ALL_PAGE_NAMES: tuple[str, ...] = (
     "Sales Agent",
     "AI Review",
     "Automation",
+    "Billing",
     "Admin",
     "Settings",
 )
@@ -49,6 +51,7 @@ ROLE_PAGE_ACCESS: dict[str, tuple[str, ...]] = {
         "Sales Agent",
         "AI Review",
         "Automation",
+        "Billing",
         "Finance",
         "Returns",
         "Reports",

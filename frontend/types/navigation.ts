@@ -14,11 +14,12 @@ export type NavigationItem = {
     | 'sales'
     | 'customers'
     | 'purchases'
-    | 'finance'
-    | 'returns'
-    | 'admin'
-    | 'integrations'
-    | 'ai'
+  | 'finance'
+  | 'returns'
+  | 'billing'
+  | 'admin'
+  | 'integrations'
+  | 'ai'
     | 'automation'
     | 'settings';
 };
@@ -46,6 +47,7 @@ export const NAV_ITEMS: NavigationItem[] = [
   { href: '/automation', label: 'Automation', group: 'System', icon: 'automation' },
   { href: '/finance', label: 'Finance', group: 'Operations', icon: 'finance' },
   { href: '/returns', label: 'Returns', group: 'Operations', icon: 'returns' },
+  { href: '/billing', label: 'Billing', group: 'System', icon: 'billing' },
   { href: '/admin', label: 'Admin', group: 'System', icon: 'admin' },
   { href: '/settings', label: 'Settings', group: 'System', icon: 'settings' }
 ];
