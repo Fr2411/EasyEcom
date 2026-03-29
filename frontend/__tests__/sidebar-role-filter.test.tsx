@@ -37,11 +37,11 @@ describe('Sidebar role filtering', () => {
     expect(screen.queryByRole('link', { name: 'Finance' })).toBeNull();
   });
 
-  test('prefers allowed pages from auth context when overrides are present', () => {
+  test('shows role-capable paid modules even when billing-filtered allowed pages omit them', () => {
     useAuthMock.mockReturnValue({
       user: {
-        roles: ['CLIENT_STAFF'],
-        allowed_pages: ['Home', 'Dashboard', 'Finance', 'Returns', 'Settings'],
+        roles: ['CLIENT_OWNER'],
+        allowed_pages: ['Home', 'Dashboard', 'Inventory', 'Sales', 'Returns', 'Settings'],
       },
       clearAuth: vi.fn(),
     });
@@ -49,7 +49,8 @@ describe('Sidebar role filtering', () => {
     render(<Sidebar />);
 
     expect(screen.getByRole('link', { name: 'Finance' })).toBeTruthy();
-    expect(screen.queryByRole('link', { name: 'Catalog' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Reports' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Automation' })).toBeTruthy();
   });
 
   test('shows automation when the session explicitly allows it', () => {
