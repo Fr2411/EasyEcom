@@ -18,6 +18,18 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: pushMock }),
 }));
 
+vi.mock('@/components/auth/auth-route-guard', () => ({
+  AuthRouteGuard: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+
+vi.mock('@/components/theme/theme-toggle', () => ({
+  ThemeToggle: () => <div>Theme toggle</div>,
+}));
+
+vi.mock('@/components/branding/easy-ecom-logo', () => ({
+  EasyEcomLogo: () => <div>EasyEcom Logo</div>,
+}));
+
 vi.mock('@/lib/api/billing', () => ({
   getPublicBillingPlans: mockGetPublicBillingPlans,
   createBillingCheckoutSession: mockCreateBillingCheckoutSession,
