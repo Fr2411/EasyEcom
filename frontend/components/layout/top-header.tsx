@@ -182,8 +182,8 @@ function getHeaderContext(pathname: string): HeaderContext {
       return {
         section: 'Operations',
         title: 'Billing success',
-        subtitle: 'Stripe return',
-        summary: 'Review the live backend subscription state after checkout returns you to the app.',
+        subtitle: 'Billing return',
+        summary: 'Review the live backend subscription state after the hosted billing flow returns you to the app.',
         searchScope: 'sales',
         actionLabel: 'Open billing',
         actionHref: '/billing',
@@ -192,8 +192,8 @@ function getHeaderContext(pathname: string): HeaderContext {
       return {
         section: 'Operations',
         title: 'Billing cancelled',
-        subtitle: 'Stripe return',
-        summary: 'The app uses backend subscription state, so cancelled checkout flows still show the actual account state.',
+        subtitle: 'Billing return',
+        summary: 'The app uses backend subscription state, so cancelled hosted flows still show the actual account state.',
         searchScope: 'sales',
         actionLabel: 'Open billing',
         actionHref: '/billing',

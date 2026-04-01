@@ -1,9 +1,9 @@
 import { apiClient } from '@/lib/api/client';
 import type {
-  BillingCheckoutRequest,
-  BillingCheckoutSessionResponse,
+  BillingActionResponse,
+  BillingPlanRequest,
   BillingPlansResponse,
-  BillingPortalSessionResponse,
+  BillingPublicConfig,
   BillingSubscriptionState,
 } from '@/types/billing';
 
@@ -11,32 +11,23 @@ export async function getPublicBillingPlans() {
   return apiClient<BillingPlansResponse>('/public/billing/plans');
 }
 
+export async function getPublicBillingConfig() {
+  return apiClient<BillingPublicConfig>('/public/billing/config');
+}
+
 export async function getBillingSubscription() {
   return apiClient<BillingSubscriptionState>('/billing/subscription');
 }
 
-export async function createBillingCheckoutSession(payload: BillingCheckoutRequest) {
-  return apiClient<BillingCheckoutSessionResponse>('/billing/checkout-session', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function openBillingPortal() {
-  return apiClient<BillingPortalSessionResponse>('/billing/customer-portal-session', {
-    method: 'POST',
-  });
-}
-
-export async function changeBillingPlan(payload: BillingCheckoutRequest) {
-  return apiClient<BillingPortalSessionResponse>('/billing/change-plan', {
+export async function changeBillingPlan(payload: BillingPlanRequest) {
+  return apiClient<BillingActionResponse>('/billing/change-plan', {
     method: 'POST',
     body: JSON.stringify({ target_plan_code: payload.plan_code }),
   });
 }
 
 export async function cancelBillingSubscription() {
-  return apiClient<BillingPortalSessionResponse>('/billing/cancel-subscription', {
+  return apiClient<BillingActionResponse>('/billing/cancel-subscription', {
     method: 'POST',
   });
 }

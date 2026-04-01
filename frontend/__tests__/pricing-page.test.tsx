@@ -5,13 +5,9 @@ import { PricingPage } from '@/components/billing/pricing-page';
 const {
   pushMock,
   mockGetPublicBillingPlans,
-  mockCreateBillingCheckoutSession,
-  mockRedirectToExternalUrl,
 } = vi.hoisted(() => ({
   pushMock: vi.fn(),
   mockGetPublicBillingPlans: vi.fn(),
-  mockCreateBillingCheckoutSession: vi.fn(),
-  mockRedirectToExternalUrl: vi.fn(),
 }));
 
 vi.mock('next/navigation', () => ({
@@ -28,29 +24,38 @@ vi.mock('@/components/branding/easy-ecom-logo', () => ({
 
 vi.mock('@/lib/api/billing', () => ({
   getPublicBillingPlans: mockGetPublicBillingPlans,
-  createBillingCheckoutSession: mockCreateBillingCheckoutSession,
 }));
 
-vi.mock('@/lib/navigation', () => ({
-  redirectToExternalUrl: mockRedirectToExternalUrl,
+vi.mock('@/components/auth/auth-provider', () => ({
+  useAuth: () => ({
+    user: { client_id: 'client-1', roles: ['CLIENT_OWNER'] },
+    loading: false,
+    bootstrapError: 'none',
+    refreshAuth: vi.fn(),
+    clearAuth: vi.fn(),
+  }),
+}));
+
+vi.mock('@/components/billing/paypal-subscribe-button', () => ({
+  PaypalSubscribeButton: ({ plan }: { plan: { display_name: string } }) => <button type="button">Start {plan.display_name}</button>,
 }));
 
 afterEach(() => {
   cleanup();
   pushMock.mockReset();
   mockGetPublicBillingPlans.mockReset();
-  mockCreateBillingCheckoutSession.mockReset();
-  mockRedirectToExternalUrl.mockReset();
 });
 
 describe('PricingPage', () => {
-  test('routes the free plan to signup and paid plans to checkout sessions', async () => {
+  test('routes the free plan to signup and renders PayPal CTA for paid plans', async () => {
     mockGetPublicBillingPlans.mockResolvedValue({
       items: [
         {
           plan_code: 'free',
           display_name: 'Free',
           is_paid: false,
+          billing_provider: 'paypal',
+          provider_plan_id: null,
           currency_code: 'AED',
           interval: 'monthly',
           sort_order: 10,
@@ -60,6 +65,8 @@ describe('PricingPage', () => {
           plan_code: 'growth',
           display_name: 'Growth',
           is_paid: true,
+          billing_provider: 'paypal',
+          provider_plan_id: 'P-growth',
           currency_code: 'AED',
           interval: 'monthly',
           sort_order: 20,
@@ -67,7 +74,6 @@ describe('PricingPage', () => {
         },
       ],
     });
-    mockCreateBillingCheckoutSession.mockResolvedValue({ checkout_url: 'https://checkout.stripe.test/session' });
 
     render(<PricingPage />);
 
@@ -75,12 +81,6 @@ describe('PricingPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Start free' }));
     expect(pushMock).toHaveBeenCalledWith('/signup');
-
-    fireEvent.click(screen.getByRole('button', { name: 'Start Growth' }));
-
-    await waitFor(() =>
-      expect(mockCreateBillingCheckoutSession).toHaveBeenCalledWith({ plan_code: 'growth' })
-    );
-    expect(mockRedirectToExternalUrl).toHaveBeenCalledWith('https://checkout.stripe.test/session');
+    expect(screen.getByRole('button', { name: 'Start Growth' })).toBeTruthy();
   });
 });

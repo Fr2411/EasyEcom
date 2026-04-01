@@ -3,20 +3,20 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { BadgeCheck } from 'lucide-react';
+import { PaypalSubscribeButton } from '@/components/billing/paypal-subscribe-button';
 import {
   billingAccessStateLabel,
   billingStatusLabel,
   billingStatusTone,
+  billingProviderLabel,
   getBillingPresentation,
   sortBillingPlans,
 } from '@/lib/billing';
 import {
   cancelBillingSubscription,
   changeBillingPlan,
-  createBillingCheckoutSession,
   getBillingSubscription,
   getPublicBillingPlans,
-  openBillingPortal,
 } from '@/lib/api/billing';
 import { redirectToExternalUrl } from '@/lib/navigation';
 import type { BillingPlan, BillingPlanCode, BillingSubscriptionState } from '@/types/billing';
@@ -51,12 +51,14 @@ function PlanCard({
   disabled,
   busy,
   onSelect,
+  onError,
 }: {
   plan: BillingPlan;
   currentPlanCode: BillingPlanCode;
   disabled: boolean;
   busy: boolean;
   onSelect: (planCode: BillingPlanCode) => void;
+  onError: (message: string) => void;
 }) {
   const current = currentPlanCode === plan.plan_code;
   const presentation = getBillingPresentation(plan.plan_code);
@@ -80,14 +82,26 @@ function PlanCard({
           </li>
         ))}
       </ul>
-      <button
-        type="button"
-        className={current ? 'secondary' : 'btn-primary'}
-        disabled={disabled || busy || current || plan.plan_code === 'free'}
-        onClick={() => onSelect(plan.plan_code)}
-      >
-        {current ? 'Current plan' : busy ? 'Working…' : presentation.ctaLabel}
-      </button>
+      {current ? (
+        <button type="button" className="secondary" disabled>
+          Current plan
+        </button>
+      ) : currentPlanCode === 'free' ? (
+        <PaypalSubscribeButton
+          plan={plan}
+          className={presentation.highlight ? 'btn-primary' : 'secondary'}
+          onError={onError}
+        />
+      ) : (
+        <button
+          type="button"
+          className="btn-primary"
+          disabled={disabled || busy || plan.plan_code === 'free'}
+          onClick={() => onSelect(plan.plan_code)}
+        >
+          {busy ? 'Working…' : presentation.ctaLabel}
+        </button>
+      )}
     </article>
   );
 }
@@ -127,20 +141,21 @@ export function BillingWorkspace() {
   const currentPlanPresentation = getBillingPresentation(currentPlanCode);
   const currentStatusTone = billingStatusTone(subscription?.billing_status);
   const currentStatusLabel = billingStatusLabel(subscription?.billing_status);
+  const providerLabel = billingProviderLabel(subscription?.billing_provider);
 
   const setBusyAndRedirect = async (
     actionLabel: string,
-    request: () => Promise<{ checkout_url?: string; portal_url?: string }>
+    request: () => Promise<{ action_url: string | null; status: string }>
   ) => {
     setBusyAction(actionLabel);
     setError('');
     try {
       const payload = await request();
-      const url = payload.checkout_url ?? payload.portal_url;
-      if (!url) {
-        throw new Error('Billing redirect URL was not returned by the backend.');
+      if (payload.action_url) {
+        redirectToExternalUrl(payload.action_url);
+        return;
       }
-      redirectToExternalUrl(url);
+      await loadWorkspace();
     } catch (actionError) {
       setError(actionErrorMessage(actionError, 'Unable to open billing action right now.'));
     } finally {
@@ -155,15 +170,7 @@ export function BillingWorkspace() {
     if (planCode === subscription?.plan_code) {
       return;
     }
-    if (subscription?.plan_code === 'free') {
-      await setBusyAndRedirect(`plan-${planCode}`, () => createBillingCheckoutSession({ plan_code: planCode }));
-      return;
-    }
     await setBusyAndRedirect(`plan-${planCode}`, () => changeBillingPlan({ plan_code: planCode }));
-  };
-
-  const handleOpenPortal = async () => {
-    await setBusyAndRedirect('portal', openBillingPortal);
   };
 
   const handleCancel = async () => {
@@ -174,10 +181,16 @@ export function BillingWorkspace() {
     () => [
       { label: 'Plan', value: subscription?.plan_name ?? 'Free', note: currentStatusLabel },
       { label: 'Access', value: billingAccessStateLabel(subscription?.billing_access_state ?? 'free_active'), note: subscription?.grace_until ? `Grace until ${formatDateTime(subscription.grace_until)}` : 'Derived from verified webhook state' },
-      { label: 'Current period', value: subscription?.current_period_end ? formatDateTime(subscription.current_period_end) : 'Not set', note: subscription?.cancel_at_period_end ? 'Cancellation scheduled at period end' : 'Renews until changed' },
-      { label: 'Portal', value: subscription?.portal_available ? 'Available' : 'Unavailable', note: subscription?.stripe_customer_id ? 'Stripe customer linked' : 'No Stripe customer yet' },
+      {
+        label: 'Current period',
+        value: subscription?.current_period_end ? formatDateTime(subscription.current_period_end) : 'Not set',
+        note: subscription?.cancel_at_period_end
+          ? `Access stays live until ${subscription.cancel_effective_at ? formatDateTime(subscription.cancel_effective_at) : subscription.current_period_end ? formatDateTime(subscription.current_period_end) : 'the current period ends'}`
+          : 'Renews monthly until changed',
+      },
+      { label: 'Provider', value: providerLabel, note: subscription?.provider_customer_id ? `${providerLabel} customer linked` : `No ${providerLabel.toLowerCase()} customer yet` },
     ],
-    [currentStatusLabel, subscription?.billing_access_state, subscription?.cancel_at_period_end, subscription?.current_period_end, subscription?.grace_until, subscription?.plan_name, subscription?.portal_available, subscription?.stripe_customer_id]
+    [currentStatusLabel, providerLabel, subscription?.billing_access_state, subscription?.cancel_at_period_end, subscription?.cancel_effective_at, subscription?.current_period_end, subscription?.grace_until, subscription?.plan_name, subscription?.provider_customer_id]
   );
 
   if (loading && !workspace) {
@@ -195,7 +208,7 @@ export function BillingWorkspace() {
       {error ? <WorkspaceNotice tone="error">{error}</WorkspaceNotice> : null}
 
       <WorkspaceNotice tone={currentStatusTone}>
-        {currentStatusLabel}. The workspace uses verified backend subscription state, not the Stripe redirect alone.
+        {currentStatusLabel}. The workspace uses verified backend subscription state, not the browser redirect alone.
       </WorkspaceNotice>
 
       <div className="finance-cards billing-summary-grid">
@@ -211,11 +224,11 @@ export function BillingWorkspace() {
       <div className="billing-layout">
         <WorkspacePanel
           title="Current subscription"
-          description="Billing is owner-managed and Stripe-hosted. Paid access only activates after verified payment webhooks."
+          description="Billing is owner-managed and PayPal-hosted. Paid access only activates after verified payment events."
         >
           <DraftRecommendationCard
             title={subscription.plan_name}
-            summary={`Status: ${currentStatusLabel}. ${subscription.cancel_at_period_end ? 'Cancellation is already scheduled.' : 'Manage the current subscription through Stripe-hosted actions.'}`}
+            summary={`Status: ${currentStatusLabel}. ${subscription.cancel_at_period_end ? 'Cancellation is scheduled at the end of the current billing cycle.' : 'Manage the current subscription through PayPal-backed billing actions.'}`}
             actions={
               <Link href="/pricing" className="button-link secondary">
                 View public pricing
@@ -236,35 +249,27 @@ export function BillingWorkspace() {
                 <dd>{subscription.current_period_end ? formatDateTime(subscription.current_period_end) : 'Not set'}</dd>
               </div>
               <div>
-                <dt>Grace until</dt>
-                <dd>{subscription.grace_until ? formatDateTime(subscription.grace_until) : 'Not in grace'}</dd>
+                <dt>Cancel effective</dt>
+                <dd>{subscription.cancel_effective_at ? formatDateTime(subscription.cancel_effective_at) : 'Not scheduled'}</dd>
               </div>
             </div>
           </DraftRecommendationCard>
 
-          <StagedActionFooter summary="Use Stripe portal for subscription management. EasyEcom never stores card data and never assumes the redirect proves payment.">
+          <StagedActionFooter summary="EasyEcom never stores card data and never assumes the browser redirect proves payment. Verified PayPal events remain the source of truth.">
             <button
               type="button"
               className="secondary"
               onClick={handleCancel}
               disabled={busyAction === 'cancel' || !subscription.can_manage_subscription}
             >
-              {busyAction === 'cancel' ? 'Opening…' : 'Cancel subscription'}
-            </button>
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={handleOpenPortal}
-              disabled={busyAction === 'portal' || !subscription.portal_available}
-            >
-              {busyAction === 'portal' ? 'Opening…' : 'Open billing portal'}
+              {busyAction === 'cancel' ? 'Scheduling…' : 'Cancel at period end'}
             </button>
           </StagedActionFooter>
         </WorkspacePanel>
 
         <WorkspacePanel
           title="Plan comparison"
-          description="Paid plan changes go through Stripe Checkout or the Stripe customer portal depending on current state."
+          description="Free tenants start from PayPal approval. Paid tenants can request an immediate upgrade, with the higher recurring price starting next cycle."
         >
           <div className="billing-plan-grid">
             {plans.map((plan) => (
@@ -275,6 +280,7 @@ export function BillingWorkspace() {
                 disabled={busyAction !== null}
                 busy={busyAction === `plan-${plan.plan_code}`}
                 onSelect={handlePlanSelect}
+                onError={setError}
               />
             ))}
           </div>

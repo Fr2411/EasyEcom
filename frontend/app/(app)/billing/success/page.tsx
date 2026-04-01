@@ -5,7 +5,7 @@ export default function BillingSuccessPage() {
   return (
     <PageShell
       title="Billing success"
-      description="Review the live backend subscription state after Stripe returns the browser to the app."
+      description="Review the live backend subscription state after PayPal returns the browser to the app."
     >
       <BillingStatusPage mode="success" />
     </PageShell>
