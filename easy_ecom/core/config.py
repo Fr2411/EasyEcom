@@ -120,6 +120,16 @@ class Settings:
     stripe_price_scale_monthly: str = field(default_factory=lambda: os.getenv("STRIPE_PRICE_SCALE_MONTHLY", "").strip())
     stripe_portal_configuration_id: str = field(default_factory=lambda: os.getenv("STRIPE_PORTAL_CONFIGURATION_ID", "").strip())
     stripe_publishable_key: str = field(default_factory=lambda: os.getenv("STRIPE_PUBLISHABLE_KEY", "").strip())
+    paypal_env: str = field(default_factory=lambda: os.getenv("PAYPAL_ENV", "sandbox").strip().lower() or "sandbox")
+    paypal_client_id: str = field(default_factory=lambda: os.getenv("PAYPAL_CLIENT_ID", "").strip())
+    paypal_client_secret: str = field(default_factory=lambda: os.getenv("PAYPAL_CLIENT_SECRET", "").strip())
+    paypal_webhook_id: str = field(default_factory=lambda: os.getenv("PAYPAL_WEBHOOK_ID", "").strip())
+    paypal_product_growth_id: str = field(default_factory=lambda: os.getenv("PAYPAL_PRODUCT_GROWTH_ID", "").strip())
+    paypal_product_scale_id: str = field(default_factory=lambda: os.getenv("PAYPAL_PRODUCT_SCALE_ID", "").strip())
+    paypal_plan_growth_monthly: str = field(default_factory=lambda: os.getenv("PAYPAL_PLAN_GROWTH_MONTHLY", "").strip())
+    paypal_plan_scale_monthly: str = field(default_factory=lambda: os.getenv("PAYPAL_PLAN_SCALE_MONTHLY", "").strip())
+    paypal_price_growth_monthly_amount: str = field(default_factory=lambda: os.getenv("PAYPAL_PRICE_GROWTH_MONTHLY_AMOUNT", "").strip())
+    paypal_price_scale_monthly_amount: str = field(default_factory=lambda: os.getenv("PAYPAL_PRICE_SCALE_MONTHLY_AMOUNT", "").strip())
 
     @property
     def postgres_dsn(self) -> str:

@@ -4,10 +4,11 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { BadgeCheck, Sparkles } from 'lucide-react';
+import { useAuth } from '@/components/auth/auth-provider';
+import { PaypalSubscribeButton } from '@/components/billing/paypal-subscribe-button';
 import { PublicLayout } from '@/components/layout/public-layout';
 import { ApiError } from '@/lib/api/client';
-import { createBillingCheckoutSession, getPublicBillingPlans } from '@/lib/api/billing';
-import { redirectToExternalUrl } from '@/lib/navigation';
+import { getPublicBillingPlans } from '@/lib/api/billing';
 import { getBillingPresentation, sortBillingPlans } from '@/lib/billing';
 import type { BillingPlan, BillingPlanCode } from '@/types/billing';
 
@@ -15,10 +16,12 @@ function PricingAction({
   plan,
   busy,
   onClick,
+  error,
 }: {
   plan: BillingPlan;
   busy: boolean;
   onClick: (planCode: BillingPlanCode) => void;
+  error: (message: string) => void;
 }) {
   const presentation = getBillingPresentation(plan.plan_code);
 
@@ -40,22 +43,30 @@ function PricingAction({
           </li>
         ))}
       </ul>
-      <button
-        type="button"
-        className={presentation.highlight ? 'btn-primary' : 'secondary'}
-        disabled={busy}
-        onClick={() => onClick(plan.plan_code)}
-      >
-        {busy ? 'Opening…' : presentation.ctaLabel}
-      </button>
+      {plan.plan_code === 'free' ? (
+        <button
+          type="button"
+          className={presentation.highlight ? 'btn-primary' : 'secondary'}
+          disabled={busy}
+          onClick={() => onClick(plan.plan_code)}
+        >
+          {busy ? 'Opening…' : presentation.ctaLabel}
+        </button>
+      ) : (
+        <PaypalSubscribeButton
+          plan={plan}
+          className={presentation.highlight ? 'btn-primary' : 'secondary'}
+          onError={error}
+        />
+      )}
     </article>
   );
 }
 
 export function PricingPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const [plans, setPlans] = useState<BillingPlan[]>([]);
-  const [busyPlan, setBusyPlan] = useState<BillingPlanCode | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -87,26 +98,23 @@ export function PricingPage() {
     };
   }, []);
 
-  const startCheckout = async (planCode: BillingPlanCode) => {
+  const handlePlanAction = async (planCode: BillingPlanCode) => {
     if (planCode === 'free') {
       router.push('/signup');
       return;
     }
-
-    setBusyPlan(planCode);
-    setError('');
-    try {
-      const { checkout_url } = await createBillingCheckoutSession({ plan_code: planCode });
-      redirectToExternalUrl(checkout_url);
-    } catch (checkoutError) {
-      if (checkoutError instanceof ApiError && checkoutError.status === 401) {
-        router.push('/signup');
-        return;
-      }
-      setError(checkoutError instanceof Error ? checkoutError.message : 'Unable to start checkout right now.');
-    } finally {
-      setBusyPlan(null);
+    if (!user) {
+      router.push('/signup');
+      return;
     }
+    if (!user.roles.includes('CLIENT_OWNER')) {
+      setError('Only the tenant owner can start or change a paid subscription.');
+      return;
+    }
+  };
+
+  const onPaypalError = (message: string) => {
+    setError(message);
   };
 
   return (
@@ -116,7 +124,7 @@ export function PricingPage() {
           <p className="pricing-eyebrow">Pricing</p>
           <h1>Simple pricing that grows with you</h1>
           <p className="pricing-lead">
-            Start free, upgrade when you grow, and keep billing simple with Stripe-hosted checkout and verified subscription access.
+            Start free, upgrade when you grow, and keep billing simple with PayPal-managed recurring subscriptions.
           </p>
           <div className="pricing-hero-actions">
             <Link href="/signup" className="button-link btn-primary">
@@ -141,8 +149,9 @@ export function PricingPage() {
               <PricingAction
                 key={plan.plan_code}
                 plan={plan}
-                busy={busyPlan === plan.plan_code}
-                onClick={startCheckout}
+                busy={false}
+                onClick={handlePlanAction}
+                error={onPaypalError}
               />
             ))}
           </section>
@@ -151,10 +160,10 @@ export function PricingPage() {
         <section className="pricing-footnote-card">
           <div>
             <p className="eyebrow">Billing flow</p>
-            <h2>EasyEcom unlocks paid access only after verified Stripe webhook events confirm subscription state.</h2>
+            <h2>EasyEcom unlocks paid access only after verified PayPal subscription events confirm subscription state.</h2>
           </div>
           <div className="pricing-footnote-points">
-            <span>Stripe-hosted checkout</span>
+            <span>PayPal-managed recurring billing</span>
             <span>Webhook-driven activation</span>
             <span>No card data stored in EasyEcom</span>
           </div>

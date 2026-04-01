@@ -30,7 +30,7 @@ const BILLING_PRESENTATION: Record<BillingPlanCode, BillingPresentation> = {
     features: [
       'Finance, reports, customers, and purchases',
       'Integrations, AI review, and automation',
-      'Stripe-hosted owner billing controls',
+      'Owner-managed subscription controls',
       'Full paid workspace access',
     ],
   },
@@ -48,6 +48,13 @@ const BILLING_PRESENTATION: Record<BillingPlanCode, BillingPresentation> = {
 
 export function getBillingPresentation(planCode: BillingPlanCode): BillingPresentation {
   return BILLING_PRESENTATION[planCode];
+}
+
+export function billingProviderLabel(provider: string | null | undefined) {
+  if (!provider) return 'Subscription provider';
+  if (provider.toLowerCase() === 'paypal') return 'PayPal';
+  if (provider.toLowerCase() === 'stripe') return 'Stripe';
+  return provider;
 }
 
 export function billingStatusTone(status: string | null | undefined) {

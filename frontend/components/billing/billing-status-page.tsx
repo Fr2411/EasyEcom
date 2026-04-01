@@ -28,14 +28,23 @@ export function BillingStatusPage({ mode }: { mode: BillingStatusPageMode }) {
 
   useEffect(() => {
     let cancelled = false;
+    let intervalId: number | null = null;
 
     async function loadSubscription() {
-      setLoading(true);
       try {
         const payload = await getBillingSubscription();
         if (!cancelled) {
           setSubscription(payload);
           setError('');
+          if (mode === 'success' && payload.billing_access_state !== 'paid_active' && !intervalId) {
+            intervalId = window.setInterval(() => {
+              void loadSubscription();
+            }, 3000);
+          }
+          if (mode === 'success' && payload.billing_access_state === 'paid_active' && intervalId) {
+            window.clearInterval(intervalId);
+            intervalId = null;
+          }
         }
       } catch (loadError) {
         if (!cancelled) {
@@ -51,15 +60,18 @@ export function BillingStatusPage({ mode }: { mode: BillingStatusPageMode }) {
     void loadSubscription();
     return () => {
       cancelled = true;
+      if (intervalId) {
+        window.clearInterval(intervalId);
+      }
     };
-  }, []);
+  }, [mode]);
 
   const currentTone = billingStatusTone(subscription?.billing_status);
   const heading = mode === 'success' ? 'Billing success' : 'Billing cancelled';
   const description =
     mode === 'success'
-      ? 'Stripe has returned you to the app, but EasyEcom waits for verified backend subscription state before granting paid access.'
-      : 'Checkout or portal flow was exited. This page shows the live backend subscription state rather than assuming anything changed.';
+      ? 'Payment approval can finish before EasyEcom receives the verified PayPal webhook, so this page waits for backend confirmation before granting paid access.'
+      : 'Cancellation has been requested. This page shows the live backend subscription state instead of assuming access changed immediately.';
 
   if (loading && !subscription) {
     return <div className="reports-loading">Loading billing state…</div>;
@@ -74,7 +86,7 @@ export function BillingStatusPage({ mode }: { mode: BillingStatusPageMode }) {
   return (
     <div className="billing-status-page">
       <WorkspaceNotice tone={currentTone}>
-        {mode === 'success' ? 'Stripe checkout returned successfully.' : 'Stripe flow was cancelled.'} Backend subscription state remains the source of truth.
+        {mode === 'success' ? 'PayPal approval returned successfully.' : 'Cancellation was requested.'} Backend subscription state remains the source of truth.
       </WorkspaceNotice>
       {error ? <WorkspaceNotice tone="error">{error}</WorkspaceNotice> : null}
 
@@ -98,13 +110,13 @@ export function BillingStatusPage({ mode }: { mode: BillingStatusPageMode }) {
                 <dd>{subscription.current_period_end ? formatDateTime(subscription.current_period_end) : 'Not set'}</dd>
               </div>
               <div>
-                <dt>Grace until</dt>
-                <dd>{subscription.grace_until ? formatDateTime(subscription.grace_until) : 'Not in grace'}</dd>
+                <dt>Cancel effective</dt>
+                <dd>{subscription.cancel_effective_at ? formatDateTime(subscription.cancel_effective_at) : 'Not scheduled'}</dd>
               </div>
             </div>
           </DraftRecommendationCard>
 
-          <StagedActionFooter summary="This page never upgrades the tenant by itself. It only reflects the verified backend view after Stripe redirects back.">
+          <StagedActionFooter summary="This page never upgrades the tenant by itself. It only reflects the verified backend view after PayPal returns to the app.">
             <Link href="/billing" className="button-link secondary">
               Open billing workspace
             </Link>

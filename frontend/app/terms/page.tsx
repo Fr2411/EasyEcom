@@ -31,8 +31,8 @@ export default function TermsPage() {
 
       <h2>2. Subscription and Billing</h2>
       <p>
-        Paid plans are billed through Stripe-hosted checkout and Stripe billing flows. EasyEcom does not store card data.
-        Access to paid features depends on verified subscription state and payment events.
+        Paid plans are billed through hosted subscription flows. EasyEcom does not store card data. Access to paid
+        features depends on verified subscription state and payment events.
       </p>
 
       <h2>3. Customer and Business Data</h2>

@@ -5,7 +5,7 @@ export default function BillingPage() {
   return (
     <PageShell
       title="Billing"
-      description="Owner-only billing workspace that trusts backend subscription state, separates plan changes from checkout, and keeps Stripe redirects explicit."
+      description="Owner-only billing workspace that trusts backend subscription state, separates plan changes from hosted billing actions, and keeps redirects explicit."
     >
       <BillingWorkspace />
     </PageShell>
