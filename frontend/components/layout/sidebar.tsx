@@ -61,10 +61,10 @@ export function Sidebar({
         </div>
         <div className="brand-badge-row">
           <span className="brand-badge">LIVE</span>
-          <span className="brand-badge muted">AI + Ops</span>
+          <span className="brand-badge muted">COMMERCE</span>
         </div>
-        <h1 className="brand-title">Operations Hub</h1>
-        <p className="brand-subtitle">AI-assisted sales, stock truth, and daily execution from one command surface.</p>
+        <h1 className="brand-title">Command Center</h1>
+        <p className="brand-subtitle">Sales, inventory, and operations in one disciplined workspace.</p>
         <div className="sidebar-user-card">
           <div className="sidebar-user-row">
             <Building2 size={15} aria-hidden="true" />
@@ -105,7 +105,7 @@ export function Sidebar({
         ))}
       </nav>
       <footer className="sidebar-footer">
-        <p className="sidebar-footer-copy">Move fast, keep inventory exact, and keep every action auditable.</p>
+        <p className="sidebar-footer-copy">Tenant-safe, ledger-backed workflows.</p>
         <SidebarLogoutButton />
       </footer>
     </aside>

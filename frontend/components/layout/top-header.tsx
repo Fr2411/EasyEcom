@@ -269,7 +269,6 @@ export function TopHeader({ onOpenNavigation }: { onOpenNavigation?: () => void 
         </div>
         <p className="header-title">{pageContext.title ?? matchedRoute?.label ?? DEFAULT_TITLE}</p>
         <p className="header-subtitle">{pageContext.subtitle}</p>
-        <p className="header-summary">{pageContext.summary}</p>
       </div>
       <form className="header-search" aria-label="Global search" onSubmit={onSubmit}>
         <span className="header-search-icon" aria-hidden="true">
@@ -289,14 +288,14 @@ export function TopHeader({ onOpenNavigation }: { onOpenNavigation?: () => void 
           type="search"
           aria-label="Search query"
           className="header-search-input"
-          placeholder="Search orders, SKUs, returns..."
+          placeholder="Search orders, SKUs, returns"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
         <button type="submit" className="header-search-button">Search</button>
       </form>
       <div className="header-utilities">
-        <span className="header-pill">Live workspace</span>
+        <span className="header-pill">Ready</span>
         <button
           type="button"
           className="header-btn"

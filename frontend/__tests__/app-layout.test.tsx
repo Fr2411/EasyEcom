@@ -39,7 +39,7 @@ describe('AppLayout', () => {
     expect(screen.getByTestId('auth-route-guard')).toBeTruthy();
     expect(screen.getByLabelText('Primary')).toBeTruthy();
     expect(screen.getByRole('img', { name: 'Easy-Ecom' })).toBeTruthy();
-    expect(screen.getByText('Operations Hub')).toBeTruthy();
+    expect(screen.getByText('Command Center')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Open reports' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Admin' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Customers' })).toBeTruthy();
