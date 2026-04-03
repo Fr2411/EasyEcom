@@ -23,7 +23,7 @@ export function AuthLayout({
             <EasyEcomLogo className="easyecom-logo easyecom-logo-hero" imageClassName="easyecom-logo-image easyecom-logo-hero" />
             <div>
               <strong>EasyEcom</strong>
-              <span>AI sales and operations platform</span>
+              <span>Commerce operating system</span>
             </div>
           </Link>
         </div>
