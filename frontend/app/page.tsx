@@ -113,9 +113,19 @@ function HeroMockup() {
   return (
     <div className="hero-mockup" aria-label="EasyEcom product preview">
       <section className="hero-chat-panel">
+        <div className="hero-window-bar" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </div>
         <div className="hero-panel-head">
           <span className="hero-panel-kicker">Customer chat</span>
           <strong>WhatsApp inquiry</strong>
+        </div>
+        <div className="hero-code-chip-row" aria-label="Workflow state">
+          <span>[ incoming ]</span>
+          <span>[ ai reply ]</span>
+          <span>[ draft order ]</span>
         </div>
         <div className="hero-chat-thread">
           <article className="hero-bubble customer">
@@ -134,9 +144,28 @@ function HeroMockup() {
       </section>
 
       <section className="hero-dashboard-panel">
+        <div className="hero-window-bar" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </div>
         <div className="hero-panel-head">
           <span className="hero-panel-kicker">Operations</span>
           <strong>Order created</strong>
+        </div>
+        <div className="hero-metric-strip">
+          <article>
+            <span>Response time</span>
+            <strong>12 sec</strong>
+          </article>
+          <article>
+            <span>Stock status</span>
+            <strong>In sync</strong>
+          </article>
+          <article>
+            <span>Order value</span>
+            <strong>$120</strong>
+          </article>
         </div>
         <div className="hero-order-card">
           <div className="hero-order-row">
@@ -171,6 +200,20 @@ function HeroMockup() {
               <strong>Instant AI response</strong>
             </div>
           </article>
+        </div>
+        <div className="hero-chart-card">
+          <div className="hero-chart-head">
+            <span>Conversation to order</span>
+            <strong>Today</strong>
+          </div>
+          <div className="hero-chart-bars" aria-hidden="true">
+            <span style={{ height: '42%' }} />
+            <span style={{ height: '58%' }} />
+            <span style={{ height: '49%' }} />
+            <span style={{ height: '74%' }} />
+            <span style={{ height: '68%' }} />
+            <span style={{ height: '84%' }} />
+          </div>
         </div>
       </section>
     </div>
