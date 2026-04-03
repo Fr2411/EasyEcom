@@ -3971,7 +3971,7 @@ body {
 
 .hero-chart-bars {
   display: flex;
-  align-items: end;
+  align-items: flex-end;
   gap: 0.55rem;
   height: 7rem;
   margin-top: 1rem;
@@ -4420,5 +4420,351 @@ body {
     background: rgba(13, 117, 101, 0.1);
     color: var(--primary-strong);
     font-weight: 700;
+  }
+}
+
+body {
+  --app-bg: #0f0c0a;
+  --app-surface: rgba(20, 16, 14, 0.82);
+  --app-surface-strong: #17120f;
+  --app-surface-soft: rgba(29, 23, 19, 0.92);
+  --app-border: rgba(255, 244, 236, 0.1);
+  --app-border-strong: rgba(255, 244, 236, 0.16);
+  --app-text: #f6efe8;
+  --app-muted: #a9998c;
+  --app-accent: #ff7a3d;
+  --app-accent-soft: rgba(255, 122, 61, 0.12);
+  --app-shadow: 0 28px 80px rgba(0, 0, 0, 0.34);
+}
+
+html[data-theme='light'] body {
+  --app-bg: #efe7df;
+  --app-surface: rgba(255, 250, 245, 0.84);
+  --app-surface-strong: #fff9f2;
+  --app-surface-soft: rgba(252, 244, 237, 0.94);
+  --app-border: rgba(24, 18, 13, 0.08);
+  --app-border-strong: rgba(24, 18, 13, 0.14);
+  --app-text: #18120f;
+  --app-muted: #706257;
+  --app-accent: #ef6b2e;
+  --app-accent-soft: rgba(239, 107, 46, 0.1);
+  --app-shadow: 0 24px 70px rgba(29, 21, 14, 0.12);
+}
+
+.shell {
+  background:
+    radial-gradient(circle at 16% 0%, rgba(255, 122, 61, 0.12), transparent 26%),
+    radial-gradient(circle at 85% 8%, rgba(112, 85, 255, 0.08), transparent 18%);
+}
+
+.shell-orb-a {
+  background: rgba(255, 122, 61, 0.14);
+}
+
+.shell-orb-b {
+  background: rgba(255, 179, 143, 0.12);
+}
+
+.shell-grid {
+  background:
+    linear-gradient(rgba(255, 244, 236, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 244, 236, 0.04) 1px, transparent 1px);
+}
+
+.sidebar,
+.top-header,
+.page-shell,
+.workspace-panel,
+.kpi-card,
+.section-card,
+.dashboard-loading,
+.dashboard-error,
+.dashboard-empty,
+.ps-card,
+.customer-detail,
+.sales-panel,
+.inventory-panel,
+.settings-card,
+.admin-card,
+.reports-loading,
+.reports-error,
+.integrations-events li,
+.ai-msg,
+.admin-role-card,
+.admin-access-summary div,
+.admin-access-row,
+.finance-row-card,
+.finance-transaction-card,
+.finance-row-card dl div,
+.finance-transaction-card dl div,
+.customers-empty,
+.sales-empty,
+.reports-deferred,
+.placeholder-card,
+.foundation-card,
+.foundation-hero,
+.save-bar {
+  border-color: var(--app-border-strong);
+  background: linear-gradient(180deg, var(--app-surface) 0%, var(--app-surface-soft) 100%);
+  color: var(--app-text);
+  box-shadow: var(--app-shadow);
+  backdrop-filter: blur(20px);
+}
+
+.sidebar {
+  background:
+    radial-gradient(circle at top right, rgba(255, 122, 61, 0.14), transparent 34%),
+    linear-gradient(180deg, rgba(20, 16, 14, 0.94) 0%, rgba(26, 20, 17, 0.92) 100%);
+  color: var(--app-text);
+}
+
+.brand-block,
+.sidebar-footer {
+  border-color: var(--app-border);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.02) 100%);
+}
+
+.brand-badge {
+  border-color: rgba(255, 122, 61, 0.24);
+  background: rgba(255, 122, 61, 0.14);
+  color: #ffd3bd;
+}
+
+.brand-badge.muted {
+  border-color: var(--app-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--app-muted);
+}
+
+.brand-title,
+.sidebar-user-row strong,
+.sidebar-user-row span,
+.sidebar-footer strong,
+.nav-link,
+.header-title,
+.page-shell-header h2,
+.dashboard-section-head h3,
+.dashboard-insight-card h4,
+.dashboard-insight-card strong,
+.kpi-card h3,
+.foundation-card h4,
+.pricing-card-head h3 {
+  color: var(--app-text);
+}
+
+.eyebrow,
+.brand-subtitle,
+.sidebar-user-row small,
+.sidebar-footer-copy,
+.nav-group h2,
+.header-subtitle,
+.header-summary,
+.page-shell-header p,
+.muted,
+.customers-meta,
+.admin-muted,
+.settings-muted,
+.dashboard-bar-meta span,
+.dashboard-chart-caption,
+.dashboard-chart-legend,
+.dashboard-insight-entity,
+.finance-row-meta,
+.finance-row-note,
+.finance-ledger-block > header p,
+.finance-module .ps-card p,
+.finance-module .ps-card span {
+  color: var(--app-muted);
+}
+
+.sidebar-toggle,
+.sidebar-close-mobile,
+.header-mobile-menu,
+.header-command-chip {
+  border-color: var(--app-border);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--app-muted);
+}
+
+.nav-link {
+  border-color: transparent;
+  background: transparent;
+}
+
+.nav-link:hover {
+  border-color: rgba(255, 122, 61, 0.16);
+  background: rgba(255, 122, 61, 0.08);
+  color: #fff1e8;
+}
+
+.nav-link.active {
+  border-color: rgba(255, 122, 61, 0.22);
+  background: linear-gradient(135deg, rgba(255, 122, 61, 0.16) 0%, rgba(255, 122, 61, 0.06) 100%);
+  color: #fff4ec;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.top-header {
+  background:
+    radial-gradient(circle at top right, rgba(255, 122, 61, 0.14), transparent 30%),
+    linear-gradient(180deg, rgba(20, 16, 14, 0.9) 0%, rgba(28, 21, 18, 0.86) 100%);
+  border-color: var(--app-border-strong);
+}
+
+.header-kicker-pill,
+.header-pill,
+.page-shell-chip,
+.workspace-tab.active,
+.status-pill,
+.int-status,
+.finance-origin-pill,
+.finance-transaction-type {
+  border-color: rgba(255, 122, 61, 0.22);
+  background: rgba(255, 122, 61, 0.12);
+  color: #ffd2bb;
+}
+
+.header-search {
+  border-color: var(--app-border);
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: none;
+}
+
+.header-search-icon,
+.header-search-scope,
+.header-search-input,
+.header-search-input::placeholder {
+  color: var(--app-muted);
+}
+
+.header-search-button,
+.header-btn,
+.workspace-tab.active,
+.btn-primary,
+.login-card button,
+.button-link.btn-primary {
+  background: linear-gradient(135deg, #ff7a3d 0%, #d7551c 100%);
+  color: #fff4ec;
+  border-color: transparent;
+  box-shadow: 0 16px 40px rgba(255, 122, 61, 0.24);
+}
+
+.header-search-button:hover,
+.header-btn:hover,
+.btn-primary:hover,
+.login-card button:hover,
+.button-link.btn-primary:hover {
+  background: linear-gradient(135deg, #ff6b26 0%, #bf4a16 100%);
+}
+
+button.secondary,
+.button-link.secondary {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--app-text);
+  border-color: var(--app-border);
+}
+
+button.secondary:hover,
+.button-link.secondary:hover {
+  background: rgba(255, 122, 61, 0.08);
+  border-color: rgba(255, 122, 61, 0.16);
+}
+
+.page-shell-header,
+.workspace-panel-header,
+.foundation-hero,
+.save-bar {
+  background:
+    radial-gradient(circle at top right, rgba(255, 122, 61, 0.12), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, transparent 100%);
+}
+
+.page-shell-header::after,
+.workspace-panel-header::after,
+.login-hero::after,
+.foundation-hero::after,
+.auth-feedback-card::after {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.06), transparent 58%);
+}
+
+.page-shell-body,
+.workspace-panel-body {
+  background: transparent;
+}
+
+.dashboard-insight-card.tone-positive,
+.dashboard-insight-card.tone-warning,
+.dashboard-insight-card.tone-critical,
+.dashboard-insight-card.tone-info,
+.selection-card.active,
+.selection-card:hover,
+.customers-list tr.active,
+.ai-review-queue button.active,
+.workspace-notice,
+.settings-notice {
+  background: linear-gradient(180deg, rgba(255, 122, 61, 0.1) 0%, rgba(255, 255, 255, 0.03) 100%);
+  border-color: rgba(255, 122, 61, 0.16);
+}
+
+.dashboard-bar-track {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.dashboard-bar-fill {
+  background: linear-gradient(90deg, #ff7a3d 0%, #ffb38f 100%);
+}
+
+.dashboard-inline-link,
+.legal-card a,
+.marketing-footer-group a:hover {
+  color: var(--app-accent);
+}
+
+.top-products-table th,
+.top-products-table td,
+.sales-table th,
+.sales-table td,
+.inventory-table th,
+.inventory-table td,
+.admin-table th,
+.admin-table td,
+.customers-list th,
+.customers-list td,
+.variant-grid th,
+.variant-grid td {
+  border-bottom-color: var(--app-border);
+}
+
+thead th {
+  color: var(--app-muted);
+}
+
+.mobile-bottom-nav {
+  border-color: var(--app-border-strong);
+  background: rgba(18, 14, 12, 0.94);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+}
+
+.mobile-bottom-link {
+  color: var(--app-muted);
+}
+
+.mobile-bottom-link.active {
+  background: rgba(255, 122, 61, 0.12);
+  color: #fff1e8;
+}
+
+@media (max-width: 900px) {
+  .top-header {
+    background:
+      radial-gradient(circle at top right, rgba(255, 122, 61, 0.14), transparent 30%),
+      linear-gradient(180deg, rgba(20, 16, 14, 0.94) 0%, rgba(28, 21, 18, 0.9) 100%);
+  }
+
+  .sidebar,
+  .sidebar.sidebar-collapsed {
+    background:
+      radial-gradient(circle at top right, rgba(255, 122, 61, 0.16), transparent 34%),
+      linear-gradient(180deg, rgba(20, 16, 14, 0.98) 0%, rgba(26, 20, 17, 0.96) 100%);
+    border-right-color: var(--app-border-strong);
   }
 }
