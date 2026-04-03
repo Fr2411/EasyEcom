@@ -61,10 +61,10 @@ const RANGE_OPTIONS: Array<{ value: DashboardRangeKey; label: string }> = [
 ];
 
 const MOVEMENT_COLORS: Record<string, string> = {
-  stock_received: '#0f766e',
-  sale_fulfilled: '#1d4ed8',
-  sales_return_restock: '#16a34a',
-  adjustment: '#f59e0b',
+  stock_received: '#ff7a3d',
+  sale_fulfilled: '#ffb38f',
+  sales_return_restock: '#f55d24',
+  adjustment: '#cdb49d',
 };
 
 
@@ -224,22 +224,24 @@ function ComboTrendChartRecharts({
           data={items}
           margin={{ top: 20, right: 30, left: 0, bottom: 5 }}
         >
-          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 244, 236, 0.12)" />
           <XAxis 
             dataKey="label" 
-            tick={{ fontSize: 12, fill: '#6b7280' }} 
+            tick={{ fontSize: 12, fill: '#aa9a8d' }} 
           />
           <YAxis 
-            tick={{ fontSize: 12, fill: '#6b7280' }} 
+            tick={{ fontSize: 12, fill: '#aa9a8d' }} 
           />
           <Tooltip
             labelFormatter={(value) => `${value}`}
             formatter={(value) => `$${Number(value).toLocaleString()}`}
             contentStyle={{ 
-              backgroundColor: 'rgba(255, 255, 255, 0.9)', 
+              backgroundColor: 'rgba(20, 16, 14, 0.94)', 
               padding: '8px', 
               borderRadius: '4px',
-              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+              color: '#f6efe8',
+              border: '1px solid rgba(255, 244, 236, 0.12)',
+              boxShadow: '0 10px 32px rgba(0, 0, 0, 0.28)'
             }}
             cursor={{ strokeWidth: 1 }}
           />
@@ -247,29 +249,29 @@ function ComboTrendChartRecharts({
             verticalAlign="top" 
             height={36} 
             formatter={(value) => value}
-            labelStyle={{ fontSize: 12, fill: '#6b7280' }}
+            labelStyle={{ fontSize: 12, fill: '#aa9a8d' }}
           />
           <Bar
             dataKey="bar"
             barSize={20}
             radius={[4, 4, 0, 0]}
-            fill="#3b82f6" /* Blue */
+            fill="#ff7a3d"
           />
           {moneyLine ? (
             <Line
               type="monotone"
               dataKey="line"
-              stroke="#10b981" /* Green */
+              stroke="#ffb38f"
               strokeWidth={2}
-              dot={{ r: 4, strokeWidth: 2, stroke: '#fff' }}
+              dot={{ r: 4, strokeWidth: 2, stroke: '#17120f' }}
             />
           ) : (
             <Line
               type="monotone"
               dataKey="line"
-              stroke={moneyLine ? '#10b981' : '#f59e0b'} /* Green or Amber */
+              stroke={moneyLine ? '#ffb38f' : '#cdb49d'}
               strokeWidth={2}
-              dot={{ r: 4, strokeWidth: 2, stroke: '#fff' }}
+              dot={{ r: 4, strokeWidth: 2, stroke: '#17120f' }}
             />
           )}
         </ComposedChart>
@@ -317,53 +319,55 @@ function StackedMovementChartRecharts({ items }: { items: DashboardStockMovement
           data={data}
           margin={{ top: 20, right: 30, left: 0, bottom: 5 }}
         >
-          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 244, 236, 0.12)" />
           <XAxis 
             dataKey="period" 
-            tick={{ fontSize: 12, fill: '#6b7280' }} 
+            tick={{ fontSize: 12, fill: '#aa9a8d' }} 
           />
           <YAxis 
-            tick={{ fontSize: 12, fill: '#6b7280' }} 
+            tick={{ fontSize: 12, fill: '#aa9a8d' }} 
           />
           <Tooltip
             labelFormatter={(value) => `${value}`}
             formatter={(value) => `${Number(value).toLocaleString()}`}
             contentStyle={{ 
-              backgroundColor: 'rgba(255, 255, 255, 0.9)', 
+              backgroundColor: 'rgba(20, 16, 14, 0.94)', 
               padding: '8px', 
               borderRadius: '4px',
-              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+              color: '#f6efe8',
+              border: '1px solid rgba(255, 244, 236, 0.12)',
+              boxShadow: '0 10px 32px rgba(0, 0, 0, 0.28)'
             }}
           />
           <Legend 
             verticalAlign="top" 
             height={36} 
             formatter={(value) => value}
-            labelStyle={{ fontSize: 12, fill: '#6b7280' }}
+            labelStyle={{ fontSize: 12, fill: '#aa9a8d' }}
           />
           <Bar 
             dataKey="stock_received" 
             barSize={20} 
             radius={[4, 4, 0, 0]} 
-            fill="#10b981" /* Green */
+            fill={MOVEMENT_COLORS.stock_received}
           />
           <Bar 
             dataKey="sale_fulfilled" 
             barSize={20} 
             radius={[4, 4, 0, 0]} 
-            fill="#3b82f6" /* Blue */
+            fill={MOVEMENT_COLORS.sale_fulfilled}
           />
           <Bar 
             dataKey="sales_return_restock" 
             barSize={20} 
             radius={[4, 4, 0, 0]} 
-            fill="#22c55e" /* Green-light */
+            fill={MOVEMENT_COLORS.sales_return_restock}
           />
           <Bar 
             dataKey="adjustment" 
             barSize={20} 
             radius={[4, 4, 0, 0]} 
-            fill="#f59e0b" /* Amber */
+            fill={MOVEMENT_COLORS.adjustment}
           />
         </BarChart>
       </ResponsiveContainer>
@@ -390,15 +394,15 @@ function OpportunityMatrixRecharts({ items }: { items: DashboardProductOpportuni
         <ScatterChart
           margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
         >
-          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 244, 236, 0.12)" />
           <XAxis 
             dataKey="sales"
-            tick={{ fontSize: 12, fill: '#6b7280' }}
+            tick={{ fontSize: 12, fill: '#aa9a8d' }}
             label={{ value: 'Sales qty/day', position: 'insideBottom', offset: 30 }}
           />
           <YAxis 
             dataKey="margin"
-            tick={{ fontSize: 12, fill: '#6b7280' }}
+            tick={{ fontSize: 12, fill: '#aa9a8d' }}
             label={{ value: 'Avg. margin %', position: 'insideLeft', offset: -40, angle: -90 }}
           />
           <ZAxis dataKey="inventoryCostValue" range={[80, 400]} name="Inventory cost value" />
@@ -410,24 +414,26 @@ function OpportunityMatrixRecharts({ items }: { items: DashboardProductOpportuni
                 : Number(value).toLocaleString()
             }
             contentStyle={{ 
-              backgroundColor: 'rgba(255, 255, 255, 0.9)', 
+              backgroundColor: 'rgba(20, 16, 14, 0.94)', 
               padding: '8px', 
               borderRadius: '4px',
-              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+              color: '#f6efe8',
+              border: '1px solid rgba(255, 244, 236, 0.12)',
+              boxShadow: '0 10px 32px rgba(0, 0, 0, 0.28)'
             }}
           />
           <Legend 
             verticalAlign="top" 
             height={36} 
             formatter={(value) => value}
-            labelStyle={{ fontSize: 12, fill: '#6b7280' }}
+            labelStyle={{ fontSize: 12, fill: '#aa9a8d' }}
           />
           <Scatter
             name="Products"
             data={chartData}
-            fill="#10b981" /* Green */
+            fill="#ff7a3d"
             opacity={0.6}
-            stroke="#fff"
+            stroke="#17120f"
             strokeWidth={1}
           />
         </ScatterChart>

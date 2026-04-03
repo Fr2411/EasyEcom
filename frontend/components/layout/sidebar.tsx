@@ -59,7 +59,12 @@ export function Sidebar({
             </button>
           </div>
         </div>
+        <div className="brand-badge-row">
+          <span className="brand-badge">LIVE</span>
+          <span className="brand-badge muted">AI + Ops</span>
+        </div>
         <h1 className="brand-title">Operations Hub</h1>
+        <p className="brand-subtitle">AI-assisted sales, stock truth, and daily execution from one command surface.</p>
         <div className="sidebar-user-card">
           <div className="sidebar-user-row">
             <Building2 size={15} aria-hidden="true" />
@@ -100,6 +105,7 @@ export function Sidebar({
         ))}
       </nav>
       <footer className="sidebar-footer">
+        <p className="sidebar-footer-copy">Move fast, keep inventory exact, and keep every action auditable.</p>
         <SidebarLogoutButton />
       </footer>
     </aside>

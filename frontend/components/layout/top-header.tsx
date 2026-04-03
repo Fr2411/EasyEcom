@@ -263,8 +263,13 @@ export function TopHeader({ onOpenNavigation }: { onOpenNavigation?: () => void 
         <Menu size={18} aria-hidden="true" />
       </button>
       <div className="header-copy">
+        <div className="header-kicker-row">
+          <span className="header-kicker-pill">{pageContext.section}</span>
+          <span className="header-command-chip">{pageContext.actionLabel}</span>
+        </div>
         <p className="header-title">{pageContext.title ?? matchedRoute?.label ?? DEFAULT_TITLE}</p>
         <p className="header-subtitle">{pageContext.subtitle}</p>
+        <p className="header-summary">{pageContext.summary}</p>
       </div>
       <form className="header-search" aria-label="Global search" onSubmit={onSubmit}>
         <span className="header-search-icon" aria-hidden="true">
@@ -291,6 +296,7 @@ export function TopHeader({ onOpenNavigation }: { onOpenNavigation?: () => void 
         <button type="submit" className="header-search-button">Search</button>
       </form>
       <div className="header-utilities">
+        <span className="header-pill">Live workspace</span>
         <button
           type="button"
           className="header-btn"
