@@ -19,6 +19,10 @@ vi.mock('@/components/ui/nav-item', () => ({
   NavItem: ({ item }: { item: { label: string; href: string } }) => <a href={item.href}>{item.label}</a>
 }));
 
+vi.mock('@/components/theme/theme-toggle', () => ({
+  ThemeToggle: () => <div>Theme toggle</div>,
+}));
+
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ replace: vi.fn() }),
   usePathname: () => '/dashboard'

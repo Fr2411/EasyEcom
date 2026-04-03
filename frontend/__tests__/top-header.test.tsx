@@ -9,6 +9,10 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: pushMock }),
 }));
 
+vi.mock('@/components/theme/theme-toggle', () => ({
+  ThemeToggle: () => <div>Theme toggle</div>,
+}));
+
 import { TopHeader } from '@/components/layout/top-header';
 
 describe('TopHeader', () => {
