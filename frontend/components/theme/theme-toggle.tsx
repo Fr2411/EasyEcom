@@ -27,10 +27,11 @@ export function ThemeToggle() {
             type="button"
             className={active ? 'theme-toggle-option active' : 'theme-toggle-option'}
             aria-pressed={active}
+            aria-label={`${option.label} theme`}
+            title={option.label}
             onClick={() => setPreference(option.value)}
           >
             <Icon size={14} aria-hidden="true" />
-            <span>{option.label}</span>
           </button>
         );
       })}
