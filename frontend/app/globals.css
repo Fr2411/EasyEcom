@@ -4759,56 +4759,56 @@ thead th {
 
 :root {
   color-scheme: light;
-  --background-base: #f7f3ee;
-  --background-subtle: #efe8df;
-  --surface: #fcfaf7;
-  --surface-muted: #f4eee7;
+  --background-base: #fdfdfd;
+  --background-subtle: #fafafa;
+  --surface: #ffffff;
+  --surface-muted: #f5f5f5;
   --surface-raised: #ffffff;
-  --border: rgba(92, 68, 51, 0.16);
-  --border-strong: rgba(92, 68, 51, 0.26);
-  --text: #1b120d;
-  --text-muted: #6f6157;
-  --mono-foreground: #5b4b3f;
-  --primary: #ea6a2a;
-  --primary-soft: rgba(234, 106, 42, 0.12);
-  --primary-strong: #cb541a;
-  --shadow-sm: 0 1px 0 rgba(27, 18, 13, 0.04);
-  --shadow-md: 0 18px 50px rgba(27, 18, 13, 0.08);
-  --app-bg: #f7f3ee;
-  --app-surface: #fcfaf7;
+  --border: rgba(10, 10, 10, 0.08);
+  --border-strong: rgba(10, 10, 10, 0.12);
+  --text: #0a0a0a;
+  --text-muted: #666666;
+  --mono-foreground: #525252;
+  --primary: #ff4c00;
+  --primary-soft: rgba(250, 93, 25, 0.12);
+  --primary-strong: #fa5d19;
+  --shadow-sm: 0 1px 2px rgba(10, 10, 10, 0.04);
+  --shadow-md: 0 18px 48px rgba(10, 10, 10, 0.08);
+  --app-bg: #fdfdfd;
+  --app-surface: #ffffff;
   --app-surface-raised: #ffffff;
-  --app-border: rgba(92, 68, 51, 0.16);
-  --app-border-strong: rgba(92, 68, 51, 0.24);
-  --app-text: #1b120d;
-  --app-muted: #6f6157;
-  --app-accent: #ea6a2a;
+  --app-border: rgba(10, 10, 10, 0.08);
+  --app-border-strong: rgba(10, 10, 10, 0.12);
+  --app-text: #0a0a0a;
+  --app-muted: #666666;
+  --app-accent: #ff4c00;
 }
 
 html[data-theme='dark'] {
   color-scheme: dark;
-  --background-base: #0c0b0a;
-  --background-subtle: #14110f;
-  --surface: #11100f;
-  --surface-muted: #171412;
-  --surface-raised: #1b1715;
-  --border: rgba(255, 237, 222, 0.11);
-  --border-strong: rgba(255, 237, 222, 0.18);
-  --text: #f4ede5;
-  --text-muted: #aa9a8d;
-  --mono-foreground: #ccb9aa;
-  --primary: #ff7a3d;
-  --primary-soft: rgba(255, 122, 61, 0.12);
-  --primary-strong: #ff905d;
+  --background-base: #0a0a0a;
+  --background-subtle: #111111;
+  --surface: #111111;
+  --surface-muted: #171717;
+  --surface-raised: #141414;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.12);
+  --text: #fafafa;
+  --text-muted: #a3a3a3;
+  --mono-foreground: #b3b3b3;
+  --primary: #ff4c00;
+  --primary-soft: rgba(250, 93, 25, 0.12);
+  --primary-strong: #fa5d19;
   --shadow-sm: 0 1px 0 rgba(255, 255, 255, 0.02);
   --shadow-md: 0 24px 64px rgba(0, 0, 0, 0.34);
-  --app-bg: #0c0b0a;
-  --app-surface: #11100f;
-  --app-surface-raised: #1b1715;
-  --app-border: rgba(255, 237, 222, 0.11);
-  --app-border-strong: rgba(255, 237, 222, 0.18);
-  --app-text: #f4ede5;
-  --app-muted: #aa9a8d;
-  --app-accent: #ff7a3d;
+  --app-bg: #0a0a0a;
+  --app-surface: #111111;
+  --app-surface-raised: #141414;
+  --app-border: rgba(255, 255, 255, 0.08);
+  --app-border-strong: rgba(255, 255, 255, 0.12);
+  --app-text: #fafafa;
+  --app-muted: #a3a3a3;
+  --app-accent: #ff4c00;
 }
 
 html,
@@ -4971,21 +4971,32 @@ button.secondary:hover,
 }
 
 .theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+  min-width: 6.6rem;
   border: 1px solid var(--border);
-  background: var(--surface-muted);
+  background: var(--surface);
   padding: 0.2rem;
   border-radius: 999px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 .theme-toggle-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 2rem;
   height: 2rem;
   color: var(--text-muted);
   border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  flex: 1 1 0;
 }
 
 .theme-toggle-option.active {
-  background: var(--surface-raised);
+  background: var(--surface-muted);
   color: var(--text);
   border: 1px solid var(--border);
 }
@@ -5282,6 +5293,12 @@ button.secondary:hover,
   border-color: var(--app-border);
 }
 
+.header-utilities {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
 .header-search-scope,
 .header-search-input {
   color: var(--app-text);
@@ -5362,6 +5379,11 @@ button.secondary:hover,
 @media (max-width: 1100px) {
   .top-header {
     grid-template-columns: 1fr;
+  }
+
+  .header-utilities {
+    justify-content: flex-start;
+    flex-wrap: wrap;
   }
 }
 
