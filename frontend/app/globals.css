@@ -1019,10 +1019,11 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
 
 .pricing-hero,
 .pricing-footnote-card {
-  border: 1px solid var(--border);
+  border: 1px solid var(--marketing-border-strong);
   border-radius: 24px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94) 0%, rgba(247, 251, 251, 0.88) 100%);
-  box-shadow: var(--shadow-md);
+  background: var(--marketing-surface);
+  box-shadow: var(--marketing-shadow);
+  backdrop-filter: blur(16px);
   padding: 1.35rem;
 }
 
@@ -1033,7 +1034,7 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
 
 .pricing-eyebrow {
   margin: 0;
-  color: var(--primary-strong);
+  color: var(--marketing-accent);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-size: 0.75rem;
@@ -1050,7 +1051,7 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
 .pricing-lead {
   margin: 0;
   max-width: 70ch;
-  color: var(--text-muted);
+  color: var(--marketing-muted);
   line-height: 1.7;
 }
 
@@ -1069,16 +1070,17 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
 .pricing-card {
   display: grid;
   gap: 0.85rem;
-  border: 1px solid var(--border);
+  border: 1px solid var(--marketing-border-strong);
   border-radius: 22px;
   padding: 1.1rem;
-  background: linear-gradient(180deg, #fff 0%, #f8fcfb 100%);
-  box-shadow: var(--shadow-sm);
+  background: var(--marketing-surface);
+  box-shadow: var(--marketing-shadow);
+  backdrop-filter: blur(16px);
 }
 
 .pricing-card.highlighted {
-  border-color: #8fd8ca;
-  box-shadow: 0 16px 38px rgba(13, 117, 101, 0.11);
+  border-color: color-mix(in srgb, var(--marketing-accent) 40%, transparent);
+  box-shadow: 0 24px 60px rgba(22, 15, 10, 0.16);
 }
 
 .pricing-card-head {
@@ -1171,9 +1173,9 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
 }
 
 .pricing-footnote-points span {
-  border: 1px solid #bde7de;
-  background: #effaf7;
-  color: var(--primary-strong);
+  border: 1px solid var(--marketing-border-strong);
+  background: var(--marketing-accent-soft);
+  color: var(--marketing-text);
   border-radius: 999px;
   padding: 0.26rem 0.62rem;
   font-size: 0.78rem;
@@ -1192,7 +1194,7 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
 
 .auth-hero,
 .auth-card {
-  border: 1px solid var(--marketing-border);
+  border: 1px solid var(--marketing-border-strong);
   background: var(--marketing-surface);
   box-shadow: var(--marketing-shadow);
   backdrop-filter: blur(16px);
@@ -1201,6 +1203,23 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
 
 .auth-hero {
   padding: clamp(1.6rem, 3vw, 2.5rem);
+  position: relative;
+  overflow: hidden;
+}
+
+.auth-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at top right, var(--marketing-accent-glow), transparent 35%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 24%);
+  pointer-events: none;
+}
+
+.auth-hero > * {
+  position: relative;
+  z-index: 1;
 }
 
 .auth-hero-logo {
@@ -1254,8 +1273,8 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
 }
 
 .auth-hero-points li {
-  border: 1px solid var(--marketing-border);
-  background: rgba(255, 255, 255, 0.58);
+  border: 1px solid var(--marketing-border-strong);
+  background: color-mix(in srgb, var(--marketing-surface-strong) 88%, var(--marketing-accent-soft));
   border-radius: 999px;
   padding: 0.65rem 0.9rem;
   font-weight: 600;
@@ -1263,6 +1282,9 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
 
 .auth-card {
   padding: 1.5rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 30%),
+    var(--marketing-surface);
 }
 
 .auth-card-header {
@@ -1289,6 +1311,9 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
   width: 100%;
   min-height: 2.9rem;
   padding-right: 2.9rem;
+  border-color: var(--marketing-border-strong);
+  background: color-mix(in srgb, var(--marketing-surface-strong) 82%, transparent);
+  color: var(--marketing-text);
 }
 
 .auth-input-wrap.has-error input {
@@ -1305,6 +1330,7 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
   padding: 0;
   border: none;
   background: transparent;
+  color: var(--marketing-muted);
 }
 
 .auth-field-error,
@@ -3415,33 +3441,44 @@ button.secondary:hover,
 }
 
 :root {
-  --marketing-bg: #f5f7f4;
-  --marketing-surface: rgba(255, 255, 255, 0.88);
-  --marketing-surface-strong: #ffffff;
-  --marketing-text: #102327;
-  --marketing-muted: #49646a;
-  --marketing-border: rgba(16, 35, 39, 0.1);
-  --marketing-accent: #1f6f67;
-  --marketing-accent-soft: rgba(31, 111, 103, 0.12);
-  --marketing-shadow: 0 24px 70px rgba(20, 37, 42, 0.12);
+  --marketing-bg: #f4efe8;
+  --marketing-bg-accent: rgba(241, 116, 42, 0.08);
+  --marketing-surface: rgba(255, 251, 247, 0.84);
+  --marketing-surface-strong: #fffaf5;
+  --marketing-panel: #17120f;
+  --marketing-panel-soft: #221b16;
+  --marketing-text: #15120f;
+  --marketing-muted: #6f645b;
+  --marketing-border: rgba(24, 18, 13, 0.1);
+  --marketing-border-strong: rgba(24, 18, 13, 0.18);
+  --marketing-accent: #ef6b2e;
+  --marketing-accent-soft: rgba(239, 107, 46, 0.12);
+  --marketing-accent-glow: rgba(239, 107, 46, 0.22);
+  --marketing-shadow: 0 24px 80px rgba(25, 18, 12, 0.12);
 }
 
 html[data-theme='dark'] {
-  --marketing-bg: #081316;
-  --marketing-surface: rgba(11, 24, 29, 0.88);
-  --marketing-surface-strong: #0f1f24;
-  --marketing-text: #f2f7f8;
-  --marketing-muted: #9cb2b7;
-  --marketing-border: rgba(215, 236, 238, 0.1);
-  --marketing-accent: #65c8bb;
-  --marketing-accent-soft: rgba(101, 200, 187, 0.16);
-  --marketing-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
+  --marketing-bg: #0d0b0a;
+  --marketing-bg-accent: rgba(255, 119, 61, 0.11);
+  --marketing-surface: rgba(17, 14, 12, 0.84);
+  --marketing-surface-strong: #14100e;
+  --marketing-panel: #12100e;
+  --marketing-panel-soft: #1b1714;
+  --marketing-text: #f6efe8;
+  --marketing-muted: #aa9a8d;
+  --marketing-border: rgba(255, 244, 236, 0.08);
+  --marketing-border-strong: rgba(255, 244, 236, 0.14);
+  --marketing-accent: #ff7a3d;
+  --marketing-accent-soft: rgba(255, 122, 61, 0.14);
+  --marketing-accent-glow: rgba(255, 122, 61, 0.24);
+  --marketing-shadow: 0 32px 100px rgba(0, 0, 0, 0.42);
 }
 
 body {
   background:
-    radial-gradient(circle at top left, rgba(49, 131, 122, 0.12), transparent 28%),
-    radial-gradient(circle at 85% 12%, rgba(34, 95, 171, 0.12), transparent 24%),
+    radial-gradient(circle at 18% 0%, var(--marketing-bg-accent), transparent 28%),
+    radial-gradient(circle at 82% 8%, rgba(106, 78, 255, 0.08), transparent 22%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0)),
     var(--marketing-bg);
   color: var(--marketing-text);
   transition: background-color 180ms ease, color 180ms ease;
@@ -3477,10 +3514,10 @@ body {
   justify-content: space-between;
   gap: 1rem;
   padding: 0.85rem 1rem;
-  background: var(--marketing-surface);
-  border: 1px solid var(--marketing-border);
+  background: color-mix(in srgb, var(--marketing-surface) 88%, transparent);
+  border: 1px solid var(--marketing-border-strong);
   border-radius: 1.35rem;
-  backdrop-filter: blur(16px);
+  backdrop-filter: blur(18px);
   box-shadow: var(--marketing-shadow);
 }
 
@@ -3500,6 +3537,10 @@ body {
 .marketing-brand span {
   color: var(--marketing-muted);
   font-size: 0.9rem;
+}
+
+.marketing-brand strong {
+  letter-spacing: -0.03em;
 }
 
 .marketing-nav-actions {
@@ -3535,10 +3576,12 @@ body {
   text-decoration: none;
   color: var(--marketing-text);
   font-weight: 600;
+  opacity: 0.85;
 }
 
 .marketing-nav-link:hover {
   color: var(--marketing-accent);
+  opacity: 1;
 }
 
 .theme-toggle {
@@ -3568,7 +3611,7 @@ body {
 .theme-toggle-option.active {
   background: var(--marketing-surface-strong);
   color: var(--marketing-text);
-  box-shadow: 0 8px 20px rgba(12, 24, 28, 0.08);
+  box-shadow: 0 8px 24px rgba(20, 14, 10, 0.16);
 }
 
 .landing-hero-grid,
@@ -3604,7 +3647,7 @@ body {
 .marketing-copy-card,
 .marketing-footer {
   background: var(--marketing-surface);
-  border: 1px solid var(--marketing-border);
+  border: 1px solid var(--marketing-border-strong);
   box-shadow: var(--marketing-shadow);
   backdrop-filter: blur(16px);
 }
@@ -3612,6 +3655,23 @@ body {
 .landing-copy {
   border-radius: 2rem;
   padding: clamp(1.6rem, 3vw, 3rem);
+  position: relative;
+  overflow: hidden;
+}
+
+.landing-copy::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(135deg, var(--marketing-accent-soft), transparent 32%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent);
+  pointer-events: none;
+}
+
+.landing-copy > * {
+  position: relative;
+  z-index: 1;
 }
 
 .marketing-kicker {
@@ -3621,6 +3681,27 @@ body {
   letter-spacing: 0.18em;
   color: var(--marketing-accent);
   font-weight: 700;
+}
+
+.landing-hero-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.landing-hero-badges span,
+.pricing-footnote-points span {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid var(--marketing-border-strong);
+  background: var(--marketing-accent-soft);
+  color: var(--marketing-text);
+  padding: 0.35rem 0.72rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 .landing-copy h1,
@@ -3682,13 +3763,54 @@ body {
 
 .hero-mockup {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
 }
 
 .hero-chat-panel,
 .hero-dashboard-panel {
   border-radius: 1.6rem;
   padding: 1.2rem;
-  background: var(--marketing-surface-strong);
+  background: linear-gradient(180deg, var(--marketing-panel) 0%, var(--marketing-panel-soft) 100%);
+  color: #f6efe8;
+  position: relative;
+  overflow: hidden;
+}
+
+.hero-chat-panel::before,
+.hero-dashboard-panel::before {
+  content: '';
+  position: absolute;
+  inset: auto -15% 72% auto;
+  width: 220px;
+  height: 220px;
+  background: radial-gradient(circle, var(--marketing-accent-glow), transparent 72%);
+  pointer-events: none;
+}
+
+.hero-window-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+}
+
+.hero-window-bar span {
+  width: 0.62rem;
+  height: 0.62rem;
+  border-radius: 999px;
+  background: rgba(246, 239, 232, 0.2);
+}
+
+.hero-window-bar span:first-child {
+  background: #ff6b57;
+}
+
+.hero-window-bar span:nth-child(2) {
+  background: #f7c94a;
+}
+
+.hero-window-bar span:nth-child(3) {
+  background: #28c840;
 }
 
 .hero-panel-head {
@@ -3696,6 +3818,8 @@ body {
   flex-direction: column;
   gap: 0.2rem;
   margin-bottom: 1rem;
+  position: relative;
+  z-index: 1;
 }
 
 .hero-panel-kicker,
@@ -3709,32 +3833,86 @@ body {
   font-weight: 700;
 }
 
+.hero-code-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-bottom: 1rem;
+  position: relative;
+  z-index: 1;
+}
+
+.hero-code-chip-row span {
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: #d4c5b9;
+  font-family: 'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.72rem;
+  padding: 0.35rem 0.58rem;
+}
+
 .hero-chat-thread {
   display: grid;
   gap: 0.8rem;
+  position: relative;
+  z-index: 1;
 }
 
 .hero-bubble {
   border-radius: 1.15rem;
   padding: 0.95rem 1rem;
-  border: 1px solid var(--marketing-border);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .hero-bubble.customer {
-  background: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .hero-bubble.ai {
-  background: rgba(228, 247, 242, 0.92);
+  background: rgba(255, 122, 61, 0.12);
 }
 
 .hero-bubble.system {
-  background: rgba(245, 248, 250, 0.92);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .hero-bubble p {
   margin: 0.35rem 0 0;
   line-height: 1.6;
+  color: rgba(246, 239, 232, 0.92);
+}
+
+.hero-metric-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin-bottom: 0.9rem;
+  position: relative;
+  z-index: 1;
+}
+
+.hero-metric-strip article,
+.hero-chart-card {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 1rem;
+  padding: 0.85rem;
+}
+
+.hero-metric-strip span,
+.hero-chart-head span {
+  display: block;
+  color: #bcaea2;
+  font-size: 0.78rem;
+}
+
+.hero-metric-strip strong,
+.hero-chart-head strong {
+  display: block;
+  margin-top: 0.35rem;
+  color: #fff4ec;
+  font-size: 1rem;
 }
 
 .hero-order-card {
@@ -3742,8 +3920,10 @@ body {
   gap: 0.8rem;
   padding: 1rem;
   border-radius: 1.15rem;
-  background: rgba(255, 255, 255, 0.76);
-  border: 1px solid var(--marketing-border);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  position: relative;
+  z-index: 1;
 }
 
 .hero-order-row {
@@ -3754,12 +3934,14 @@ body {
 
 .hero-order-row span,
 .hero-mini-stat span {
-  color: var(--marketing-muted);
+  color: #bcaea2;
 }
 
 .hero-dashboard-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   margin-top: 0.9rem;
+  position: relative;
+  z-index: 1;
 }
 
 .hero-mini-stat {
@@ -3769,8 +3951,38 @@ body {
   align-items: center;
   padding: 0.85rem;
   border-radius: 1rem;
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid var(--marketing-border);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #fff4ec;
+}
+
+.hero-chart-card {
+  margin-top: 0.9rem;
+  position: relative;
+  z-index: 1;
+}
+
+.hero-chart-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.hero-chart-bars {
+  display: flex;
+  align-items: end;
+  gap: 0.55rem;
+  height: 7rem;
+  margin-top: 1rem;
+}
+
+.hero-chart-bars span {
+  flex: 1;
+  min-height: 1rem;
+  border-radius: 999px 999px 0.6rem 0.6rem;
+  background: linear-gradient(180deg, #ff9f73 0%, #ff7a3d 100%);
+  box-shadow: 0 0 0 1px rgba(255, 122, 61, 0.12);
 }
 
 .landing-section {
@@ -3810,6 +4022,25 @@ body {
 .marketing-copy-card {
   border-radius: 1.7rem;
   padding: 1.4rem;
+}
+
+.landing-problem-card,
+.landing-solution-card,
+.landing-pricing-card,
+.marketing-copy-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.landing-problem-card::before,
+.landing-solution-card::before,
+.landing-pricing-card::before,
+.marketing-copy-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 25%);
+  pointer-events: none;
 }
 
 .landing-card-number,
@@ -3870,7 +4101,9 @@ body {
   display: grid;
   align-content: center;
   gap: 0.55rem;
-  background: linear-gradient(180deg, rgba(228, 247, 242, 0.95) 0%, rgba(255, 255, 255, 0.94) 100%);
+  background:
+    radial-gradient(circle at top right, var(--marketing-accent-glow), transparent 45%),
+    linear-gradient(180deg, color-mix(in srgb, var(--marketing-surface-strong) 85%, var(--marketing-accent-soft)) 0%, var(--marketing-surface) 100%);
 }
 
 .landing-highlight-box p,
@@ -3897,6 +4130,9 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 1.25rem;
+  background:
+    radial-gradient(circle at top right, var(--marketing-accent-glow), transparent 42%),
+    var(--marketing-surface);
 }
 
 .marketing-footer-shell {
@@ -3906,6 +4142,10 @@ body {
 .marketing-footer {
   gap: 1.25rem;
   padding: 1.4rem;
+}
+
+.marketing-footer-brand .marketing-brand span {
+  max-width: 18rem;
 }
 
 .marketing-footer-group h2 {

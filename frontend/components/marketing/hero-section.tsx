@@ -17,6 +17,11 @@ export function HeroSection({
     <section className="marketing-hero landing-hero">
       <div className="landing-hero-grid">
         <div className="landing-copy">
+          <div className="landing-hero-badges" aria-label="EasyEcom highlights">
+            <span>AI sales</span>
+            <span>Live inventory</span>
+            <span>Ops control</span>
+          </div>
           <h1>{title}</h1>
           <p className="landing-subheadline">{description}</p>
           <div className="landing-cta-row">{actions}</div>
