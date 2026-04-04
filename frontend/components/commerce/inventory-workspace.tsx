@@ -750,7 +750,7 @@ export function InventoryWorkspace() {
                     const isMenuOpen = openQuickActionsFor === group.product_id;
                     return (
                       <Fragment key={group.product_id}>
-                        <tr key={group.product_id} className="inventory-product-row">
+                        <tr className={`inventory-product-row${isMenuOpen ? ' menu-open' : ''}`}>
                           <td>
                             <div className="inventory-product-cell">
                               <button
