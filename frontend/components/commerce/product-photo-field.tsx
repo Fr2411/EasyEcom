@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { uploadStagedProductMedia } from '@/lib/api/commerce';
 import type { ProductMedia } from '@/types/catalog';
 
@@ -60,11 +60,71 @@ async function normalizeUploadImage(file: File): Promise<File> {
 
 export function ProductPhotoField({ image, onUploaded, onRemove }: ProductPhotoFieldProps) {
   const uploadId = useId();
-  const captureId = useId();
   const uploadRef = useRef<HTMLInputElement | null>(null);
-  const captureRef = useRef<HTMLInputElement | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const [error, setError] = useState('');
   const [isUploading, setIsUploading] = useState(false);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [isStartingCamera, setIsStartingCamera] = useState(false);
+
+  const stopCamera = () => {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+  };
+
+  useEffect(() => stopCamera, []);
+
+  useEffect(() => {
+    if (!isCameraOpen) {
+      stopCamera();
+      return;
+    }
+
+    let cancelled = false;
+    const startCamera = async () => {
+      setError('');
+      setIsStartingCamera(true);
+      try {
+        if (!navigator.mediaDevices?.getUserMedia) {
+          throw new Error('This device does not support direct camera capture in the browser.');
+        }
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1280 },
+            height: { ideal: 1280 },
+          },
+          audio: false,
+        });
+        if (cancelled) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play().catch(() => undefined);
+        }
+      } catch (cameraError) {
+        setError(cameraError instanceof Error ? cameraError.message : 'Unable to open device camera.');
+        setIsCameraOpen(false);
+      } finally {
+        if (!cancelled) {
+          setIsStartingCamera(false);
+        }
+      }
+    };
+
+    void startCamera();
+    return () => {
+      cancelled = true;
+      stopCamera();
+    };
+  }, [isCameraOpen]);
 
   const uploadFile = async (file: File | null) => {
     if (!file) {
@@ -85,8 +145,39 @@ export function ProductPhotoField({ image, onUploaded, onRemove }: ProductPhotoF
     } finally {
       setIsUploading(false);
       if (uploadRef.current) uploadRef.current.value = '';
-      if (captureRef.current) captureRef.current.value = '';
     }
+  };
+
+  const captureFromCamera = async () => {
+    if (!videoRef.current) {
+      setError('Camera preview is not ready yet.');
+      return;
+    }
+    const video = videoRef.current;
+    const width = video.videoWidth || 1280;
+    const height = video.videoHeight || 1280;
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d');
+    if (!context) {
+      setError('Unable to capture this photo right now.');
+      return;
+    }
+    context.drawImage(video, 0, 0, width, height);
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(resolve, 'image/jpeg', 0.9);
+    });
+    if (!blob) {
+      setError('Unable to capture this photo right now.');
+      return;
+    }
+    const capturedFile = new File([blob], `capture-${Date.now()}.jpg`, {
+      type: 'image/jpeg',
+      lastModified: Date.now(),
+    });
+    await uploadFile(capturedFile);
+    setIsCameraOpen(false);
   };
 
   return (
@@ -111,19 +202,9 @@ export function ProductPhotoField({ image, onUploaded, onRemove }: ProductPhotoF
           <label className={`button-like${isUploading ? ' disabled' : ''}`} htmlFor={uploadId} aria-disabled={isUploading}>
             {isUploading ? 'Uploading…' : image ? 'Replace photo' : 'Upload photo'}
           </label>
-
-          <input
-            ref={captureRef}
-            id={captureId}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="visually-hidden"
-            onChange={(event) => void uploadFile(event.target.files?.[0] ?? null)}
-          />
-          <label className={`button-like${isUploading ? ' disabled' : ''}`} htmlFor={captureId} aria-disabled={isUploading}>
+          <button type="button" onClick={() => setIsCameraOpen(true)} disabled={isUploading}>
             Capture photo
-          </label>
+          </button>
 
           {image ? (
             <button type="button" onClick={onRemove} disabled={isUploading}>
@@ -136,6 +217,33 @@ export function ProductPhotoField({ image, onUploaded, onRemove }: ProductPhotoF
         </p>
         {error ? <p className="workspace-error-copy">{error}</p> : null}
       </div>
+      {isCameraOpen ? (
+        <div className="product-photo-camera-modal" role="dialog" aria-modal="true" aria-label="Capture product photo">
+          <div className="product-photo-camera-card">
+            <div className="product-photo-camera-head">
+              <strong>Capture product photo</strong>
+              <button type="button" className="secondary" onClick={() => setIsCameraOpen(false)} disabled={isUploading}>
+                Close
+              </button>
+            </div>
+            <div className="product-photo-camera-preview">
+              {isStartingCamera ? (
+                <div className="product-photo-camera-placeholder">Opening camera…</div>
+              ) : (
+                <video ref={videoRef} autoPlay playsInline muted />
+              )}
+            </div>
+            <div className="product-photo-camera-actions">
+              <button type="button" onClick={() => setIsCameraOpen(false)} className="secondary" disabled={isUploading}>
+                Cancel
+              </button>
+              <button type="button" className="btn-primary" onClick={() => void captureFromCamera()} disabled={isUploading || isStartingCamera}>
+                {isUploading ? 'Saving…' : 'Use this photo'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

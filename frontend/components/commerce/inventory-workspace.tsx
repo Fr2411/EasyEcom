@@ -828,7 +828,25 @@ export function InventoryWorkspace() {
                                   <tbody>
                                     {group.variants.map((variant) => (
                                       <tr key={variant.variant_id} className="inventory-variant-row">
-                                        <td>{variant.label}</td>
+                                        <td>
+                                          <div className="inventory-variant-identity">
+                                            {group.image?.thumbnail_url ? (
+                                              <img
+                                                className="inventory-variant-thumb"
+                                                src={group.image.thumbnail_url}
+                                                alt={group.product_name}
+                                              />
+                                            ) : (
+                                              <div className="inventory-variant-thumb placeholder" aria-hidden="true">
+                                                {group.product_name.charAt(0).toUpperCase()}
+                                              </div>
+                                            )}
+                                            <div>
+                                              <strong>{variant.label}</strong>
+                                              <p>{group.product_name}</p>
+                                            </div>
+                                          </div>
+                                        </td>
                                         <td>{variant.sku}</td>
                                         <td>{variant.barcode || 'No barcode'}</td>
                                         <td>{formatQuantity(variant.on_hand)}</td>
