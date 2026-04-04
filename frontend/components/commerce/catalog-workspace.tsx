@@ -297,6 +297,8 @@ export function CatalogWorkspace() {
   const [saveToast, setSaveToast] = useState('');
   const [isPending, startTransition] = useTransition();
   const recommendation = deriveCatalogRecommendation(workspace);
+  const requestedProductId = searchParams.get('product_id') ?? '';
+  const shouldAutoOpenEdit = searchParams.get('edit') === '1';
 
   useEffect(() => {
     if (!saveToast) return undefined;
@@ -326,6 +328,16 @@ export function CatalogWorkspace() {
     setQueryInput(query);
     loadWorkspace(query);
   }, [searchKey]);
+
+  useEffect(() => {
+    if (!workspace || !requestedProductId || !shouldAutoOpenEdit) {
+      return;
+    }
+    const product = workspace.items.find((item) => item.product_id === requestedProductId);
+    if (product) {
+      onProductEdit(product);
+    }
+  }, [workspace, requestedProductId, shouldAutoOpenEdit]);
 
   const setNewProductForm = (seed?: string) => {
     setForm({

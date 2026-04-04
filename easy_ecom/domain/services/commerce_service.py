@@ -1016,6 +1016,11 @@ class InventoryService(CommerceBaseService):
             default_threshold = as_decimal(settings.low_stock_threshold) if settings else ZERO
             on_hand_map, reserved_map = self._stock_maps(session, user.client_id, location_context.active_location_id)
             rows = session.execute(self._apply_variant_search(self._base_variant_stmt(user.client_id), query)).all()
+            media_payload_map = self._product_media_payload_map(
+                session,
+                user.client_id,
+                [row[0] for row in rows],
+            )
             stock_items = []
             low_stock = []
             for product, variant, supplier, category in rows:
@@ -1028,10 +1033,13 @@ class InventoryService(CommerceBaseService):
                     continue
                 threshold = as_decimal(variant.reorder_level) if as_decimal(variant.reorder_level) > ZERO else default_threshold
                 effective_price = self._effective_variant_price(product, variant)
+                image_payload = media_payload_map.get(str(product.primary_media_id)) if product.primary_media_id else None
                 row = {
                     "variant_id": str(variant.variant_id),
                     "product_id": str(product.product_id),
                     "product_name": product.name,
+                    "image_url": image_payload["large_url"] if image_payload else product.image_url,
+                    "image": image_payload,
                     "label": build_variant_label(product.name, variant.title),
                     "sku": variant.sku,
                     "barcode": variant.barcode,

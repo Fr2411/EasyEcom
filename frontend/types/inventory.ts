@@ -1,5 +1,6 @@
 import type {
   CatalogProduct,
+  ProductMedia,
   CatalogVariant,
   CatalogVariantInput,
   ProductIdentityInput,
@@ -10,6 +11,8 @@ export type InventoryStockRow = {
   variant_id: string;
   product_id: string;
   product_name: string;
+  image_url: string;
+  image: ProductMedia | null;
   label: string;
   sku: string;
   barcode: string;
