@@ -60,20 +60,25 @@ async function normalizeUploadImage(file: File): Promise<File> {
 
 export function ProductPhotoField({ image, onUploaded, onRemove }: ProductPhotoFieldProps) {
   const uploadId = useId();
+  const fallbackCaptureId = useId();
   const uploadRef = useRef<HTMLInputElement | null>(null);
+  const fallbackCaptureRef = useRef<HTMLInputElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [error, setError] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isStartingCamera, setIsStartingCamera] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
 
   const stopCamera = () => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     if (videoRef.current) {
+      videoRef.current.pause();
       videoRef.current.srcObject = null;
     }
+    setCameraReady(false);
   };
 
   useEffect(() => stopCamera, []);
@@ -106,8 +111,22 @@ export function ProductPhotoField({ image, onUploaded, onRemove }: ProductPhotoF
         }
         streamRef.current = stream;
         if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play().catch(() => undefined);
+          const video = videoRef.current;
+          video.muted = true;
+          video.autoplay = true;
+          video.playsInline = true;
+          video.setAttribute('playsinline', 'true');
+          video.setAttribute('webkit-playsinline', 'true');
+          video.srcObject = stream;
+          await new Promise<void>((resolve) => {
+            const onLoadedMetadata = () => {
+              video.removeEventListener('loadedmetadata', onLoadedMetadata);
+              resolve();
+            };
+            video.addEventListener('loadedmetadata', onLoadedMetadata);
+          });
+          await video.play();
+          setCameraReady(true);
         }
       } catch (cameraError) {
         setError(cameraError instanceof Error ? cameraError.message : 'Unable to open device camera.');
@@ -145,6 +164,7 @@ export function ProductPhotoField({ image, onUploaded, onRemove }: ProductPhotoF
     } finally {
       setIsUploading(false);
       if (uploadRef.current) uploadRef.current.value = '';
+      if (fallbackCaptureRef.current) fallbackCaptureRef.current.value = '';
     }
   };
 
@@ -154,8 +174,12 @@ export function ProductPhotoField({ image, onUploaded, onRemove }: ProductPhotoF
       return;
     }
     const video = videoRef.current;
-    const width = video.videoWidth || 1280;
-    const height = video.videoHeight || 1280;
+    if (!cameraReady || !streamRef.current?.active || !video.videoWidth || !video.videoHeight) {
+      setError('Camera preview is not ready yet. If this keeps happening, use fallback capture below.');
+      return;
+    }
+    const width = video.videoWidth;
+    const height = video.videoHeight;
     const canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
@@ -205,6 +229,15 @@ export function ProductPhotoField({ image, onUploaded, onRemove }: ProductPhotoF
           <button type="button" onClick={() => setIsCameraOpen(true)} disabled={isUploading}>
             Capture photo
           </button>
+          <input
+            ref={fallbackCaptureRef}
+            id={fallbackCaptureId}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="visually-hidden"
+            onChange={(event) => void uploadFile(event.target.files?.[0] ?? null)}
+          />
 
           {image ? (
             <button type="button" onClick={onRemove} disabled={isUploading}>
@@ -233,6 +266,16 @@ export function ProductPhotoField({ image, onUploaded, onRemove }: ProductPhotoF
                 <video ref={videoRef} autoPlay playsInline muted />
               )}
             </div>
+            {!cameraReady && !isStartingCamera ? (
+              <div className="product-photo-camera-fallback">
+                <p className="workspace-helper-copy">
+                  If the live preview stays black on this device, use the fallback capture control below.
+                </p>
+                <label className={`button-like${isUploading ? ' disabled' : ''}`} htmlFor={fallbackCaptureId} aria-disabled={isUploading}>
+                  Fallback capture
+                </label>
+              </div>
+            ) : null}
             <div className="product-photo-camera-actions">
               <button type="button" onClick={() => setIsCameraOpen(false)} className="secondary" disabled={isUploading}>
                 Cancel
