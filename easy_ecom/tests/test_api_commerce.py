@@ -16,12 +16,14 @@ from easy_ecom.data.store.postgres_models import (
     CustomerModel,
     InventoryLedgerModel,
     LocationModel,
+    ProductMediaModel,
     ProductModel,
     ProductVariantModel,
     PurchaseItemModel,
     PurchaseModel,
     SupplierModel,
 )
+from easy_ecom.domain.services.product_media_service import ProductMediaService
 from easy_ecom.tests.support.sqlite_runtime import build_sqlite_runtime, seed_auth_user
 
 
@@ -313,6 +315,69 @@ def test_inventory_receipt_can_create_product_and_multiple_variant_lines(monkeyp
     stock_items = inventory_response.json()["stock_items"]
     assert len(stock_items) == 2
     assert {item["available_to_sell"] for item in stock_items} == {"5.000", "3.000"}
+
+
+def test_inventory_receipt_can_attach_staged_product_media(monkeypatch, tmp_path: Path):
+    runtime = _setup_runtime(tmp_path, monkeypatch)
+    client = _login_client(runtime)
+    staged_media_id = new_uuid()
+
+    monkeypatch.setattr(ProductMediaService, "_move_object", lambda self, source_key, target_key, content_type: None)
+    monkeypatch.setattr(
+        ProductMediaService,
+        "signed_url",
+        lambda self, key, expires_in_seconds=3600: f"https://signed.example/{key}",
+    )
+
+    with runtime.session_factory() as session:
+        session.add(
+            ProductMediaModel(
+                product_media_id=staged_media_id,
+                client_id=CLIENT_ID,
+                status="staged",
+                role="primary",
+                large_object_key=f"{CLIENT_ID}/product-media/staged/{staged_media_id}/image-768.jpg",
+                thumbnail_object_key=f"{CLIENT_ID}/product-media/staged/{staged_media_id}/thumb-256.webp",
+                checksum_sha256="abc123",
+                uploaded_by_user_id=USER_ID,
+            )
+        )
+        session.commit()
+
+    response = client.post(
+        "/inventory/receipts",
+        json={
+            "action": "receive_stock",
+            "notes": "New shipment with photo",
+            "identity": {
+                "product_name": "Photo Sneaker",
+                "supplier": "Fresh Supplier",
+                "category": "Footwear",
+                "sku_root": "PIC",
+                "default_selling_price": "65",
+                "min_selling_price": "55",
+                "pending_primary_media_upload_id": staged_media_id,
+            },
+            "lines": [
+                {
+                    "size": "41",
+                    "color": "Black",
+                    "quantity": "5",
+                    "default_purchase_price": "28",
+                    "default_selling_price": "65",
+                    "min_selling_price": "55",
+                    "reorder_level": "2",
+                }
+            ],
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["product"]["image"]["media_id"] == staged_media_id
+
+    with runtime.session_factory() as session:
+        product = session.execute(select(ProductModel).where(ProductModel.name == "Photo Sneaker")).scalar_one()
+        assert str(product.primary_media_id) == staged_media_id
 
 
 def test_inventory_template_save_adds_new_variant_without_stock_or_purchase(monkeypatch, tmp_path: Path):

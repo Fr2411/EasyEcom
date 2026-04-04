@@ -35,6 +35,7 @@ from easy_ecom.data.store.postgres_models import (
 )
 from easy_ecom.domain.models.auth import AuthenticatedUser
 from easy_ecom.domain.services.finance_posting_service import FinancePostingService
+from easy_ecom.domain.services.product_media_service import ProductMediaService
 
 
 ZERO = Decimal("0")
@@ -151,6 +152,7 @@ class CommerceBaseService:
     def __init__(self, session_factory: sessionmaker[Session]) -> None:
         self._session_factory = session_factory
         self._finance_posting = FinancePostingService()
+        self._product_media = ProductMediaService()
 
     def _active_locations(self, session: Session, client_id: str) -> list[LocationModel]:
         return list(
@@ -463,14 +465,32 @@ class CommerceBaseService:
             "available_to_sell": on_hand - reserved,
         }
 
+    def _product_media_payload_map(
+        self,
+        session: Session,
+        client_id: str,
+        products: list[ProductModel],
+    ) -> dict[str, dict[str, Any]]:
+        media_ids = {
+            str(product.primary_media_id)
+            for product in products
+            if product.primary_media_id
+        }
+        return self._product_media.media_payload_map(session, client_id=client_id, media_ids=media_ids)
+
     def _product_payload_from_rows(
         self,
+        client_id: str,
         rows: list[tuple[ProductModel, ProductVariantModel, SupplierModel | None, CategoryModel | None]],
         on_hand_map: dict[str, Decimal],
         reserved_map: dict[str, Decimal],
+        media_payload_map: dict[str, dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         _require(bool(rows), message="Product not found", code="PRODUCT_NOT_FOUND", status_code=404)
         product, _variant, supplier, category = rows[0]
+        image_payload = None
+        if product.primary_media_id and media_payload_map:
+            image_payload = media_payload_map.get(str(product.primary_media_id))
         payload = {
             "product_id": str(product.product_id),
             "name": product.name,
@@ -486,6 +506,8 @@ class CommerceBaseService:
                 as_optional_decimal(product.default_price_amount),
                 as_optional_decimal(product.min_price_amount),
             ),
+            "image_url": image_payload["large_url"] if image_payload else product.image_url,
+            "image": image_payload,
             "variants": [],
         }
         for current_product, variant, _supplier, _category in rows:
@@ -510,7 +532,34 @@ class CommerceBaseService:
         rows = session.execute(
             self._base_variant_stmt(client_id).where(ProductModel.product_id == product_id)
         ).all()
-        return self._product_payload_from_rows(rows, on_hand_map, reserved_map)
+        products = [row[0] for row in rows]
+        media_payload_map = self._product_media_payload_map(session, client_id, products)
+        return self._product_payload_from_rows(client_id, rows, on_hand_map, reserved_map, media_payload_map)
+
+    def _apply_product_media_instructions(
+        self,
+        session: Session,
+        *,
+        user: AuthenticatedUser,
+        product: ProductModel,
+        identity: dict[str, Any],
+    ) -> None:
+        pending_upload_id = str(identity.get("pending_primary_media_upload_id", "") or "").strip()
+        remove_primary_image = bool(identity.get("remove_primary_image", False))
+        if remove_primary_image:
+            self._product_media.remove_primary_media(
+                session,
+                client_id=user.client_id,
+                product_id=str(product.product_id),
+            )
+        if pending_upload_id:
+            self._product_media.attach_staged_upload(
+                session,
+                client_id=user.client_id,
+                product_id=str(product.product_id),
+                staged_upload_id=pending_upload_id,
+                user_id=user.user_id,
+            )
 
     def _sales_order_payload(self, session: Session, order: SalesOrderModel) -> dict[str, Any]:
         customer = None
@@ -703,6 +752,38 @@ class CommerceBaseService:
 
 
 class CatalogService(CommerceBaseService):
+    def create_staged_media(self, user: AuthenticatedUser, upload_file) -> dict[str, Any]:
+        if "Catalog" not in user.allowed_pages and "Inventory" not in user.allowed_pages and "SUPER_ADMIN" not in user.roles:
+            raise ApiException(status_code=403, code="ACCESS_DENIED", message="Access denied for product media upload")
+        with self._session_factory() as session:
+            payload = self._product_media.create_staged_upload(
+                session,
+                client_id=user.client_id,
+                user_id=user.user_id,
+                upload_file=upload_file,
+            )
+            session.commit()
+            return payload
+
+    def attach_product_media(self, user: AuthenticatedUser, *, product_id: str, staged_upload_id: str) -> dict[str, Any]:
+        _require_page(user, "Catalog")
+        with self._session_factory() as session:
+            self._product_media.attach_staged_upload(
+                session,
+                client_id=user.client_id,
+                product_id=product_id,
+                staged_upload_id=staged_upload_id,
+                user_id=user.user_id,
+            )
+            session.commit()
+            location_context = self._location_context(session, user.client_id)
+            return self._product_payload(
+                session,
+                user.client_id,
+                product_id,
+                location_context.active_location_id,
+            )
+
     def workspace(
         self,
         user: AuthenticatedUser,
@@ -717,6 +798,11 @@ class CatalogService(CommerceBaseService):
             on_hand_map, reserved_map = self._stock_maps(session, user.client_id, location_context.active_location_id)
             stmt = self._apply_variant_search(self._base_variant_stmt(user.client_id), query)
             rows = session.execute(stmt).all()
+            media_payload_map = self._product_media_payload_map(
+                session,
+                user.client_id,
+                [row[0] for row in rows],
+            )
 
             products: dict[str, dict[str, Any]] = {}
             for product, variant, supplier, category in rows:
@@ -729,6 +815,7 @@ class CatalogService(CommerceBaseService):
                     continue
                 product_key = str(product.product_id)
                 if product_key not in products:
+                    image_payload = media_payload_map.get(str(product.primary_media_id)) if product.primary_media_id else None
                     products[product_key] = {
                         "product_id": product_key,
                         "name": product.name,
@@ -744,6 +831,8 @@ class CatalogService(CommerceBaseService):
                             as_optional_decimal(product.default_price_amount),
                             as_optional_decimal(product.min_price_amount),
                         ),
+                        "image_url": image_payload["large_url"] if image_payload else product.image_url,
+                        "image": image_payload,
                         "variants": [],
                     }
                 products[product_key]["variants"].append(
@@ -816,12 +905,12 @@ class CatalogService(CommerceBaseService):
             product.sku_root = str(identity.get("sku_root", "")).strip()
             product.brand = str(identity.get("brand", "")).strip()
             product.description = str(identity.get("description", "")).strip()
-            product.image_url = str(identity.get("image_url", "")).strip()
             product.status = str(identity.get("status", "active")).strip() or "active"
             product.default_price_amount = default_price
             product.min_price_amount = min_price
             product.max_discount_percent = derived_discount
             session.flush()
+            self._apply_product_media_instructions(session, user=user, product=product, identity=identity)
 
             option_signatures: set[tuple[str, str, str]] = set()
             for variant_payload in variants:
@@ -992,6 +1081,11 @@ class InventoryService(CommerceBaseService):
             location_context = self._location_context(session, user.client_id, location_id)
             rows = session.execute(self._apply_variant_search(self._base_variant_stmt(user.client_id), trimmed)).all()
             on_hand_map, reserved_map = self._stock_maps(session, user.client_id, location_context.active_location_id)
+            media_payload_map = self._product_media_payload_map(
+                session,
+                user.client_id,
+                [row[0] for row in rows],
+            )
             product_payloads: dict[str, dict[str, Any]] = {}
             exact_variants: list[dict[str, Any]] = []
             exact_product_ids: set[str] = set()
@@ -1008,7 +1102,13 @@ class InventoryService(CommerceBaseService):
                     product_rows = session.execute(
                         self._base_variant_stmt(user.client_id).where(ProductModel.product_id == product.product_id)
                     ).all()
-                    product_payloads[product_id] = self._product_payload_from_rows(product_rows, on_hand_map, reserved_map)
+                    product_payloads[product_id] = self._product_payload_from_rows(
+                        user.client_id,
+                        product_rows,
+                        on_hand_map,
+                        reserved_map,
+                        media_payload_map,
+                    )
                 if product_id not in broad_product_seen:
                     broad_product_ids.append(product_id)
                     broad_product_seen.add(product_id)
@@ -1140,12 +1240,13 @@ class InventoryService(CommerceBaseService):
             product.sku_root = str(identity.get("sku_root", "")).strip()
             product.brand = str(identity.get("brand", "")).strip()
             product.description = str(identity.get("description", "")).strip()
-            product.image_url = str(identity.get("image_url", "")).strip()
             product.status = "active"
             product.default_price_amount = default_price
             product.min_price_amount = min_price
             product.max_discount_percent = derived_discount
         session.flush()
+        if is_new_product or update_matched_product_details:
+            self._apply_product_media_instructions(session, user=user, product=product, identity=identity)
         return product, purchase_supplier_id, is_new_product
 
     def _prepare_receive_variant(

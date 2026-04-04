@@ -2,6 +2,7 @@ import { apiClient } from '@/lib/api/client';
 import type {
   CatalogUpsertPayload,
   CatalogProduct,
+  StagedProductMediaUpload,
   CatalogWorkspace,
 } from '@/types/catalog';
 import type {
@@ -52,6 +53,24 @@ export async function saveCatalogProduct(payload: CatalogUpsertPayload) {
   return apiClient<{ product: CatalogProduct }>('/catalog/products', {
     method: 'POST',
     body: JSON.stringify(payload),
+  });
+}
+
+
+export async function uploadStagedProductMedia(file: File) {
+  const form = new FormData();
+  form.append('image', file);
+  return apiClient<StagedProductMediaUpload>('/catalog/media/staged', {
+    method: 'POST',
+    body: form,
+  });
+}
+
+
+export async function attachCatalogProductMedia(productId: string, uploadId: string) {
+  return apiClient<{ product: CatalogProduct }>(`/catalog/products/${productId}/media`, {
+    method: 'POST',
+    body: JSON.stringify({ upload_id: uploadId }),
   });
 }
 

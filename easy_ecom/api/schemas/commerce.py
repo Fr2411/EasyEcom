@@ -51,6 +51,16 @@ class CatalogVariantResponse(BaseModel):
     available_to_sell: Decimal
 
 
+class ProductImageResponse(BaseModel):
+    media_id: str
+    upload_id: str
+    large_url: str
+    thumbnail_url: str
+    width: int
+    height: int
+    vector_status: str
+
+
 class CatalogProductResponse(BaseModel):
     product_id: str
     name: str
@@ -63,6 +73,8 @@ class CatalogProductResponse(BaseModel):
     default_price: Decimal | None
     min_price: Decimal | None
     max_discount_percent: Decimal | None
+    image_url: str = ""
+    image: ProductImageResponse | None = None
     variants: list[CatalogVariantResponse]
 
 
@@ -88,6 +100,8 @@ class ProductIdentityInput(BaseModel):
     min_selling_price: Decimal | None = None
     max_discount_percent: Decimal | None = None
     status: str = "active"
+    pending_primary_media_upload_id: str = ""
+    remove_primary_image: bool = False
 
     @field_validator("default_selling_price", "min_selling_price", "max_discount_percent", mode="before")
     @classmethod
@@ -155,6 +169,14 @@ class CatalogUpsertRequest(BaseModel):
 
 class CatalogUpsertResponse(BaseModel):
     product: CatalogProductResponse
+
+
+class StagedProductMediaUploadResponse(ProductImageResponse):
+    pass
+
+
+class AttachProductMediaRequest(BaseModel):
+    upload_id: str
 
 
 class InventoryStockRowResponse(BaseModel):

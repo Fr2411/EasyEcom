@@ -214,10 +214,55 @@ class ProductModel(TenantMixin, TimestampMixin, Base):
     brand: Mapped[str] = mapped_column(String(128), nullable=False, default="")
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
     image_url: Mapped[str] = mapped_column(String(512), nullable=False, default="")
+    primary_media_id: Mapped[str | None] = mapped_column(GUID(), index=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="draft", index=True)
     default_price_amount: Mapped[Decimal | None] = mapped_column(Amount)
     min_price_amount: Mapped[Decimal | None] = mapped_column(Amount)
     max_discount_percent: Mapped[Decimal | None] = mapped_column(Percent)
+
+
+class ProductMediaModel(TenantMixin, TimestampMixin, Base):
+    __tablename__ = "product_media"
+    __table_args__ = (
+        Index("ix_product_media_client_product_status", "client_id", "product_id", "status"),
+    )
+
+    product_media_id: Mapped[str] = mapped_column(GUID(), primary_key=True)
+    product_id: Mapped[str | None] = mapped_column(GUID(), ForeignKey("products.product_id", ondelete="CASCADE"), index=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="staged", index=True)
+    role: Mapped[str] = mapped_column(String(32), nullable=False, default="primary", index=True)
+    large_object_key: Mapped[str] = mapped_column(String(512), nullable=False)
+    thumbnail_object_key: Mapped[str] = mapped_column(String(512), nullable=False)
+    large_mime_type: Mapped[str] = mapped_column(String(64), nullable=False, default="image/jpeg")
+    thumbnail_mime_type: Mapped[str] = mapped_column(String(64), nullable=False, default="image/webp")
+    large_width: Mapped[int] = mapped_column(Integer, nullable=False, default=768)
+    large_height: Mapped[int] = mapped_column(Integer, nullable=False, default=768)
+    thumbnail_width: Mapped[int] = mapped_column(Integer, nullable=False, default=256)
+    thumbnail_height: Mapped[int] = mapped_column(Integer, nullable=False, default=256)
+    checksum_sha256: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    uploaded_by_user_id: Mapped[str | None] = mapped_column(GUID(), ForeignKey("users.user_id", ondelete="SET NULL"))
+    attached_at: Mapped[datetime | None] = mapped_column(Timestamp)
+
+
+class ProductVectorModel(TenantMixin, TimestampMixin, Base):
+    __tablename__ = "product_vectors"
+    __table_args__ = (
+        UniqueConstraint("client_id", "product_id", "product_media_id", name="uq_product_vectors_client_product_media"),
+    )
+
+    product_vector_id: Mapped[str] = mapped_column(GUID(), primary_key=True)
+    product_id: Mapped[str] = mapped_column(GUID(), ForeignKey("products.product_id", ondelete="CASCADE"), nullable=False, index=True)
+    product_media_id: Mapped[str] = mapped_column(
+        GUID(),
+        ForeignKey("product_media.product_media_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending", index=True)
+    provider: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    embedding_ref: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    source_object_key: Mapped[str] = mapped_column(String(512), nullable=False, default="")
+    generated_at: Mapped[datetime | None] = mapped_column(Timestamp)
 
 
 class ProductVariantModel(TenantMixin, TimestampMixin, Base):

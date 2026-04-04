@@ -16,10 +16,13 @@ from easy_ecom.data.store.postgres_models import (
     ClientSettingsModel,
     InventoryLedgerModel,
     LocationModel,
+    ProductMediaModel,
     ProductModel,
+    ProductVectorModel,
     ProductVariantModel,
     SupplierModel,
 )
+from easy_ecom.domain.services.product_media_service import ProductMediaService
 from easy_ecom.tests.support.sqlite_runtime import build_sqlite_runtime, seed_auth_user
 
 
@@ -316,6 +319,104 @@ def test_catalog_create_product_success(monkeypatch, tmp_path: Path):
     # Check variant structure - size and color are in options
     assert variant["options"]["size"] == "M"  # Fixed: now checking correct field
     assert variant["options"]["color"] == "Blue"  # Fixed: now checking correct field
+
+
+def test_catalog_staged_media_upload_endpoint(monkeypatch, tmp_path: Path):
+    runtime = _setup_runtime(tmp_path, monkeypatch)
+    client = _login_client(runtime)
+
+    monkeypatch.setattr(
+        ProductMediaService,
+        "create_staged_upload",
+        lambda self, session, client_id, user_id, upload_file: {
+            "media_id": "media-1",
+            "upload_id": "media-1",
+            "large_url": "https://example.com/large.jpg",
+            "thumbnail_url": "https://example.com/thumb.webp",
+            "width": 768,
+            "height": 768,
+            "vector_status": "pending",
+        },
+    )
+
+    response = client.post(
+        "/catalog/media/staged",
+        files={"image": ("shoe.jpg", b"fake-image", "image/jpeg")},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["upload_id"] == "media-1"
+    assert payload["thumbnail_url"] == "https://example.com/thumb.webp"
+
+
+def test_catalog_create_product_attaches_staged_media(monkeypatch, tmp_path: Path):
+    runtime = _setup_runtime(tmp_path, monkeypatch)
+    client = _login_client(runtime)
+    staged_media_id = new_uuid()
+
+    monkeypatch.setattr(ProductMediaService, "_move_object", lambda self, source_key, target_key, content_type: None)
+    monkeypatch.setattr(
+        ProductMediaService,
+        "signed_url",
+        lambda self, key, expires_in_seconds=3600: f"https://signed.example/{key}",
+    )
+
+    with runtime.session_factory() as session:
+        session.add(
+            ProductMediaModel(
+                product_media_id=staged_media_id,
+                client_id=CLIENT_ID,
+                status="staged",
+                role="primary",
+                large_object_key=f"{CLIENT_ID}/product-media/staged/{staged_media_id}/image-768.jpg",
+                thumbnail_object_key=f"{CLIENT_ID}/product-media/staged/{staged_media_id}/thumb-256.webp",
+                checksum_sha256="abc123",
+                uploaded_by_user_id=USER_ID,
+            )
+        )
+        session.commit()
+
+    response = client.post(
+        "/catalog/products",
+        json={
+            "identity": {
+                "product_name": "Photo Product",
+                "supplier": "Test Supplier",
+                "category": "Test Category",
+                "sku_root": "PHOTO",
+                "default_selling_price": "100",
+                "min_selling_price": "90",
+                "pending_primary_media_upload_id": staged_media_id,
+            },
+            "variants": [
+                {
+                    "size": "M",
+                    "color": "Blue",
+                    "default_purchase_price": "50",
+                    "default_selling_price": "100",
+                    "min_selling_price": "90",
+                    "reorder_level": "2",
+                }
+            ],
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["product"]["image"]["media_id"] == staged_media_id
+    assert payload["product"]["image_url"].startswith("https://signed.example/")
+
+    with runtime.session_factory() as session:
+        product = session.execute(select(ProductModel).where(ProductModel.name == "Photo Product")).scalar_one()
+        media = session.execute(
+            select(ProductMediaModel).where(ProductMediaModel.product_media_id == staged_media_id)
+        ).scalar_one()
+        vector = session.execute(
+            select(ProductVectorModel).where(ProductVectorModel.product_media_id == staged_media_id)
+        ).scalar_one()
+        assert str(product.primary_media_id) == staged_media_id
+        assert media.status == "attached"
+        assert str(media.product_id) == str(product.product_id)
+        assert vector.status == "pending"
 
 
 def test_catalog_create_product_validation_error(monkeypatch, tmp_path: Path):
