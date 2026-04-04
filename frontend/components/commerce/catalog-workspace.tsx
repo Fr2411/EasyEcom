@@ -7,6 +7,7 @@ import { getCatalogWorkspace, saveCatalogProduct } from '@/lib/api/commerce';
 import { buildSkuPreview, buildVariantCombinations, signatureForVariant, type VariantOptionValues } from '@/lib/variant-generator';
 import type {
   CatalogProduct,
+  ProductMedia,
   CatalogUpsertPayload,
   CatalogVariantInput,
   ProductIdentityInput,
@@ -28,6 +29,7 @@ import {
   WorkspaceToast,
 } from '@/components/commerce/workspace-primitives';
 import { formatMoney, formatPercent, formatQuantity, numberFromString } from '@/lib/commerce-format';
+import { ProductPhotoField } from '@/components/commerce/product-photo-field';
 
 
 type CatalogTab = 'products' | 'edit';
@@ -55,6 +57,8 @@ const EMPTY_IDENTITY: ProductIdentityInput = {
   brand: '',
   description: '',
   image_url: '',
+  pending_primary_media_upload_id: '',
+  remove_primary_image: false,
   sku_root: '',
   default_selling_price: '',
   min_selling_price: '',
@@ -146,7 +150,9 @@ function productToPayload(product: CatalogProduct): CatalogUpsertPayload {
       category: product.category,
       brand: product.brand,
       description: product.description,
-      image_url: '',
+      image_url: product.image_url || '',
+      pending_primary_media_upload_id: '',
+      remove_primary_image: false,
       sku_root: product.sku_root,
       default_selling_price: valueOrEmpty(product.default_price),
       min_selling_price: valueOrEmpty(product.min_price),
@@ -285,6 +291,7 @@ export function CatalogWorkspace() {
   });
   const [savedVariants, setSavedVariants] = useState<CatalogVariantInput[]>([]);
   const [generator, setGenerator] = useState<VariantGeneratorState>({ ...EMPTY_GENERATOR });
+  const [productImage, setProductImage] = useState<ProductMedia | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [saveToast, setSaveToast] = useState('');
@@ -330,6 +337,7 @@ export function CatalogWorkspace() {
     });
     setSavedVariants([]);
     setGenerator({ ...EMPTY_GENERATOR });
+    setProductImage(null);
     setNotice('');
     setError('');
     setActiveTab('edit');
@@ -340,6 +348,7 @@ export function CatalogWorkspace() {
     setForm(payload);
     setSavedVariants(payload.variants.map(cloneVariant));
     setGenerator(generatorFromProduct(product));
+    setProductImage(product.image);
     setActiveTab('edit');
     setNotice('');
     setError('');
@@ -490,9 +499,14 @@ export function CatalogWorkspace() {
               renderItem={(product) => (
                 <article key={product.product_id} className="guided-match-item">
                   <div className="guided-match-item-header">
-                    <div>
+                    <div className="guided-match-item-identity">
+                      {product.image?.thumbnail_url ? (
+                        <img className="guided-match-item-thumb" src={product.image.thumbnail_url} alt={product.name} />
+                      ) : null}
+                      <div>
                       <h5>{product.name}</h5>
                       <p>{product.brand || 'No brand'} · {product.category || 'Uncategorized'} · {product.supplier || 'No supplier'}</p>
+                      </div>
                     </div>
                     <button type="button" onClick={() => onProductEdit(product)}>
                       Open product
@@ -621,6 +635,36 @@ export function CatalogWorkspace() {
                   }
                 />
               </label>
+              <div className="field-span-2">
+                <label>Product photo</label>
+                <ProductPhotoField
+                  image={productImage}
+                  onUploaded={(image) => {
+                    setProductImage(image);
+                    setForm((current) => ({
+                      ...current,
+                      identity: {
+                        ...current.identity,
+                        pending_primary_media_upload_id: image.upload_id,
+                        remove_primary_image: false,
+                        image_url: image.large_url,
+                      },
+                    }));
+                  }}
+                  onRemove={() => {
+                    setProductImage(null);
+                    setForm((current) => ({
+                      ...current,
+                      identity: {
+                        ...current.identity,
+                        pending_primary_media_upload_id: '',
+                        remove_primary_image: Boolean(current.product_id || current.identity.image_url),
+                        image_url: '',
+                      },
+                    }));
+                  }}
+                />
+              </div>
             </div>
 
             <div className="workspace-subsection">

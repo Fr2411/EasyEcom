@@ -15,6 +15,8 @@ function buildProduct(overrides: Partial<CatalogProduct> = {}): CatalogProduct {
     default_price: '120',
     min_price: '90',
     max_discount_percent: '25',
+    image_url: '',
+    image: null,
     variants: [],
     ...overrides,
   };

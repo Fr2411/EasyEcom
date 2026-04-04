@@ -39,6 +39,18 @@ export type CatalogVariant = {
   available_to_sell: string;
 };
 
+export type ProductMedia = {
+  media_id: string;
+  upload_id: string;
+  large_url: string;
+  thumbnail_url: string;
+  width: number;
+  height: number;
+  vector_status: string;
+};
+
+export type StagedProductMediaUpload = ProductMedia;
+
 export type CatalogProduct = {
   product_id: string;
   name: string;
@@ -51,6 +63,8 @@ export type CatalogProduct = {
   default_price: string | null;
   min_price: string | null;
   max_discount_percent: string | null;
+  image_url: string;
+  image: ProductMedia | null;
   variants: CatalogVariant[];
 };
 
@@ -71,6 +85,8 @@ export type ProductIdentityInput = {
   brand: string;
   description: string;
   image_url: string;
+  pending_primary_media_upload_id?: string;
+  remove_primary_image?: boolean;
   sku_root: string;
   default_selling_price: string;
   min_selling_price: string;

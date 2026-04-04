@@ -10,7 +10,7 @@ import {
   getInventoryWorkspace,
   receiveInventoryStock,
 } from '@/lib/api/commerce';
-import type { CatalogProduct, CatalogVariant, ProductIdentityInput } from '@/types/catalog';
+import type { CatalogProduct, CatalogVariant, ProductIdentityInput, ProductMedia } from '@/types/catalog';
 import type {
   InventoryAdjustmentPayload,
   InventoryIntakeExactVariantMatch,
@@ -27,6 +27,7 @@ import {
 } from '@/components/commerce/workspace-primitives';
 import { formatMoney, formatQuantity } from '@/lib/commerce-format';
 import { buildSkuPreview, buildVariantCombinations, signatureForVariant } from '@/lib/variant-generator';
+import { ProductPhotoField } from '@/components/commerce/product-photo-field';
 
 
 type InventoryTab = 'stock' | 'receive' | 'adjust' | 'low-stock';
@@ -76,6 +77,8 @@ const EMPTY_IDENTITY: InventoryIntakeIdentityInput = {
   brand: '',
   description: '',
   image_url: '',
+  pending_primary_media_upload_id: '',
+  remove_primary_image: false,
   sku_root: '',
   default_selling_price: '',
   min_selling_price: '',
@@ -146,7 +149,9 @@ function productIdentityFromCatalog(product: CatalogProduct): InventoryIntakeIde
     category: product.category,
     brand: product.brand,
     description: product.description,
-    image_url: '',
+    image_url: product.image_url || '',
+    pending_primary_media_upload_id: '',
+    remove_primary_image: false,
     sku_root: product.sku_root,
     default_selling_price: valueOrEmpty(product.default_price),
     min_selling_price: valueOrEmpty(product.min_price),
@@ -291,6 +296,7 @@ export function InventoryWorkspace() {
   const [intakeQuery, setIntakeQuery] = useState('');
   const [intakeResults, setIntakeResults] = useState<Awaited<ReturnType<typeof getInventoryIntakeLookup>> | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<CatalogProduct | null>(null);
+  const [productImage, setProductImage] = useState<ProductMedia | null>(null);
   const [generator, setGenerator] = useState<IntakeGeneratorState>({ ...EMPTY_GENERATOR });
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
@@ -341,6 +347,7 @@ export function InventoryWorkspace() {
     setGenerator({ ...EMPTY_GENERATOR });
     setIntakeResults(null);
     setIntakeQuery('');
+    setProductImage(null);
   };
 
   const beginNewProduct = (seed?: { product_name: string; sku_root: string } | null) => {
@@ -357,6 +364,7 @@ export function InventoryWorkspace() {
       lines: [],
     });
     setGenerator({ ...EMPTY_GENERATOR });
+    setProductImage(null);
     setNotice('');
     setError('');
   };
@@ -371,6 +379,7 @@ export function InventoryWorkspace() {
       lines: initialLines.map(cloneLine),
     });
     setGenerator(generatorFromProduct(product));
+    setProductImage(product.image);
     setNotice('');
     setError('');
   };
@@ -711,11 +720,16 @@ export function InventoryWorkspace() {
                     {exactVariantMatches.map((match) => (
                       <article key={`${match.variant.variant_id}-${match.match_reason}`} className="commerce-card compact">
                         <div className="commerce-card-header">
-                          <div>
+                          <div className="guided-match-item-identity">
+                            {match.product.image?.thumbnail_url ? (
+                              <img className="guided-match-item-thumb" src={match.product.image.thumbnail_url} alt={match.product.name} />
+                            ) : null}
+                            <div>
                             <h4>{match.variant.label}</h4>
                             <p>
                               Matched by {match.match_reason} · SKU {match.variant.sku} · Available {formatQuantity(match.variant.available_to_sell)}
                             </p>
+                            </div>
                           </div>
                           <button type="button" onClick={() => openExactVariantMatch(match)}>
                             Use exact variant
@@ -734,11 +748,16 @@ export function InventoryWorkspace() {
                     {visibleProductMatches.map((product) => (
                       <article key={product.product_id} className="commerce-card compact">
                         <div className="commerce-card-header">
-                          <div>
+                          <div className="guided-match-item-identity">
+                            {product.image?.thumbnail_url ? (
+                              <img className="guided-match-item-thumb" src={product.image.thumbnail_url} alt={product.name} />
+                            ) : null}
+                            <div>
                             <h4>{product.name}</h4>
                             <p>
                               {product.variants.length} saved variants · Supplier {product.supplier || 'Not set'} · Category {product.category || 'Not set'}
                             </p>
+                            </div>
                           </div>
                           <button
                             type="button"
@@ -954,6 +973,36 @@ export function InventoryWorkspace() {
                           disabled={!canEditSavedDetails}
                         />
                       </label>
+                      <div className="field-span-2">
+                        <label>Product photo</label>
+                        <ProductPhotoField
+                          image={productImage}
+                          onUploaded={(image) => {
+                            setProductImage(image);
+                            setReceiveForm((current) => ({
+                              ...current,
+                              identity: {
+                                ...current.identity,
+                                pending_primary_media_upload_id: image.upload_id,
+                                remove_primary_image: false,
+                                image_url: image.large_url,
+                              },
+                            }));
+                          }}
+                          onRemove={() => {
+                            setProductImage(null);
+                            setReceiveForm((current) => ({
+                              ...current,
+                              identity: {
+                                ...current.identity,
+                                pending_primary_media_upload_id: '',
+                                remove_primary_image: Boolean(current.identity.product_id || current.identity.image_url),
+                                image_url: '',
+                              },
+                            }));
+                          }}
+                        />
+                      </div>
                     </div>
                   </div>
 

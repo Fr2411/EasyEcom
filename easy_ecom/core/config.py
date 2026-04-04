@@ -130,6 +130,12 @@ class Settings:
     paypal_plan_scale_monthly: str = field(default_factory=lambda: os.getenv("PAYPAL_PLAN_SCALE_MONTHLY", "").strip())
     paypal_price_growth_monthly_amount: str = field(default_factory=lambda: os.getenv("PAYPAL_PRICE_GROWTH_MONTHLY_AMOUNT", "").strip())
     paypal_price_scale_monthly_amount: str = field(default_factory=lambda: os.getenv("PAYPAL_PRICE_SCALE_MONTHLY_AMOUNT", "").strip())
+    aws_region: str = field(default_factory=lambda: os.getenv("AWS_REGION", "").strip() or "us-east-1")
+    product_media_s3_bucket: str = field(default_factory=lambda: os.getenv("PRODUCT_MEDIA_S3_BUCKET", "").strip())
+    product_media_s3_prefix: str = field(default_factory=lambda: os.getenv("PRODUCT_MEDIA_S3_PREFIX", "clients").strip() or "clients")
+    product_media_staged_ttl_hours: int = field(
+        default_factory=lambda: _to_int(os.getenv("PRODUCT_MEDIA_STAGED_TTL_HOURS"), 24)
+    )
 
     @property
     def postgres_dsn(self) -> str:

@@ -20,6 +20,7 @@ export class ApiNetworkError extends Error {
 export async function apiClient<T>(path: string, init?: RequestInit): Promise<T> {
   const { apiBaseUrl } = getPublicEnv();
   const url = `${apiBaseUrl}${path}`;
+  const isFormData = typeof FormData !== 'undefined' && init?.body instanceof FormData;
 
   let response: Response;
   try {
@@ -28,7 +29,7 @@ export async function apiClient<T>(path: string, init?: RequestInit): Promise<T>
       credentials: 'include',
       cache: 'no-store',
       headers: {
-        'Content-Type': 'application/json',
+        ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
         ...(init?.headers ?? {}),
       },
     });
