@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { FormEvent, useEffect, useMemo, useState, useTransition } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { FormEvent, Fragment, useEffect, useMemo, useState, useTransition } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/components/auth/auth-provider';
 import {
   createInventoryAdjustment,
@@ -15,6 +15,7 @@ import type {
   InventoryAdjustmentPayload,
   InventoryIntakeExactVariantMatch,
   InventoryIntakeIdentityInput,
+  InventoryStockRow,
   ReceiveStockLineInput,
   ReceiveStockPayload,
 } from '@/types/inventory';
@@ -31,6 +32,20 @@ import { ProductPhotoField } from '@/components/commerce/product-photo-field';
 
 
 type InventoryTab = 'stock' | 'receive' | 'adjust' | 'low-stock';
+
+type InventoryProductGroup = {
+  product_id: string;
+  product_name: string;
+  supplier: string;
+  category: string;
+  image_url: string;
+  image: ProductMedia | null;
+  on_hand: number;
+  reserved: number;
+  available_to_sell: number;
+  low_stock_count: number;
+  variants: InventoryStockRow[];
+};
 
 type IntakeGeneratorState = {
   size_values: string;
@@ -284,8 +299,42 @@ function productVariantCount(product: CatalogProduct) {
   return product.variants.length;
 }
 
+function toNumber(value: string) {
+  return Number(value || '0');
+}
+
+export function deriveInventoryProductGroups(items: InventoryStockRow[]): InventoryProductGroup[] {
+  const groups = new Map<string, InventoryProductGroup>();
+  items.forEach((item) => {
+    const existing = groups.get(item.product_id);
+    if (existing) {
+      existing.variants.push(item);
+      existing.on_hand += toNumber(item.on_hand);
+      existing.reserved += toNumber(item.reserved);
+      existing.available_to_sell += toNumber(item.available_to_sell);
+      existing.low_stock_count += item.low_stock ? 1 : 0;
+      return;
+    }
+    groups.set(item.product_id, {
+      product_id: item.product_id,
+      product_name: item.product_name,
+      supplier: item.supplier,
+      category: item.category,
+      image_url: item.image_url,
+      image: item.image,
+      on_hand: toNumber(item.on_hand),
+      reserved: toNumber(item.reserved),
+      available_to_sell: toNumber(item.available_to_sell),
+      low_stock_count: item.low_stock ? 1 : 0,
+      variants: [item],
+    });
+  });
+  return Array.from(groups.values()).sort((left, right) => left.product_name.localeCompare(right.product_name));
+}
+
 export function InventoryWorkspace() {
   const { user } = useAuth();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const searchKey = searchParams.toString();
   const [activeTab, setActiveTab] = useState<InventoryTab>('stock');
@@ -302,6 +351,9 @@ export function InventoryWorkspace() {
   const [error, setError] = useState('');
   const [lookupPending, setLookupPending] = useState(false);
   const [submitPending, setSubmitPending] = useState(false);
+  const [expandedProducts, setExpandedProducts] = useState<Record<string, boolean>>({});
+  const [openQuickActionsFor, setOpenQuickActionsFor] = useState<string | null>(null);
+  const [adjustmentProductId, setAdjustmentProductId] = useState<string>('');
   const [isPending, startTransition] = useTransition();
   const intakeRecommendation = deriveIntakeRecommendation(intakeResults);
   const exactVariantMatches = intakeResults?.exact_variants ?? [];
@@ -313,6 +365,16 @@ export function InventoryWorkspace() {
     return intakeResults.product_matches.filter((product) => !exactProductIds.has(product.product_id));
   }, [intakeResults]);
   const newProductSuggestion = intakeResults?.suggested_new_product ?? null;
+  const productGroups = useMemo(
+    () => deriveInventoryProductGroups(workspace?.stock_items ?? []),
+    [workspace?.stock_items],
+  );
+  const adjustmentOptions = useMemo(() => {
+    if (!adjustmentProductId || !workspace?.stock_items.length) {
+      return workspace?.stock_items ?? [];
+    }
+    return workspace.stock_items.filter((item) => item.product_id === adjustmentProductId);
+  }, [adjustmentProductId, workspace?.stock_items]);
 
   const loadWorkspace = (query = '') => {
     startTransition(async () => {
@@ -348,6 +410,41 @@ export function InventoryWorkspace() {
     setIntakeResults(null);
     setIntakeQuery('');
     setProductImage(null);
+  };
+
+  const beginAdjustmentForProduct = (productGroup: InventoryProductGroup) => {
+    setAdjustmentProductId(productGroup.product_id);
+    setAdjustmentForm({
+      ...EMPTY_ADJUSTMENT,
+      variant_id: productGroup.variants.length === 1 ? productGroup.variants[0].variant_id : '',
+    });
+    setActiveTab('adjust');
+    setNotice(
+      productGroup.variants.length === 1
+        ? `Adjustment opened for ${productGroup.product_name}.`
+        : `Select the variant to adjust for ${productGroup.product_name}.`,
+    );
+    setError('');
+  };
+
+  const beginReceiveForProduct = (productGroup: InventoryProductGroup) => {
+    const matchingProduct = intakeResults?.product_matches.find((item) => item.product_id === productGroup.product_id) ?? selectedProduct;
+    if (matchingProduct && matchingProduct.product_id === productGroup.product_id) {
+      beginExistingProduct(
+        matchingProduct,
+        matchingProduct.variants.length === 1 ? [lineFromExistingVariant(matchingProduct.variants[0])] : [],
+      );
+      setActiveTab('receive');
+      setOpenQuickActionsFor(null);
+      return;
+    }
+    void openQuickReceive(productGroup.variants[0]?.sku || productGroup.product_name);
+    setOpenQuickActionsFor(null);
+  };
+
+  const beginModifyProduct = (productGroup: InventoryProductGroup) => {
+    setOpenQuickActionsFor(null);
+    router.push(`/catalog?q=${encodeURIComponent(productGroup.product_name)}&product_id=${encodeURIComponent(productGroup.product_id)}&edit=1`);
   };
 
   const beginNewProduct = (seed?: { product_name: string; sku_root: string } | null) => {
@@ -603,15 +700,28 @@ export function InventoryWorkspace() {
           </span>
         }
         actions={
-          <form className="workspace-search" onSubmit={onSearch}>
-            <input
-              type="search"
-              value={queryInput}
-              placeholder="Search available stock"
-              onChange={(event) => setQueryInput(event.target.value)}
-            />
-            <button type="submit">Search</button>
-          </form>
+          <div className="inventory-panel-actions">
+            <form className="workspace-search" onSubmit={onSearch}>
+              <input
+                type="search"
+                value={queryInput}
+                placeholder="Search available stock"
+                onChange={(event) => setQueryInput(event.target.value)}
+              />
+              <button type="submit">Search</button>
+            </form>
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => {
+                beginNewProduct(null);
+                setActiveTab('receive');
+                setOpenQuickActionsFor(null);
+              }}
+            >
+              Add New Product
+            </button>
+          </div>
         }
       >
         {notice ? <WorkspaceNotice tone="success">{notice}</WorkspaceNotice> : null}
@@ -619,43 +729,125 @@ export function InventoryWorkspace() {
         {isPending && !workspace ? <WorkspaceNotice>Loading inventory…</WorkspaceNotice> : null}
 
         {activeTab === 'stock' ? (
-          workspace?.stock_items.length ? (
+          productGroups.length ? (
             <div className="table-scroll">
-              <table className="workspace-table">
+              <table className="workspace-table inventory-grouped-table">
                 <thead>
                   <tr>
-                    <th>Variant</th>
+                    <th>Product</th>
                     <th>Supplier</th>
                     <th>On Hand</th>
                     <th>Reserved</th>
                     <th>Available</th>
-                    <th>Unit Cost</th>
-                    <th>Unit Price</th>
+                    <th>Variants</th>
+                    <th>Alerts</th>
                     <th>Quick Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {workspace.stock_items.map((item) => (
-                    <tr key={item.variant_id}>
-                      <td>{item.label}</td>
-                      <td>{item.supplier || 'No supplier'}</td>
-                      <td>{formatQuantity(item.on_hand)}</td>
-                      <td>{formatQuantity(item.reserved)}</td>
-                      <td>{formatQuantity(item.available_to_sell)}</td>
-                      <td>{formatMoney(item.unit_cost)}</td>
-                      <td>{formatMoney(item.unit_price)}</td>
-                      <td>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            void openQuickReceive(item.sku);
-                          }}
-                        >
-                          Receive
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {productGroups.map((group) => {
+                    const isExpanded = Boolean(expandedProducts[group.product_id]);
+                    const isMenuOpen = openQuickActionsFor === group.product_id;
+                    return (
+                      <Fragment key={group.product_id}>
+                        <tr key={group.product_id} className="inventory-product-row">
+                          <td>
+                            <div className="inventory-product-cell">
+                              <button
+                                type="button"
+                                className="inventory-expand-button"
+                                onClick={() =>
+                                  setExpandedProducts((current) => ({
+                                    ...current,
+                                    [group.product_id]: !current[group.product_id],
+                                  }))
+                                }
+                                aria-expanded={isExpanded}
+                              >
+                                {isExpanded ? '−' : '+'}
+                              </button>
+                              {group.image?.thumbnail_url ? (
+                                <img
+                                  className="inventory-product-thumb"
+                                  src={group.image.thumbnail_url}
+                                  alt={group.product_name}
+                                />
+                              ) : (
+                                <div className="inventory-product-thumb placeholder" aria-hidden="true">
+                                  {group.product_name.charAt(0).toUpperCase()}
+                                </div>
+                              )}
+                              <div>
+                                <strong>{group.product_name}</strong>
+                                <p>{group.category || 'Uncategorized'}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td>{group.supplier || 'No supplier'}</td>
+                          <td>{formatQuantity(group.on_hand.toFixed(3))}</td>
+                          <td>{formatQuantity(group.reserved.toFixed(3))}</td>
+                          <td>{formatQuantity(group.available_to_sell.toFixed(3))}</td>
+                          <td>{group.variants.length}</td>
+                          <td>{group.low_stock_count ? `${group.low_stock_count} low` : 'Clear'}</td>
+                          <td>
+                            <div className="quick-actions-menu">
+                              <button
+                                type="button"
+                                onClick={() => setOpenQuickActionsFor((current) => current === group.product_id ? null : group.product_id)}
+                              >
+                                Quick Actions
+                              </button>
+                              {isMenuOpen ? (
+                                <div className="quick-actions-popover">
+                                  <button type="button" onClick={() => beginReceiveForProduct(group)}>Receive Stock</button>
+                                  <button type="button" onClick={() => beginAdjustmentForProduct(group)}>Adjustment</button>
+                                  <button type="button" onClick={() => beginModifyProduct(group)}>Modify</button>
+                                </div>
+                              ) : null}
+                            </div>
+                          </td>
+                        </tr>
+                        {isExpanded ? (
+                          <tr className="inventory-variant-container-row">
+                            <td colSpan={8}>
+                              <div className="inventory-variant-table-wrap">
+                                <table className="workspace-table inventory-variant-table">
+                                  <thead>
+                                    <tr>
+                                      <th>Variant</th>
+                                      <th>SKU</th>
+                                      <th>Barcode</th>
+                                      <th>On Hand</th>
+                                      <th>Reserved</th>
+                                      <th>Available</th>
+                                      <th>Unit Cost</th>
+                                      <th>Unit Price</th>
+                                      <th>Status</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {group.variants.map((variant) => (
+                                      <tr key={variant.variant_id} className="inventory-variant-row">
+                                        <td>{variant.label}</td>
+                                        <td>{variant.sku}</td>
+                                        <td>{variant.barcode || 'No barcode'}</td>
+                                        <td>{formatQuantity(variant.on_hand)}</td>
+                                        <td>{formatQuantity(variant.reserved)}</td>
+                                        <td>{formatQuantity(variant.available_to_sell)}</td>
+                                        <td>{formatMoney(variant.unit_cost)}</td>
+                                        <td>{formatMoney(variant.unit_price)}</td>
+                                        <td>{variant.low_stock ? 'Low stock' : 'Normal'}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </td>
+                          </tr>
+                        ) : null}
+                      </Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1345,7 +1537,7 @@ export function InventoryWorkspace() {
                   required
                 >
                   <option value="">Select a variant</option>
-                  {workspace?.stock_items.map((item) => (
+                  {adjustmentOptions.map((item) => (
                     <option key={item.variant_id} value={item.variant_id}>
                       {item.label}
                     </option>

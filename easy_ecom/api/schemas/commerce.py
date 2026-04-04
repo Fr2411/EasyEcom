@@ -183,6 +183,8 @@ class InventoryStockRowResponse(BaseModel):
     variant_id: str
     product_id: str
     product_name: str
+    image_url: str = ""
+    image: ProductImageResponse | None = None
     label: str
     sku: str
     barcode: str
