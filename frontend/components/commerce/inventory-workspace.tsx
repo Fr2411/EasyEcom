@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { FormEvent, Fragment, useEffect, useMemo, useState, useTransition } from 'react';
+import { FormEvent, Fragment, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/components/auth/auth-provider';
 import {
@@ -353,12 +353,15 @@ export function InventoryWorkspace() {
   const [submitPending, setSubmitPending] = useState(false);
   const [expandedProducts, setExpandedProducts] = useState<Record<string, boolean>>({});
   const [openQuickActionsFor, setOpenQuickActionsFor] = useState<string | null>(null);
+  const [quickActionsPosition, setQuickActionsPosition] = useState<{ top: number; left: number } | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [supplierFilter, setSupplierFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [stockFilter, setStockFilter] = useState<'all' | 'normal' | 'low' | 'out'>('all');
   const [adjustmentProductId, setAdjustmentProductId] = useState<string>('');
   const [isPending, startTransition] = useTransition();
+  const quickActionsMenuRef = useRef<HTMLDivElement | null>(null);
+  const quickActionsButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const intakeRecommendation = deriveIntakeRecommendation(intakeResults);
   const exactVariantMatches = intakeResults?.exact_variants ?? [];
   const visibleProductMatches = useMemo(() => {
@@ -388,6 +391,10 @@ export function InventoryWorkspace() {
       return supplierMatch && categoryMatch && stockMatch;
     });
   }, [categoryFilter, productGroups, stockFilter, supplierFilter]);
+  const openQuickActionGroup = useMemo(
+    () => filteredProductGroups.find((group) => group.product_id === openQuickActionsFor) ?? null,
+    [filteredProductGroups, openQuickActionsFor],
+  );
   const adjustmentOptions = useMemo(() => {
     if (!adjustmentProductId || !workspace?.stock_items.length) {
       return workspace?.stock_items ?? [];
@@ -407,6 +414,37 @@ export function InventoryWorkspace() {
     });
   };
 
+  const positionQuickActionsMenu = (button: HTMLButtonElement) => {
+    const rect = button.getBoundingClientRect();
+    const horizontalMargin = 8;
+    const verticalMargin = 8;
+    const estimatedWidth = 176;
+    const estimatedHeight = 156;
+    let left = rect.right - estimatedWidth;
+    if (left < horizontalMargin) {
+      left = rect.left;
+    }
+    left = Math.min(left, window.innerWidth - estimatedWidth - horizontalMargin);
+    left = Math.max(horizontalMargin, left);
+    let top = rect.bottom + verticalMargin;
+    if (top + estimatedHeight > window.innerHeight - verticalMargin) {
+      top = rect.top - estimatedHeight - verticalMargin;
+    }
+    top = Math.max(verticalMargin, top);
+    setQuickActionsPosition({ top, left });
+  };
+
+  const toggleQuickActions = (productId: string, button: HTMLButtonElement) => {
+    setOpenQuickActionsFor((current) => {
+      if (current === productId) {
+        setQuickActionsPosition(null);
+        return null;
+      }
+      positionQuickActionsMenu(button);
+      return productId;
+    });
+  };
+
   useEffect(() => {
     const query = searchParams.get('q') ?? '';
     const tab = searchParams.get('tab');
@@ -416,6 +454,39 @@ export function InventoryWorkspace() {
     }
     loadWorkspace(query);
   }, [searchKey]);
+
+  useEffect(() => {
+    if (!openQuickActionsFor) {
+      return;
+    }
+    const button = quickActionsButtonRefs.current[openQuickActionsFor];
+    if (!button) {
+      setOpenQuickActionsFor(null);
+      setQuickActionsPosition(null);
+      return;
+    }
+    const reposition = () => positionQuickActionsMenu(button);
+    reposition();
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (quickActionsMenuRef.current?.contains(target)) {
+        return;
+      }
+      if (button.contains(target)) {
+        return;
+      }
+      setOpenQuickActionsFor(null);
+      setQuickActionsPosition(null);
+    };
+    window.addEventListener('resize', reposition);
+    window.addEventListener('scroll', reposition, true);
+    document.addEventListener('mousedown', closeOnOutsideClick);
+    return () => {
+      window.removeEventListener('resize', reposition);
+      window.removeEventListener('scroll', reposition, true);
+      document.removeEventListener('mousedown', closeOnOutsideClick);
+    };
+  }, [openQuickActionsFor]);
 
   const onSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -864,17 +935,15 @@ export function InventoryWorkspace() {
                             <div className="quick-actions-menu">
                               <button
                                 type="button"
-                                onClick={() => setOpenQuickActionsFor((current) => current === group.product_id ? null : group.product_id)}
+                                ref={(node) => {
+                                  quickActionsButtonRefs.current[group.product_id] = node;
+                                }}
+                                onClick={(event) => toggleQuickActions(group.product_id, event.currentTarget)}
+                                aria-expanded={isMenuOpen}
+                                aria-haspopup="menu"
                               >
                                 More
                               </button>
-                              {isMenuOpen ? (
-                                <div className="quick-actions-popover">
-                                  <button type="button" onClick={() => beginReceiveForProduct(group)}>Receive Stock</button>
-                                  <button type="button" onClick={() => beginAdjustmentForProduct(group)}>Adjustment</button>
-                                  <button type="button" onClick={() => beginModifyProduct(group)}>Modify</button>
-                                </div>
-                              ) : null}
                             </div>
                           </td>
                         </tr>
@@ -958,6 +1027,18 @@ export function InventoryWorkspace() {
               }
             />
           )
+        ) : null}
+        {openQuickActionGroup && quickActionsPosition ? (
+          <div
+            ref={quickActionsMenuRef}
+            className="quick-actions-popover quick-actions-popover-floating"
+            style={{ top: quickActionsPosition.top, left: quickActionsPosition.left }}
+            role="menu"
+          >
+            <button type="button" onClick={() => beginReceiveForProduct(openQuickActionGroup)}>Receive Stock</button>
+            <button type="button" onClick={() => beginAdjustmentForProduct(openQuickActionGroup)}>Adjustment</button>
+            <button type="button" onClick={() => beginModifyProduct(openQuickActionGroup)}>Modify</button>
+          </div>
         ) : null}
 
         {activeTab === 'receive' ? (
