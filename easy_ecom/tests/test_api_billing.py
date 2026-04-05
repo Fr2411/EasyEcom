@@ -287,3 +287,35 @@ def test_paypal_webhook_idempotency_and_period_end_downgrade(monkeypatch, tmp_pa
     assert me_response.status_code == 200
     assert me_response.json()["billing_plan_code"] == "free"
     assert me_response.json()["billing_access_state"] == "free_active"
+
+
+def test_free_plan_owner_retains_finance_access(monkeypatch, tmp_path: Path) -> None:
+    runtime = _setup_runtime(tmp_path, monkeypatch)
+    _mock_paypal_request(monkeypatch)
+    _seed_owner(runtime, role_code="CLIENT_OWNER", email="owner@example.com")
+
+    client = _login("owner@example.com")
+    me_response = client.get("/auth/me")
+
+    assert me_response.status_code == 200
+    assert me_response.json()["billing_plan_code"] == "free"
+    assert "Finance" in me_response.json()["allowed_pages"]
+
+    finance_response = client.get("/finance/overview")
+    assert finance_response.status_code == 200
+
+
+def test_free_plan_client_staff_still_blocked_from_finance(monkeypatch, tmp_path: Path) -> None:
+    runtime = _setup_runtime(tmp_path, monkeypatch)
+    _mock_paypal_request(monkeypatch)
+    _seed_owner(runtime, role_code="CLIENT_STAFF", email="staff@example.com")
+
+    client = _login("staff@example.com")
+    me_response = client.get("/auth/me")
+
+    assert me_response.status_code == 200
+    assert me_response.json()["billing_plan_code"] == "free"
+    assert "Finance" not in me_response.json()["allowed_pages"]
+
+    finance_response = client.get("/finance/overview")
+    assert finance_response.status_code == 403

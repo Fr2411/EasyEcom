@@ -131,12 +131,12 @@ describe('BillingWorkspace', () => {
   });
 
   test('renders PayPal CTA for a free tenant upgrading into a paid plan', async () => {
-    mockGetBillingSubscription.mockResolvedValue(subscriptionFixture({ plan_code: 'free', plan_name: 'Free', billing_status: 'free', billing_access_state: 'free_active', provider_customer_id: null, provider_subscription_id: null, can_upgrade: true, can_manage_subscription: false, paid_modules_locked: ['Finance', 'Reports'] }));
+    mockGetBillingSubscription.mockResolvedValue(subscriptionFixture({ plan_code: 'free', plan_name: 'Free', billing_status: 'free', billing_access_state: 'free_active', provider_customer_id: null, provider_subscription_id: null, can_upgrade: true, can_manage_subscription: false, paid_modules_locked: ['Reports'] }));
     mockGetPublicBillingPlans.mockResolvedValue(plansFixture());
 
     render(<BillingWorkspace />);
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Start Growth' })).toBeTruthy());
-    expect(screen.getByText('Finance')).toBeTruthy();
+    expect(screen.getByText('Reports')).toBeTruthy();
   });
 });
