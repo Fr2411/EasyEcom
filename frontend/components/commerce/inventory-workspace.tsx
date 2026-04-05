@@ -353,6 +353,10 @@ export function InventoryWorkspace() {
   const [submitPending, setSubmitPending] = useState(false);
   const [expandedProducts, setExpandedProducts] = useState<Record<string, boolean>>({});
   const [openQuickActionsFor, setOpenQuickActionsFor] = useState<string | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [supplierFilter, setSupplierFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [stockFilter, setStockFilter] = useState<'all' | 'normal' | 'low' | 'out'>('all');
   const [adjustmentProductId, setAdjustmentProductId] = useState<string>('');
   const [isPending, startTransition] = useTransition();
   const intakeRecommendation = deriveIntakeRecommendation(intakeResults);
@@ -369,6 +373,21 @@ export function InventoryWorkspace() {
     () => deriveInventoryProductGroups(workspace?.stock_items ?? []),
     [workspace?.stock_items],
   );
+  const filteredProductGroups = useMemo(() => {
+    return productGroups.filter((group) => {
+      const supplierMatch = !supplierFilter.trim() || group.supplier.toLowerCase().includes(supplierFilter.trim().toLowerCase());
+      const categoryMatch = !categoryFilter.trim() || group.category.toLowerCase().includes(categoryFilter.trim().toLowerCase());
+      const stockMatch =
+        stockFilter === 'all'
+          ? true
+          : stockFilter === 'low'
+            ? group.low_stock_count > 0
+            : stockFilter === 'out'
+              ? group.available_to_sell <= 0
+              : group.low_stock_count === 0 && group.available_to_sell > 0;
+      return supplierMatch && categoryMatch && stockMatch;
+    });
+  }, [categoryFilter, productGroups, stockFilter, supplierFilter]);
   const adjustmentOptions = useMemo(() => {
     if (!adjustmentProductId || !workspace?.stock_items.length) {
       return workspace?.stock_items ?? [];
@@ -677,7 +696,14 @@ export function InventoryWorkspace() {
   const templateDisabled = !hasTemplateEligibleLine(receiveForm.lines);
 
   return (
-    <div className="workspace-stack">
+    <div className="workspace-stack inventory-command-center">
+      <div className="inventory-breadcrumb">
+        <Link href="/dashboard">Home</Link>
+        <span>/</span>
+        <span>Commerce</span>
+        <span>/</span>
+        <strong>Inventory</strong>
+      </div>
       <WorkspaceTabs
         tabs={[
           { id: 'stock', label: 'Available Stock' },
@@ -705,11 +731,19 @@ export function InventoryWorkspace() {
               <input
                 type="search"
                 value={queryInput}
-                placeholder="Search available stock"
+                placeholder="Search products, variants, SKU, or barcode (Cmd/Ctrl+K)"
                 onChange={(event) => setQueryInput(event.target.value)}
               />
               <button type="submit">Search</button>
             </form>
+            <button
+              type="button"
+              className="btn-secondary"
+              aria-expanded={filtersOpen}
+              onClick={() => setFiltersOpen((current) => !current)}
+            >
+              {filtersOpen ? 'Hide Filters' : 'Filters'}
+            </button>
             <button
               type="button"
               className="btn-primary"
@@ -727,9 +761,38 @@ export function InventoryWorkspace() {
         {notice ? <WorkspaceNotice tone="success">{notice}</WorkspaceNotice> : null}
         {error ? <WorkspaceNotice tone="error">{error}</WorkspaceNotice> : null}
         {isPending && !workspace ? <WorkspaceNotice>Loading inventory…</WorkspaceNotice> : null}
+        {filtersOpen ? (
+          <section className="inventory-filters" aria-label="Inventory filters">
+            <label>
+              Supplier
+              <input
+                value={supplierFilter}
+                onChange={(event) => setSupplierFilter(event.target.value)}
+                placeholder="Filter by supplier"
+              />
+            </label>
+            <label>
+              Category
+              <input
+                value={categoryFilter}
+                onChange={(event) => setCategoryFilter(event.target.value)}
+                placeholder="Filter by category"
+              />
+            </label>
+            <label>
+              Stock status
+              <select value={stockFilter} onChange={(event) => setStockFilter(event.target.value as typeof stockFilter)}>
+                <option value="all">All</option>
+                <option value="normal">Healthy</option>
+                <option value="low">Low stock</option>
+                <option value="out">Out of stock</option>
+              </select>
+            </label>
+          </section>
+        ) : null}
 
         {activeTab === 'stock' ? (
-          productGroups.length ? (
+          filteredProductGroups.length ? (
             <div className="table-scroll">
               <table className="workspace-table inventory-grouped-table">
                 <thead>
@@ -745,7 +808,7 @@ export function InventoryWorkspace() {
                   </tr>
                 </thead>
                 <tbody>
-                  {productGroups.map((group) => {
+                  {filteredProductGroups.map((group) => {
                     const isExpanded = Boolean(expandedProducts[group.product_id]);
                     const isMenuOpen = openQuickActionsFor === group.product_id;
                     return (
@@ -788,14 +851,22 @@ export function InventoryWorkspace() {
                           <td>{formatQuantity(group.reserved.toFixed(3))}</td>
                           <td>{formatQuantity(group.available_to_sell.toFixed(3))}</td>
                           <td>{group.variants.length}</td>
-                          <td>{group.low_stock_count ? `${group.low_stock_count} low` : 'Clear'}</td>
+                          <td>
+                            {group.available_to_sell <= 0 ? (
+                              <span className="inventory-status-badge out">Out</span>
+                            ) : group.low_stock_count ? (
+                              <span className="inventory-status-badge low">{group.low_stock_count} low</span>
+                            ) : (
+                              <span className="inventory-status-badge healthy">Healthy</span>
+                            )}
+                          </td>
                           <td>
                             <div className="quick-actions-menu">
                               <button
                                 type="button"
                                 onClick={() => setOpenQuickActionsFor((current) => current === group.product_id ? null : group.product_id)}
                               >
-                                Quick Actions
+                                More
                               </button>
                               {isMenuOpen ? (
                                 <div className="quick-actions-popover">
@@ -854,7 +925,15 @@ export function InventoryWorkspace() {
                                         <td>{formatQuantity(variant.available_to_sell)}</td>
                                         <td>{formatMoney(variant.unit_cost)}</td>
                                         <td>{formatMoney(variant.unit_price)}</td>
-                                        <td>{variant.low_stock ? 'Low stock' : 'Normal'}</td>
+                                        <td>
+                                          {toNumber(variant.available_to_sell) <= 0 ? (
+                                            <span className="inventory-status-badge out">Out</span>
+                                          ) : variant.low_stock ? (
+                                            <span className="inventory-status-badge low">Low</span>
+                                          ) : (
+                                            <span className="inventory-status-badge healthy">Normal</span>
+                                          )}
+                                        </td>
                                       </tr>
                                     ))}
                                   </tbody>
@@ -871,8 +950,12 @@ export function InventoryWorkspace() {
             </div>
           ) : (
             <WorkspaceEmpty
-              title="No available stock"
-              message="Receive stock or return sellable items to bring variants back into the operating list."
+              title={productGroups.length ? 'No stock matches the current filters' : 'No available stock'}
+              message={
+                productGroups.length
+                  ? 'Adjust supplier, category, or stock filters to see more products.'
+                  : 'Receive stock or return sellable items to bring variants back into the operating list.'
+              }
             />
           )
         ) : null}
