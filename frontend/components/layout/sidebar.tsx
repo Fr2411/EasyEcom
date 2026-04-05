@@ -59,10 +59,6 @@ export function Sidebar({
             </button>
           </div>
         </div>
-        <div className="brand-badge-row">
-          <span className="brand-badge">LIVE</span>
-          <span className="brand-badge muted">COMMERCE</span>
-        </div>
         <h1 className="brand-title">Command Center</h1>
         <p className="brand-subtitle">Sales, inventory, and operations in one disciplined workspace.</p>
         <div className="sidebar-user-card">
