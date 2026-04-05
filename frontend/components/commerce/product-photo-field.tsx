@@ -155,7 +155,7 @@ export function ProductPhotoField({ image, onUploaded, onRemove }: ProductPhotoF
         if (!cancelled) {
           readyTimeout = window.setTimeout(() => {
             if (!cancelled && !(video.videoWidth > 0 && video.videoHeight > 0)) {
-              setError('Live preview is not available on this browser. Use the fallback capture control below.');
+              setError('Camera preview is not available on this browser. Use the fallback capture control below.');
               setIsStartingCamera(false);
             }
           }, 1500);

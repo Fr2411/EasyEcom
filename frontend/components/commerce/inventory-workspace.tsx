@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { FormEvent, Fragment, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { createPortal } from 'react-dom';
 import { useAuth } from '@/components/auth/auth-provider';
 import {
   createInventoryAdjustment,
@@ -771,8 +772,6 @@ export function InventoryWorkspace() {
       <div className="inventory-breadcrumb">
         <Link href="/dashboard">Home</Link>
         <span>/</span>
-        <span>Commerce</span>
-        <span>/</span>
         <strong>Inventory</strong>
       </div>
       <WorkspaceTabs
@@ -1028,18 +1027,21 @@ export function InventoryWorkspace() {
             />
           )
         ) : null}
-        {openQuickActionGroup && quickActionsPosition ? (
-          <div
-            ref={quickActionsMenuRef}
-            className="quick-actions-popover quick-actions-popover-floating"
-            style={{ top: quickActionsPosition.top, left: quickActionsPosition.left }}
-            role="menu"
-          >
-            <button type="button" onClick={() => beginReceiveForProduct(openQuickActionGroup)}>Receive Stock</button>
-            <button type="button" onClick={() => beginAdjustmentForProduct(openQuickActionGroup)}>Adjustment</button>
-            <button type="button" onClick={() => beginModifyProduct(openQuickActionGroup)}>Modify</button>
-          </div>
-        ) : null}
+        {openQuickActionGroup && quickActionsPosition && typeof document !== 'undefined'
+          ? createPortal(
+              <div
+                ref={quickActionsMenuRef}
+                className="quick-actions-popover quick-actions-popover-floating"
+                style={{ top: quickActionsPosition.top, left: quickActionsPosition.left }}
+                role="menu"
+              >
+                <button type="button" onClick={() => beginReceiveForProduct(openQuickActionGroup)}>Receive Stock</button>
+                <button type="button" onClick={() => beginAdjustmentForProduct(openQuickActionGroup)}>Adjustment</button>
+                <button type="button" onClick={() => beginModifyProduct(openQuickActionGroup)}>Modify</button>
+              </div>,
+              document.body,
+            )
+          : null}
 
         {activeTab === 'receive' ? (
           <div className="workspace-stack">
