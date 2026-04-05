@@ -41,7 +41,7 @@ export function PublicFooter() {
             <EasyEcomLogo className="easyecom-logo" imageClassName="easyecom-logo-image" />
             <div>
               <strong>EasyEcom</strong>
-              <span>Commerce operating system</span>
+              <span>Business operating system</span>
             </div>
           </Link>
         </div>
