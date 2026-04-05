@@ -76,7 +76,7 @@ function getHeaderContext(pathname: string): HeaderContext {
         subtitle: 'Stock control',
         summary: 'Track on-hand stock, receive goods, and keep the ledger consistent across locations.',
         searchScope: 'inventory',
-        actionLabel: 'Open purchases',
+        actionLabel: 'View purchases',
         actionHref: '/purchases',
       };
     case '/sales':
@@ -297,7 +297,7 @@ export function TopHeader({ onOpenNavigation }: { onOpenNavigation?: () => void 
       </form>
       <div className="header-utilities">
         <ThemeToggle />
-        <span className="header-pill">Ready</span>
+        <span className="header-pill">Active</span>
         <button
           type="button"
           className="header-btn"
