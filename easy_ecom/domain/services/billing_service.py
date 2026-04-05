@@ -28,7 +28,6 @@ from easy_ecom.domain.models.auth import AuthenticatedUser
 PAID_ONLY_PAGES: tuple[str, ...] = (
     "Purchases",
     "Customers",
-    "Finance",
     "Reports",
     "Integrations",
     "Sales Agent",
@@ -41,6 +40,7 @@ FREE_ALLOWED_PAGES: tuple[str, ...] = (
     "Catalog",
     "Inventory",
     "Sales",
+    "Finance",
     "Returns",
     "Settings",
 )

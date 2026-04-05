@@ -58,13 +58,13 @@ describe('BillingStatusPage', () => {
       provider_subscription_id: 'I-123',
       can_upgrade: false,
       can_manage_subscription: true,
-      paid_modules_locked: ['Finance', 'Reports'],
+      paid_modules_locked: ['Reports'],
     });
 
     render(<BillingStatusPage mode="cancel" />);
 
     await waitFor(() => expect(screen.getByText('Billing cancelled')).toBeTruthy());
     expect(screen.getAllByText('Read-only grace').length).toBeGreaterThan(0);
-    expect(screen.getByText('2 paid modules are currently locked.')).toBeTruthy();
+    expect(screen.getByText('1 paid modules are currently locked.')).toBeTruthy();
   });
 });
