@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { uploadStagedProductMedia } from '@/lib/api/commerce';
 import type { ProductMedia } from '@/types/catalog';
 
@@ -73,7 +73,7 @@ export function ProductPhotoField({ image, onUploaded, onRemove }: ProductPhotoF
   const fallbackCaptureId = useId();
   const uploadRef = useRef<HTMLInputElement | null>(null);
   const fallbackCaptureRef = useRef<HTMLInputElement | null>(null);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [error, setError] = useState('');
   const [isUploading, setIsUploading] = useState(false);
@@ -84,9 +84,9 @@ export function ProductPhotoField({ image, onUploaded, onRemove }: ProductPhotoF
   const stopCamera = () => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
-    if (videoRef.current) {
-      videoRef.current.pause();
-      videoRef.current.srcObject = null;
+    if (videoElement) {
+      videoElement.pause();
+      videoElement.srcObject = null;
     }
     setCameraReady(false);
   };
@@ -94,12 +94,13 @@ export function ProductPhotoField({ image, onUploaded, onRemove }: ProductPhotoF
   useEffect(() => stopCamera, []);
 
   useEffect(() => {
-    if (!isCameraOpen) {
+    if (!isCameraOpen || !videoElement) {
       stopCamera();
       return;
     }
 
     let cancelled = false;
+    let readyTimeout: number | null = null;
     const startCamera = async () => {
       setError('');
       setIsStartingCamera(true);
@@ -120,40 +121,69 @@ export function ProductPhotoField({ image, onUploaded, onRemove }: ProductPhotoF
           return;
         }
         streamRef.current = stream;
-        if (videoRef.current) {
-          const video = videoRef.current;
-          video.muted = true;
-          video.autoplay = true;
-          video.playsInline = true;
-          video.setAttribute('playsinline', 'true');
-          video.setAttribute('webkit-playsinline', 'true');
-          video.srcObject = stream;
-          await new Promise<void>((resolve) => {
-            const onLoadedMetadata = () => {
-              video.removeEventListener('loadedmetadata', onLoadedMetadata);
-              resolve();
-            };
-            video.addEventListener('loadedmetadata', onLoadedMetadata);
-          });
-          await video.play();
-          setCameraReady(true);
+        const video = videoElement;
+        const markReady = () => {
+          if (cancelled) {
+            return;
+          }
+          if (video.videoWidth > 0 && video.videoHeight > 0) {
+            setCameraReady(true);
+            setIsStartingCamera(false);
+          }
+        };
+        const clearReadyHandlers = () => {
+          video.removeEventListener('loadeddata', markReady);
+          video.removeEventListener('playing', markReady);
+        };
+        video.muted = true;
+        video.autoplay = true;
+        video.playsInline = true;
+        video.setAttribute('playsinline', 'true');
+        video.setAttribute('webkit-playsinline', 'true');
+        video.srcObject = stream;
+        video.addEventListener('loadeddata', markReady);
+        video.addEventListener('playing', markReady);
+        await new Promise<void>((resolve) => {
+          const onLoadedMetadata = () => {
+            video.removeEventListener('loadedmetadata', onLoadedMetadata);
+            resolve();
+          };
+          video.addEventListener('loadedmetadata', onLoadedMetadata);
+        });
+        await video.play();
+        markReady();
+        if (!cancelled) {
+          readyTimeout = window.setTimeout(() => {
+            if (!cancelled && !(video.videoWidth > 0 && video.videoHeight > 0)) {
+              setError('Live preview is not available on this browser. Use the fallback capture control below.');
+              setIsStartingCamera(false);
+            }
+          }, 1500);
         }
+        return clearReadyHandlers;
       } catch (cameraError) {
         setError(cameraError instanceof Error ? cameraError.message : 'Unable to open device camera.');
         setIsCameraOpen(false);
-      } finally {
-        if (!cancelled) {
-          setIsStartingCamera(false);
-        }
       }
+      return undefined;
     };
 
-    void startCamera();
+    let clearReadyHandlers: (() => void) | undefined;
+    const boot = async () => {
+      clearReadyHandlers = await startCamera();
+    };
+    void boot();
     return () => {
       cancelled = true;
+      if (readyTimeout) {
+        window.clearTimeout(readyTimeout);
+      }
+      clearReadyHandlers?.();
+      videoElement.removeAttribute('src');
+      videoElement.load();
       stopCamera();
     };
-  }, [isCameraOpen]);
+  }, [isCameraOpen, videoElement]);
 
   const uploadFile = async (file: File | null) => {
     if (!file) {
@@ -165,6 +195,7 @@ export function ProductPhotoField({ image, onUploaded, onRemove }: ProductPhotoF
       const optimizedFile = await normalizeUploadImage(file);
       const uploaded = await uploadStagedProductMedia(optimizedFile);
       onUploaded(uploaded);
+      setIsCameraOpen(false);
     } catch (uploadError) {
       setError(
         uploadError instanceof Error
@@ -179,11 +210,11 @@ export function ProductPhotoField({ image, onUploaded, onRemove }: ProductPhotoF
   };
 
   const captureFromCamera = async () => {
-    if (!videoRef.current) {
+    if (!videoElement) {
       setError('Camera preview is not ready yet.');
       return;
     }
-    const video = videoRef.current;
+    const video = videoElement;
     if (!cameraReady || !streamRef.current?.active || !video.videoWidth || !video.videoHeight) {
       setError('Camera preview is not ready yet. If this keeps happening, use fallback capture below.');
       return;
@@ -219,8 +250,13 @@ export function ProductPhotoField({ image, onUploaded, onRemove }: ProductPhotoF
       fallbackCaptureRef.current?.click();
       return;
     }
+    setCameraReady(false);
     setIsCameraOpen(true);
   };
+
+  const attachVideoElement = useCallback((element: HTMLVideoElement | null) => {
+    setVideoElement(element);
+  }, []);
 
   return (
     <div className="product-photo-field">
@@ -281,7 +317,7 @@ export function ProductPhotoField({ image, onUploaded, onRemove }: ProductPhotoF
               {isStartingCamera ? (
                 <div className="product-photo-camera-placeholder">Opening camera…</div>
               ) : (
-                <video ref={videoRef} autoPlay playsInline muted />
+                <video ref={attachVideoElement} autoPlay playsInline muted />
               )}
             </div>
             {!cameraReady && !isStartingCamera ? (
