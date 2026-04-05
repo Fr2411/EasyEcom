@@ -210,6 +210,14 @@ export function FinanceWorkspace() {
       <WorkspaceNotice tone="info">
         Fulfilled sales and paid refunds post automatically. Use this workspace only for manual operating payments and expenses.
       </WorkspaceNotice>
+      <section className="finance-checklist" aria-label="Finance first-run checklist">
+        <h4>Finance first-run checklist</h4>
+        <ul>
+          <li>1. Post at least one sale from Sales so commerce-origin receivables appear.</li>
+          <li>2. Record manual operating cash movement here for expenses or adjustments.</li>
+          <li>3. Review receivables and refunds, then reconcile payables before period close.</li>
+        </ul>
+      </section>
       {notice ? <WorkspaceNotice tone="success">{notice}</WorkspaceNotice> : null}
       {error ? <WorkspaceNotice tone="error">{error}</WorkspaceNotice> : null}
 
@@ -271,7 +279,7 @@ export function FinanceWorkspace() {
                 />
               </label>
               <label>
-                Reference
+                Reference *
                 <input
                   value={draft.reference}
                   onChange={(event) => setDraft((current) => ({ ...current, reference: event.target.value }))}
@@ -279,7 +287,7 @@ export function FinanceWorkspace() {
                 />
               </label>
               <label>
-                Counterparty
+                Counterparty *
                 <input
                   value={draft.counterparty_name}
                   onChange={(event) => setDraft((current) => ({ ...current, counterparty_name: event.target.value }))}
@@ -308,7 +316,7 @@ export function FinanceWorkspace() {
                 </select>
               </label>
               <label>
-                Status
+                Status *
                 <select
                   value={draft.status}
                   onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value as FinanceDraft['status'] }))}
@@ -378,9 +386,10 @@ export function FinanceWorkspace() {
 
         <div className="finance-side-stack">
           <WorkspacePanel
-            title="Commerce-origin transactions"
+            title="Commerce-origin transactions (read-only)"
             description="These transactions are created by fulfillment or refund workflows and are read-only here."
           >
+            <p className="finance-role-chip">Owner / Finance staff</p>
             {commerceTransactions.length ? (
               <div className="finance-row-list">
                 {commerceTransactions.map((transaction) => {
@@ -415,15 +424,16 @@ export function FinanceWorkspace() {
             ) : (
               <WorkspaceEmpty
                 title="No commerce-origin transactions yet"
-                message="Fulfilled sales and paid refunds will appear here automatically after their native workflows post finance events."
+                message="Fulfilled sales and paid refunds will appear here automatically. Continue from Sales or Returns to create source transactions."
               />
             )}
           </WorkspacePanel>
 
           <WorkspacePanel
-            title="Manual finance transactions"
+            title="Manual finance transactions (editable)"
             description="Keep operating cash movement here. Manual entries remain editable."
           >
+            <p className="finance-role-chip">Owner / Finance staff</p>
             {manualTransactions.length ? (
               <div className="finance-row-list finance-row-list-tight">
                 {manualTransactions.map((transaction) => (
@@ -463,6 +473,7 @@ export function FinanceWorkspace() {
         title="Receivables and recent refunds"
         description="Revenue stays separate from cash collected. Refund payouts appear as their own finance events."
       >
+        <p className="finance-role-chip">Warehouse / General staff: monitor only</p>
         <div className="finance-two-up">
           <section className="finance-ledger-block">
             <header>
@@ -489,7 +500,7 @@ export function FinanceWorkspace() {
                 ))}
               </div>
             ) : (
-              <WorkspaceEmpty title="No outstanding receivables" message="Open customer balances will appear here once fulfilled sales are posted." />
+              <WorkspaceEmpty title="No outstanding receivables" message="Open customer balances will appear after sales are fulfilled. Go to Sales to post new receivables." />
             )}
           </section>
 
@@ -553,7 +564,7 @@ export function FinanceWorkspace() {
               ))}
             </div>
           ) : (
-            <WorkspaceEmpty title="No paid refunds yet" message="Refunds will appear here once return payment events are posted." />
+            <WorkspaceEmpty title="No paid refunds yet" message="Refunds appear after payout events are posted in Returns. Open Returns to continue." />
           )}
         </section>
       </WorkspacePanel>

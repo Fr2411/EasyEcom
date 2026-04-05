@@ -731,6 +731,33 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
 .delta-negative { color: var(--danger); font-weight: 600; }
 
 .finance-cards { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.finance-checklist {
+  border: 1px solid #c7d8f5;
+  background: #f5f9ff;
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 0.85rem;
+}
+.finance-checklist h4 {
+  margin: 0;
+  font-size: 0.92rem;
+}
+.finance-checklist ul {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.28rem;
+}
+.finance-role-chip {
+  margin: 0 0 0.55rem;
+  width: fit-content;
+  border: 1px solid #d9d9e3;
+  background: #f7f7fb;
+  color: #3f3f5f;
+  border-radius: 999px;
+  padding: 0.12rem 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
 .finance-module .ps-card p { margin: 0; color: var(--text-muted); font-size: 0.8rem; }
 .finance-module .ps-card strong { margin-top: 0.4rem; display: block; font-size: 1rem; }
 .finance-module .ps-card span { display: block; margin-top: 0.25rem; color: var(--text-muted); font-size: 0.78rem; }
