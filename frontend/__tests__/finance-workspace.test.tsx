@@ -128,8 +128,9 @@ describe('FinanceWorkspace', () => {
     render(<FinanceWorkspace />);
 
     await waitFor(() => expect(screen.getByText('Record manual finance entry')).toBeTruthy());
-    expect(screen.getByText('Commerce-origin transactions')).toBeTruthy();
-    expect(screen.getByText('Manual finance transactions')).toBeTruthy();
+    expect(screen.getByText('Finance first-run checklist')).toBeTruthy();
+    expect(screen.getByText('Commerce-origin transactions (read-only)')).toBeTruthy();
+    expect(screen.getByText('Manual finance transactions (editable)')).toBeTruthy();
     expect(screen.getByText('Receivables and recent refunds')).toBeTruthy();
     expect(screen.getAllByText('From Sales').length).toBeGreaterThan(0);
     expect(screen.getAllByText('From Returns').length).toBeGreaterThan(0);
@@ -170,7 +171,7 @@ describe('FinanceWorkspace', () => {
     fireEvent.change(screen.getByLabelText(/entry type/i), { target: { value: 'manual_expense' } });
     fireEvent.change(screen.getByLabelText(/^amount$/i), { target: { value: '75' } });
     fireEvent.change(screen.getByLabelText(/reference/i), { target: { value: 'BILL-2001' } });
-    fireEvent.change(screen.getByLabelText(/^counterparty$/i), { target: { value: 'FastShip' } });
+    fireEvent.change(screen.getByLabelText(/^counterparty \*/i), { target: { value: 'FastShip' } });
     fireEvent.change(screen.getByLabelText(/note/i), { target: { value: 'Courier invoice' } });
     fireEvent.change(screen.getByLabelText(/status/i), { target: { value: 'unpaid' } });
     fireEvent.click(screen.getByRole('button', { name: /record manual expense/i }));
