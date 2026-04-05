@@ -58,6 +58,16 @@ async function normalizeUploadImage(file: File): Promise<File> {
   });
 }
 
+function shouldUseNativeCapture() {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+    return false;
+  }
+  const coarsePointer = window.matchMedia?.('(pointer: coarse)').matches ?? false;
+  const touchDevice = navigator.maxTouchPoints > 0;
+  const mobileUserAgent = /android|iphone|ipad|ipod/i.test(navigator.userAgent);
+  return coarsePointer || touchDevice || mobileUserAgent;
+}
+
 export function ProductPhotoField({ image, onUploaded, onRemove }: ProductPhotoFieldProps) {
   const uploadId = useId();
   const fallbackCaptureId = useId();
@@ -204,6 +214,14 @@ export function ProductPhotoField({ image, onUploaded, onRemove }: ProductPhotoF
     setIsCameraOpen(false);
   };
 
+  const openCapture = () => {
+    if (shouldUseNativeCapture()) {
+      fallbackCaptureRef.current?.click();
+      return;
+    }
+    setIsCameraOpen(true);
+  };
+
   return (
     <div className="product-photo-field">
       <div className="product-photo-preview">
@@ -226,7 +244,7 @@ export function ProductPhotoField({ image, onUploaded, onRemove }: ProductPhotoF
           <label className={`button-like${isUploading ? ' disabled' : ''}`} htmlFor={uploadId} aria-disabled={isUploading}>
             {isUploading ? 'Uploading…' : image ? 'Replace photo' : 'Upload photo'}
           </label>
-          <button type="button" onClick={() => setIsCameraOpen(true)} disabled={isUploading}>
+          <button type="button" onClick={openCapture} disabled={isUploading}>
             Capture photo
           </button>
           <input
