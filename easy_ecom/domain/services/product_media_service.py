@@ -17,6 +17,7 @@ from easy_ecom.data.store.postgres_models import ProductMediaModel, ProductModel
 
 
 IMAGE_CANVAS_SIZE = 768
+LARGE_MAX_EDGE = 2048
 THUMB_CANVAS_SIZE = 256
 IMAGE_QUALITY = 82
 THUMB_QUALITY = 68
@@ -28,10 +29,10 @@ class RenderedMedia:
     large_bytes: bytes
     thumbnail_bytes: bytes
     checksum_sha256: str
-    large_width: int = IMAGE_CANVAS_SIZE
-    large_height: int = IMAGE_CANVAS_SIZE
-    thumbnail_width: int = THUMB_CANVAS_SIZE
-    thumbnail_height: int = THUMB_CANVAS_SIZE
+    large_width: int
+    large_height: int
+    thumbnail_width: int
+    thumbnail_height: int
 
 
 class ProductMediaService:
@@ -128,7 +129,17 @@ class ProductMediaService:
         image = image.convert("RGB")
         checksum = hashlib.sha256(source).hexdigest()
 
-        def render_square(canvas_size: int, fmt: str, quality: int) -> bytes:
+        def render_large(fmt: str, quality: int) -> tuple[bytes, int, int]:
+            working = image.copy()
+            working.thumbnail((LARGE_MAX_EDGE, LARGE_MAX_EDGE), Image.Resampling.LANCZOS)
+            output = io.BytesIO()
+            save_kwargs = {"quality": quality, "optimize": True}
+            if fmt == "JPEG":
+                save_kwargs["progressive"] = True
+            working.save(output, format=fmt, **save_kwargs)
+            return output.getvalue(), working.width, working.height
+
+        def render_square(canvas_size: int, fmt: str, quality: int) -> tuple[bytes, int, int]:
             working = image.copy()
             working.thumbnail((canvas_size, canvas_size), Image.Resampling.LANCZOS)
             canvas = Image.new("RGB", (canvas_size, canvas_size), (255, 255, 255))
@@ -139,12 +150,19 @@ class ProductMediaService:
             if fmt == "JPEG":
                 save_kwargs["progressive"] = True
             canvas.save(output, format=fmt, **save_kwargs)
-            return output.getvalue()
+            return output.getvalue(), canvas.width, canvas.height
+
+        large_bytes, large_width, large_height = render_large("JPEG", IMAGE_QUALITY)
+        thumbnail_bytes, thumbnail_width, thumbnail_height = render_square(THUMB_CANVAS_SIZE, "WEBP", THUMB_QUALITY)
 
         return RenderedMedia(
-            large_bytes=render_square(IMAGE_CANVAS_SIZE, "JPEG", IMAGE_QUALITY),
-            thumbnail_bytes=render_square(THUMB_CANVAS_SIZE, "WEBP", THUMB_QUALITY),
+            large_bytes=large_bytes,
+            thumbnail_bytes=thumbnail_bytes,
             checksum_sha256=checksum,
+            large_width=large_width,
+            large_height=large_height,
+            thumbnail_width=thumbnail_width,
+            thumbnail_height=thumbnail_height,
         )
 
     def _read_upload_bytes(self, upload_file: BinaryIO) -> bytes:
