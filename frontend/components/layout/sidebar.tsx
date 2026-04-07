@@ -59,8 +59,7 @@ export function Sidebar({
             </button>
           </div>
         </div>
-        <h1 className="brand-title">Command Center</h1>
-        <p className="brand-subtitle">Sales, inventory, and operations in one disciplined workspace.</p>
+        {/* <h1 className="brand-title">Command Center</h1> */}
         <div className="sidebar-user-card">
           <div className="sidebar-user-row">
             <Building2 size={15} aria-hidden="true" />
