@@ -30,3 +30,4 @@ auth_cookie.txt
 easy_ecom.db
 .idea/
 .frontend/
+.aider*
