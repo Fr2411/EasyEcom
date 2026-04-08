@@ -100,7 +100,6 @@ export function Sidebar({
         ))}
       </nav>
       <footer className="sidebar-footer">
-        <p className="sidebar-footer-copy">Tenant-safe, ledger-backed workflows.</p>
         <SidebarLogoutButton />
       </footer>
     </aside>
