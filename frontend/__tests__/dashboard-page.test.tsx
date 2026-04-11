@@ -221,4 +221,13 @@ describe('Dashboard page', () => {
     expect(screen.queryByText(/revenue vs estimated gross profit/i)).toBeNull();
     expect(screen.queryByText(/top products by revenue/i)).toBeNull();
   });
+
+  test('removed dashboard labels do not render', async () => {
+    render(<DashboardPage />);
+
+    await screen.findByText(/business analytics dashboard/i);
+    expect(screen.queryByText(/^today$/i)).toBeNull();
+    expect(screen.queryByText(/^open reports$/i)).toBeNull();
+    expect(screen.queryByText(/^workspace$/i)).toBeNull();
+  });
 });
