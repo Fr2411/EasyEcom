@@ -536,6 +536,14 @@ describe('Business pages', () => {
     await waitFor(() => expect(screen.getByText(matcher)).toBeTruthy());
   });
 
+  test('inventory workspace does not render removed labels', async () => {
+    render(<InventoryPage />);
+    await waitFor(() => expect(screen.getByText(/variant-level inventory control/i)).toBeTruthy());
+    expect(screen.queryByText(/^today$/i)).toBeNull();
+    expect(screen.queryByText(/^open reports$/i)).toBeNull();
+    expect(screen.queryByText(/^workspace$/i)).toBeNull();
+  });
+
   test('purchases page explains receive-stock ownership in inventory', async () => {
     render(<PurchasesPage />);
     await waitFor(() => expect(screen.getByText(/canonical ledger-backed write path/i)).toBeTruthy());
