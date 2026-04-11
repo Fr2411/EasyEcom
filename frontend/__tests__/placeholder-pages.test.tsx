@@ -19,6 +19,14 @@ import SettingsPage from '@/app/(app)/settings/page';
 
 vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
+  useRouter: () => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+    refresh: vi.fn(),
+    back: vi.fn(),
+    forward: vi.fn(),
+    prefetch: vi.fn(),
+  }),
   redirect: vi.fn(),
 }));
 
@@ -501,7 +509,7 @@ vi.mock('@/lib/api/automation', () => ({
 }));
 
 const cases = [
-  ['Home', HomePage, /the product foundation is live again/i],
+  ['Home', HomePage, /quick links to the main operating modules/i],
   ['Dashboard', DashboardPage, /business analytics dashboard/i],
   ['Reports', ReportsPage, /loading tenant reports|sales revenue/i],
   ['Catalog', CatalogPage, /variant-first catalog/i],
