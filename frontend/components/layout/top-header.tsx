@@ -265,8 +265,8 @@
    265|      </button>
    266|      <div className="header-copy">
    267|        <div className="header-kicker-row">
-   268|          <span className="header-kicker-pill">{/* ${pageContext.section} */}</span>
-   269|          <span className="header-command-chip">{/* ${pageContext.actionLabel} */}</span>
+   268|          <span className="header-kicker-pill">{ /* pageContext.section */ }</span>
+   269|          <span className="header-command-chip">{ /* pageContext.actionLabel */ }</span>
    270|        </div>
    271|        <p className="header-title">{pageContext.title ?? matchedRoute?.label ?? DEFAULT_TITLE}</p>
    272|        <p className="header-subtitle">{pageContext.subtitle}</p>
@@ -297,14 +297,14 @@
    297|      </form>
    298|      <div className="header-utilities">
    299|        <ThemeToggle />
-   300|        <span className="header-pill">{/* Active */}</span>
+   300|        <span className="header-pill">{ /* Active */ }</span>
    301|        <button
    302|          type="button"
    303|          className="header-btn"
    304|          onClick={() => router.push(pageContext.actionHref)}
    305|          aria-label={pageContext.actionLabel}
    306|        >
-   307|          {/* {pageContext.actionLabel} */}
+   307|          { /* pageContext.actionLabel */ }
    308|          <ArrowRight size={14} aria-hidden="true" />
    309|        </button>
    310|      </div>
