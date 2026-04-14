@@ -1,0 +1,74 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      deploy_ref:
+        description: Git ref or SHA to deploy
+        required: false
+        default: main
+
+concurrency:
+  group: backend-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy backend to EC2
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+    env:
+      EC2_HOST: ${{ secrets.EC2_HOST }}
+      EC2_USER: ${{ secrets.EC2_USER }}
+      API_BASE_URL: ${{ secrets.API_BASE_URL }}
+      DEPLOY_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_ref || github.sha }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate deploy secrets
+        run: |
+          test -n "$EC2_HOST"
+          test -n "$EC2_USER"
+          test -n "${{ secrets.EC2_SSH_PRIVATE_KEY }}"
+
+      - name: Add EC2 host to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
+
+      - name: Persist SSH key for deploy script
+        run: |
+          install -m 600 /dev/null /tmp/easy-ecom-ec2.key
+          cat <<'KEY' > /tmp/easy-ecom-ec2.key
+          ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          KEY
+          echo "SSH_KEY_PATH=/tmp/easy-ecom-ec2.key" >> "$GITHUB_ENV"
+
+      - name: Deploy backend
+        run: ./scripts/deploy_prod.sh "$DEPLOY_REF"
+
+      - name: Backend smoke check
+        if: ${{ env.API_BASE_URL != '' }}
+        run: API_BASE_URL="$API_BASE_URL" ./scripts/auth_deploy_smoke.sh
+
+      - name: Deployment summary
+        run: |
+          {
+            echo "## Backend deployment"
+            echo ""
+            echo "- Deployed ref: \`$DEPLOY_REF\`"
+            echo "- Target host: \`$EC2_HOST\`"
+            if [ -n "$API_BASE_URL" ]; then
+              echo "- Smoke check: passed against \`$API_BASE_URL\`"
+            else
+              echo "- Smoke check: skipped because \`API_BASE_URL\` secret is not configured"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

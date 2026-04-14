@@ -1,13 +1,37 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-EC2_HOST="44.197.250.127"
-EC2_USER="ec2-user"
-SSH_KEY="$HOME/Downloads/EasyEcomKey.pem"
+DEFAULT_EC2_HOST="44.197.250.127"
+DEFAULT_EC2_USER="ec2-user"
+DEFAULT_SSH_KEY="$HOME/Downloads/EasyEcomKey.pem"
+
+EC2_HOST="${EC2_HOST:-$DEFAULT_EC2_HOST}"
+EC2_USER="${EC2_USER:-$DEFAULT_EC2_USER}"
+SSH_KEY_PATH="${SSH_KEY_PATH:-${SSH_KEY:-$DEFAULT_SSH_KEY}}"
 DEPLOY_REF="${DEPLOY_REF:-${1:-HEAD}}"
 DEPLOY_SHA="$(git rev-parse --verify "${DEPLOY_REF}^{commit}")"
 ARTIFACT_PATH="$("$(dirname "$0")/build_backend_release.sh" "${DEPLOY_SHA}")"
 REMOTE_ARTIFACT="/tmp/easyecom-backend-${DEPLOY_SHA}.tar.gz"
+
+if [[ -z "${EC2_HOST}" ]]; then
+  echo "[deploy] EC2_HOST is required"
+  exit 1
+fi
+
+if [[ -z "${EC2_USER}" ]]; then
+  echo "[deploy] EC2_USER is required"
+  exit 1
+fi
+
+if [[ -z "${SSH_KEY_PATH}" ]]; then
+  echo "[deploy] SSH_KEY_PATH is required"
+  exit 1
+fi
+
+if [[ ! -f "${SSH_KEY_PATH}" ]]; then
+  echo "[deploy] SSH key not found at ${SSH_KEY_PATH}"
+  exit 1
+fi
 
 echo "[deploy] Backend production deploy script"
 echo "[deploy] This deploys a backend-only release bundle to EC2."
@@ -24,7 +48,7 @@ echo "[deploy] Uploading backend artifact to EC2..."
 scp \
   -o IPQoS=throughput \
   -o IdentitiesOnly=yes \
-  -i "$SSH_KEY" \
+  -i "$SSH_KEY_PATH" \
   "${ARTIFACT_PATH}" \
   "${EC2_USER}@${EC2_HOST}:${REMOTE_ARTIFACT}"
 
@@ -33,7 +57,7 @@ echo "[deploy] Connecting to EC2 and applying release..."
 ssh -T \
   -o IPQoS=throughput \
   -o IdentitiesOnly=yes \
-  -i "$SSH_KEY" \
+  -i "$SSH_KEY_PATH" \
   "${EC2_USER}@${EC2_HOST}" \
   "DEPLOY_SHA='${DEPLOY_SHA}' REMOTE_ARTIFACT='${REMOTE_ARTIFACT}' bash -s" <<'REMOTE'
 set -euo pipefail

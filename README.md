@@ -60,6 +60,7 @@ If you want full local development, keep `.env.local` pointed at `http://localho
 - Frontend connectivity remains through Amplify config in `amplify.yml`
 - Backend connectivity remains through the existing startup entrypoint in `startup.sh`
 - Existing EC2 deployment helper is preserved in `scripts/deploy_prod.sh`
+- GitHub Actions can now trigger the backend EC2 deploy using `.github/workflows/deploy-backend.yml`
 
 ## Repo Guardrails
 - Run `./scripts/check_repo_surface.sh` to fail fast on tracked local venvs, IDE state, backup/debug copies, logs, build metadata, and other files that should not reach production
@@ -83,11 +84,21 @@ Backend deploy to AWS EC2:
 
 What it does:
 - SSH into the EC2 app host
-- pull the latest code from `main`
+- upload a backend release artifact for the selected Git ref/SHA
+- sync runtime files into the EC2 project directory
 - install Python dependencies
 - run database migrations
 - seed baseline data
 - restart the backend service
+
+GitHub-driven backend deploy:
+- Push to `main` triggers `.github/workflows/deploy-backend.yml`
+- Manual rollback or redeploy is available through GitHub Actions `workflow_dispatch`
+- Required GitHub Secrets:
+  - `EC2_HOST`
+  - `EC2_USER`
+  - `EC2_SSH_PRIVATE_KEY`
+  - optional `API_BASE_URL` for post-deploy smoke checks
 
 Frontend deploy to AWS Amplify:
 ```bash
