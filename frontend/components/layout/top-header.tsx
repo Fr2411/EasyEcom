@@ -265,8 +265,8 @@ export function TopHeader({ onOpenNavigation }: { onOpenNavigation?: () => void 
       </button>
       <div className="header-copy">
         <div className="header-kicker-row">
-          <span className="header-kicker-pill">{ /* pageContext.section }</span>
-          <span className="header-command-chip">{ /* pageContext.actionLabel }</span>
+          <span className="header-kicker-pill">{ /* pageContext.section */ }</span>
+          <span className="header-command-chip">{ /* pageContext.actionLabel */ }</span>
         </div>
         <p className="header-title">{pageContext.title ?? matchedRoute?.label ?? DEFAULT_TITLE}</p>
         <p className="header-subtitle">{pageContext.subtitle}</p>
@@ -297,14 +297,14 @@ export function TopHeader({ onOpenNavigation }: { onOpenNavigation?: () => void 
       </form>
       <div className="header-utilities">
         <ThemeToggle />
-        <span className="header-pill">{ /* Active }</span>
+        <span className="header-pill">{ /* Active */ }</span>
         <button
           type="button"
           className="header-btn"
           onClick={() => router.push(pageContext.actionHref)}
           aria-label={pageContext.actionLabel}
         >
-          {pageContext.actionLabel}
+          { /* pageContext.actionLabel */ }
           <ArrowRight size={14} aria-hidden="true" />
         </button>
       </div>
