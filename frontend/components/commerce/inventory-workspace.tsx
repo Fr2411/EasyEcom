@@ -526,6 +526,9 @@ export function InventoryWorkspace() {
     });
     return counts;
   }, [productGroups]);
+  const hasActiveInventoryFilters = Boolean(
+    supplierFilter.trim() || categoryFilter.trim() || tagFilter.trim() || stockFilter !== 'all',
+  );
   const openQuickActionGroup = useMemo(
     () => filteredProductGroups.find((group) => group.product_id === openQuickActionsFor) ?? null,
     [filteredProductGroups, openQuickActionsFor],
@@ -1458,14 +1461,21 @@ export function InventoryWorkspace() {
               </table>
             </div>
           ) : (
-            <WorkspaceEmpty
-              title={productGroups.length ? 'No stock matches the current filters' : 'No available stock'}
-              message={
-                productGroups.length
-                  ? 'Adjust supplier, category, or stock filters to see more products.'
-                  : 'Receive stock or return sellable items to bring variants back into the operating list.'
-              }
-            />
+            <>
+              {productGroups.length && hasActiveInventoryFilters ? (
+                <WorkspaceNotice>
+                  No rows match the current filter set. Clear or broaden filters to continue.
+                </WorkspaceNotice>
+              ) : null}
+              <WorkspaceEmpty
+                title={productGroups.length ? 'No stock matches the current filters' : 'No available stock'}
+                message={
+                  productGroups.length
+                    ? 'Adjust supplier, category, tag, or stock filters to see more products.'
+                    : 'Receive stock or return sellable items to bring variants back into the operating list.'
+                }
+              />
+            </>
           )
         ) : null}
         {openQuickActionGroup && quickActionsPosition && typeof document !== 'undefined'
