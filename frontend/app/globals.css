@@ -1769,6 +1769,47 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
   flex: 1;
 }
 
+.inventory-search-combobox {
+  position: relative;
+  flex: 1;
+  min-width: min(100%, 320px);
+}
+
+.inventory-search-combobox input {
+  width: 100%;
+}
+
+.inventory-search-suggestions {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  max-height: 16rem;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0.35rem;
+  list-style: none;
+  border: 1px solid var(--border-muted);
+  border-radius: 0.75rem;
+  background: var(--surface-raised);
+  box-shadow: 0 10px 24px rgba(17, 35, 31, 0.08);
+}
+
+.inventory-search-suggestions button {
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: 0.45rem 0.5rem;
+  border-radius: 0.55rem;
+  cursor: pointer;
+}
+
+.inventory-search-suggestions button:hover {
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+}
+
 .workspace-form {
   display: grid;
   gap: 1rem;

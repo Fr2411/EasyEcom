@@ -493,6 +493,7 @@ export function InventoryWorkspace() {
   const [error, setError] = useState('');
   const [lookupPending, setLookupPending] = useState(false);
   const [submitPending, setSubmitPending] = useState(false);
+  const [searchSuggestionsOpen, setSearchSuggestionsOpen] = useState(false);
   const [expandedProducts, setExpandedProducts] = useState<Record<string, boolean>>({});
   const [openQuickActionsFor, setOpenQuickActionsFor] = useState<string | null>(null);
   const [quickActionsPosition, setQuickActionsPosition] = useState<{ top: number; left: number } | null>(null);
@@ -542,6 +543,13 @@ export function InventoryWorkspace() {
     () => deriveInventorySearchSuggestions(workspace?.stock_items ?? [], queryInput),
     [queryInput, workspace?.stock_items],
   );
+  const visibleSearchSuggestions = useMemo(() => {
+    const normalized = queryInput.trim().toLowerCase();
+    if (!normalized) {
+      return [];
+    }
+    return searchSuggestions.filter((suggestion) => suggestion.trim().toLowerCase() !== normalized).slice(0, 8);
+  }, [queryInput, searchSuggestions]);
   const supplierOptions = useMemo(
     () => Array.from(new Set(productGroups.map((group) => group.supplier.trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
     [productGroups],
@@ -747,6 +755,7 @@ export function InventoryWorkspace() {
 
   const onSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setSearchSuggestionsOpen(false);
     loadWorkspace(queryInput.trim());
   };
 
@@ -1168,13 +1177,50 @@ export function InventoryWorkspace() {
         actions={
           <div className="inventory-panel-actions">
             <form className="workspace-search" onSubmit={onSearch}>
-              <input
-                type="search"
-                value={queryInput}
-                placeholder="Search products, variants, SKU, or barcode (Cmd/Ctrl+K)"
-                list="inventory-stock-search-suggestions"
-                onChange={(event) => setQueryInput(event.target.value)}
-              />
+              <div className="inventory-search-combobox">
+                <input
+                  type="search"
+                  value={queryInput}
+                  placeholder="Search products, variants, SKU, or barcode (Cmd/Ctrl+K)"
+                  list="inventory-stock-search-suggestions"
+                  onChange={(event) => {
+                    setQueryInput(event.target.value);
+                    setSearchSuggestionsOpen(true);
+                  }}
+                  onFocus={() => {
+                    if (visibleSearchSuggestions.length) {
+                      setSearchSuggestionsOpen(true);
+                    }
+                  }}
+                  onBlur={() => {
+                    window.setTimeout(() => setSearchSuggestionsOpen(false), 120);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Escape') {
+                      setSearchSuggestionsOpen(false);
+                    }
+                  }}
+                />
+                {searchSuggestionsOpen && visibleSearchSuggestions.length ? (
+                  <ul className="inventory-search-suggestions" role="listbox" aria-label="Inventory search suggestions">
+                    {visibleSearchSuggestions.map((suggestion) => (
+                      <li key={suggestion}>
+                        <button
+                          type="button"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => {
+                            setQueryInput(suggestion);
+                            setSearchSuggestionsOpen(false);
+                            loadWorkspace(suggestion);
+                          }}
+                        >
+                          {suggestion}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
               <button type="submit">Search</button>
             </form>
             <datalist id="inventory-stock-search-suggestions">
