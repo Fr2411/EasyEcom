@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, File, Query, UploadFile
 
-from easy_ecom.api.dependencies import ServiceContainer, get_authenticated_user, get_container, require_page_access
+from easy_ecom.api.dependencies import ServiceContainer, get_authenticated_user, get_container, require_module_access
 from easy_ecom.api.schemas.commerce import (
     AttachProductMediaRequest,
     CatalogUpsertRequest,
@@ -11,7 +11,11 @@ from easy_ecom.api.schemas.commerce import (
 from easy_ecom.api.schemas.common import ModuleOverviewResponse
 from easy_ecom.domain.models.auth import AuthenticatedUser
 
-router = APIRouter(prefix="/catalog", tags=["catalog"])
+router = APIRouter(
+    prefix="/catalog",
+    tags=["catalog"],
+    dependencies=[Depends(require_module_access("Catalog"))],
+)
 
 
 @router.get("/overview", response_model=ModuleOverviewResponse)
@@ -19,7 +23,6 @@ def catalog_overview(
     user: AuthenticatedUser = Depends(get_authenticated_user),
     container: ServiceContainer = Depends(get_container),
 ) -> ModuleOverviewResponse:
-    require_page_access(user, "Catalog")
     return container.overview.catalog(user)
 
 

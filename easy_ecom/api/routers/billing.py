@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Header, Request
 
-from easy_ecom.api.dependencies import ServiceContainer, get_authenticated_user, get_container, require_page_access
+from easy_ecom.api.dependencies import ServiceContainer, get_authenticated_user, get_container, require_module_access
 from easy_ecom.api.schemas.billing import (
     BillingActionResponse,
     BillingChangePlanRequest,
@@ -15,7 +15,11 @@ from easy_ecom.domain.models.auth import AuthenticatedUser
 
 router = APIRouter(tags=["billing"])
 public_router = APIRouter(prefix="/public/billing", tags=["public-billing"])
-protected_router = APIRouter(prefix="/billing", tags=["billing"])
+protected_router = APIRouter(
+    prefix="/billing",
+    tags=["billing"],
+    dependencies=[Depends(require_module_access("Billing"))],
+)
 
 
 @public_router.get("/plans", response_model=BillingPlansResponse)
@@ -37,7 +41,6 @@ def get_billing_subscription(
     user: AuthenticatedUser = Depends(get_authenticated_user),
     container: ServiceContainer = Depends(get_container),
 ) -> BillingSubscriptionState:
-    require_page_access(user, "Billing")
     return BillingSubscriptionState.model_validate(container.billing.subscription_state(user))
 
 
@@ -47,7 +50,6 @@ def change_plan(
     user: AuthenticatedUser = Depends(get_authenticated_user),
     container: ServiceContainer = Depends(get_container),
 ) -> BillingActionResponse:
-    require_page_access(user, "Billing")
     return BillingActionResponse.model_validate(
         container.billing.change_plan(user, target_plan_code=payload.target_plan_code)
     )
@@ -58,7 +60,6 @@ def cancel_subscription(
     user: AuthenticatedUser = Depends(get_authenticated_user),
     container: ServiceContainer = Depends(get_container),
 ) -> BillingActionResponse:
-    require_page_access(user, "Billing")
     return BillingActionResponse.model_validate(container.billing.cancel_subscription(user))
 
 

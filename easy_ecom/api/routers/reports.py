@@ -4,7 +4,7 @@ from typing import Optional
 import csv
 import io
 
-from easy_ecom.api.dependencies import ServiceContainer, get_authenticated_user, get_container, require_page_access
+from easy_ecom.api.dependencies import ServiceContainer, get_authenticated_user, get_container, require_module_access
 from easy_ecom.api.schemas.reports import (
     SalesReport,
     InventoryReport,
@@ -16,7 +16,11 @@ from easy_ecom.api.schemas.reports import (
 )
 from easy_ecom.domain.models.auth import AuthenticatedUser
 
-router = APIRouter(prefix="/reports", tags=["reports"])
+router = APIRouter(
+    prefix="/reports",
+    tags=["reports"],
+    dependencies=[Depends(require_module_access("Reports"))],
+)
 
 
 @router.get("/overview", response_model=ReportsOverview)
@@ -26,7 +30,6 @@ def reports_overview(
     user: AuthenticatedUser = Depends(get_authenticated_user),
     container: ServiceContainer = Depends(get_container),
 ) -> ReportsOverview:
-    require_page_access(user, "Reports")
     return container.reports.get_reports_overview(user, from_date, to_date)
 
 
@@ -37,7 +40,6 @@ def sales_report(
     user: AuthenticatedUser = Depends(get_authenticated_user),
     container: ServiceContainer = Depends(get_container),
 ) -> SalesReport:
-    require_page_access(user, "Reports")
     return container.reports.get_sales_report(user, from_date, to_date)
 
 
@@ -48,7 +50,6 @@ def inventory_report(
     user: AuthenticatedUser = Depends(get_authenticated_user),
     container: ServiceContainer = Depends(get_container),
 ) -> InventoryReport:
-    require_page_access(user, "Reports")
     return container.reports.get_inventory_report(user, from_date, to_date)
 
 
@@ -59,7 +60,6 @@ def purchases_report(
     user: AuthenticatedUser = Depends(get_authenticated_user),
     container: ServiceContainer = Depends(get_container),
 ) -> PurchasesReport:
-    require_page_access(user, "Reports")
     return container.reports.get_purchases_report(user, from_date, to_date)
 
 
@@ -70,7 +70,6 @@ def finance_report(
     user: AuthenticatedUser = Depends(get_authenticated_user),
     container: ServiceContainer = Depends(get_container),
 ) -> FinanceReport:
-    require_page_access(user, "Reports")
     return container.reports.get_finance_report(user, from_date, to_date)
 
 
@@ -81,7 +80,6 @@ def returns_report(
     user: AuthenticatedUser = Depends(get_authenticated_user),
     container: ServiceContainer = Depends(get_container),
 ) -> ReturnsReport:
-    require_page_access(user, "Reports")
     return container.reports.get_returns_report(user, from_date, to_date)
 
 
@@ -92,7 +90,6 @@ def products_report(
     user: AuthenticatedUser = Depends(get_authenticated_user),
     container: ServiceContainer = Depends(get_container),
 ) -> ProductsReport:
-    require_page_access(user, "Reports")
     return container.reports.get_products_report(user, from_date, to_date)
 
 
@@ -106,7 +103,6 @@ def export_reports(
     """
     Export reports overview as CSV.
     """
-    require_page_access(user, "Reports")
     overview = container.reports.get_reports_overview(user, from_date, to_date)
     
     # Create CSV in memory
@@ -134,4 +130,3 @@ def export_reports(
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=reports_overview.csv"}
     )
-

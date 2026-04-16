@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Query, Path, status
 from fastapi.exceptions import HTTPException
 
-from easy_ecom.api.dependencies import ServiceContainer, get_authenticated_user, get_container, require_page_access
+from easy_ecom.api.dependencies import ServiceContainer, get_authenticated_user, get_container, require_module_access
 from easy_ecom.api.schemas.commerce import (
     ReturnCreateRequest,
     ReturnEligibleLinesResponse,
@@ -14,7 +14,11 @@ from easy_ecom.api.schemas.commerce import (
 from easy_ecom.api.schemas.common import ModuleOverviewResponse
 from easy_ecom.domain.models.auth import AuthenticatedUser
 
-router = APIRouter(prefix="/returns", tags=["returns"])
+router = APIRouter(
+    prefix="/returns",
+    tags=["returns"],
+    dependencies=[Depends(require_module_access("Returns"))],
+)
 
 
 @router.get("/overview", response_model=ModuleOverviewResponse)
@@ -22,7 +26,6 @@ def returns_overview(
     user: AuthenticatedUser = Depends(get_authenticated_user),
     container: ServiceContainer = Depends(get_container),
 ) -> ModuleOverviewResponse:
-    require_page_access(user, "Returns")
     return container.overview.returns(user)
 
 
@@ -42,7 +45,6 @@ def get_return(
     container: ServiceContainer = Depends(get_container),
 ) -> ReturnResponse:
     """Get a specific return by ID."""
-    require_page_access(user, "Returns")
     return_record = container.returns.get_return(user, return_id)
     if not return_record:
         raise HTTPException(
@@ -98,7 +100,6 @@ def update_return(
     container: ServiceContainer = Depends(get_container),
 ) -> ReturnResponse:
     """Update an existing return (e.g., refund status, notes)."""
-    require_page_access(user, "Returns")
     return_record = container.returns.update_return(user, return_id, payload)
     if not return_record:
         raise HTTPException(
@@ -115,7 +116,6 @@ def record_refund(
     user: AuthenticatedUser = Depends(get_authenticated_user),
     container: ServiceContainer = Depends(get_container),
 ) -> ReturnResponse:
-    require_page_access(user, "Returns")
     return_record = container.returns.record_refund_payment(
         user,
         return_id=return_id,

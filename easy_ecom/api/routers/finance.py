@@ -2,7 +2,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
 
-from easy_ecom.api.dependencies import ServiceContainer, get_authenticated_user, get_container, require_page_access
+from easy_ecom.api.dependencies import ServiceContainer, get_authenticated_user, get_container, require_module_access
 from easy_ecom.api.schemas.finance import (
     CreateTransactionRequest,
     FinanceOverviewResponse,
@@ -14,7 +14,11 @@ from easy_ecom.api.schemas.finance import (
 from easy_ecom.domain.models.auth import AuthenticatedUser
 from easy_ecom.domain.services.transaction_service import TransactionContext
 
-router = APIRouter(prefix="/finance", tags=["finance"])
+router = APIRouter(
+    prefix="/finance",
+    tags=["finance"],
+    dependencies=[Depends(require_module_access("Finance"))],
+)
 
 
 def _transaction_context(user: AuthenticatedUser) -> TransactionContext:
@@ -26,7 +30,6 @@ def finance_overview(
     user: AuthenticatedUser = Depends(get_authenticated_user),
     container: ServiceContainer = Depends(get_container),
 ) -> FinanceOverviewResponse:
-    require_page_access(user, "Finance")
     return container.reports.get_finance_overview(user)
 
 
@@ -35,7 +38,6 @@ def finance_workspace(
     user: AuthenticatedUser = Depends(get_authenticated_user),
     container: ServiceContainer = Depends(get_container),
 ) -> FinanceWorkspaceResponse:
-    require_page_access(user, "Finance")
     context = _transaction_context(user)
     return FinanceWorkspaceResponse(
         overview=container.reports.get_finance_overview(user),
@@ -57,7 +59,6 @@ def list_transactions(
     user: AuthenticatedUser = Depends(get_authenticated_user),
     container: ServiceContainer = Depends(get_container),
 ) -> TransactionListResponse:
-    require_page_access(user, "Finance")
     if transaction_type not in (None, "sale_fulfillment", "return_refund", "manual_payment", "manual_expense"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported transaction_type")
     context = _transaction_context(user)
@@ -81,7 +82,6 @@ def get_transaction(
     user: AuthenticatedUser = Depends(get_authenticated_user),
     container: ServiceContainer = Depends(get_container),
 ) -> FinanceTransaction:
-    require_page_access(user, "Finance")
     transaction = container.transaction.get_transaction(_transaction_context(user), transaction_id)
     if not transaction:
         raise HTTPException(
@@ -97,7 +97,6 @@ def create_transaction(
     user: AuthenticatedUser = Depends(get_authenticated_user),
     container: ServiceContainer = Depends(get_container),
 ) -> FinanceTransaction:
-    require_page_access(user, "Finance")
     return container.transaction.create_transaction(
         _transaction_context(user),
         transaction_type=transaction_data.origin_type,
@@ -112,7 +111,6 @@ def update_transaction(
     user: AuthenticatedUser = Depends(get_authenticated_user),
     container: ServiceContainer = Depends(get_container),
 ) -> FinanceTransaction:
-    require_page_access(user, "Finance")
     payload = transaction_data.model_dump(exclude_unset=True)
     transaction_type = payload.pop("origin_type", None)
     if not transaction_type:
@@ -136,7 +134,6 @@ def list_accounts(
     container: ServiceContainer = Depends(get_container),
     user: AuthenticatedUser = Depends(get_authenticated_user),
 ) -> List[dict]:
-    require_page_access(user, "Finance")
     overview = container.reports.get_finance_overview(user)
     report = container.reports.get_finance_report(user)
     return [
@@ -184,7 +181,6 @@ def list_financial_reports(
     container: ServiceContainer = Depends(get_container),
     user: AuthenticatedUser = Depends(get_authenticated_user),
 ) -> List[dict]:
-    require_page_access(user, "Finance")
     report = container.reports.get_finance_report(user)
     overview = container.reports.get_finance_overview(user)
 
