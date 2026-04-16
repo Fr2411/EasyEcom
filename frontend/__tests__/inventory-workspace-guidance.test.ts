@@ -5,8 +5,9 @@ import {
   deriveInventorySearchSuggestions,
   receiveLinesFromPurchaseOrder,
   safePurchaseOrderErrorMessage,
+  safeReceiveStockErrorMessage,
 } from '@/components/commerce/inventory-workspace';
-import { ApiError } from '@/lib/api/client';
+import { ApiError, ApiNetworkError } from '@/lib/api/client';
 import type { InventoryIntakeLookup, InventoryStockRow } from '@/types/inventory';
 
 function buildLookup(overrides: Partial<InventoryIntakeLookup>): InventoryIntakeLookup {
@@ -221,5 +222,17 @@ describe('safePurchaseOrderErrorMessage', () => {
   test('returns a safe permission message for purchase-order 403 errors', () => {
     const result = safePurchaseOrderErrorMessage(new ApiError(403, 'Access denied for Purchases (https://api.easy-ecom.online/purchases/orders?status=draft)'), 'Fallback');
     expect(result).toBe('You do not have permission to view purchase orders.');
+  });
+});
+
+describe('safeReceiveStockErrorMessage', () => {
+  test('returns a role-safe message for purchase-order permission errors', () => {
+    const result = safeReceiveStockErrorMessage(new ApiError(403, 'Forbidden (https://api.easy-ecom.online/inventory/receipts)'), 'po-1');
+    expect(result).toBe('You do not have permission to receive stock against purchase orders.');
+  });
+
+  test('returns a network-safe generic message for transient failures', () => {
+    const result = safeReceiveStockErrorMessage(new ApiNetworkError('fetch failed (https://api.easy-ecom.online/inventory/receipts)'));
+    expect(result).toBe('Unable to save stock receipt right now. Check your connection and try again.');
   });
 });
