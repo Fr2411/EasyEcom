@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useMemo, useState, useTransition } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ApiError } from '@/lib/api/client';
 import { getCatalogWorkspace, saveCatalogProduct } from '@/lib/api/commerce';
 import { buildSkuPreview, buildVariantCombinations, signatureForVariant, type VariantOptionValues } from '@/lib/variant-generator';
@@ -33,6 +33,10 @@ import { ProductPhotoField } from '@/components/commerce/product-photo-field';
 
 
 type CatalogTab = 'products' | 'edit';
+type PostCreateSuccessState = {
+  productId: string;
+  productName: string;
+};
 
 type VariantGeneratorState = {
   size_values: string;
@@ -280,6 +284,7 @@ export function deriveCatalogRecommendation(workspace: CatalogWorkspace | null):
 
 
 export function CatalogWorkspace() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const searchKey = searchParams.toString();
   const [activeTab, setActiveTab] = useState<CatalogTab>('products');
@@ -295,6 +300,7 @@ export function CatalogWorkspace() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [saveToast, setSaveToast] = useState('');
+  const [postCreateSuccess, setPostCreateSuccess] = useState<PostCreateSuccessState | null>(null);
   const [isPending, startTransition] = useTransition();
   const recommendation = deriveCatalogRecommendation(workspace);
   const requestedProductId = searchParams.get('product_id') ?? '';
@@ -339,7 +345,7 @@ export function CatalogWorkspace() {
     }
   }, [workspace, requestedProductId, shouldAutoOpenEdit]);
 
-  const setNewProductForm = (seed?: string) => {
+  const setNewProductForm = (seed?: string, options?: { keepPostCreateSuccess?: boolean }) => {
     setForm({
       identity: {
         ...EMPTY_IDENTITY,
@@ -352,6 +358,9 @@ export function CatalogWorkspace() {
     setProductImage(null);
     setNotice('');
     setError('');
+    if (!options?.keepPostCreateSuccess) {
+      setPostCreateSuccess(null);
+    }
     setActiveTab('edit');
   };
 
@@ -364,6 +373,7 @@ export function CatalogWorkspace() {
     setActiveTab('edit');
     setNotice('');
     setError('');
+    setPostCreateSuccess(null);
   };
 
   const onWorkspaceIntent = async (query: string) => {
@@ -371,6 +381,7 @@ export function CatalogWorkspace() {
     if (!trimmed) {
       setWorkspace(null);
       setQueryInput('');
+      setPostCreateSuccess(null);
       return;
     }
     setQueryInput(trimmed);
@@ -468,9 +479,17 @@ export function CatalogWorkspace() {
     setNotice('');
     setError('');
     try {
-      await saveCatalogProduct(form);
-      setSaveToast(form.product_id ? 'Product updated successfully.' : 'Product saved successfully.');
-      setNewProductForm();
+      const response = await saveCatalogProduct(form);
+      if (form.product_id) {
+        setSaveToast('Product updated successfully.');
+      } else {
+        setSaveToast('Product saved successfully.');
+        setPostCreateSuccess({
+          productId: response.product.product_id,
+          productName: response.product.name,
+        });
+      }
+      setNewProductForm(undefined, { keepPostCreateSuccess: !form.product_id });
     } catch (saveError) {
       if (saveError instanceof ApiError && saveError.status === 404) {
         setError('Catalog save is not available on the connected API yet. Deploy the latest backend before trying to save products.');
@@ -511,6 +530,34 @@ export function CatalogWorkspace() {
           </IntentInput>
         }
       >
+        {postCreateSuccess ? (
+          <WorkspaceNotice tone="success">
+            <div className="workspace-stack">
+              <strong>Product created: {postCreateSuccess.productName}</strong>
+              <span>Choose the next step to continue with variant-level operations.</span>
+              <div className="workspace-actions">
+                <button
+                  type="button"
+                  onClick={() => {
+                    router.push(
+                      `/catalog?q=${encodeURIComponent(postCreateSuccess.productName)}&product_id=${encodeURIComponent(postCreateSuccess.productId)}&edit=1`
+                    );
+                  }}
+                >
+                  Add another variant
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    router.push(`/inventory?q=${encodeURIComponent(postCreateSuccess.productName)}`);
+                  }}
+                >
+                  Go to stock
+                </button>
+              </div>
+            </div>
+          </WorkspaceNotice>
+        ) : null}
         {notice ? <WorkspaceNotice tone="success">{notice}</WorkspaceNotice> : null}
         {error ? <WorkspaceNotice tone="error">{error}</WorkspaceNotice> : null}
         {isPending && !workspace ? <WorkspaceNotice>Loading catalog…</WorkspaceNotice> : null}
