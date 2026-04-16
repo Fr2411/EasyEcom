@@ -2,12 +2,16 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, Query
 
-from easy_ecom.api.dependencies import ServiceContainer, get_authenticated_user, get_container, require_page_access
+from easy_ecom.api.dependencies import ServiceContainer, get_authenticated_user, get_container, require_module_access
 from easy_ecom.api.schemas.dashboard import DashboardAnalyticsResponse
 from easy_ecom.api.schemas.common import ModuleOverviewResponse
 from easy_ecom.domain.models.auth import AuthenticatedUser
 
-router = APIRouter(prefix="/dashboard", tags=["dashboard"])
+router = APIRouter(
+    prefix="/dashboard",
+    tags=["dashboard"],
+    dependencies=[Depends(require_module_access("Dashboard"))],
+)
 
 
 @router.get("/overview", response_model=ModuleOverviewResponse)
@@ -15,7 +19,6 @@ def dashboard_overview(
     user: AuthenticatedUser = Depends(get_authenticated_user),
     container: ServiceContainer = Depends(get_container),
 ) -> ModuleOverviewResponse:
-    require_page_access(user, "Dashboard")
     return container.overview.dashboard(user)
 
 
@@ -28,7 +31,6 @@ def dashboard_analytics(
     user: AuthenticatedUser = Depends(get_authenticated_user),
     container: ServiceContainer = Depends(get_container),
 ) -> DashboardAnalyticsResponse:
-    require_page_access(user, "Dashboard")
     return DashboardAnalyticsResponse.model_validate(
         container.dashboard.analytics(
             user,

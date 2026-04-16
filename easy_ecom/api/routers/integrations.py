@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
 
-from easy_ecom.api.dependencies import ServiceContainer, get_authenticated_user, get_container
+from easy_ecom.api.dependencies import ServiceContainer, get_authenticated_user, get_container, require_module_access
 from easy_ecom.api.schemas.sales_agent import (
     ChannelDiagnosticsEnvelopeResponse,
     ChannelIntegrationsResponse,
@@ -16,7 +16,11 @@ from easy_ecom.api.schemas.sales_agent import (
 from easy_ecom.domain.models.auth import AuthenticatedUser
 
 
-router = APIRouter(prefix="/integrations", tags=["integrations"])
+router = APIRouter(
+    prefix="/integrations",
+    tags=["integrations"],
+    dependencies=[Depends(require_module_access("Sales Agent"))],
+)
 
 
 @router.get("/channels", response_model=ChannelIntegrationsResponse)

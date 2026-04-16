@@ -269,6 +269,29 @@ def _signed_webhook_request(client: TestClient, webhook_key: str, payload: dict[
     )
 
 
+def test_sales_agent_module_routes_require_page_access(monkeypatch, tmp_path: Path) -> None:
+    _setup_runtime(tmp_path, monkeypatch)
+    client = _login_client()
+    session_token = client.cookies.get(deps.settings.session_cookie_name)
+    assert session_token
+
+    payload = deps._signer().loads(session_token)
+    payload["allowed_pages"] = ["Dashboard", "Catalog", "Settings"]
+    client.cookies.set(deps.settings.session_cookie_name, deps._signer().dumps(payload))
+
+    integrations_response = client.get("/integrations/channels")
+    assert integrations_response.status_code == 403
+    assert integrations_response.json()["error"]["code"] == "ACCESS_DENIED"
+
+    sales_agent_response = client.get("/sales-agent/conversations")
+    assert sales_agent_response.status_code == 403
+    assert sales_agent_response.json()["error"]["code"] == "ACCESS_DENIED"
+
+    ai_review_response = client.get("/ai-review/drafts")
+    assert ai_review_response.status_code == 403
+    assert ai_review_response.json()["error"]["code"] == "ACCESS_DENIED"
+
+
 def test_whatsapp_integration_can_be_saved_and_listed(monkeypatch, tmp_path: Path) -> None:
     runtime = _setup_runtime(tmp_path, monkeypatch)
     client = _login_client()

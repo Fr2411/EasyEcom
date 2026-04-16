@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from easy_ecom.api.dependencies import get_authenticated_user, require_page_access
+from easy_ecom.api.dependencies import get_authenticated_user, require_module_access
 from easy_ecom.api.schemas.automation import (
     AutomationRuleResponse,
     AutomationRunsResponse,
@@ -12,7 +12,11 @@ from easy_ecom.api.schemas.common import ModuleOverviewResponse
 from easy_ecom.domain.models.auth import AuthenticatedUser
 from easy_ecom.domain.services.automation_service import AutomationService
 
-router = APIRouter(prefix="/automation", tags=["automation"])
+router = APIRouter(
+    prefix="/automation",
+    tags=["automation"],
+    dependencies=[Depends(require_module_access("Automation"))],
+)
 
 
 def _service() -> AutomationService:
@@ -23,7 +27,6 @@ def _service() -> AutomationService:
 def automation_overview(
     user: AuthenticatedUser = Depends(get_authenticated_user),
 ) -> ModuleOverviewResponse:
-    require_page_access(user, "Automation")
     return _service().overview(user)
 
 
@@ -31,7 +34,6 @@ def automation_overview(
 def list_rules(
     user: AuthenticatedUser = Depends(get_authenticated_user),
 ) -> AutomationRulesResponse:
-    require_page_access(user, "Automation")
     return _service().list_rules(user)
 
 
@@ -40,7 +42,6 @@ def get_rule(
     rule_id: str,
     user: AuthenticatedUser = Depends(get_authenticated_user),
 ) -> AutomationRuleResponse:
-    require_page_access(user, "Automation")
     try:
         return _service().get_rule(user, rule_id)
     except LookupError as exc:
@@ -55,7 +56,6 @@ def list_rule_runs(
     rule_id: str,
     user: AuthenticatedUser = Depends(get_authenticated_user),
 ) -> AutomationRunsResponse:
-    require_page_access(user, "Automation")
     return _service().list_rule_runs(user, rule_id)
 
 
@@ -63,5 +63,4 @@ def list_rule_runs(
 def list_runs(
     user: AuthenticatedUser = Depends(get_authenticated_user),
 ) -> AutomationRunsResponse:
-    require_page_access(user, "Automation")
     return _service().list_runs(user)

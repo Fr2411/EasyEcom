@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
 
-from easy_ecom.api.dependencies import ServiceContainer, get_authenticated_user, get_container
+from easy_ecom.api.dependencies import ServiceContainer, get_authenticated_user, get_container, require_module_access
 from easy_ecom.api.schemas.commerce import SalesOrderActionRequest, SalesOrderActionResponse
 from easy_ecom.api.schemas.sales_agent import (
     SalesAgentConversationDetailResponse,
@@ -17,7 +17,11 @@ from easy_ecom.api.schemas.sales_agent import (
 from easy_ecom.domain.models.auth import AuthenticatedUser
 
 
-router = APIRouter(prefix="/sales-agent", tags=["sales-agent"])
+router = APIRouter(
+    prefix="/sales-agent",
+    tags=["sales-agent"],
+    dependencies=[Depends(require_module_access("Sales Agent"))],
+)
 
 
 @router.get("/conversations", response_model=SalesAgentConversationsResponse)

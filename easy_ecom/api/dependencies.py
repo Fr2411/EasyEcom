@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 
 from fastapi import Cookie, Depends, Request
 from sqlalchemy.engine import Engine
@@ -249,3 +249,10 @@ def require_page_access(user: AuthenticatedUser, page: str) -> None:
             code="ACCESS_DENIED",
             message=f"Access denied for {page}",
         )
+
+
+def require_module_access(page: str) -> Callable[[AuthenticatedUser], None]:
+    def _dependency(user: AuthenticatedUser = Depends(get_authenticated_user)) -> None:
+        require_page_access(user, page)
+
+    return _dependency

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
 
-from easy_ecom.api.dependencies import ServiceContainer, get_authenticated_user, get_container
+from easy_ecom.api.dependencies import ServiceContainer, get_authenticated_user, get_container, require_module_access
 from easy_ecom.api.schemas.sales_agent import (
     AiReviewDetailResponse,
     AiReviewQueueResponse,
@@ -13,7 +13,11 @@ from easy_ecom.api.schemas.sales_agent import (
 from easy_ecom.domain.models.auth import AuthenticatedUser
 
 
-router = APIRouter(prefix="/ai-review", tags=["ai-review"])
+router = APIRouter(
+    prefix="/ai-review",
+    tags=["ai-review"],
+    dependencies=[Depends(require_module_access("AI Review"))],
+)
 
 
 @router.get("/drafts", response_model=AiReviewQueueResponse)
