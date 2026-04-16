@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'vitest';
-import { deriveCatalogRecommendation } from '@/components/commerce/catalog-workspace';
+import { ApiError } from '@/lib/api/client';
+import {
+  deriveCatalogInlineErrors,
+  deriveCatalogRecommendation,
+  normalizeFirstVariantForCreateFlow,
+} from '@/components/commerce/catalog-workspace';
 import type { CatalogProduct, CatalogWorkspace } from '@/types/catalog';
 
 function buildProduct(overrides: Partial<CatalogProduct> = {}): CatalogProduct {
@@ -80,5 +85,47 @@ describe('deriveCatalogRecommendation', () => {
     expect(result.kind).toBe('new');
     expect(result.title).toContain('No catalog match');
     expect(result.actionLabel).toBe('Start new product');
+  });
+});
+
+describe('normalizeFirstVariantForCreateFlow', () => {
+  test('promotes the first active detailed variant to index 0 for create-flow validation', () => {
+    const payload = normalizeFirstVariantForCreateFlow({
+      identity: {
+        product_name: 'Runner',
+        supplier: 'Supplier A',
+        category: 'Shoes',
+        brand: '',
+        description: '',
+        image_url: '',
+        pending_primary_media_upload_id: '',
+        remove_primary_image: false,
+        sku_root: 'RUN',
+        default_selling_price: '',
+        min_selling_price: '',
+        max_discount_percent: '',
+        status: 'active',
+      },
+      variants: [
+        { sku: '', barcode: '', size: '', color: '', other: '', default_purchase_price: '', default_selling_price: '', min_selling_price: '', reorder_level: '', status: 'active' },
+        { sku: '', barcode: '', size: '42', color: '', other: '', default_purchase_price: '', default_selling_price: '', min_selling_price: '', reorder_level: '', status: 'active' },
+      ],
+    });
+
+    expect(payload.variants[0].size).toBe('42');
+    expect(payload.variants).toHaveLength(2);
+  });
+});
+
+describe('deriveCatalogInlineErrors', () => {
+  test('maps product-name validation failures to a safe inline message', () => {
+    const errors = deriveCatalogInlineErrors(
+      new ApiError(
+        422,
+        '{"detail":[{"loc":["body","identity","product_name"],"msg":"String should have at least 2 characters","type":"string_too_short"}]} (https://example.com/catalog/products)'
+      )
+    );
+
+    expect(errors.product_name).toBe('Product name must be at least 2 characters.');
   });
 });

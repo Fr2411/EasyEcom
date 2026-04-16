@@ -217,6 +217,48 @@ function cloneVariant(variant: CatalogVariantInput): CatalogVariantInput {
   return { ...variant };
 }
 
+function stripRequestUrlFromMessage(message: string) {
+  return message.replace(/\s*\(https?:\/\/[^)]+\)\s*$/i, '').trim();
+}
+
+function isVariantEligibleAsFirstForCreateFlow(variant: CatalogVariantInput) {
+  const status = (variant.status || 'active').trim() || 'active';
+  if (status !== 'active') return false;
+  return Boolean(
+    variant.size.trim()
+    || variant.color.trim()
+    || variant.other.trim()
+    || variant.barcode.trim()
+  );
+}
+
+export function normalizeFirstVariantForCreateFlow(payload: CatalogUpsertPayload): CatalogUpsertPayload {
+  const candidateIndex = payload.variants.findIndex(isVariantEligibleAsFirstForCreateFlow);
+  if (candidateIndex <= 0) return payload;
+  const variants = payload.variants.map(cloneVariant);
+  const [candidate] = variants.splice(candidateIndex, 1);
+  variants.unshift(candidate);
+  return { ...payload, variants };
+}
+
+type CatalogInlineErrors = {
+  product_name?: string;
+};
+
+export function deriveCatalogInlineErrors(error: unknown): CatalogInlineErrors {
+  if (!(error instanceof ApiError)) return {};
+  const message = stripRequestUrlFromMessage(error.message);
+  const normalized = message.toLowerCase();
+  if (
+    normalized.includes('identity.product_name')
+    || normalized.includes('product name must be at least 2 characters')
+    || normalized.includes('string_too_short')
+  ) {
+    return { product_name: 'Product name must be at least 2 characters.' };
+  }
+  return {};
+}
+
 function normalizeCatalogQuery(value: string) {
   return value.trim().toLowerCase();
 }
@@ -306,6 +348,7 @@ export function CatalogWorkspace() {
   const [productImage, setProductImage] = useState<ProductMedia | null>(null);
   const [createStep, setCreateStep] = useState<CatalogCreationStep>('product');
   const [error, setError] = useState('');
+  const [inlineErrors, setInlineErrors] = useState<CatalogInlineErrors>({});
   const [notice, setNotice] = useState('');
   const [saveToast, setSaveToast] = useState('');
   const [postCreateSuccess, setPostCreateSuccess] = useState<PostCreateSuccessState | null>(null);
@@ -366,6 +409,7 @@ export function CatalogWorkspace() {
     setProductImage(null);
     setNotice('');
     setError('');
+    setInlineErrors({});
     setCreateStep('product');
     if (!options?.keepPostCreateSuccess) {
       setPostCreateSuccess(null);
@@ -382,6 +426,7 @@ export function CatalogWorkspace() {
     setActiveTab('edit');
     setNotice('');
     setError('');
+    setInlineErrors({});
     setPostCreateSuccess(null);
     setCreateStep('confirm');
   };
@@ -488,16 +533,21 @@ export function CatalogWorkspace() {
     event.preventDefault();
     setNotice('');
     setError('');
+    setInlineErrors({});
+    const payload = isCreateFlow ? normalizeFirstVariantForCreateFlow(form) : form;
     try {
-      if (!form.product_id) {
+      if (payload !== form) {
+        setForm(payload);
+      }
+      if (!payload.product_id) {
         await validateCatalogCreationStep({
           step: 'confirm',
-          identity: form.identity,
-          variants: form.variants,
+          identity: payload.identity,
+          variants: payload.variants,
         });
       }
-      const response = await saveCatalogProduct(form);
-      if (form.product_id) {
+      const response = await saveCatalogProduct(payload);
+      if (payload.product_id) {
         setSaveToast('Product updated successfully.');
       } else {
         setSaveToast('Product saved successfully.');
@@ -512,7 +562,9 @@ export function CatalogWorkspace() {
         setError('Catalog save is not available on the connected API yet. Deploy the latest backend before trying to save products.');
         return;
       }
-      setError(saveError instanceof Error ? saveError.message : 'Unable to save product.');
+      const nextInlineErrors = deriveCatalogInlineErrors(saveError);
+      setInlineErrors(nextInlineErrors);
+      setError(Object.keys(nextInlineErrors).length ? 'Fix the highlighted fields and try again.' : saveError instanceof Error ? saveError.message : 'Unable to save product.');
     }
   };
 
@@ -520,11 +572,16 @@ export function CatalogWorkspace() {
   const isCreateFlow = !form.product_id;
   const goToNextCreateStep = async () => {
     if (!isCreateFlow || createStep === 'confirm') return;
+    setInlineErrors({});
+    const payload = createStep === 'first_variant' ? normalizeFirstVariantForCreateFlow(form) : form;
     try {
+      if (payload !== form) {
+        setForm(payload);
+      }
       await validateCatalogCreationStep({
         step: createStep,
-        identity: form.identity,
-        variants: form.variants,
+        identity: payload.identity,
+        variants: payload.variants,
       });
       const nextStep = CREATE_STEPS[activeStepIndex + 1];
       if (nextStep) {
@@ -533,7 +590,9 @@ export function CatalogWorkspace() {
         setError('');
       }
     } catch (stepError) {
-      setError(stepError instanceof Error ? stepError.message : 'Unable to continue to the next step.');
+      const nextInlineErrors = deriveCatalogInlineErrors(stepError);
+      setInlineErrors(nextInlineErrors);
+      setError(Object.keys(nextInlineErrors).length ? 'Fix the highlighted fields and continue.' : stepError instanceof Error ? stepError.message : 'Unable to continue to the next step.');
     }
   };
 
@@ -718,6 +777,7 @@ export function CatalogWorkspace() {
                     }
                     required
                   />
+                  {inlineErrors.product_name ? <p className="validation-message">{inlineErrors.product_name}</p> : null}
                 </label>
                 <label>
                   Supplier
