@@ -5636,9 +5636,17 @@ button.secondary:hover,
 .inventory-breadcrumb {
   display: flex;
   align-items: center;
-  gap: 0.45rem;
   color: var(--muted-foreground);
   font-size: 0.82rem;
+}
+
+.inventory-breadcrumb ol {
+  margin: 0;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  list-style: none;
 }
 
 .inventory-breadcrumb a {
@@ -5815,6 +5823,12 @@ button.secondary:hover,
 .inventory-stock-table-scroll {
   max-height: 72vh;
   overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable both-edges;
+}
+
+.inventory-command-center .table-scroll {
+  -webkit-overflow-scrolling: touch;
 }
 
 .inventory-variant-identity {
@@ -5847,7 +5861,7 @@ button.secondary:hover,
 }
 
 @media (max-width: 720px) {
-  .workspace-table-sticky thead th {
+  .inventory-command-center .workspace-table-sticky thead th {
     position: static;
   }
 
@@ -5869,5 +5883,12 @@ button.secondary:hover,
 
   .quick-actions-popover {
     min-width: min(11rem, calc(100vw - 1rem));
+  }
+}
+
+@media (max-width: 960px) {
+  .inventory-grouped-table th:first-child,
+  .inventory-grouped-table td:first-child {
+    position: static;
   }
 }

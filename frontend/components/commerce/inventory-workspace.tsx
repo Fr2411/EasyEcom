@@ -775,13 +775,21 @@ export function InventoryWorkspace() {
 
   return (
     <div className="workspace-stack inventory-command-center">
-      <div className="inventory-breadcrumb">
-        <Link href="/dashboard">Home</Link>
-        <span>/</span>
-        <Link href="/inventory">Inventory</Link>
-        <span>/</span>
-        <strong>{activeTabLabel[activeTab]}</strong>
-      </div>
+      <nav className="inventory-breadcrumb" aria-label="Inventory breadcrumb">
+        <ol>
+          <li>
+            <Link href="/dashboard">Home</Link>
+          </li>
+          <li aria-hidden="true">/</li>
+          <li>
+            <Link href="/inventory">Inventory</Link>
+          </li>
+          <li aria-hidden="true">/</li>
+          <li aria-current="page">
+            <strong>{activeTabLabel[activeTab]}</strong>
+          </li>
+        </ol>
+      </nav>
       <WorkspaceTabs
         tabs={[
           { id: 'stock', label: 'Available Stock' },
