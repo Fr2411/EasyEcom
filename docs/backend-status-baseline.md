@@ -115,5 +115,6 @@ Invariant status:
 
 ## 6) Blockers Requiring PM/User Input
 - No technical blocker to continue execution.
-- Policy decision needed before TEA-34 implementation:
-  - confirm whether destructive reset SQL must remain available only as an explicit ops script (recommended), or be removed entirely from repo migration history.
+- TEA-34 resolved on 2026-04-16:
+  - destructive DDL removed from versioned `20260315_0001_product_ready_foundation.sql`
+  - explicit ops-only reset path added via `scripts/reset_rds_to_full_foundation.sh`

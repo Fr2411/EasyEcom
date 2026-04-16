@@ -115,6 +115,18 @@ Optional backend smoke check after deploy:
 API_BASE_URL=https://<your-backend-domain> ./scripts/auth_deploy_smoke.sh
 ```
 
+## Controlled reset scripts
+- Auth-only reset (legacy auth/core only):
+```bash
+./scripts/reset_rds_to_auth_core.sh
+```
+- Full foundation reset (destructive; drops all public tables, then re-runs migrations + seeds):
+```bash
+./scripts/reset_rds_to_full_foundation.sh
+```
+
+Destructive reset logic is intentionally kept outside versioned migrations.
+
 ## DBeaver gateway to RDS
 
 Start the SSH gateway from your laptop:
