@@ -34,6 +34,7 @@ import { buildSkuPreview, buildVariantCombinations, signatureForVariant } from '
 import { ProductPhotoField } from '@/components/commerce/product-photo-field';
 import { getPurchaseOrder, listPurchaseOrders } from '@/lib/api/purchases';
 import type { PurchaseDetail } from '@/types/purchases';
+import { ApiError } from '@/lib/api/client';
 
 
 type InventoryTab = 'stock' | 'receive' | 'adjust' | 'low-stock';
@@ -250,6 +251,13 @@ export function receiveLinesFromPurchaseOrder(order: PurchaseDetail): ReceiveSto
       quantity: String(line.qty ?? ''),
       default_purchase_price: String(line.unit_cost ?? ''),
     }));
+}
+
+export function safePurchaseOrderErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof ApiError && error.status === 403) {
+    return 'You do not have permission to view purchase orders.';
+  }
+  return fallback;
 }
 
 function isNewVariantLine(line: ReceiveStockLineInput) {
@@ -560,6 +568,15 @@ export function InventoryWorkspace() {
     try {
       const payload = await listPurchaseOrders({ status: 'draft' });
       setOutstandingPurchaseOrders(payload.items);
+      setError('');
+    } catch (loadError) {
+      setOutstandingPurchaseOrders([]);
+      setError(
+        safePurchaseOrderErrorMessage(
+          loadError,
+          'Unable to load outstanding purchase orders. You can still receive stock manually.'
+        )
+      );
     } finally {
       setLoadingPurchaseOrders(false);
     }
@@ -610,9 +627,7 @@ export function InventoryWorkspace() {
     if (activeTab !== 'receive') {
       return;
     }
-    void loadOutstandingPurchaseOrders().catch((purchaseOrderError) => {
-      setError(purchaseOrderError instanceof Error ? purchaseOrderError.message : 'Unable to load outstanding purchase orders.');
-    });
+    void loadOutstandingPurchaseOrders();
   }, [activeTab]);
 
   useEffect(() => {
@@ -956,7 +971,12 @@ export function InventoryWorkspace() {
       }));
       setNotice(`Loaded ${order.lines.length} line(s) from ${order.purchase_no}.`);
     } catch (orderError) {
-      setError(orderError instanceof Error ? orderError.message : 'Unable to load purchase order details.');
+      setError(
+        safePurchaseOrderErrorMessage(
+          orderError,
+          'Unable to load purchase order details. You can still proceed with manual receiving.'
+        )
+      );
     } finally {
       setLookupPending(false);
     }

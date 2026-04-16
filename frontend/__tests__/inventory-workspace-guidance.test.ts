@@ -4,7 +4,9 @@ import {
   deriveInventoryProductGroups,
   deriveInventorySearchSuggestions,
   receiveLinesFromPurchaseOrder,
+  safePurchaseOrderErrorMessage,
 } from '@/components/commerce/inventory-workspace';
+import { ApiError } from '@/lib/api/client';
 import type { InventoryIntakeLookup, InventoryStockRow } from '@/types/inventory';
 
 function buildLookup(overrides: Partial<InventoryIntakeLookup>): InventoryIntakeLookup {
@@ -212,5 +214,12 @@ describe('receiveLinesFromPurchaseOrder', () => {
     expect(lines[0].variant_id).toBe('variant-1');
     expect(lines[0].quantity).toBe('5');
     expect(lines[0].default_purchase_price).toBe('12.5');
+  });
+});
+
+describe('safePurchaseOrderErrorMessage', () => {
+  test('returns a safe permission message for purchase-order 403 errors', () => {
+    const result = safePurchaseOrderErrorMessage(new ApiError(403, 'Access denied for Purchases (https://api.easy-ecom.online/purchases/orders?status=draft)'), 'Fallback');
+    expect(result).toBe('You do not have permission to view purchase orders.');
   });
 });
