@@ -264,14 +264,7 @@ export function TopHeader({ onOpenNavigation }: { onOpenNavigation?: () => void 
         <Menu size={18} aria-hidden="true" />
       </button>
       <div className="header-copy">
-        {pageContext.section ? (
-          <div className="header-kicker-row">
-            <span className="header-kicker-pill">{pageContext.section}</span>
-          </div>
-        ) : null}
         <p className="header-title">{pageContext.title ?? matchedRoute?.label ?? DEFAULT_TITLE}</p>
-        {pageContext.subtitle ? <p className="header-subtitle">{pageContext.subtitle}</p> : null}
-        {pageContext.summary ? <p className="header-summary">{pageContext.summary}</p> : null}
       </div>
       <form className="header-search" aria-label="Global search" onSubmit={onSubmit}>
         <span className="header-search-icon" aria-hidden="true">
