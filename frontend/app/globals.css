@@ -1938,6 +1938,12 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
   background: #f7fbfb;
 }
 
+.workspace-table-sticky thead th {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
 .workspace-table td input,
 .workspace-table td select {
   width: 100%;
@@ -5635,6 +5641,15 @@ button.secondary:hover,
   font-size: 0.82rem;
 }
 
+.inventory-breadcrumb a {
+  color: var(--muted-foreground);
+  text-decoration: none;
+}
+
+.inventory-breadcrumb a:hover {
+  text-decoration: underline;
+}
+
 .inventory-breadcrumb strong {
   color: var(--foreground);
 }
@@ -5658,6 +5673,10 @@ button.secondary:hover,
 
 .inventory-grouped-table .inventory-product-row > td {
   vertical-align: middle;
+}
+
+.inventory-grouped-table {
+  min-width: 980px;
 }
 
 .inventory-grouped-table th:first-child,
@@ -5790,6 +5809,12 @@ button.secondary:hover,
 
 .inventory-variant-table {
   margin: 0;
+  min-width: 860px;
+}
+
+.inventory-stock-table-scroll {
+  max-height: 72vh;
+  overflow: auto;
 }
 
 .inventory-variant-identity {
@@ -5822,6 +5847,14 @@ button.secondary:hover,
 }
 
 @media (max-width: 720px) {
+  .workspace-table-sticky thead th {
+    position: static;
+  }
+
+  .inventory-stock-table-scroll {
+    max-height: none;
+  }
+
   .inventory-filters {
     grid-template-columns: 1fr;
   }
