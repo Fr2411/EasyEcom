@@ -231,6 +231,7 @@ class InventoryIntakeLookupResponse(BaseModel):
 class ReceiveStockRequest(BaseModel):
     action: Literal["receive_stock", "save_template_only"] = "receive_stock"
     location_id: str | None = None
+    source_purchase_order_id: str | None = None
     notes: str = ""
     update_matched_product_details: bool = False
     identity: InventoryIntakeIdentityInput

@@ -31,6 +31,8 @@ import {
 import { formatMoney, formatQuantity } from '@/lib/commerce-format';
 import { buildSkuPreview, buildVariantCombinations, signatureForVariant } from '@/lib/variant-generator';
 import { ProductPhotoField } from '@/components/commerce/product-photo-field';
+import { getPurchaseOrder, listPurchaseOrders } from '@/lib/api/purchases';
+import type { PurchaseDetail } from '@/types/purchases';
 
 
 type InventoryTab = 'stock' | 'receive' | 'adjust' | 'low-stock';
@@ -235,6 +237,17 @@ function newLineFromCombo(
 
 function cloneLine(line: ReceiveStockLineInput): ReceiveStockLineInput {
   return { ...line };
+}
+
+export function receiveLinesFromPurchaseOrder(order: PurchaseDetail): ReceiveStockLineInput[] {
+  return order.lines
+    .filter((line) => line.variant_id)
+    .map((line) => ({
+      ...EMPTY_LINE,
+      variant_id: line.variant_id,
+      quantity: String(line.qty ?? ''),
+      default_purchase_price: String(line.unit_cost ?? ''),
+    }));
 }
 
 function isNewVariantLine(line: ReceiveStockLineInput) {
@@ -460,6 +473,9 @@ export function InventoryWorkspace() {
   const [reorderDrafts, setReorderDrafts] = useState<Record<string, string>>({});
   const [savingSupplierFor, setSavingSupplierFor] = useState<string | null>(null);
   const [savingReorderFor, setSavingReorderFor] = useState<string | null>(null);
+  const [outstandingPurchaseOrders, setOutstandingPurchaseOrders] = useState<Awaited<ReturnType<typeof listPurchaseOrders>>['items']>([]);
+  const [selectedPurchaseOrderId, setSelectedPurchaseOrderId] = useState('');
+  const [loadingPurchaseOrders, setLoadingPurchaseOrders] = useState(false);
   const [isPending, startTransition] = useTransition();
   const quickActionsMenuRef = useRef<HTMLDivElement | null>(null);
   const quickActionsButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
@@ -533,6 +549,16 @@ export function InventoryWorkspace() {
     });
   };
 
+  const loadOutstandingPurchaseOrders = async () => {
+    setLoadingPurchaseOrders(true);
+    try {
+      const payload = await listPurchaseOrders({ status: 'draft' });
+      setOutstandingPurchaseOrders(payload.items);
+    } finally {
+      setLoadingPurchaseOrders(false);
+    }
+  };
+
   const positionQuickActionsMenu = (button: HTMLButtonElement) => {
     const rect = button.getBoundingClientRect();
     const horizontalMargin = 8;
@@ -573,6 +599,15 @@ export function InventoryWorkspace() {
     }
     loadWorkspace(query);
   }, [searchKey]);
+
+  useEffect(() => {
+    if (activeTab !== 'receive') {
+      return;
+    }
+    void loadOutstandingPurchaseOrders().catch((purchaseOrderError) => {
+      setError(purchaseOrderError instanceof Error ? purchaseOrderError.message : 'Unable to load outstanding purchase orders.');
+    });
+  }, [activeTab]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -878,6 +913,39 @@ export function InventoryWorkspace() {
       }),
     }));
     setNotice(scope === 'all' ? 'Generator defaults applied to all receipt lines.' : 'Generator defaults filled empty receipt fields.');
+  };
+
+  const applyPurchaseOrderToReceive = async () => {
+    if (!selectedPurchaseOrderId) {
+      setError('Select an outstanding purchase order first.');
+      return;
+    }
+    setLookupPending(true);
+    setNotice('');
+    setError('');
+    try {
+      const order = await getPurchaseOrder(selectedPurchaseOrderId);
+      const firstLine = order.lines[0];
+      if (!firstLine) {
+        setError('Selected purchase order has no lines.');
+        return;
+      }
+      setReceiveForm((current) => ({
+        ...current,
+        source_purchase_order_id: order.purchase_id,
+        notes: current.notes.trim() ? current.notes : `Receiving against ${order.purchase_no}`,
+        identity: {
+          ...current.identity,
+          product_name: current.identity.product_name.trim() || firstLine.product_name || 'Purchase order receipt',
+        },
+        lines: receiveLinesFromPurchaseOrder(order),
+      }));
+      setNotice(`Loaded ${order.lines.length} line(s) from ${order.purchase_no}.`);
+    } catch (orderError) {
+      setError(orderError instanceof Error ? orderError.message : 'Unable to load purchase order details.');
+    } finally {
+      setLookupPending(false);
+    }
   };
 
   const submitReceive = async (action: ReceiveStockPayload['action']) => {
@@ -1418,6 +1486,48 @@ export function InventoryWorkspace() {
 
         {activeTab === 'receive' ? (
           <div className="workspace-stack">
+            <section className="workspace-subsection">
+              <div className="workspace-subsection-header">
+                <h4 className="workspace-heading">
+                  Outstanding Purchase Orders
+                  <WorkspaceHint
+                    label="Outstanding purchase orders help"
+                    text="When an open PO exists, load it first to prefill expected variants and quantities before posting the stock receipt."
+                  />
+                </h4>
+              </div>
+              <div className="workspace-inline-actions">
+                <label>
+                  Draft purchase order
+                  <select
+                    value={selectedPurchaseOrderId}
+                    onChange={(event) => setSelectedPurchaseOrderId(event.target.value)}
+                    disabled={loadingPurchaseOrders}
+                  >
+                    <option value="">Select outstanding PO</option>
+                    {outstandingPurchaseOrders.map((order) => (
+                      <option key={order.purchase_id} value={order.purchase_id}>
+                        {order.purchase_no} · {order.supplier_name || 'No supplier'} · {order.purchase_date || 'No date'}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button type="button" onClick={() => void applyPurchaseOrderToReceive()} disabled={!selectedPurchaseOrderId || lookupPending}>
+                  {lookupPending ? 'Loading…' : 'Load PO lines'}
+                </button>
+                <button type="button" className="btn-secondary" onClick={() => void loadOutstandingPurchaseOrders()}>
+                  Refresh POs
+                </button>
+                <span>
+                  {loadingPurchaseOrders
+                    ? 'Refreshing outstanding orders…'
+                    : outstandingPurchaseOrders.length
+                      ? `${outstandingPurchaseOrders.length} draft PO(s) available`
+                      : 'No outstanding draft POs'}
+                </span>
+              </div>
+            </section>
+
             <section className="workspace-subsection">
               <div className="workspace-subsection-header">
                 <h4 className="workspace-heading">
