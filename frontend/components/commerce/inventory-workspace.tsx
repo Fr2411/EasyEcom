@@ -34,7 +34,7 @@ import { buildSkuPreview, buildVariantCombinations, signatureForVariant } from '
 import { ProductPhotoField } from '@/components/commerce/product-photo-field';
 import { getPurchaseOrder, listPurchaseOrders } from '@/lib/api/purchases';
 import type { PurchaseDetail } from '@/types/purchases';
-import { ApiError } from '@/lib/api/client';
+import { ApiError, ApiNetworkError } from '@/lib/api/client';
 
 
 type InventoryTab = 'stock' | 'receive' | 'adjust' | 'low-stock';
@@ -258,6 +258,31 @@ export function safePurchaseOrderErrorMessage(error: unknown, fallback: string) 
     return 'You do not have permission to view purchase orders.';
   }
   return fallback;
+}
+
+export function safeReceiveStockErrorMessage(error: unknown, sourcePurchaseOrderId?: string) {
+  if (error instanceof ApiNetworkError) {
+    return 'Unable to save stock receipt right now. Check your connection and try again.';
+  }
+  if (error instanceof ApiError) {
+    if (sourcePurchaseOrderId) {
+      if (error.status === 403) {
+        return 'You do not have permission to receive stock against purchase orders.';
+      }
+      if (error.status === 404) {
+        return 'The selected purchase order was not found. Refresh outstanding orders and try again.';
+      }
+      if (error.status >= 500) {
+        return 'Purchase order receiving is temporarily unavailable. You can continue with manual receiving.';
+      }
+      return 'Unable to receive against the selected purchase order. Refresh orders and try again.';
+    }
+    if (error.status >= 500) {
+      return 'Unable to save stock receipt right now. Please try again in a moment.';
+    }
+    return 'Unable to save stock receipt. Please review the form values and try again.';
+  }
+  return 'Unable to save stock receipt right now. Please try again.';
 }
 
 function isNewVariantLine(line: ReceiveStockLineInput) {
@@ -1010,7 +1035,7 @@ export function InventoryWorkspace() {
         setActiveTab('stock');
       }
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : 'Unable to save intake.');
+      setError(safeReceiveStockErrorMessage(submitError, receiveForm.source_purchase_order_id));
     } finally {
       setSubmitPending(false);
     }
