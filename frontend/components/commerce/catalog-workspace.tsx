@@ -393,6 +393,25 @@ export function CatalogWorkspace() {
 
   const generatedCombos = useMemo(() => buildVariantCombinations(generator), [generator]);
   const derivedDiscount = calculateDerivedDiscount(form.identity.default_selling_price, form.identity.min_selling_price);
+  const hasVariantDimensionInputs = useMemo(
+    () => [generator.size_values, generator.color_values, generator.other_values].some((value) => value.trim().length > 0),
+    [generator.size_values, generator.color_values, generator.other_values]
+  );
+  const hasVariantRowsBeyondDefault = useMemo(
+    () =>
+      form.variants.some((variant) =>
+        Boolean(
+          variant.variant_id
+          || variant.size.trim()
+          || variant.color.trim()
+          || variant.other.trim()
+          || variant.sku.trim()
+          || variant.barcode.trim()
+        )
+      ),
+    [form.variants]
+  );
+  const collapseVariantControlsByDefault = !hasVariantDimensionInputs && !hasVariantRowsBeyondDefault;
 
   const applyGenerator = (mode: 'merge' | 'reset') => {
     setForm((current) => {
@@ -723,110 +742,120 @@ export function CatalogWorkspace() {
                   <input value={derivedDiscount ? `${derivedDiscount}%` : 'Not set'} readOnly />
                 </label>
               </div>
+              <p className="workspace-field-note">
+                Product-level prices are templates for this catalog parent. Saleable stock and final sell behavior are defined per variant row.
+              </p>
             </div>
 
-            <div className="workspace-subsection">
-              <div className="workspace-subsection-header">
-                <h4 className="workspace-heading">
-                  Variant Generator
-                  <WorkspaceHint
-                    label="Catalog variant generator help"
-                    text="Enter comma-separated option values to generate combinations, then review and edit the rows below before saving."
-                  />
-                </h4>
-                <div className="workspace-inline-actions">
-                  <button type="button" onClick={() => applyGenerator('merge')}>Generate / Regenerate</button>
-                  <button type="button" onClick={() => applyGenerator('reset')}>Reset from generator</button>
+            <details className="workspace-subsection" open={!collapseVariantControlsByDefault}>
+              <summary className="workspace-field-note">
+                Variant controls (optional): configure only when this product needs multiple variant combinations.
+              </summary>
+              <div className="workspace-stack">
+                <div className="workspace-subsection">
+                  <div className="workspace-subsection-header">
+                    <h4 className="workspace-heading">
+                      Variant Generator
+                      <WorkspaceHint
+                        label="Catalog variant generator help"
+                        text="Enter comma-separated option values to generate combinations, then review and edit the rows below before saving."
+                      />
+                    </h4>
+                    <div className="workspace-inline-actions">
+                      <button type="button" onClick={() => applyGenerator('merge')}>Generate / Regenerate</button>
+                      <button type="button" onClick={() => applyGenerator('reset')}>Reset from generator</button>
+                    </div>
+                  </div>
+                  <div className="workspace-form-grid">
+                    <label>
+                      Sizes
+                      <input
+                        value={generator.size_values}
+                        placeholder="40, 41, 42"
+                        onChange={(event) => setGenerator((current) => ({ ...current, size_values: event.target.value }))}
+                      />
+                    </label>
+                    <label>
+                      Colors
+                      <input
+                        value={generator.color_values}
+                        placeholder="Black, White"
+                        onChange={(event) => setGenerator((current) => ({ ...current, color_values: event.target.value }))}
+                      />
+                    </label>
+                    <label>
+                      Other
+                      <input
+                        value={generator.other_values}
+                        placeholder="Mesh, Leather"
+                        onChange={(event) => setGenerator((current) => ({ ...current, other_values: event.target.value }))}
+                      />
+                    </label>
+                  </div>
+                  <div className="commerce-card-meta">
+                    <span>Preview combinations: {generatedCombos.length}</span>
+                    <span>Saved variants: {savedVariants.length}</span>
+                    <span>Rows in editor: {form.variants.length}</span>
+                  </div>
                 </div>
-              </div>
-              <div className="workspace-form-grid">
-                <label>
-                  Sizes
-                  <input
-                    value={generator.size_values}
-                    placeholder="40, 41, 42"
-                    onChange={(event) => setGenerator((current) => ({ ...current, size_values: event.target.value }))}
-                  />
-                </label>
-                <label>
-                  Colors
-                  <input
-                    value={generator.color_values}
-                    placeholder="Black, White"
-                    onChange={(event) => setGenerator((current) => ({ ...current, color_values: event.target.value }))}
-                  />
-                </label>
-                <label>
-                  Other
-                  <input
-                    value={generator.other_values}
-                    placeholder="Mesh, Leather"
-                    onChange={(event) => setGenerator((current) => ({ ...current, other_values: event.target.value }))}
-                  />
-                </label>
-              </div>
-              <div className="commerce-card-meta">
-                <span>Preview combinations: {generatedCombos.length}</span>
-                <span>Saved variants: {savedVariants.length}</span>
-                <span>Rows in editor: {form.variants.length}</span>
-              </div>
-            </div>
 
-            <div className="workspace-subsection">
-              <div className="workspace-subsection-header">
-                <h4 className="workspace-heading">
-                  Variant Defaults
-                  <WorkspaceHint
-                    label="Variant defaults help"
-                    text="Use these shared defaults when many variants should start with the same cost, price, minimum price, or reorder level."
-                  />
-                </h4>
-                <div className="workspace-inline-actions">
-                  <button type="button" onClick={() => applyDefaultsToVariants('empty')}>Apply to empty rows</button>
-                  <button type="button" onClick={() => applyDefaultsToVariants('all')}>Apply to all rows</button>
+                <div className="workspace-subsection">
+                  <div className="workspace-subsection-header">
+                    <h4 className="workspace-heading">
+                      Variant Defaults
+                      <WorkspaceHint
+                        label="Variant defaults help"
+                        text="Use these shared defaults when many variants should start with the same cost, price, minimum price, or reorder level."
+                      />
+                    </h4>
+                    <div className="workspace-inline-actions">
+                      <button type="button" onClick={() => applyDefaultsToVariants('empty')}>Apply to empty rows</button>
+                      <button type="button" onClick={() => applyDefaultsToVariants('all')}>Apply to all rows</button>
+                    </div>
+                  </div>
+                  <div className="workspace-form-grid compact">
+                    <label>
+                      Default purchase cost
+                      <input
+                        inputMode="decimal"
+                        value={generator.default_purchase_price}
+                        onChange={(event) =>
+                          setGenerator((current) => ({ ...current, default_purchase_price: event.target.value }))
+                        }
+                      />
+                    </label>
+                    <label>
+                      Default selling price
+                      <input
+                        inputMode="decimal"
+                        value={generator.default_selling_price}
+                        onChange={(event) =>
+                          setGenerator((current) => ({ ...current, default_selling_price: event.target.value }))
+                        }
+                      />
+                    </label>
+                    <label>
+                      Minimum selling price
+                      <input
+                        inputMode="decimal"
+                        value={generator.min_selling_price}
+                        onChange={(event) =>
+                          setGenerator((current) => ({ ...current, min_selling_price: event.target.value }))
+                        }
+                      />
+                    </label>
+                    <label>
+                      Reorder level
+                      <input
+                        inputMode="decimal"
+                        value={generator.reorder_level}
+                        onChange={(event) => setGenerator((current) => ({ ...current, reorder_level: event.target.value }))}
+                      />
+                    </label>
+                  </div>
                 </div>
               </div>
-              <div className="workspace-form-grid compact">
-                <label>
-                  Default purchase cost
-                  <input
-                    inputMode="decimal"
-                    value={generator.default_purchase_price}
-                    onChange={(event) =>
-                      setGenerator((current) => ({ ...current, default_purchase_price: event.target.value }))
-                    }
-                  />
-                </label>
-                <label>
-                  Default selling price
-                  <input
-                    inputMode="decimal"
-                    value={generator.default_selling_price}
-                    onChange={(event) =>
-                      setGenerator((current) => ({ ...current, default_selling_price: event.target.value }))
-                    }
-                  />
-                </label>
-                <label>
-                  Minimum selling price
-                  <input
-                    inputMode="decimal"
-                    value={generator.min_selling_price}
-                    onChange={(event) =>
-                      setGenerator((current) => ({ ...current, min_selling_price: event.target.value }))
-                    }
-                  />
-                </label>
-                <label>
-                  Reorder level
-                  <input
-                    inputMode="decimal"
-                    value={generator.reorder_level}
-                    onChange={(event) => setGenerator((current) => ({ ...current, reorder_level: event.target.value }))}
-                  />
-                </label>
-              </div>
-            </div>
+            </details>
 
             <div className="workspace-subsection">
               <div className="workspace-subsection-header">
@@ -851,6 +880,9 @@ export function CatalogWorkspace() {
               </div>
 
               <div className="workspace-stack">
+                <p className="workspace-field-note">
+                  Product fields stay shared at parent level. Variant rows below represent the saleable SKUs and can override price and reorder values.
+                </p>
                 {form.variants.map((variant, index) => {
                   const isSavedVariant = Boolean(variant.variant_id);
                   const skuPreview = buildSkuPreview(form.identity.product_name, form.identity.sku_root, variant);
