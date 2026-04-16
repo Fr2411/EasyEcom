@@ -5664,7 +5664,7 @@ button.secondary:hover,
 
 .inventory-filters {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 0.7rem;
   padding: 0.8rem;
   border: 1px solid var(--border-muted);
@@ -5677,6 +5677,46 @@ button.secondary:hover,
   gap: 0.35rem;
   font-size: 0.82rem;
   color: var(--muted-foreground);
+}
+
+.inventory-filter-reset {
+  align-self: end;
+  justify-self: end;
+}
+
+.inventory-status-segments {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.inventory-status-segments button {
+  border: 1px solid var(--border-muted);
+  background: var(--surface-raised);
+  color: var(--foreground);
+  border-radius: 0.75rem;
+  padding: 0.45rem 0.65rem;
+  font-size: 0.82rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+}
+
+.inventory-status-segments button span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  font-size: 0.75rem;
+  padding: 0.1rem 0.38rem;
+}
+
+.inventory-status-segments button.active {
+  border-color: color-mix(in srgb, var(--brand) 60%, var(--border-muted));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--brand) 28%, transparent);
 }
 
 .inventory-grouped-table .inventory-product-row > td {
@@ -5871,6 +5911,14 @@ button.secondary:hover,
 
   .inventory-filters {
     grid-template-columns: 1fr;
+  }
+
+  .inventory-filter-reset {
+    justify-self: stretch;
+  }
+
+  .inventory-status-segments {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .inventory-panel-actions {

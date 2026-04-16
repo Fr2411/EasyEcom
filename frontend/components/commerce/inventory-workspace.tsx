@@ -33,6 +33,7 @@ import { ProductPhotoField } from '@/components/commerce/product-photo-field';
 
 
 type InventoryTab = 'stock' | 'receive' | 'adjust' | 'low-stock';
+type InventoryStockSegment = 'all' | 'normal' | 'low' | 'out';
 
 type InventoryProductGroup = {
   product_id: string;
@@ -304,6 +305,36 @@ function toNumber(value: string) {
   return Number(value || '0');
 }
 
+function stockStatusForGroup(group: InventoryProductGroup): Exclude<InventoryStockSegment, 'all'> {
+  if (group.available_to_sell <= 0) {
+    return 'out';
+  }
+  if (group.low_stock_count > 0) {
+    return 'low';
+  }
+  return 'normal';
+}
+
+function matchesStockSegment(group: InventoryProductGroup, stockFilter: InventoryStockSegment) {
+  return stockFilter === 'all' ? true : stockStatusForGroup(group) === stockFilter;
+}
+
+function matchesTagFilter(group: InventoryProductGroup, filterValue: string) {
+  const normalized = filterValue.trim().toLowerCase();
+  if (!normalized) {
+    return true;
+  }
+  const tags = [
+    group.product_name,
+    group.supplier,
+    group.category,
+    ...group.variants.flatMap((variant) => [variant.label, variant.sku, variant.barcode]),
+  ]
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+  return tags.some((tag) => tag.includes(normalized));
+}
+
 export function deriveInventoryProductGroups(items: InventoryStockRow[]): InventoryProductGroup[] {
   const groups = new Map<string, InventoryProductGroup>();
   items.forEach((item) => {
@@ -358,7 +389,8 @@ export function InventoryWorkspace() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [supplierFilter, setSupplierFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
-  const [stockFilter, setStockFilter] = useState<'all' | 'normal' | 'low' | 'out'>('all');
+  const [tagFilter, setTagFilter] = useState('');
+  const [stockFilter, setStockFilter] = useState<InventoryStockSegment>('all');
   const [adjustmentProductId, setAdjustmentProductId] = useState<string>('');
   const [isPending, startTransition] = useTransition();
   const quickActionsMenuRef = useRef<HTMLDivElement | null>(null);
@@ -381,17 +413,31 @@ export function InventoryWorkspace() {
     return productGroups.filter((group) => {
       const supplierMatch = !supplierFilter.trim() || group.supplier.toLowerCase().includes(supplierFilter.trim().toLowerCase());
       const categoryMatch = !categoryFilter.trim() || group.category.toLowerCase().includes(categoryFilter.trim().toLowerCase());
-      const stockMatch =
-        stockFilter === 'all'
-          ? true
-          : stockFilter === 'low'
-            ? group.low_stock_count > 0
-            : stockFilter === 'out'
-              ? group.available_to_sell <= 0
-              : group.low_stock_count === 0 && group.available_to_sell > 0;
-      return supplierMatch && categoryMatch && stockMatch;
+      const stockMatch = matchesStockSegment(group, stockFilter);
+      const tagMatch = matchesTagFilter(group, tagFilter);
+      return supplierMatch && categoryMatch && stockMatch && tagMatch;
     });
-  }, [categoryFilter, productGroups, stockFilter, supplierFilter]);
+  }, [categoryFilter, productGroups, stockFilter, supplierFilter, tagFilter]);
+  const supplierOptions = useMemo(
+    () => Array.from(new Set(productGroups.map((group) => group.supplier.trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [productGroups],
+  );
+  const categoryOptions = useMemo(
+    () => Array.from(new Set(productGroups.map((group) => group.category.trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [productGroups],
+  );
+  const stockCounts = useMemo(() => {
+    const counts: Record<InventoryStockSegment, number> = {
+      all: productGroups.length,
+      normal: 0,
+      low: 0,
+      out: 0,
+    };
+    productGroups.forEach((group) => {
+      counts[stockStatusForGroup(group)] += 1;
+    });
+    return counts;
+  }, [productGroups]);
   const openQuickActionGroup = useMemo(
     () => filteredProductGroups.find((group) => group.product_id === openQuickActionsFor) ?? null,
     [filteredProductGroups, openQuickActionsFor],
@@ -847,11 +893,46 @@ export function InventoryWorkspace() {
         {notice ? <WorkspaceNotice tone="success">{notice}</WorkspaceNotice> : null}
         {error ? <WorkspaceNotice tone="error">{error}</WorkspaceNotice> : null}
         {isPending && !workspace ? <WorkspaceNotice>Loading inventory…</WorkspaceNotice> : null}
+        <section className="inventory-status-segments" aria-label="Stock status segmentation">
+          <button
+            type="button"
+            className={stockFilter === 'all' ? 'active' : ''}
+            onClick={() => setStockFilter('all')}
+          >
+            All
+            <span>{stockCounts.all}</span>
+          </button>
+          <button
+            type="button"
+            className={stockFilter === 'normal' ? 'active' : ''}
+            onClick={() => setStockFilter('normal')}
+          >
+            Healthy
+            <span>{stockCounts.normal}</span>
+          </button>
+          <button
+            type="button"
+            className={stockFilter === 'low' ? 'active' : ''}
+            onClick={() => setStockFilter('low')}
+          >
+            Low
+            <span>{stockCounts.low}</span>
+          </button>
+          <button
+            type="button"
+            className={stockFilter === 'out' ? 'active' : ''}
+            onClick={() => setStockFilter('out')}
+          >
+            Out
+            <span>{stockCounts.out}</span>
+          </button>
+        </section>
         {filtersOpen ? (
           <section className="inventory-filters" aria-label="Inventory filters">
             <label>
               Supplier
               <input
+                list="inventory-supplier-filter-options"
                 value={supplierFilter}
                 onChange={(event) => setSupplierFilter(event.target.value)}
                 placeholder="Filter by supplier"
@@ -860,9 +941,18 @@ export function InventoryWorkspace() {
             <label>
               Category
               <input
+                list="inventory-category-filter-options"
                 value={categoryFilter}
                 onChange={(event) => setCategoryFilter(event.target.value)}
                 placeholder="Filter by category"
+              />
+            </label>
+            <label>
+              Tags
+              <input
+                value={tagFilter}
+                onChange={(event) => setTagFilter(event.target.value)}
+                placeholder="Filter by SKU, barcode, or variant"
               />
             </label>
             <label>
@@ -874,6 +964,24 @@ export function InventoryWorkspace() {
                 <option value="out">Out of stock</option>
               </select>
             </label>
+            <button
+              type="button"
+              className="btn-secondary inventory-filter-reset"
+              onClick={() => {
+                setSupplierFilter('');
+                setCategoryFilter('');
+                setTagFilter('');
+                setStockFilter('all');
+              }}
+            >
+              Clear filters
+            </button>
+            <datalist id="inventory-supplier-filter-options">
+              {supplierOptions.map((value) => <option key={value} value={value} />)}
+            </datalist>
+            <datalist id="inventory-category-filter-options">
+              {categoryOptions.map((value) => <option key={value} value={value} />)}
+            </datalist>
           </section>
         ) : null}
 
