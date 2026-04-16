@@ -364,6 +364,48 @@ export function deriveInventoryProductGroups(items: InventoryStockRow[]): Invent
   return Array.from(groups.values()).sort((left, right) => left.product_name.localeCompare(right.product_name));
 }
 
+export function deriveInventorySearchSuggestions(
+  items: InventoryStockRow[],
+  query: string,
+  limit = 12
+): string[] {
+  const normalizedQuery = query.trim().toLowerCase();
+  const ranked = new Map<string, number>();
+  items.forEach((item) => {
+    const candidates = [
+      item.product_name,
+      item.sku,
+      item.label,
+      item.barcode,
+      item.supplier,
+      item.category,
+    ];
+    candidates.forEach((raw) => {
+      const candidate = raw.trim();
+      if (!candidate) {
+        return;
+      }
+      const lower = candidate.toLowerCase();
+      if (!normalizedQuery || lower.includes(normalizedQuery)) {
+        const score = normalizedQuery && lower.startsWith(normalizedQuery) ? 0 : 1;
+        const existing = ranked.get(candidate);
+        if (existing === undefined || score < existing) {
+          ranked.set(candidate, score);
+        }
+      }
+    });
+  });
+  return Array.from(ranked.entries())
+    .sort(([leftText, leftScore], [rightText, rightScore]) => {
+      if (leftScore !== rightScore) {
+        return leftScore - rightScore;
+      }
+      return leftText.localeCompare(rightText);
+    })
+    .slice(0, limit)
+    .map(([text]) => text);
+}
+
 export function InventoryWorkspace() {
   const { user } = useAuth();
   const router = useRouter();
@@ -418,6 +460,10 @@ export function InventoryWorkspace() {
       return supplierMatch && categoryMatch && stockMatch && tagMatch;
     });
   }, [categoryFilter, productGroups, stockFilter, supplierFilter, tagFilter]);
+  const searchSuggestions = useMemo(
+    () => deriveInventorySearchSuggestions(workspace?.stock_items ?? [], queryInput),
+    [queryInput, workspace?.stock_items],
+  );
   const supplierOptions = useMemo(
     () => Array.from(new Set(productGroups.map((group) => group.supplier.trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
     [productGroups],
@@ -864,10 +910,14 @@ export function InventoryWorkspace() {
                 type="search"
                 value={queryInput}
                 placeholder="Search products, variants, SKU, or barcode (Cmd/Ctrl+K)"
+                list="inventory-stock-search-suggestions"
                 onChange={(event) => setQueryInput(event.target.value)}
               />
               <button type="submit">Search</button>
             </form>
+            <datalist id="inventory-stock-search-suggestions">
+              {searchSuggestions.map((suggestion) => <option key={suggestion} value={suggestion} />)}
+            </datalist>
             <button
               type="button"
               className="btn-secondary"

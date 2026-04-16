@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'vitest';
-import { deriveIntakeRecommendation, deriveInventoryProductGroups } from '@/components/commerce/inventory-workspace';
+import {
+  deriveIntakeRecommendation,
+  deriveInventoryProductGroups,
+  deriveInventorySearchSuggestions,
+} from '@/components/commerce/inventory-workspace';
 import type { InventoryIntakeLookup, InventoryStockRow } from '@/types/inventory';
 
 function buildLookup(overrides: Partial<InventoryIntakeLookup>): InventoryIntakeLookup {
@@ -138,5 +142,40 @@ describe('deriveInventoryProductGroups', () => {
     expect(groups[0].on_hand).toBe(8);
     expect(groups[0].available_to_sell).toBe(7);
     expect(groups[0].low_stock_count).toBe(1);
+  });
+});
+
+describe('deriveInventorySearchSuggestions', () => {
+  test('returns product, sku, and variant-derived suggestions prioritized by prefix match', () => {
+    const suggestions = deriveInventorySearchSuggestions(
+      [
+        {
+          variant_id: 'v1',
+          product_id: 'p1',
+          product_name: 'Runner Shoe',
+          image_url: '',
+          image: null,
+          label: 'Runner Shoe / 41 / Black',
+          sku: 'RUN-41-BLK',
+          barcode: '111',
+          supplier: 'Sport Hub',
+          category: 'Shoes',
+          location_id: 'loc-1',
+          location_name: 'Main',
+          unit_cost: '20',
+          unit_price: '40',
+          reorder_level: '2',
+          on_hand: '3.000',
+          reserved: '1.000',
+          available_to_sell: '2.000',
+          low_stock: false,
+        },
+      ] as InventoryStockRow[],
+      'run',
+    );
+
+    expect(suggestions[0]).toBe('RUN-41-BLK');
+    expect(suggestions).toContain('Runner Shoe');
+    expect(suggestions).toContain('Runner Shoe / 41 / Black');
   });
 });
