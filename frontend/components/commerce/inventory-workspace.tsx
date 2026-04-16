@@ -26,6 +26,7 @@ import {
   WorkspaceHint,
   WorkspaceNotice,
   WorkspacePanel,
+  WorkspaceToast,
   WorkspaceTabs,
 } from '@/components/commerce/workspace-primitives';
 import { formatMoney, formatQuantity } from '@/lib/commerce-format';
@@ -38,6 +39,7 @@ import type { PurchaseDetail } from '@/types/purchases';
 type InventoryTab = 'stock' | 'receive' | 'adjust' | 'low-stock';
 type InventoryStockSegment = 'all' | 'normal' | 'low' | 'out';
 type InventoryColumnKey = 'supplier' | 'on_hand' | 'reserved' | 'available' | 'variants' | 'alerts';
+type InlineToast = { tone: 'success' | 'error'; message: string } | null;
 
 type InventoryProductGroup = {
   product_id: string;
@@ -473,6 +475,7 @@ export function InventoryWorkspace() {
   const [reorderDrafts, setReorderDrafts] = useState<Record<string, string>>({});
   const [savingSupplierFor, setSavingSupplierFor] = useState<string | null>(null);
   const [savingReorderFor, setSavingReorderFor] = useState<string | null>(null);
+  const [inlineToast, setInlineToast] = useState<InlineToast>(null);
   const [outstandingPurchaseOrders, setOutstandingPurchaseOrders] = useState<Awaited<ReturnType<typeof listPurchaseOrders>>['items']>([]);
   const [selectedPurchaseOrderId, setSelectedPurchaseOrderId] = useState('');
   const [loadingPurchaseOrders, setLoadingPurchaseOrders] = useState(false);
@@ -693,6 +696,14 @@ export function InventoryWorkspace() {
       document.removeEventListener('mousedown', closeOnOutsideClick);
     };
   }, [openQuickActionsFor]);
+
+  useEffect(() => {
+    if (!inlineToast) {
+      return;
+    }
+    const timer = window.setTimeout(() => setInlineToast(null), 2800);
+    return () => window.clearTimeout(timer);
+  }, [inlineToast]);
 
   const onSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -1022,9 +1033,11 @@ export function InventoryWorkspace() {
         supplier: draft,
       });
       setNotice(`Updated supplier for ${group.product_name}.`);
+      setInlineToast({ tone: 'success', message: `Supplier updated for ${group.product_name}.` });
       await loadWorkspace(queryInput.trim());
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Unable to update supplier.');
+      setInlineToast({ tone: 'error', message: `Supplier update failed for ${group.product_name}.` });
     } finally {
       setSavingSupplierFor(null);
     }
@@ -1048,9 +1061,11 @@ export function InventoryWorkspace() {
         reorder_level: draft,
       });
       setNotice(`Updated reorder level for ${variant.label}.`);
+      setInlineToast({ tone: 'success', message: `Reorder level updated for ${variant.label}.` });
       await loadWorkspace(queryInput.trim());
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Unable to update reorder level.');
+      setInlineToast({ tone: 'error', message: `Reorder level update failed for ${variant.label}.` });
     } finally {
       setSavingReorderFor(null);
     }
@@ -1150,6 +1165,7 @@ export function InventoryWorkspace() {
           </div>
         }
       >
+        {inlineToast ? <WorkspaceToast tone={inlineToast.tone} message={inlineToast.message} onClose={() => setInlineToast(null)} /> : null}
         {notice ? <WorkspaceNotice tone="success">{notice}</WorkspaceNotice> : null}
         {error ? <WorkspaceNotice tone="error">{error}</WorkspaceNotice> : null}
         {isPending && !workspace ? <WorkspaceNotice>Loading inventory…</WorkspaceNotice> : null}
