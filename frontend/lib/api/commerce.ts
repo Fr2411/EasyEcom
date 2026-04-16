@@ -7,6 +7,7 @@ import type {
 } from '@/types/catalog';
 import type {
   InventoryAdjustmentPayload,
+  InventoryInlineUpdatePayload,
   InventoryIntakeLookup,
   InventoryStockRow,
   InventoryWorkspace,
@@ -106,6 +107,13 @@ export async function receiveInventoryStock(payload: ReceiveStockPayload) {
 export async function createInventoryAdjustment(payload: InventoryAdjustmentPayload) {
   return apiClient<InventoryStockRow>('/inventory/adjustments', {
     method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateInventoryInlineFields(payload: InventoryInlineUpdatePayload) {
+  return apiClient<InventoryStockRow>('/inventory/inline-update', {
+    method: 'PATCH',
     body: JSON.stringify(payload),
   });
 }

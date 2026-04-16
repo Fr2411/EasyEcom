@@ -475,6 +475,39 @@ def test_inventory_adjust_stock_success(monkeypatch, tmp_path: Path):
     assert payload["available_to_sell"] == "12.000"  # 15 - 3
 
 
+def test_inventory_inline_update_updates_supplier_and_reorder_level(monkeypatch, tmp_path: Path):
+    runtime = _setup_runtime(tmp_path, monkeypatch)
+    _seed_variant(
+        runtime,
+        product_name="Inline Editable Product",
+        sku="INLINE-001",
+        size="M",
+        color="Blue",
+        stock_qty=Decimal("8"),
+        reorder_level=Decimal("2"),
+    )
+    client = _login_client(runtime)
+
+    with runtime.session_factory() as session:
+        variant = session.execute(
+            select(ProductVariantModel).where(ProductVariantModel.sku == "INLINE-001")
+        ).scalar_one()
+        variant_id = str(variant.variant_id)
+
+    response = client.patch(
+        "/inventory/inline-update",
+        json={
+            "variant_id": variant_id,
+            "supplier": "Inline Supplier",
+            "reorder_level": "5",
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["supplier"] == "Inline Supplier"
+    assert payload["reorder_level"] == "5.000"
+
+
 def test_inventory_adjust_stock_validation_error(monkeypatch, tmp_path: Path):
     runtime = _setup_runtime(tmp_path, monkeypatch)
     seeded = _seed_variant(
@@ -537,11 +570,14 @@ def test_inventory_endpoints_require_authentication(monkeypatch, tmp_path: Path)
         ("/inventory/low-stock", "GET"),
         ("/inventory/receipts", "POST"),
         ("/inventory/adjustments", "POST"),
+        ("/inventory/inline-update", "PATCH"),
     ]
 
     for endpoint, method in endpoints:
         if method == "GET":
             response = client.get(endpoint)
-        else:
+        elif method == "POST":
             response = client.post(endpoint, json={})
+        else:
+            response = client.patch(endpoint, json={})
         assert response.status_code == 401, f"{endpoint} should require authentication"
