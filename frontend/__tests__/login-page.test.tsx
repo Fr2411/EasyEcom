@@ -31,7 +31,7 @@ describe('LoginPage', () => {
     expect(screen.getByRole('heading', { name: 'Welcome back' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'EasyEcom home' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Sign In' })).toBeTruthy();
-    expect(screen.getAllByRole('link', { name: 'Create account' }).every((link) => link.getAttribute('href') === '/signup')).toBe(true);
+    expect(screen.getByRole('link', { name: 'Create account' }).getAttribute('href')).toBe('/signup');
   });
 
   test('redirects authenticated users to dashboard', async () => {

@@ -191,7 +191,6 @@ export function AuthPageView({ mode }: { mode: AuthMode }) {
             {mode === 'login' ? (
               <div className="auth-inline-links">
                 <a href="mailto:support@easy-ecom.online?subject=EasyEcom%20Password%20Reset">Forgot password?</a>
-                <Link href="/signup">Create account</Link>
               </div>
             ) : (
               <div className="auth-inline-links">
