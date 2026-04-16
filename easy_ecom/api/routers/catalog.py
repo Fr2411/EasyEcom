@@ -3,6 +3,8 @@ from fastapi import APIRouter, Depends, File, Query, UploadFile
 from easy_ecom.api.dependencies import ServiceContainer, get_authenticated_user, get_container, require_module_access
 from easy_ecom.api.schemas.commerce import (
     AttachProductMediaRequest,
+    CatalogStepValidationRequest,
+    CatalogStepValidationResponse,
     CatalogUpsertRequest,
     CatalogUpsertResponse,
     CatalogWorkspaceResponse,
@@ -52,6 +54,21 @@ def create_product(
         variants=[item.model_dump() for item in payload.variants],
     )
     return CatalogUpsertResponse(product=product)
+
+
+@router.post("/products/validate-step", response_model=CatalogStepValidationResponse)
+def validate_product_creation_step(
+    payload: CatalogStepValidationRequest,
+    user: AuthenticatedUser = Depends(get_authenticated_user),
+    container: ServiceContainer = Depends(get_container),
+) -> CatalogStepValidationResponse:
+    result = container.catalog.validate_product_creation_step(
+        user,
+        step=payload.step,
+        identity=payload.identity.model_dump(),
+        variants=[item.model_dump() for item in payload.variants],
+    )
+    return CatalogStepValidationResponse.model_validate(result)
 
 
 @router.post("/media/staged", response_model=StagedProductMediaUploadResponse)

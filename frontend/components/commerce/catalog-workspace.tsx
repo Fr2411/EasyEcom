@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ApiError } from '@/lib/api/client';
-import { getCatalogWorkspace, saveCatalogProduct } from '@/lib/api/commerce';
+import { getCatalogWorkspace, saveCatalogProduct, validateCatalogCreationStep } from '@/lib/api/commerce';
 import { buildSkuPreview, buildVariantCombinations, signatureForVariant, type VariantOptionValues } from '@/lib/variant-generator';
 import type {
   CatalogProduct,
@@ -13,6 +13,7 @@ import type {
   ProductIdentityInput,
   VariantOptions,
   CatalogWorkspace,
+  CatalogCreationStep,
 } from '@/types/catalog';
 import type { SuggestedAction } from '@/types/guided-workflow';
 import {
@@ -33,6 +34,12 @@ import { ProductPhotoField } from '@/components/commerce/product-photo-field';
 
 
 type CatalogTab = 'products' | 'edit';
+const CREATE_STEPS: CatalogCreationStep[] = ['product', 'first_variant', 'confirm'];
+const CREATE_STEP_LABELS: Record<CatalogCreationStep, string> = {
+  product: 'Product',
+  first_variant: 'First Variant',
+  confirm: 'Confirm',
+};
 type PostCreateSuccessState = {
   productId: string;
   productName: string;
@@ -297,6 +304,7 @@ export function CatalogWorkspace() {
   const [savedVariants, setSavedVariants] = useState<CatalogVariantInput[]>([]);
   const [generator, setGenerator] = useState<VariantGeneratorState>({ ...EMPTY_GENERATOR });
   const [productImage, setProductImage] = useState<ProductMedia | null>(null);
+  const [createStep, setCreateStep] = useState<CatalogCreationStep>('product');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [saveToast, setSaveToast] = useState('');
@@ -358,6 +366,7 @@ export function CatalogWorkspace() {
     setProductImage(null);
     setNotice('');
     setError('');
+    setCreateStep('product');
     if (!options?.keepPostCreateSuccess) {
       setPostCreateSuccess(null);
     }
@@ -374,6 +383,7 @@ export function CatalogWorkspace() {
     setNotice('');
     setError('');
     setPostCreateSuccess(null);
+    setCreateStep('confirm');
   };
 
   const onWorkspaceIntent = async (query: string) => {
@@ -479,6 +489,13 @@ export function CatalogWorkspace() {
     setNotice('');
     setError('');
     try {
+      if (!form.product_id) {
+        await validateCatalogCreationStep({
+          step: 'confirm',
+          identity: form.identity,
+          variants: form.variants,
+        });
+      }
       const response = await saveCatalogProduct(form);
       if (form.product_id) {
         setSaveToast('Product updated successfully.');
@@ -496,6 +513,37 @@ export function CatalogWorkspace() {
         return;
       }
       setError(saveError instanceof Error ? saveError.message : 'Unable to save product.');
+    }
+  };
+
+  const activeStepIndex = CREATE_STEPS.indexOf(createStep);
+  const isCreateFlow = !form.product_id;
+  const goToNextCreateStep = async () => {
+    if (!isCreateFlow || createStep === 'confirm') return;
+    try {
+      await validateCatalogCreationStep({
+        step: createStep,
+        identity: form.identity,
+        variants: form.variants,
+      });
+      const nextStep = CREATE_STEPS[activeStepIndex + 1];
+      if (nextStep) {
+        setCreateStep(nextStep);
+        setNotice('');
+        setError('');
+      }
+    } catch (stepError) {
+      setError(stepError instanceof Error ? stepError.message : 'Unable to continue to the next step.');
+    }
+  };
+
+  const goToPreviousCreateStep = () => {
+    if (!isCreateFlow || createStep === 'product') return;
+    const previousStep = CREATE_STEPS[activeStepIndex - 1];
+    if (previousStep) {
+      setCreateStep(previousStep);
+      setNotice('');
+      setError('');
     }
   };
 
@@ -611,11 +659,11 @@ export function CatalogWorkspace() {
             title={form.product_id ? `Editing ${form.identity.product_name}` : 'New product draft'}
             summary={form.product_id
               ? 'Review or adjust the parent product and its variants before saving the updated catalog record.'
-              : 'Start with the typed clue. The editor keeps the parent product and variants visible before the final save.'}
+              : 'Step through Product, First Variant, and Confirm before final save.'}
             actions={
               <StagedActionFooter summary="The catalog only writes when you explicitly save the product.">
                 <button type="submit" form="catalog-product-form">
-                  {form.product_id ? 'Review before saving' : 'Create product'}
+                  {form.product_id ? 'Review before saving' : createStep === 'confirm' ? 'Create product' : 'Complete all steps to save'}
                 </button>
                 <button type="button" onClick={() => setNewProductForm(workspace?.query)}>
                   Reset draft
@@ -624,6 +672,29 @@ export function CatalogWorkspace() {
             }
           >
           <form id="catalog-product-form" className="workspace-form" onSubmit={onSave}>
+            {isCreateFlow ? (
+              <div className="workspace-subsection">
+                <div className="workspace-subsection-header">
+                  <h4 className="workspace-heading">Create flow</h4>
+                </div>
+                <div className="workspace-inline-actions">
+                  {CREATE_STEPS.map((step, index) => (
+                    <button
+                      key={step}
+                      type="button"
+                      onClick={() => {
+                        if (index <= activeStepIndex) setCreateStep(step);
+                      }}
+                      disabled={index > activeStepIndex}
+                    >
+                      {index + 1}. {CREATE_STEP_LABELS[step]}{step === createStep ? ' (Current)' : ''}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {(!isCreateFlow || createStep === 'product' || createStep === 'confirm') ? (
             <div className="workspace-subsection">
               <div className="workspace-subsection-header">
                 <h4 className="workspace-heading">
@@ -744,7 +815,9 @@ export function CatalogWorkspace() {
                 />
               </div>
             </div>
+            ) : null}
 
+            {(!isCreateFlow || createStep === 'product' || createStep === 'confirm') ? (
             <div className="workspace-subsection">
               <div className="workspace-subsection-header">
                 <h4 className="workspace-heading">
@@ -793,7 +866,9 @@ export function CatalogWorkspace() {
                 Product-level prices are templates for this catalog parent. Saleable stock and final sell behavior are defined per variant row.
               </p>
             </div>
+            ) : null}
 
+            {(!isCreateFlow || createStep === 'first_variant' || createStep === 'confirm') ? (
             <details className="workspace-subsection" open={!collapseVariantControlsByDefault}>
               <summary className="workspace-field-note">
                 Variant controls (optional): configure only when this product needs multiple variant combinations.
@@ -903,7 +978,9 @@ export function CatalogWorkspace() {
                 </div>
               </div>
             </details>
+            ) : null}
 
+            {(!isCreateFlow || createStep === 'first_variant' || createStep === 'confirm') ? (
             <div className="workspace-subsection">
               <div className="workspace-subsection-header">
                 <h4 className="workspace-heading">
@@ -1104,9 +1181,38 @@ export function CatalogWorkspace() {
                 })}
               </div>
             </div>
+            ) : null}
+
+            {isCreateFlow && createStep === 'confirm' ? (
+              <div className="workspace-subsection">
+                <h4 className="workspace-heading">Confirm before save</h4>
+                <div className="commerce-card-meta">
+                  <span>Product: {form.identity.product_name || 'Not set'}</span>
+                  <span>First variant: {form.variants[0] ? [form.variants[0].size, form.variants[0].color, form.variants[0].other].filter(Boolean).join(' / ') || 'Default' : 'Missing'}</span>
+                  <span>Total variant rows: {form.variants.length}</span>
+                </div>
+                <p className="workspace-field-note">
+                  Final save will create the product parent and the first saleable variant together in one atomic request.
+                </p>
+              </div>
+            ) : null}
 
             <div className="workspace-actions">
-              <button type="submit">{form.product_id ? 'Update product' : 'Create product'}</button>
+              {isCreateFlow ? (
+                <>
+                  <button type="button" onClick={goToPreviousCreateStep} disabled={createStep === 'product'}>
+                    Back
+                  </button>
+                  {createStep !== 'confirm' ? (
+                    <button type="button" onClick={() => void goToNextCreateStep()}>
+                      Continue to {CREATE_STEP_LABELS[CREATE_STEPS[activeStepIndex + 1]]}
+                    </button>
+                  ) : null}
+                </>
+              ) : null}
+              <button type="submit" disabled={isCreateFlow && createStep !== 'confirm'}>
+                {form.product_id ? 'Update product' : 'Create product'}
+              </button>
               <button type="button" onClick={() => setNewProductForm(workspace?.query)}>Reset form</button>
             </div>
 
