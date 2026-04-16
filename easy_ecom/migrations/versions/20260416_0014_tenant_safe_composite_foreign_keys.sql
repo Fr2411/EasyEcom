@@ -284,9 +284,19 @@ ALTER TABLE products
     FOREIGN KEY (client_id, category_id)
     REFERENCES categories (client_id, category_id);
 ALTER TABLE products
+    ADD CONSTRAINT fk_products_category_set_null
+    FOREIGN KEY (category_id)
+    REFERENCES categories (category_id)
+    ON DELETE SET NULL;
+ALTER TABLE products
     ADD CONSTRAINT fk_products_client_supplier
     FOREIGN KEY (client_id, supplier_id)
     REFERENCES suppliers (client_id, supplier_id);
+ALTER TABLE products
+    ADD CONSTRAINT fk_products_supplier_set_null
+    FOREIGN KEY (supplier_id)
+    REFERENCES suppliers (supplier_id)
+    ON DELETE SET NULL;
 
 ALTER TABLE product_variants DROP CONSTRAINT IF EXISTS product_variants_product_id_fkey;
 ALTER TABLE product_variants
@@ -303,6 +313,11 @@ ALTER TABLE purchases
     FOREIGN KEY (client_id, supplier_id)
     REFERENCES suppliers (client_id, supplier_id);
 ALTER TABLE purchases
+    ADD CONSTRAINT fk_purchases_supplier_set_null
+    FOREIGN KEY (supplier_id)
+    REFERENCES suppliers (supplier_id)
+    ON DELETE SET NULL;
+ALTER TABLE purchases
     ADD CONSTRAINT fk_purchases_client_location
     FOREIGN KEY (client_id, location_id)
     REFERENCES locations (client_id, location_id);
@@ -310,6 +325,11 @@ ALTER TABLE purchases
     ADD CONSTRAINT fk_purchases_client_created_by_user
     FOREIGN KEY (client_id, created_by_user_id)
     REFERENCES users (client_id, user_id);
+ALTER TABLE purchases
+    ADD CONSTRAINT fk_purchases_created_by_user_set_null
+    FOREIGN KEY (created_by_user_id)
+    REFERENCES users (user_id)
+    ON DELETE SET NULL;
 
 ALTER TABLE purchase_items DROP CONSTRAINT IF EXISTS purchase_items_purchase_id_fkey;
 ALTER TABLE purchase_items DROP CONSTRAINT IF EXISTS purchase_items_variant_id_fkey;
@@ -338,6 +358,11 @@ ALTER TABLE inventory_ledger
     ADD CONSTRAINT fk_inventory_ledger_client_created_by_user
     FOREIGN KEY (client_id, created_by_user_id)
     REFERENCES users (client_id, user_id);
+ALTER TABLE inventory_ledger
+    ADD CONSTRAINT fk_inventory_ledger_created_by_user_set_null
+    FOREIGN KEY (created_by_user_id)
+    REFERENCES users (user_id)
+    ON DELETE SET NULL;
 
 ALTER TABLE sales_orders DROP CONSTRAINT IF EXISTS sales_orders_customer_id_fkey;
 ALTER TABLE sales_orders DROP CONSTRAINT IF EXISTS sales_orders_location_id_fkey;
@@ -347,6 +372,11 @@ ALTER TABLE sales_orders
     FOREIGN KEY (client_id, customer_id)
     REFERENCES customers (client_id, customer_id);
 ALTER TABLE sales_orders
+    ADD CONSTRAINT fk_sales_orders_customer_set_null
+    FOREIGN KEY (customer_id)
+    REFERENCES customers (customer_id)
+    ON DELETE SET NULL;
+ALTER TABLE sales_orders
     ADD CONSTRAINT fk_sales_orders_client_location
     FOREIGN KEY (client_id, location_id)
     REFERENCES locations (client_id, location_id);
@@ -354,6 +384,11 @@ ALTER TABLE sales_orders
     ADD CONSTRAINT fk_sales_orders_client_created_by_user
     FOREIGN KEY (client_id, created_by_user_id)
     REFERENCES users (client_id, user_id);
+ALTER TABLE sales_orders
+    ADD CONSTRAINT fk_sales_orders_created_by_user_set_null
+    FOREIGN KEY (created_by_user_id)
+    REFERENCES users (user_id)
+    ON DELETE SET NULL;
 
 ALTER TABLE sales_order_items DROP CONSTRAINT IF EXISTS sales_order_items_sales_order_id_fkey;
 ALTER TABLE sales_order_items DROP CONSTRAINT IF EXISTS sales_order_items_variant_id_fkey;
@@ -375,13 +410,28 @@ ALTER TABLE sales_returns
     FOREIGN KEY (client_id, sales_order_id)
     REFERENCES sales_orders (client_id, sales_order_id);
 ALTER TABLE sales_returns
+    ADD CONSTRAINT fk_sales_returns_sales_order_set_null
+    FOREIGN KEY (sales_order_id)
+    REFERENCES sales_orders (sales_order_id)
+    ON DELETE SET NULL;
+ALTER TABLE sales_returns
     ADD CONSTRAINT fk_sales_returns_client_customer
     FOREIGN KEY (client_id, customer_id)
     REFERENCES customers (client_id, customer_id);
 ALTER TABLE sales_returns
+    ADD CONSTRAINT fk_sales_returns_customer_set_null
+    FOREIGN KEY (customer_id)
+    REFERENCES customers (customer_id)
+    ON DELETE SET NULL;
+ALTER TABLE sales_returns
     ADD CONSTRAINT fk_sales_returns_client_created_by_user
     FOREIGN KEY (client_id, created_by_user_id)
     REFERENCES users (client_id, user_id);
+ALTER TABLE sales_returns
+    ADD CONSTRAINT fk_sales_returns_created_by_user_set_null
+    FOREIGN KEY (created_by_user_id)
+    REFERENCES users (user_id)
+    ON DELETE SET NULL;
 
 ALTER TABLE sales_return_items DROP CONSTRAINT IF EXISTS sales_return_items_sales_return_id_fkey;
 ALTER TABLE sales_return_items DROP CONSTRAINT IF EXISTS sales_return_items_sales_order_item_id_fkey;
@@ -396,6 +446,11 @@ ALTER TABLE sales_return_items
     FOREIGN KEY (client_id, sales_order_item_id)
     REFERENCES sales_order_items (client_id, sales_order_item_id);
 ALTER TABLE sales_return_items
+    ADD CONSTRAINT fk_sales_return_items_sales_order_item_set_null
+    FOREIGN KEY (sales_order_item_id)
+    REFERENCES sales_order_items (sales_order_item_id)
+    ON DELETE SET NULL;
+ALTER TABLE sales_return_items
     ADD CONSTRAINT fk_sales_return_items_client_variant
     FOREIGN KEY (client_id, variant_id)
     REFERENCES product_variants (client_id, variant_id);
@@ -408,13 +463,28 @@ ALTER TABLE payments
     FOREIGN KEY (client_id, sales_order_id)
     REFERENCES sales_orders (client_id, sales_order_id);
 ALTER TABLE payments
+    ADD CONSTRAINT fk_payments_sales_order_set_null
+    FOREIGN KEY (sales_order_id)
+    REFERENCES sales_orders (sales_order_id)
+    ON DELETE SET NULL;
+ALTER TABLE payments
     ADD CONSTRAINT fk_payments_client_sales_return
     FOREIGN KEY (client_id, sales_return_id)
     REFERENCES sales_returns (client_id, sales_return_id);
 ALTER TABLE payments
+    ADD CONSTRAINT fk_payments_sales_return_set_null
+    FOREIGN KEY (sales_return_id)
+    REFERENCES sales_returns (sales_return_id)
+    ON DELETE SET NULL;
+ALTER TABLE payments
     ADD CONSTRAINT fk_payments_client_created_by_user
     FOREIGN KEY (client_id, created_by_user_id)
     REFERENCES users (client_id, user_id);
+ALTER TABLE payments
+    ADD CONSTRAINT fk_payments_created_by_user_set_null
+    FOREIGN KEY (created_by_user_id)
+    REFERENCES users (user_id)
+    ON DELETE SET NULL;
 
 ALTER TABLE shipments DROP CONSTRAINT IF EXISTS shipments_sales_order_id_fkey;
 ALTER TABLE shipments
@@ -436,14 +506,29 @@ ALTER TABLE refunds
     FOREIGN KEY (client_id, payment_id)
     REFERENCES payments (client_id, payment_id);
 ALTER TABLE refunds
+    ADD CONSTRAINT fk_refunds_payment_set_null
+    FOREIGN KEY (payment_id)
+    REFERENCES payments (payment_id)
+    ON DELETE SET NULL;
+ALTER TABLE refunds
     ADD CONSTRAINT fk_refunds_client_created_by_user
     FOREIGN KEY (client_id, created_by_user_id)
     REFERENCES users (client_id, user_id);
+ALTER TABLE refunds
+    ADD CONSTRAINT fk_refunds_created_by_user_set_null
+    FOREIGN KEY (created_by_user_id)
+    REFERENCES users (user_id)
+    ON DELETE SET NULL;
 
 ALTER TABLE expenses DROP CONSTRAINT IF EXISTS expenses_created_by_user_id_fkey;
 ALTER TABLE expenses
     ADD CONSTRAINT fk_expenses_client_created_by_user
     FOREIGN KEY (client_id, created_by_user_id)
     REFERENCES users (client_id, user_id);
+ALTER TABLE expenses
+    ADD CONSTRAINT fk_expenses_created_by_user_set_null
+    FOREIGN KEY (created_by_user_id)
+    REFERENCES users (user_id)
+    ON DELETE SET NULL;
 
 COMMIT;
