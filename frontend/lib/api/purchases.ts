@@ -1,5 +1,5 @@
 import { apiClient } from '@/lib/api/client';
-import type { PurchaseOrdersResponse } from '@/types/purchases';
+import type { PurchaseDetail, PurchaseOrdersResponse } from '@/types/purchases';
 
 function buildQuery(params: { status?: string; q?: string }) {
   const search = new URLSearchParams();
@@ -15,4 +15,8 @@ function buildQuery(params: { status?: string; q?: string }) {
 
 export async function listPurchaseOrders(params: { status?: string; q?: string } = {}) {
   return apiClient<PurchaseOrdersResponse>(`/purchases/orders${buildQuery(params)}`);
+}
+
+export async function getPurchaseOrder(purchaseOrderId: string) {
+  return apiClient<PurchaseDetail>(`/purchases/orders/${purchaseOrderId}`);
 }

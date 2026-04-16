@@ -3,6 +3,7 @@ import {
   deriveIntakeRecommendation,
   deriveInventoryProductGroups,
   deriveInventorySearchSuggestions,
+  receiveLinesFromPurchaseOrder,
 } from '@/components/commerce/inventory-workspace';
 import type { InventoryIntakeLookup, InventoryStockRow } from '@/types/inventory';
 
@@ -177,5 +178,39 @@ describe('deriveInventorySearchSuggestions', () => {
     expect(suggestions[0]).toBe('RUN-41-BLK');
     expect(suggestions).toContain('Runner Shoe');
     expect(suggestions).toContain('Runner Shoe / 41 / Black');
+  });
+});
+
+describe('receiveLinesFromPurchaseOrder', () => {
+  test('maps purchase-order lines into receive-stock lines with variant id, quantity, and cost', () => {
+    const lines = receiveLinesFromPurchaseOrder({
+      purchase_id: 'po-1',
+      purchase_no: 'PO-1001',
+      purchase_date: '2026-04-10',
+      supplier_id: 'sup-1',
+      supplier_name: 'Supplier',
+      reference_no: '',
+      subtotal: 100,
+      status: 'draft',
+      created_at: '2026-04-10T00:00:00Z',
+      note: '',
+      created_by_user_id: 'user-1',
+      lines: [
+        {
+          line_id: 'line-1',
+          variant_id: 'variant-1',
+          product_id: 'product-1',
+          product_name: 'Runner',
+          qty: 5,
+          unit_cost: 12.5,
+          line_total: 62.5,
+        },
+      ],
+    });
+
+    expect(lines).toHaveLength(1);
+    expect(lines[0].variant_id).toBe('variant-1');
+    expect(lines[0].quantity).toBe('5');
+    expect(lines[0].default_purchase_price).toBe('12.5');
   });
 });

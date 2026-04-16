@@ -1344,6 +1344,7 @@ class InventoryService(CommerceBaseService):
         *,
         action: str,
         location_id: str | None,
+        source_purchase_order_id: str | None,
         notes: str,
         update_matched_product_details: bool,
         identity: dict[str, Any],
@@ -1359,6 +1360,26 @@ class InventoryService(CommerceBaseService):
             )
         with self._session_factory() as session:
             location_context = self._location_context(session, user.client_id, location_id)
+            source_purchase: PurchaseModel | None = None
+            if source_purchase_order_id:
+                source_purchase = session.execute(
+                    select(PurchaseModel).where(
+                        PurchaseModel.client_id == user.client_id,
+                        PurchaseModel.purchase_id == source_purchase_order_id,
+                    )
+                ).scalar_one_or_none()
+                _require(
+                    source_purchase is not None,
+                    message="Source purchase order not found",
+                    code="NOT_FOUND",
+                    status_code=404,
+                )
+                _require(
+                    source_purchase.status == "draft",
+                    message="Only draft purchase orders can be linked for receiving",
+                    code="INVALID_REQUEST",
+                    status_code=400,
+                )
             product = self._resolve_receive_product(session, user, identity, lines)
             product, purchase_supplier_id, is_new_product = self._apply_receive_product_identity(
                 session,
@@ -1451,11 +1472,15 @@ class InventoryService(CommerceBaseService):
                 status="received",
                 ordered_at=now_utc(),
                 received_at=now_utc(),
+                reference_no=(source_purchase.purchase_number if source_purchase else ""),
                 notes=notes.strip(),
                 created_by_user_id=user.user_id,
                 subtotal_amount=subtotal,
                 total_amount=subtotal,
             )
+            if source_purchase is not None:
+                po_note = f"Linked source purchase order: {source_purchase.purchase_number}"
+                purchase.notes = f"{purchase.notes}\n{po_note}".strip()
             session.add(purchase)
             session.flush()
 
@@ -2013,8 +2038,8 @@ class InventoryService(CommerceBaseService):
             for item in purchase_items:
                 lines.append({
                     "variant_id": str(item.variant_id),
-                    "qty": item.quantity,
-                    "unit_cost": item.unit_cost_amount,
+                    "quantity": item.quantity,
+                    "default_purchase_price": item.unit_cost_amount,
                 })
 
             # Use receive_stock to process the receipt
@@ -2022,6 +2047,7 @@ class InventoryService(CommerceBaseService):
                 user,
                 action="receive_stock",
                 location_id=None,  # Use purchase's location or default
+                source_purchase_order_id=str(purchase.purchase_id),
                 notes=purchase.notes or "Received via purchase order",
                 update_matched_product_details=False,
                 identity={

@@ -65,6 +65,7 @@ export type InventoryIntakeLookup = {
 export type ReceiveStockPayload = {
   action: 'receive_stock' | 'save_template_only';
   location_id?: string;
+  source_purchase_order_id?: string;
   notes: string;
   update_matched_product_details: boolean;
   identity: InventoryIntakeIdentityInput;

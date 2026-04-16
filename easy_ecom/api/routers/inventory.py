@@ -70,6 +70,7 @@ def receive_stock(
             user,
             action=payload.action,
             location_id=payload.location_id,
+            source_purchase_order_id=payload.source_purchase_order_id,
             notes=payload.notes,
             update_matched_product_details=payload.update_matched_product_details,
             identity=payload.identity.model_dump(),
