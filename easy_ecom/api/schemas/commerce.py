@@ -293,6 +293,21 @@ class InventoryAdjustmentRequest(BaseModel):
     notes: str = ""
 
 
+class InventoryInlineUpdateRequest(BaseModel):
+    variant_id: str
+    supplier: str | None = None
+    reorder_level: Decimal | None = None
+
+    @field_validator("supplier", mode="before")
+    @classmethod
+    def normalize_supplier(cls, value: object) -> object:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return value.strip()
+        return value
+
+
 class EmbeddedCustomerResponse(BaseModel):
     customer_id: str
     name: str

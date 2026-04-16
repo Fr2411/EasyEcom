@@ -1593,6 +1593,67 @@ class InventoryService(CommerceBaseService):
                 "low_stock": threshold > ZERO and refreshed_available <= threshold,
             }
 
+    def update_inline_fields(
+        self,
+        user: AuthenticatedUser,
+        *,
+        variant_id: str,
+        supplier: str | None,
+        reorder_level: Decimal | None,
+    ) -> dict[str, Any]:
+        _require_page(user, "Inventory")
+        _require(
+            supplier is not None or reorder_level is not None,
+            message="At least one field must be provided for inline update",
+        )
+        if reorder_level is not None:
+            _require(reorder_level >= ZERO, message="Reorder level cannot be negative")
+
+        with self._session_factory() as session:
+            location_context = self._location_context(session, user.client_id, None)
+            variant_row = session.execute(
+                self._base_variant_stmt(user.client_id).where(ProductVariantModel.variant_id == variant_id)
+            ).first()
+            _require(variant_row is not None, message="Variant not found", code="VARIANT_NOT_FOUND", status_code=404)
+            product, variant, _supplier, _category = variant_row
+
+            if supplier is not None:
+                product.supplier_id = self._ensure_supplier(session, user.client_id, supplier)
+            if reorder_level is not None:
+                variant.reorder_level = reorder_level
+            session.commit()
+
+            on_hand_map, reserved_map = self._stock_maps(session, user.client_id, location_context.active_location_id)
+            refreshed_variant_row = session.execute(
+                self._base_variant_stmt(user.client_id).where(ProductVariantModel.variant_id == variant_id)
+            ).first()
+            _require(refreshed_variant_row is not None, message="Variant not found", code="VARIANT_NOT_FOUND", status_code=404)
+            refreshed_product, refreshed_variant, refreshed_supplier, refreshed_category = refreshed_variant_row
+            on_hand = on_hand_map.get(str(refreshed_variant.variant_id), ZERO)
+            reserved = reserved_map.get(str(refreshed_variant.variant_id), ZERO)
+            available = on_hand - reserved
+            threshold = as_decimal(refreshed_variant.reorder_level)
+
+            return {
+                "variant_id": str(refreshed_variant.variant_id),
+                "product_id": str(refreshed_product.product_id),
+                "product_name": refreshed_product.name,
+                "label": build_variant_label(refreshed_product.name, refreshed_variant.title),
+                "sku": refreshed_variant.sku,
+                "barcode": refreshed_variant.barcode,
+                "supplier": refreshed_supplier.name if refreshed_supplier else "",
+                "category": refreshed_category.name if refreshed_category else "",
+                "location_id": location_context.active_location_id,
+                "location_name": location_context.active_location_name,
+                "unit_cost": as_optional_decimal(refreshed_variant.cost_amount),
+                "unit_price": self._effective_variant_price(refreshed_product, refreshed_variant),
+                "reorder_level": threshold,
+                "on_hand": on_hand,
+                "reserved": reserved,
+                "available_to_sell": available,
+                "low_stock": threshold > ZERO and available <= threshold,
+            }
+
 
     def list_purchase_orders(self, user: AuthenticatedUser, *, status: str | None = None, query: str = '') -> list[dict[str, Any]]:
         _require_page(user, "Purchases")

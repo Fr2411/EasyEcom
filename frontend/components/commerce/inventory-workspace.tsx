@@ -10,6 +10,7 @@ import {
   getInventoryIntakeLookup,
   getInventoryWorkspace,
   receiveInventoryStock,
+  updateInventoryInlineFields,
 } from '@/lib/api/commerce';
 import type { CatalogProduct, CatalogVariant, ProductIdentityInput, ProductMedia } from '@/types/catalog';
 import type {
@@ -34,6 +35,7 @@ import { ProductPhotoField } from '@/components/commerce/product-photo-field';
 
 type InventoryTab = 'stock' | 'receive' | 'adjust' | 'low-stock';
 type InventoryStockSegment = 'all' | 'normal' | 'low' | 'out';
+type InventoryColumnKey = 'supplier' | 'on_hand' | 'reserved' | 'available' | 'variants' | 'alerts';
 
 type InventoryProductGroup = {
   product_id: string;
@@ -319,6 +321,24 @@ function matchesStockSegment(group: InventoryProductGroup, stockFilter: Inventor
   return stockFilter === 'all' ? true : stockStatusForGroup(group) === stockFilter;
 }
 
+const INVENTORY_COLUMN_CONFIG: Array<{ key: InventoryColumnKey; label: string }> = [
+  { key: 'supplier', label: 'Supplier' },
+  { key: 'on_hand', label: 'On Hand' },
+  { key: 'reserved', label: 'Reserved' },
+  { key: 'available', label: 'Available' },
+  { key: 'variants', label: 'Variants' },
+  { key: 'alerts', label: 'Alerts' },
+];
+
+const DEFAULT_VISIBLE_COLUMNS: Record<InventoryColumnKey, boolean> = {
+  supplier: true,
+  on_hand: true,
+  reserved: true,
+  available: true,
+  variants: true,
+  alerts: true,
+};
+
 function matchesTagFilter(group: InventoryProductGroup, filterValue: string) {
   const normalized = filterValue.trim().toLowerCase();
   if (!normalized) {
@@ -434,6 +454,12 @@ export function InventoryWorkspace() {
   const [tagFilter, setTagFilter] = useState('');
   const [stockFilter, setStockFilter] = useState<InventoryStockSegment>('all');
   const [adjustmentProductId, setAdjustmentProductId] = useState<string>('');
+  const [columnSelectorOpen, setColumnSelectorOpen] = useState(false);
+  const [visibleColumns, setVisibleColumns] = useState<Record<InventoryColumnKey, boolean>>(DEFAULT_VISIBLE_COLUMNS);
+  const [supplierDrafts, setSupplierDrafts] = useState<Record<string, string>>({});
+  const [reorderDrafts, setReorderDrafts] = useState<Record<string, string>>({});
+  const [savingSupplierFor, setSavingSupplierFor] = useState<string | null>(null);
+  const [savingReorderFor, setSavingReorderFor] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const quickActionsMenuRef = useRef<HTMLDivElement | null>(null);
   const quickActionsButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
@@ -547,6 +573,55 @@ export function InventoryWorkspace() {
     }
     loadWorkspace(query);
   }, [searchKey]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    const raw = window.localStorage.getItem('inventory-stock-visible-columns');
+    if (!raw) {
+      return;
+    }
+    try {
+      const parsed = JSON.parse(raw) as Partial<Record<InventoryColumnKey, boolean>>;
+      setVisibleColumns({
+        ...DEFAULT_VISIBLE_COLUMNS,
+        ...parsed,
+      });
+    } catch {
+      setVisibleColumns(DEFAULT_VISIBLE_COLUMNS);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    window.localStorage.setItem('inventory-stock-visible-columns', JSON.stringify(visibleColumns));
+  }, [visibleColumns]);
+
+  useEffect(() => {
+    setSupplierDrafts((current) => {
+      const next = { ...current };
+      filteredProductGroups.forEach((group) => {
+        if (next[group.product_id] === undefined) {
+          next[group.product_id] = group.supplier || '';
+        }
+      });
+      return next;
+    });
+    setReorderDrafts((current) => {
+      const next = { ...current };
+      filteredProductGroups.forEach((group) => {
+        group.variants.forEach((variant) => {
+          if (next[variant.variant_id] === undefined) {
+            next[variant.variant_id] = variant.reorder_level;
+          }
+        });
+      });
+      return next;
+    });
+  }, [filteredProductGroups]);
 
   useEffect(() => {
     if (!openQuickActionsFor) {
@@ -854,6 +929,62 @@ export function InventoryWorkspace() {
     }
   };
 
+  const toggleColumnVisibility = (key: InventoryColumnKey) => {
+    setVisibleColumns((current) => ({ ...current, [key]: !current[key] }));
+  };
+
+  const saveSupplierInline = async (group: InventoryProductGroup) => {
+    const variant = group.variants[0];
+    if (!variant) {
+      return;
+    }
+    const draft = (supplierDrafts[group.product_id] ?? '').trim();
+    if (draft === (group.supplier || '').trim()) {
+      return;
+    }
+    setSavingSupplierFor(group.product_id);
+    setNotice('');
+    setError('');
+    try {
+      await updateInventoryInlineFields({
+        variant_id: variant.variant_id,
+        supplier: draft,
+      });
+      setNotice(`Updated supplier for ${group.product_name}.`);
+      await loadWorkspace(queryInput.trim());
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Unable to update supplier.');
+    } finally {
+      setSavingSupplierFor(null);
+    }
+  };
+
+  const saveReorderInline = async (variant: InventoryStockRow) => {
+    const draft = (reorderDrafts[variant.variant_id] ?? '').trim();
+    if (!draft) {
+      setError('Reorder level is required.');
+      return;
+    }
+    if (draft === variant.reorder_level) {
+      return;
+    }
+    setSavingReorderFor(variant.variant_id);
+    setNotice('');
+    setError('');
+    try {
+      await updateInventoryInlineFields({
+        variant_id: variant.variant_id,
+        reorder_level: draft,
+      });
+      setNotice(`Updated reorder level for ${variant.label}.`);
+      await loadWorkspace(queryInput.trim());
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Unable to update reorder level.');
+    } finally {
+      setSavingReorderFor(null);
+    }
+  };
+
   const canEditSavedDetails = !selectedProduct || receiveForm.update_matched_product_details;
   const showAdvancedCatalog = advancedCatalogAllowed(user?.roles);
   const templateAllowed = canSaveTemplateOnly(user?.roles);
@@ -925,6 +1056,14 @@ export function InventoryWorkspace() {
               onClick={() => setFiltersOpen((current) => !current)}
             >
               {filtersOpen ? 'Hide Filters' : 'Filters'}
+            </button>
+            <button
+              type="button"
+              className="btn-secondary"
+              aria-expanded={columnSelectorOpen}
+              onClick={() => setColumnSelectorOpen((current) => !current)}
+            >
+              Columns
             </button>
             <button
               type="button"
@@ -1034,6 +1173,20 @@ export function InventoryWorkspace() {
             </datalist>
           </section>
         ) : null}
+        {columnSelectorOpen ? (
+          <section className="inventory-filters" aria-label="Inventory column visibility">
+            {INVENTORY_COLUMN_CONFIG.map((column) => (
+              <label key={column.key}>
+                <input
+                  type="checkbox"
+                  checked={visibleColumns[column.key]}
+                  onChange={() => toggleColumnVisibility(column.key)}
+                />
+                {column.label}
+              </label>
+            ))}
+          </section>
+        ) : null}
 
         {activeTab === 'stock' ? (
           filteredProductGroups.length ? (
@@ -1042,12 +1195,12 @@ export function InventoryWorkspace() {
                 <thead>
                   <tr>
                     <th>Product</th>
-                    <th>Supplier</th>
-                    <th>On Hand</th>
-                    <th>Reserved</th>
-                    <th>Available</th>
-                    <th>Variants</th>
-                    <th>Alerts</th>
+                    {visibleColumns.supplier ? <th>Supplier</th> : null}
+                    {visibleColumns.on_hand ? <th>On Hand</th> : null}
+                    {visibleColumns.reserved ? <th>Reserved</th> : null}
+                    {visibleColumns.available ? <th>Available</th> : null}
+                    {visibleColumns.variants ? <th>Variants</th> : null}
+                    {visibleColumns.alerts ? <th>Alerts</th> : null}
                     <th>Quick Action</th>
                   </tr>
                 </thead>
@@ -1090,20 +1243,44 @@ export function InventoryWorkspace() {
                               </div>
                             </div>
                           </td>
-                          <td>{group.supplier || 'No supplier'}</td>
-                          <td>{formatQuantity(group.on_hand.toFixed(3))}</td>
-                          <td>{formatQuantity(group.reserved.toFixed(3))}</td>
-                          <td>{formatQuantity(group.available_to_sell.toFixed(3))}</td>
-                          <td>{group.variants.length}</td>
-                          <td>
-                            {group.available_to_sell <= 0 ? (
-                              <span className="inventory-status-badge out">Out</span>
-                            ) : group.low_stock_count ? (
-                              <span className="inventory-status-badge low">{group.low_stock_count} low</span>
-                            ) : (
-                              <span className="inventory-status-badge healthy">Healthy</span>
-                            )}
-                          </td>
+                          {visibleColumns.supplier ? (
+                            <td>
+                              <div className="workspace-inline-actions">
+                                <input
+                                  value={supplierDrafts[group.product_id] ?? group.supplier ?? ''}
+                                  onChange={(event) =>
+                                    setSupplierDrafts((current) => ({
+                                      ...current,
+                                      [group.product_id]: event.target.value,
+                                    }))
+                                  }
+                                  placeholder="Supplier"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => void saveSupplierInline(group)}
+                                  disabled={savingSupplierFor === group.product_id}
+                                >
+                                  {savingSupplierFor === group.product_id ? 'Saving…' : 'Save'}
+                                </button>
+                              </div>
+                            </td>
+                          ) : null}
+                          {visibleColumns.on_hand ? <td>{formatQuantity(group.on_hand.toFixed(3))}</td> : null}
+                          {visibleColumns.reserved ? <td>{formatQuantity(group.reserved.toFixed(3))}</td> : null}
+                          {visibleColumns.available ? <td>{formatQuantity(group.available_to_sell.toFixed(3))}</td> : null}
+                          {visibleColumns.variants ? <td>{group.variants.length}</td> : null}
+                          {visibleColumns.alerts ? (
+                            <td>
+                              {group.available_to_sell <= 0 ? (
+                                <span className="inventory-status-badge out">Out</span>
+                              ) : group.low_stock_count ? (
+                                <span className="inventory-status-badge low">{group.low_stock_count} low</span>
+                              ) : (
+                                <span className="inventory-status-badge healthy">Healthy</span>
+                              )}
+                            </td>
+                          ) : null}
                           <td>
                             <div className="quick-actions-menu">
                               <button
@@ -1122,7 +1299,7 @@ export function InventoryWorkspace() {
                         </tr>
                         {isExpanded ? (
                           <tr className="inventory-variant-container-row">
-                            <td colSpan={8}>
+                            <td colSpan={2 + INVENTORY_COLUMN_CONFIG.filter((column) => visibleColumns[column.key]).length}>
                               <div className="inventory-variant-table-wrap">
                                 <table className="workspace-table workspace-table-sticky inventory-variant-table">
                                   <thead>
@@ -1133,6 +1310,7 @@ export function InventoryWorkspace() {
                                       <th>On Hand</th>
                                       <th>Reserved</th>
                                       <th>Available</th>
+                                      <th>Reorder</th>
                                       <th>Unit Cost</th>
                                       <th>Unit Price</th>
                                       <th>Status</th>
@@ -1165,6 +1343,27 @@ export function InventoryWorkspace() {
                                         <td>{formatQuantity(variant.on_hand)}</td>
                                         <td>{formatQuantity(variant.reserved)}</td>
                                         <td>{formatQuantity(variant.available_to_sell)}</td>
+                                        <td>
+                                          <div className="workspace-inline-actions">
+                                            <input
+                                              value={reorderDrafts[variant.variant_id] ?? variant.reorder_level}
+                                              onChange={(event) =>
+                                                setReorderDrafts((current) => ({
+                                                  ...current,
+                                                  [variant.variant_id]: event.target.value,
+                                                }))
+                                              }
+                                              inputMode="decimal"
+                                            />
+                                            <button
+                                              type="button"
+                                              onClick={() => void saveReorderInline(variant)}
+                                              disabled={savingReorderFor === variant.variant_id}
+                                            >
+                                              {savingReorderFor === variant.variant_id ? 'Saving…' : 'Save'}
+                                            </button>
+                                          </div>
+                                        </td>
                                         <td>{formatMoney(variant.unit_cost)}</td>
                                         <td>{formatMoney(variant.unit_price)}</td>
                                         <td>

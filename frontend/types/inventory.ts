@@ -89,3 +89,9 @@ export type InventoryAdjustmentPayload = {
   reason: string;
   notes: string;
 };
+
+export type InventoryInlineUpdatePayload = {
+  variant_id: string;
+  supplier?: string;
+  reorder_level?: string;
+};

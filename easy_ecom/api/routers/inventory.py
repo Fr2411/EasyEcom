@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, Query
 from easy_ecom.api.dependencies import ServiceContainer, get_authenticated_user, get_container, require_page_access
 from easy_ecom.api.schemas.commerce import (
     InventoryAdjustmentRequest,
+    InventoryInlineUpdateRequest,
     InventoryIntakeLookupResponse,
     InventoryStockRowResponse,
     InventoryWorkspaceResponse,
@@ -91,5 +92,21 @@ def adjust_stock(
             quantity_delta=payload.quantity_delta,
             reason=payload.reason,
             notes=payload.notes,
+        )
+    )
+
+
+@router.patch("/inline-update", response_model=InventoryStockRowResponse)
+def inline_update_stock_row(
+    payload: InventoryInlineUpdateRequest,
+    user: AuthenticatedUser = Depends(get_authenticated_user),
+    container: ServiceContainer = Depends(get_container),
+) -> InventoryStockRowResponse:
+    return InventoryStockRowResponse.model_validate(
+        container.inventory.update_inline_fields(
+            user,
+            variant_id=payload.variant_id,
+            supplier=payload.supplier,
+            reorder_level=payload.reorder_level,
         )
     )
