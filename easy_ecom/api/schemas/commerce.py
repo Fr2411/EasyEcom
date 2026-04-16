@@ -171,6 +171,20 @@ class CatalogUpsertResponse(BaseModel):
     product: CatalogProductResponse
 
 
+CatalogCreationStep = Literal["product", "first_variant", "confirm"]
+
+
+class CatalogStepValidationRequest(BaseModel):
+    step: CatalogCreationStep
+    identity: ProductIdentityInput
+    variants: list[CatalogVariantInput] = Field(default_factory=list)
+
+
+class CatalogStepValidationResponse(BaseModel):
+    step: CatalogCreationStep
+    valid: bool = True
+
+
 class StagedProductMediaUploadResponse(ProductImageResponse):
     pass
 

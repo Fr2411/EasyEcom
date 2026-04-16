@@ -463,6 +463,52 @@ def test_catalog_create_product_validation_error(monkeypatch, tmp_path: Path):
     assert response.status_code == 400  # Bad Request from business logic
 
 
+
+
+def test_catalog_validate_step_enforces_first_variant_details(monkeypatch, tmp_path: Path):
+    runtime = _setup_runtime(tmp_path, monkeypatch)
+    client = _login_client(runtime)
+
+    invalid_response = client.post(
+        "/catalog/products/validate-step",
+        json={
+            "step": "first_variant",
+            "identity": {
+                "product_name": "Wizard Product",
+            },
+            "variants": [
+                {
+                    "size": "",
+                    "color": "",
+                    "other": "",
+                    "barcode": "",
+                }
+            ],
+        },
+    )
+    assert invalid_response.status_code == 400
+    assert "First variant details are required" in invalid_response.json()["error"]["message"]
+
+    valid_response = client.post(
+        "/catalog/products/validate-step",
+        json={
+            "step": "first_variant",
+            "identity": {
+                "product_name": "Wizard Product",
+            },
+            "variants": [
+                {
+                    "size": "M",
+                    "color": "",
+                    "other": "",
+                    "barcode": "",
+                }
+            ],
+        },
+    )
+    assert valid_response.status_code == 200
+    assert valid_response.json() == {"step": "first_variant", "valid": True}
+
 def test_catalog_update_product_success(monkeypatch, tmp_path: Path):
     runtime = _setup_runtime(tmp_path, monkeypatch)
     seeded = _seed_variant(

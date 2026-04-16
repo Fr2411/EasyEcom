@@ -1,5 +1,6 @@
 import { apiClient } from '@/lib/api/client';
 import type {
+  CatalogCreationStep,
   CatalogUpsertPayload,
   CatalogProduct,
   StagedProductMediaUpload,
@@ -52,6 +53,17 @@ export async function saveCatalogProduct(payload: CatalogUpsertPayload) {
     });
   }
   return apiClient<{ product: CatalogProduct }>('/catalog/products', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function validateCatalogCreationStep(payload: {
+  step: CatalogCreationStep;
+  identity: CatalogUpsertPayload['identity'];
+  variants: CatalogUpsertPayload['variants'];
+}) {
+  return apiClient<{ step: CatalogCreationStep; valid: boolean }>('/catalog/products/validate-step', {
     method: 'POST',
     body: JSON.stringify(payload),
   });

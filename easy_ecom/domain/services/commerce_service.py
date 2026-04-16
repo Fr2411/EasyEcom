@@ -752,6 +752,40 @@ class CommerceBaseService:
 
 
 class CatalogService(CommerceBaseService):
+    def validate_product_creation_step(
+        self,
+        user: AuthenticatedUser,
+        *,
+        step: str,
+        identity: dict[str, Any],
+        variants: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        _require_page(user, "Catalog")
+        step_value = (step or "").strip().lower()
+        _require(step_value in {"product", "first_variant", "confirm"}, message="Unsupported catalog creation step")
+
+        product_name = str(identity.get("product_name", "")).strip()
+        if step_value in {"product", "first_variant", "confirm"}:
+            _require(len(product_name) >= 2, message="Product name must be at least 2 characters")
+
+        if step_value in {"first_variant", "confirm"}:
+            _require(bool(variants), message="At least one variant is required")
+            first_variant = variants[0]
+            first_status = str(first_variant.get("status", "active")).strip() or "active"
+            _require(first_status == "active", message="First variant must be active before confirmation")
+
+            size = str(first_variant.get("size", "")).strip()
+            color = str(first_variant.get("color", "")).strip()
+            other = str(first_variant.get("other", "")).strip()
+            barcode = str(first_variant.get("barcode", "")).strip()
+            has_option_or_barcode = bool(size or color or other or barcode)
+            _require(
+                has_option_or_barcode,
+                message="First variant details are required (add at least one option or barcode)",
+            )
+
+        return {"step": step_value, "valid": True}
+
     def create_staged_media(self, user: AuthenticatedUser, upload_file) -> dict[str, Any]:
         if "Catalog" not in user.allowed_pages and "Inventory" not in user.allowed_pages and "SUPER_ADMIN" not in user.roles:
             raise ApiException(status_code=403, code="ACCESS_DENIED", message="Access denied for product media upload")

@@ -113,3 +113,5 @@ export type CatalogUpsertPayload = {
   identity: ProductIdentityInput;
   variants: CatalogVariantInput[];
 };
+
+export type CatalogCreationStep = 'product' | 'first_variant' | 'confirm';
