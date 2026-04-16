@@ -4,7 +4,21 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, JSON, Numeric, String, Text, UniqueConstraint, func, text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    JSON,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from easy_ecom.data.store.postgres_db import Base
@@ -203,6 +217,22 @@ class ProductModel(TenantMixin, TimestampMixin, Base):
     __table_args__ = (
         UniqueConstraint("client_id", "slug", name="uq_products_client_slug"),
         Index("ix_products_client_name", "client_id", "name"),
+        CheckConstraint(
+            "(default_price_amount IS NULL OR default_price_amount >= 0)",
+            name="ck_products_default_price_non_negative",
+        ),
+        CheckConstraint(
+            "(min_price_amount IS NULL OR min_price_amount >= 0)",
+            name="ck_products_min_price_non_negative",
+        ),
+        CheckConstraint(
+            "(max_discount_percent IS NULL OR (max_discount_percent >= 0 AND max_discount_percent <= 100))",
+            name="ck_products_max_discount_range",
+        ),
+        CheckConstraint(
+            "(default_price_amount IS NULL OR min_price_amount IS NULL OR min_price_amount <= default_price_amount)",
+            name="ck_products_min_price_lte_default_price",
+        ),
     )
 
     product_id: Mapped[str] = mapped_column(GUID(), primary_key=True)
@@ -271,6 +301,26 @@ class ProductVariantModel(TenantMixin, TimestampMixin, Base):
         UniqueConstraint("client_id", "sku", name="uq_product_variants_client_sku"),
         Index("ix_product_variants_client_title", "client_id", "title"),
         Index("ix_product_variants_client_barcode", "client_id", "barcode"),
+        CheckConstraint(
+            "(cost_amount IS NULL OR cost_amount >= 0)",
+            name="ck_product_variants_cost_non_negative",
+        ),
+        CheckConstraint(
+            "(price_amount IS NULL OR price_amount >= 0)",
+            name="ck_product_variants_price_non_negative",
+        ),
+        CheckConstraint(
+            "(min_price_amount IS NULL OR min_price_amount >= 0)",
+            name="ck_product_variants_min_price_non_negative",
+        ),
+        CheckConstraint(
+            "(price_amount IS NULL OR min_price_amount IS NULL OR min_price_amount <= price_amount)",
+            name="ck_product_variants_min_price_lte_price",
+        ),
+        CheckConstraint(
+            "(reorder_level >= 0)",
+            name="ck_product_variants_reorder_level_non_negative",
+        ),
     )
 
     variant_id: Mapped[str] = mapped_column(GUID(), primary_key=True)
@@ -307,6 +357,15 @@ class PurchaseModel(TenantMixin, TimestampMixin, Base):
 
 class PurchaseItemModel(TenantMixin, Base):
     __tablename__ = "purchase_items"
+    __table_args__ = (
+        CheckConstraint("(quantity > 0)", name="ck_purchase_items_quantity_positive"),
+        CheckConstraint(
+            "(received_quantity >= 0 AND received_quantity <= quantity)",
+            name="ck_purchase_items_received_quantity_range",
+        ),
+        CheckConstraint("(unit_cost_amount >= 0)", name="ck_purchase_items_unit_cost_non_negative"),
+        CheckConstraint("(line_total_amount >= 0)", name="ck_purchase_items_line_total_non_negative"),
+    )
 
     purchase_item_id: Mapped[str] = mapped_column(GUID(), primary_key=True)
     purchase_id: Mapped[str] = mapped_column(GUID(), ForeignKey("purchases.purchase_id", ondelete="CASCADE"), nullable=False, index=True)
@@ -324,6 +383,15 @@ class InventoryLedgerModel(TenantMixin, Base):
     __table_args__ = (
         Index("ix_inventory_ledger_variant_location", "client_id", "variant_id", "location_id"),
         Index("ix_inventory_ledger_reference", "reference_type", "reference_id"),
+        CheckConstraint("(quantity_delta <> 0)", name="ck_inventory_ledger_quantity_delta_non_zero"),
+        CheckConstraint(
+            "(unit_cost_amount IS NULL OR unit_cost_amount >= 0)",
+            name="ck_inventory_ledger_unit_cost_non_negative",
+        ),
+        CheckConstraint(
+            "(unit_price_amount IS NULL OR unit_price_amount >= 0)",
+            name="ck_inventory_ledger_unit_price_non_negative",
+        ),
     )
 
     entry_id: Mapped[str] = mapped_column(GUID(), primary_key=True)
@@ -573,6 +641,24 @@ class SalesOrderModel(TenantMixin, TimestampMixin, Base):
 
 class SalesOrderItemModel(TenantMixin, Base):
     __tablename__ = "sales_order_items"
+    __table_args__ = (
+        CheckConstraint("(quantity > 0)", name="ck_sales_order_items_quantity_positive"),
+        CheckConstraint(
+            "(quantity_fulfilled >= 0)",
+            name="ck_sales_order_items_quantity_fulfilled_non_negative",
+        ),
+        CheckConstraint(
+            "(quantity_cancelled >= 0)",
+            name="ck_sales_order_items_quantity_cancelled_non_negative",
+        ),
+        CheckConstraint(
+            "(quantity_fulfilled + quantity_cancelled <= quantity)",
+            name="ck_sales_order_items_quantity_progress_within_quantity",
+        ),
+        CheckConstraint("(unit_price_amount >= 0)", name="ck_sales_order_items_unit_price_non_negative"),
+        CheckConstraint("(discount_amount >= 0)", name="ck_sales_order_items_discount_non_negative"),
+        CheckConstraint("(line_total_amount >= 0)", name="ck_sales_order_items_line_total_non_negative"),
+    )
 
     sales_order_item_id: Mapped[str] = mapped_column(GUID(), primary_key=True)
     sales_order_id: Mapped[str] = mapped_column(GUID(), ForeignKey("sales_orders.sales_order_id", ondelete="CASCADE"), nullable=False, index=True)
@@ -639,6 +725,17 @@ class SalesReturnModel(TenantMixin, TimestampMixin, Base):
 
 class SalesReturnItemModel(TenantMixin, Base):
     __tablename__ = "sales_return_items"
+    __table_args__ = (
+        CheckConstraint("(quantity > 0)", name="ck_sales_return_items_quantity_positive"),
+        CheckConstraint(
+            "(restock_quantity >= 0 AND restock_quantity <= quantity)",
+            name="ck_sales_return_items_restock_quantity_range",
+        ),
+        CheckConstraint(
+            "(unit_refund_amount >= 0)",
+            name="ck_sales_return_items_unit_refund_non_negative",
+        ),
+    )
 
     sales_return_item_id: Mapped[str] = mapped_column(GUID(), primary_key=True)
     sales_return_id: Mapped[str] = mapped_column(GUID(), ForeignKey("sales_returns.sales_return_id", ondelete="CASCADE"), nullable=False, index=True)
