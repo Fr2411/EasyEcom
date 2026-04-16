@@ -766,13 +766,21 @@ export function InventoryWorkspace() {
   const showAdvancedCatalog = advancedCatalogAllowed(user?.roles);
   const templateAllowed = canSaveTemplateOnly(user?.roles);
   const templateDisabled = !hasTemplateEligibleLine(receiveForm.lines);
+  const activeTabLabel: Record<InventoryTab, string> = {
+    stock: 'Available Stock',
+    receive: 'Receive Stock',
+    adjust: 'Adjustments',
+    'low-stock': 'Low Stock',
+  };
 
   return (
     <div className="workspace-stack inventory-command-center">
       <div className="inventory-breadcrumb">
         <Link href="/dashboard">Home</Link>
         <span>/</span>
-        <strong>Inventory</strong>
+        <Link href="/inventory">Inventory</Link>
+        <span>/</span>
+        <strong>{activeTabLabel[activeTab]}</strong>
       </div>
       <WorkspaceTabs
         tabs={[
@@ -863,8 +871,8 @@ export function InventoryWorkspace() {
 
         {activeTab === 'stock' ? (
           filteredProductGroups.length ? (
-            <div className="table-scroll">
-              <table className="workspace-table inventory-grouped-table">
+            <div className="table-scroll inventory-stock-table-scroll">
+              <table className="workspace-table workspace-table-sticky inventory-grouped-table">
                 <thead>
                   <tr>
                     <th>Product</th>
@@ -950,7 +958,7 @@ export function InventoryWorkspace() {
                           <tr className="inventory-variant-container-row">
                             <td colSpan={8}>
                               <div className="inventory-variant-table-wrap">
-                                <table className="workspace-table inventory-variant-table">
+                                <table className="workspace-table workspace-table-sticky inventory-variant-table">
                                   <thead>
                                     <tr>
                                       <th>Variant</th>
@@ -1207,7 +1215,7 @@ export function InventoryWorkspace() {
                   <div className="workspace-stack">
                     <p className="eyebrow">Saved Variants</p>
                     <div className="table-scroll">
-                      <table className="workspace-table">
+                      <table className="workspace-table workspace-table-sticky">
                         <thead>
                           <tr>
                             <th>Variant</th>
@@ -1765,7 +1773,7 @@ export function InventoryWorkspace() {
         {activeTab === 'low-stock' ? (
           workspace?.low_stock_items.length ? (
             <div className="table-scroll">
-              <table className="workspace-table">
+              <table className="workspace-table workspace-table-sticky">
                 <thead>
                   <tr>
                     <th>Variant</th>
