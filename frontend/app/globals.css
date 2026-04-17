@@ -6007,14 +6007,30 @@ button.secondary:hover,
   }
 }
 
-/* TEA-81: mobile sales create-entry shell width + bottom-nav clearance */
+/* TEA-83 (Wave 1 P0): authenticated mobile readability + bottom-nav non-overlap */
 @media (max-width: 900px) {
   :root {
-    --mobile-bottom-nav-clearance: calc(6.35rem + env(safe-area-inset-bottom, 0px));
+    --mobile-bottom-nav-height: 5.85rem;
+    --mobile-bottom-nav-clearance: calc(
+      var(--mobile-bottom-nav-height) + env(safe-area-inset-bottom, 0px) + 0.5rem
+    );
   }
 
   .shell {
     padding-bottom: var(--mobile-bottom-nav-clearance);
+  }
+
+  .content-pane {
+    min-width: 0;
+  }
+
+  .page-content {
+    min-width: 0;
+    padding: 0 0.75rem var(--mobile-bottom-nav-clearance);
+  }
+
+  .page-content > * {
+    min-width: 0;
   }
 
   .mobile-bottom-nav {
@@ -6023,14 +6039,8 @@ button.secondary:hover,
     bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
   }
 
-  .page-content[data-route-root='sales'] {
-    padding-bottom: var(--mobile-bottom-nav-clearance);
-  }
-
-  .page-content[data-route-root='sales'] .page-shell {
+  .page-shell {
     width: 100%;
-    border-left: 0;
-    border-right: 0;
-    border-radius: 0;
+    border-radius: 18px;
   }
 }
