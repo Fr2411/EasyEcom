@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'vitest';
-import { ApiError } from '@/lib/api/client';
+import { ApiError, ApiNetworkError } from '@/lib/api/client';
 import {
   deriveCatalogInlineErrors,
   deriveCatalogRecommendation,
+  deriveCatalogStepSafeError,
   normalizeFirstVariantForCreateFlow,
 } from '@/components/commerce/catalog-workspace';
 import type { CatalogProduct, CatalogWorkspace } from '@/types/catalog';
@@ -127,5 +128,22 @@ describe('deriveCatalogInlineErrors', () => {
     );
 
     expect(errors.product_name).toBe('Product name must be at least 2 characters.');
+  });
+});
+
+describe('deriveCatalogStepSafeError', () => {
+  test('returns a user-safe backend upgrade hint when step validation route is missing', () => {
+    const message = deriveCatalogStepSafeError(
+      new ApiError(404, 'Not Found (https://example.com/catalog/products/validate-step)')
+    );
+
+    expect(message).toContain('Deploy the latest backend');
+    expect(message).not.toContain('https://');
+  });
+
+  test('returns a generic network-safe message for transport failures', () => {
+    const message = deriveCatalogStepSafeError(new ApiNetworkError('failed (https://example.com/catalog/products/validate-step)'));
+
+    expect(message).toBe('Network connection failed while validating this step. Please retry.');
   });
 });
