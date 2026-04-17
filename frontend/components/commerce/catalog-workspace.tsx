@@ -20,7 +20,6 @@ import {
   DraftRecommendationCard,
   IntentInput,
   MatchGroupList,
-  StagedActionFooter,
   SuggestedNextStep,
   WorkspaceEmpty,
   WorkspaceHint,
@@ -762,18 +761,8 @@ export function CatalogWorkspace() {
           <DraftRecommendationCard
             title={form.product_id ? `Editing ${form.identity.product_name}` : 'New product draft'}
             summary={form.product_id
-              ? 'Review or adjust the parent product and its variants before saving the updated catalog record.'
-              : 'Step through Product, First Variant, and Confirm before final save.'}
-            actions={
-              <StagedActionFooter summary="The catalog only writes when you explicitly save the product.">
-                <button type="submit" form="catalog-product-form">
-                  {form.product_id ? 'Review before saving' : createStep === 'confirm' ? 'Create product' : 'Complete all steps to save'}
-                </button>
-                <button type="button" onClick={() => setNewProductForm(workspace?.query)}>
-                  Reset draft
-                </button>
-              </StagedActionFooter>
-            }
+              ? 'Update the parent product and variant rows, then save once.'
+              : 'Complete Product, First Variant, and Confirm. Save happens only on the final step.'}
           >
           <form id="catalog-product-form" className="workspace-form" onSubmit={onSave}>
             {isCreateFlow ? (
@@ -1311,7 +1300,7 @@ export function CatalogWorkspace() {
                   </button>
                   {createStep !== 'confirm' ? (
                     <button type="button" onClick={() => void goToNextCreateStep()} disabled={isStepTransitionPending}>
-                      Continue to {CREATE_STEP_LABELS[CREATE_STEPS[activeStepIndex + 1]]}
+                      Next: {CREATE_STEP_LABELS[CREATE_STEPS[activeStepIndex + 1]]}
                     </button>
                   ) : null}
                 </>
@@ -1319,7 +1308,7 @@ export function CatalogWorkspace() {
               <button type="submit" disabled={isCreateFlow && createStep !== 'confirm'}>
                 {form.product_id ? 'Update product' : 'Create product'}
               </button>
-              <button type="button" onClick={() => setNewProductForm(workspace?.query)}>Reset form</button>
+              <button type="button" onClick={() => setNewProductForm(workspace?.query)}>Discard draft</button>
             </div>
 
             <datalist id="catalog-suppliers">
