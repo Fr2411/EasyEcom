@@ -252,11 +252,14 @@ export function deriveCatalogInlineErrors(error: unknown): CatalogInlineErrors {
   if (
     normalized.includes('first variant details are required')
     || normalized.includes('first variant must be active')
+    || normalized.includes('at least one variant is required')
   ) {
     return { first_variant: message };
   }
   if (
     normalized.includes('identity.product_name')
+    || normalized.includes('"product_name"')
+    || normalized.includes('product name is required')
     || normalized.includes('product name must be at least 2 characters')
     || normalized.includes('string_too_short')
   ) {
