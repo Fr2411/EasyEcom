@@ -74,17 +74,31 @@ def _seed_sample_business_data(
     session.flush()
 
     products: list[tuple[ProductModel, ProductVariantModel, Decimal, Decimal, Decimal]] = []
-    seed_specs = [
-        ("Trail Runner", "TRAIL", "Easy Brand", "42 / Black", "TRAIL-42-BLK", Decimal("32"), Decimal("79"), Decimal("14")),
-        ("Trail Runner", "TRAIL", "Easy Brand", "43 / Black", "TRAIL-43-BLK", Decimal("32"), Decimal("79"), Decimal("10")),
-        ("City Backpack", "PACK", "Urban Gear", "Standard / Olive", "PACK-STD-OLV", Decimal("21"), Decimal("55"), Decimal("8")),
-        ("City Backpack", "PACK", "Urban Gear", "Standard / Sand", "PACK-STD-SND", Decimal("21"), Decimal("55"), Decimal("6")),
-        ("Hydra Bottle", "HYDRA", "Flow Labs", "750ml / Blue", "HYDRA-750-BLU", Decimal("6"), Decimal("18"), Decimal("25")),
-        ("Hydra Bottle", "HYDRA", "Flow Labs", "1L / Black", "HYDRA-1L-BLK", Decimal("7"), Decimal("22"), Decimal("20")),
+    product_templates = [
+        ("Trail Runner", "TRAIL", "Easy Brand", Decimal("32"), Decimal("79"), Decimal("14"), Decimal("10")),
+        ("City Backpack", "PACK", "Urban Gear", Decimal("21"), Decimal("55"), Decimal("8"), Decimal("6")),
+        ("Hydra Bottle", "HYDRA", "Flow Labs", Decimal("6"), Decimal("18"), Decimal("25"), Decimal("20")),
+        ("Core Tee", "CTEE", "Cotton Lab", Decimal("8"), Decimal("24"), Decimal("30"), Decimal("26")),
+        ("Denim Jacket", "DNMJ", "North Line", Decimal("36"), Decimal("92"), Decimal("9"), Decimal("7")),
+        ("Office Shirt", "OSRT", "Urban Tailor", Decimal("14"), Decimal("39"), Decimal("18"), Decimal("16")),
+        ("Weekend Polo", "POLO", "Urban Tailor", Decimal("12"), Decimal("35"), Decimal("20"), Decimal("15")),
+        ("Smart Chino", "CHNO", "Street Form", Decimal("19"), Decimal("52"), Decimal("13"), Decimal("11")),
+        ("Summer Shorts", "SHRT", "Street Form", Decimal("11"), Decimal("31"), Decimal("17"), Decimal("14")),
+        ("Yoga Leggings", "YOGA", "Flex Fit", Decimal("15"), Decimal("44"), Decimal("16"), Decimal("12")),
+        ("Training Hoodie", "HOOD", "Flex Fit", Decimal("24"), Decimal("68"), Decimal("12"), Decimal("9")),
+        ("Canvas Belt", "BELT", "Urban Gear", Decimal("5"), Decimal("16"), Decimal("22"), Decimal("18")),
+        ("Leather Wallet", "WLTT", "Carry Co", Decimal("9"), Decimal("29"), Decimal("24"), Decimal("19")),
+        ("Travel Pouch", "POUC", "Carry Co", Decimal("7"), Decimal("21"), Decimal("18"), Decimal("15")),
+        ("Sport Socks", "SOCK", "Easy Brand", Decimal("3"), Decimal("11"), Decimal("40"), Decimal("34")),
+        ("Cap Classic", "CAPC", "Easy Brand", Decimal("6"), Decimal("19"), Decimal("20"), Decimal("16")),
+        ("Rain Shell", "RAIN", "North Line", Decimal("33"), Decimal("95"), Decimal("7"), Decimal("5")),
+        ("Mini Speaker", "SPKR", "Sound Arc", Decimal("18"), Decimal("49"), Decimal("14"), Decimal("10")),
+        ("Desk Lamp", "LAMP", "Home Shift", Decimal("12"), Decimal("36"), Decimal("15"), Decimal("12")),
+        ("Aroma Candle", "CNDL", "Home Shift", Decimal("4"), Decimal("14"), Decimal("28"), Decimal("23")),
     ]
 
     product_by_name: dict[str, ProductModel] = {}
-    for product_name, sku_root, brand, title, sku, cost, price, received_qty in seed_specs:
+    for product_name, sku_root, brand, base_cost, base_price, qty_one, qty_two in product_templates:
         product = product_by_name.get(product_name)
         if product is None:
             product = ProductModel(
@@ -98,30 +112,35 @@ def _seed_sample_business_data(
                 brand=brand,
                 description=f"{product_name} sample catalog row for demo operations.",
                 status="active",
-                default_price_amount=price,
-                min_price_amount=(price - Decimal("8")),
+                default_price_amount=base_price,
+                min_price_amount=(base_price - Decimal("8")),
                 max_discount_percent=Decimal("15"),
             )
             product_by_name[product_name] = product
             session.add(product)
             session.flush()
 
-        variant = ProductVariantModel(
-            variant_id=new_uuid(),
-            client_id=client_id,
-            product_id=product.product_id,
-            title=title,
-            sku=sku,
-            barcode=f"BAR-{sku}",
-            option_values_json={"title": title},
-            status="active",
-            cost_amount=cost,
-            price_amount=price,
-            min_price_amount=(price - Decimal("8")),
-            reorder_level=Decimal("4"),
-        )
-        session.add(variant)
-        products.append((product, variant, cost, price, received_qty))
+        variant_specs = [
+            ("M / Black", f"{sku_root}-M-BLK", base_cost, base_price, qty_one),
+            ("L / Navy", f"{sku_root}-L-NVY", base_cost + Decimal("1"), base_price + Decimal("3"), qty_two),
+        ]
+        for title, sku, cost, price, received_qty in variant_specs:
+            variant = ProductVariantModel(
+                variant_id=new_uuid(),
+                client_id=client_id,
+                product_id=product.product_id,
+                title=title,
+                sku=sku,
+                barcode=f"BAR-{sku}",
+                option_values_json={"title": title},
+                status="active",
+                cost_amount=cost,
+                price_amount=price,
+                min_price_amount=(price - Decimal("8")),
+                reorder_level=Decimal("4"),
+            )
+            session.add(variant)
+            products.append((product, variant, cost, price, received_qty))
 
     session.flush()
 

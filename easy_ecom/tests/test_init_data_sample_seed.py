@@ -13,6 +13,7 @@ from easy_ecom.data.store.postgres_models import (
     FinanceTransactionModel,
     InventoryLedgerModel,
     LocationModel,
+    ProductModel,
     ProductVariantModel,
     PurchaseModel,
     SalesOrderModel,
@@ -85,8 +86,11 @@ def test_sample_seed_creates_cross_module_data_with_variant_ledger_integrity(tmp
             select(func.count()).select_from(PurchaseModel).where(PurchaseModel.client_id == client_id)
         ).scalar_one() == 1
         assert session.execute(
+            select(func.count()).select_from(ProductModel).where(ProductModel.client_id == client_id)
+        ).scalar_one() >= 20
+        assert session.execute(
             select(func.count()).select_from(ProductVariantModel).where(ProductVariantModel.client_id == client_id)
-        ).scalar_one() == 6
+        ).scalar_one() >= 40
         assert session.execute(
             select(func.count()).select_from(CustomerModel).where(CustomerModel.client_id == client_id)
         ).scalar_one() == 2
