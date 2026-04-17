@@ -3,6 +3,7 @@ import { ApiError, ApiNetworkError } from '@/lib/api/client';
 import {
   deriveCatalogInlineErrors,
   deriveCatalogRecommendation,
+  deriveCatalogStepBlockedSummary,
   deriveCatalogStepSafeError,
   normalizeFirstVariantForCreateFlow,
 } from '@/components/commerce/catalog-workspace';
@@ -156,5 +157,23 @@ describe('deriveCatalogStepSafeError', () => {
     const message = deriveCatalogStepSafeError(new ApiNetworkError('failed (https://example.com/catalog/products/validate-step)'));
 
     expect(message).toBe('Network connection failed while validating this step. Please retry.');
+  });
+});
+
+describe('deriveCatalogStepBlockedSummary', () => {
+  test('returns product-step summary for blocked required product fields', () => {
+    const summary = deriveCatalogStepBlockedSummary('product', {
+      product_name: 'Product name must be at least 2 characters.',
+    });
+
+    expect(summary).toBe('Cannot continue: complete the required Product fields.');
+  });
+
+  test('returns first-variant summary for blocked required first variant fields', () => {
+    const summary = deriveCatalogStepBlockedSummary('first_variant', {
+      first_variant: 'First variant details are required (add at least one option or barcode)',
+    });
+
+    expect(summary).toBe('Cannot continue: complete the required First Variant fields.');
   });
 });
