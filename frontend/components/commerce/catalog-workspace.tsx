@@ -495,7 +495,7 @@ export function CatalogWorkspace() {
   const stepTransitionSeqRef = useRef(0);
   const [isPending, startTransition] = useTransition();
   const recommendation = deriveCatalogRecommendation(workspace);
-  const recommendationPrimaryTone = recommendation.kind === 'new' ? 'primary' : 'secondary';
+  const recommendationPrimaryTone = 'primary';
   const showTopCreateNotice = activeTab !== 'edit' && !workspaceLoadFallback && !(workspace?.query ?? '').trim();
   const requestedProductId = searchParams.get('product_id') ?? '';
   const shouldAutoOpenEdit = searchParams.get('edit') === '1';
@@ -795,7 +795,7 @@ export function CatalogWorkspace() {
             <button
               type="button"
               data-testid="catalog-top-start-new-product"
-              className="btn-primary"
+              className="secondary"
               onClick={() => {
                 setNewProductForm(workspace?.query || '');
                 setActiveTab('edit');
@@ -810,7 +810,12 @@ export function CatalogWorkspace() {
 
       <WorkspacePanel
         className="catalog-local-finder-panel"
-        title="Find or open a product"
+        title={
+          <div className="catalog-finder-title">
+            <span className="workspace-heading">Catalog finder</span>
+            <span className="catalog-finder-scope-note">Catalog-only lookup. Top-bar search is for global navigation.</span>
+          </div>
+        }
         actions={
           <IntentInput
             label="Find product"
@@ -819,14 +824,11 @@ export function CatalogWorkspace() {
             placeholder="Search by product name, SKU root, barcode, or variant"
             pending={isPending}
             submitLabel="Search catalog"
-            submitTone="secondary"
+            submitTone="primary"
             onChange={setQueryInput}
             onSubmit={() => void onWorkspaceIntent(queryInput)}
           >
-            <p className="workspace-field-note catalog-decision-sentence">
-              Use <strong>Open product</strong> for existing products. Use <strong>Start New Product</strong> only when there is no match.
-            </p>
-            <p className="workspace-field-note">Type one detail. If no product matches, click Start New Product.</p>
+            <p className="workspace-field-note catalog-decision-sentence">Search first with one clue (name, SKU, barcode, or variant); choose <strong>Start New Product</strong> only when no match appears.</p>
           </IntentInput>
         }
       >
