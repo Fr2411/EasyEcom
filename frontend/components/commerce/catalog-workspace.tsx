@@ -496,7 +496,6 @@ export function CatalogWorkspace() {
   const [isPending, startTransition] = useTransition();
   const recommendation = deriveCatalogRecommendation(workspace);
   const recommendationPrimaryTone = 'primary';
-  const showTopCreateNotice = activeTab !== 'edit' && !workspaceLoadFallback && !(workspace?.query ?? '').trim();
   const requestedProductId = searchParams.get('product_id') ?? '';
   const shouldAutoOpenEdit = searchParams.get('edit') === '1';
 
@@ -789,24 +788,6 @@ export function CatalogWorkspace() {
         activeTab={activeTab}
         onTabChange={setActiveTab}
       />
-      {showTopCreateNotice ? (
-        <WorkspaceNotice>
-          <div className="workspace-actions">
-            <button
-              type="button"
-              data-testid="catalog-top-start-new-product"
-              className="secondary catalog-top-create-action"
-              onClick={() => {
-                setNewProductForm(workspace?.query || '');
-                setActiveTab('edit');
-              }}
-            >
-              Open new product draft
-            </button>
-            <span className="workspace-field-note">Search catalog first. Open a new draft only when no match appears.</span>
-          </div>
-        </WorkspaceNotice>
-      ) : null}
 
       <WorkspacePanel
         className="catalog-local-finder-panel"
