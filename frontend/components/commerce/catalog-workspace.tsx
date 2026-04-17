@@ -1,8 +1,8 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState, useTransition } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ApiError } from '@/lib/api/client';
+import { ApiError, ApiNetworkError } from '@/lib/api/client';
 import { getCatalogWorkspace, saveCatalogProduct, validateCatalogCreationStep } from '@/lib/api/commerce';
 import { buildSkuPreview, buildVariantCombinations, signatureForVariant, type VariantOptionValues } from '@/lib/variant-generator';
 import type {
@@ -259,6 +259,23 @@ export function deriveCatalogInlineErrors(error: unknown): CatalogInlineErrors {
   return {};
 }
 
+export function deriveCatalogStepSafeError(error: unknown): string {
+  if (error instanceof ApiNetworkError) {
+    return 'Network connection failed while validating this step. Please retry.';
+  }
+  if (error instanceof ApiError) {
+    if (error.status === 404) {
+      return 'Step validation is not available on the connected API yet. Deploy the latest backend and retry.';
+    }
+    if (error.status >= 500) {
+      return 'Step validation is temporarily unavailable. Please retry in a moment.';
+    }
+    const cleaned = stripRequestUrlFromMessage(error.message);
+    return cleaned || 'Unable to continue to the next step.';
+  }
+  return 'Unable to continue to the next step.';
+}
+
 function normalizeCatalogQuery(value: string) {
   return value.trim().toLowerCase();
 }
@@ -352,6 +369,8 @@ export function CatalogWorkspace() {
   const [notice, setNotice] = useState('');
   const [saveToast, setSaveToast] = useState('');
   const [postCreateSuccess, setPostCreateSuccess] = useState<PostCreateSuccessState | null>(null);
+  const [isStepTransitionPending, setIsStepTransitionPending] = useState(false);
+  const stepTransitionSeqRef = useRef(0);
   const [isPending, startTransition] = useTransition();
   const recommendation = deriveCatalogRecommendation(workspace);
   const requestedProductId = searchParams.get('product_id') ?? '';
@@ -571,28 +590,47 @@ export function CatalogWorkspace() {
   const activeStepIndex = CREATE_STEPS.indexOf(createStep);
   const isCreateFlow = !form.product_id;
   const goToNextCreateStep = async () => {
-    if (!isCreateFlow || createStep === 'confirm') return;
+    if (!isCreateFlow || createStep === 'confirm' || isStepTransitionPending) return;
+    const stepAtRequestStart = createStep;
+    const requestSeq = stepTransitionSeqRef.current + 1;
+    stepTransitionSeqRef.current = requestSeq;
+    setIsStepTransitionPending(true);
     setInlineErrors({});
-    const payload = createStep === 'first_variant' ? normalizeFirstVariantForCreateFlow(form) : form;
+    const payload = stepAtRequestStart === 'first_variant' ? normalizeFirstVariantForCreateFlow(form) : form;
     try {
       if (payload !== form) {
         setForm(payload);
       }
       await validateCatalogCreationStep({
-        step: createStep,
+        step: stepAtRequestStart,
         identity: payload.identity,
         variants: payload.variants,
       });
-      const nextStep = CREATE_STEPS[activeStepIndex + 1];
-      if (nextStep) {
-        setCreateStep(nextStep);
-        setNotice('');
-        setError('');
+      if (requestSeq !== stepTransitionSeqRef.current) {
+        return;
       }
+      setCreateStep((currentStep) => {
+        const currentIndex = CREATE_STEPS.indexOf(currentStep);
+        const nextStep = CREATE_STEPS[currentIndex + 1];
+        return nextStep ?? currentStep;
+      });
+      setNotice('');
+      setError('');
     } catch (stepError) {
+      if (requestSeq !== stepTransitionSeqRef.current) {
+        return;
+      }
       const nextInlineErrors = deriveCatalogInlineErrors(stepError);
       setInlineErrors(nextInlineErrors);
-      setError(Object.keys(nextInlineErrors).length ? 'Fix the highlighted fields and continue.' : stepError instanceof Error ? stepError.message : 'Unable to continue to the next step.');
+      if (Object.keys(nextInlineErrors).length) {
+        setError('Fix the highlighted fields and continue.');
+      } else {
+        setError(deriveCatalogStepSafeError(stepError));
+      }
+    } finally {
+      if (requestSeq === stepTransitionSeqRef.current) {
+        setIsStepTransitionPending(false);
+      }
     }
   };
 
@@ -1260,11 +1298,11 @@ export function CatalogWorkspace() {
             <div className="workspace-actions">
               {isCreateFlow ? (
                 <>
-                  <button type="button" onClick={goToPreviousCreateStep} disabled={createStep === 'product'}>
+                  <button type="button" onClick={goToPreviousCreateStep} disabled={createStep === 'product' || isStepTransitionPending}>
                     Back
                   </button>
                   {createStep !== 'confirm' ? (
-                    <button type="button" onClick={() => void goToNextCreateStep()}>
+                    <button type="button" onClick={() => void goToNextCreateStep()} disabled={isStepTransitionPending}>
                       Continue to {CREATE_STEP_LABELS[CREATE_STEPS[activeStepIndex + 1]]}
                     </button>
                   ) : null}
