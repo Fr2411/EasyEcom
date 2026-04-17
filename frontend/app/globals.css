@@ -6424,8 +6424,9 @@ button.secondary:hover,
   }
 
   .page-content[data-route-root='catalog'] .catalog-local-finder-panel .guided-next-step[data-kind='new'] {
-    margin-bottom: 0.35rem;
-    padding: 1rem 1rem calc(0.95rem + env(safe-area-inset-bottom, 0px));
+    margin-bottom: calc(var(--mobile-bottom-nav-clearance) * 0.42);
+    padding: 1rem 1rem calc(0.95rem + env(safe-area-inset-bottom, 0px) + (var(--mobile-bottom-nav-clearance) * 0.36));
+    scroll-margin-bottom: calc(var(--mobile-bottom-nav-clearance) + 0.85rem);
   }
 
   .page-content[data-route-root='catalog'] .catalog-local-finder-panel .guided-next-step[data-kind='new'] strong {
