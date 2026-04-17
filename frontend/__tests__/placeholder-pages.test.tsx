@@ -9,6 +9,7 @@ import FinancePage from '@/app/(app)/finance/page';
 import IntegrationsPage from '@/app/(app)/integrations/page';
 import InventoryPage from '@/app/(app)/inventory/page';
 import HomePage from '@/app/(app)/home/page';
+import ProductsPage from '@/app/(app)/products/page';
 import ProductsStockPage from '@/app/(app)/products-stock/page';
 import PurchasesPage from '@/app/(app)/purchases/page';
 import ReportsPage from '@/app/(app)/reports/page';
@@ -564,7 +565,26 @@ describe('Business pages', () => {
     vi.resetModules();
   });
 
+  test('legacy products route redirects into catalog workspace', async () => {
+    vi.resetModules();
+    const redirectMock = vi.fn();
+    vi.doMock('next/navigation', () => ({
+      redirect: redirectMock,
+    }));
+
+    const module = await import('@/app/(app)/products/page');
+    module.default();
+
+    expect(redirectMock).toHaveBeenCalledWith('/catalog');
+    vi.doUnmock('next/navigation');
+    vi.resetModules();
+  });
+
   test('preloaded products-stock page import remains available', () => {
     expect(ProductsStockPage).toBeTruthy();
+  });
+
+  test('preloaded products page import remains available', () => {
+    expect(ProductsPage).toBeTruthy();
   });
 });
