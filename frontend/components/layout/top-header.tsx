@@ -276,6 +276,9 @@ export function TopHeader({ onOpenNavigation }: { onOpenNavigation?: () => void 
         <p className="header-title">{pageContext.title ?? matchedRoute?.label ?? DEFAULT_TITLE}</p>
       </div>
       <form className="header-search" aria-label="Global workspace search" onSubmit={onSubmit}>
+        {pathname === '/catalog' ? (
+          <span className="header-search-context">Global search only. Catalog lookup is in Catalog finder.</span>
+        ) : null}
         <span className="header-search-icon" aria-hidden="true">
           <Search size={16} />
         </span>
@@ -293,7 +296,7 @@ export function TopHeader({ onOpenNavigation }: { onOpenNavigation?: () => void 
           type="search"
           aria-label="Global search query"
           className="header-search-input"
-          placeholder="Global search: orders, SKUs, returns"
+          placeholder={pathname === '/catalog' ? 'Global search only: orders, SKUs, returns' : 'Global search: orders, SKUs, returns'}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />

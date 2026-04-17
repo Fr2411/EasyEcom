@@ -2104,6 +2104,21 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
   font-weight: 500;
 }
 
+.catalog-decision-details {
+  margin: 0;
+}
+
+.catalog-decision-details summary {
+  cursor: pointer;
+  color: var(--primary-strong);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.catalog-decision-details[open] p {
+  margin: 0.3rem 0 0;
+}
+
 .guided-draft-card {
   display: grid;
   gap: 1rem;
@@ -3464,6 +3479,15 @@ button:hover {
   justify-content: center;
   width: 2.25rem;
   color: var(--text-soft);
+}
+
+.header-search-context {
+  display: block;
+  flex: 1 0 100%;
+  padding: 0.05rem 0.4rem 0.2rem;
+  font-size: 0.7rem;
+  line-height: 1.3;
+  color: var(--text-muted-readable);
 }
 
 .header-search-scope {
@@ -6614,8 +6638,8 @@ button.secondary:hover,
 
   .page-content[data-route-root='catalog'] .catalog-local-finder-panel {
     scroll-margin-top: 6.8rem;
-    scroll-margin-bottom: calc(var(--mobile-bottom-nav-clearance) + 0.45rem);
-    padding-bottom: calc(var(--mobile-bottom-nav-clearance) * 0.45);
+    scroll-margin-bottom: calc(var(--mobile-bottom-nav-clearance) + 0.95rem);
+    padding-bottom: calc(var(--mobile-bottom-nav-clearance) * 0.58);
   }
 
   .page-content[data-route-root='catalog'] {
@@ -6705,8 +6729,16 @@ button.secondary:hover,
 
   .page-content[data-route-root='catalog'] .catalog-local-finder-panel .catalog-decision-sentence {
     margin: 0;
-    font-size: 0.78rem;
-    line-height: 1.3;
+    font-size: 0.8rem;
+    line-height: 1.34;
+  }
+
+  .page-content[data-route-root='catalog'] .catalog-local-finder-panel .catalog-decision-details {
+    margin-top: 0.1rem;
+  }
+
+  .page-content[data-route-root='catalog'] .catalog-local-finder-panel .catalog-decision-details summary {
+    font-size: 0.76rem;
   }
 
   .page-content[data-route-root='catalog'] .catalog-local-finder-panel .guided-next-step[data-kind='new'] {
@@ -6747,13 +6779,13 @@ button.secondary:hover,
 
   .mobile-bottom-nav.is-catalog-context {
     border-color: color-mix(in srgb, var(--app-border-strong) 62%, transparent);
-    background: color-mix(in srgb, var(--app-surface) 82%, transparent);
-    box-shadow: 0 8px 18px rgba(9, 10, 15, 0.12);
+    background: color-mix(in srgb, var(--app-surface) 74%, transparent);
+    box-shadow: 0 8px 16px rgba(9, 10, 15, 0.1);
     backdrop-filter: blur(9px);
   }
 
   .mobile-bottom-nav.is-catalog-context .mobile-bottom-link {
-    opacity: 0.82;
+    opacity: 0.76;
   }
 
   .mobile-bottom-nav.is-catalog-context .mobile-bottom-link.active {

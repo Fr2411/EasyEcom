@@ -795,15 +795,15 @@ export function CatalogWorkspace() {
             <button
               type="button"
               data-testid="catalog-top-start-new-product"
-              className="secondary"
+              className="secondary catalog-top-create-action"
               onClick={() => {
                 setNewProductForm(workspace?.query || '');
                 setActiveTab('edit');
               }}
             >
-              Start New Product
+              Open new product draft
             </button>
-            <span className="workspace-field-note">Use this when the product does not already exist.</span>
+            <span className="workspace-field-note">Search catalog first. Open a new draft only when no match appears.</span>
           </div>
         </WorkspaceNotice>
       ) : null}
@@ -828,7 +828,13 @@ export function CatalogWorkspace() {
             onChange={setQueryInput}
             onSubmit={() => void onWorkspaceIntent(queryInput)}
           >
-            <p className="workspace-field-note catalog-decision-sentence">Search one clue first (name, SKU, barcode, or variant). Use <strong>Start New Product</strong> only when no match appears.</p>
+            <p className="workspace-field-note catalog-decision-sentence">
+              Search one clue first (name, SKU, barcode, or variant), then open a new draft only when no match appears.
+            </p>
+            <details className="catalog-decision-details">
+              <summary>When to open a new draft</summary>
+              <p className="workspace-field-note">Use it only for products that do not already exist in this catalog.</p>
+            </details>
           </IntentInput>
         }
       >
