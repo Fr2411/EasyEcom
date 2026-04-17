@@ -37,6 +37,7 @@ export function WorkspacePanel({
   hint,
   hintLabel,
   actions,
+  className,
   children,
 }: {
   title: React.ReactNode;
@@ -44,12 +45,14 @@ export function WorkspacePanel({
   hint?: string;
   hintLabel?: string;
   actions?: React.ReactNode;
+  className?: string;
   children: React.ReactNode;
 }) {
   const helpText = [description, hint].filter(Boolean).join(' ');
+  const panelClassName = className ? `workspace-panel ${className}` : 'workspace-panel';
 
   return (
-    <section className="workspace-panel">
+    <section className={panelClassName}>
       <header className="workspace-panel-header">
         <div>
           <h3>

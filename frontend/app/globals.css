@@ -6169,6 +6169,11 @@ button.secondary:hover,
   .page-content[data-route-root='purchases'] .purchases-module {
     padding-bottom: calc(var(--mobile-bottom-nav-clearance) + 0.35rem);
   }
+
+  .page-content[data-route-root='catalog'] .catalog-local-finder-panel {
+    scroll-margin-bottom: calc(var(--mobile-bottom-nav-clearance) + 0.45rem);
+    padding-bottom: calc(var(--mobile-bottom-nav-clearance) * 0.28);
+  }
 }
 
 /* TEA-87 Wave 4: typography, contrast, and spacing normalization */

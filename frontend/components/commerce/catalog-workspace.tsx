@@ -751,6 +751,7 @@ export function CatalogWorkspace() {
       ) : null}
 
       <WorkspacePanel
+        className="catalog-local-finder-panel"
         title="Catalog local finder"
         actions={
           <IntentInput
