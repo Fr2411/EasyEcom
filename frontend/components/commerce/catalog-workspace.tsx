@@ -243,12 +243,19 @@ export function normalizeFirstVariantForCreateFlow(payload: CatalogUpsertPayload
 
 type CatalogInlineErrors = {
   product_name?: string;
+  first_variant?: string;
 };
 
 export function deriveCatalogInlineErrors(error: unknown): CatalogInlineErrors {
   if (!(error instanceof ApiError)) return {};
   const message = stripRequestUrlFromMessage(error.message);
   const normalized = message.toLowerCase();
+  if (
+    normalized.includes('first variant details are required')
+    || normalized.includes('first variant must be active')
+  ) {
+    return { first_variant: message };
+  }
   if (
     normalized.includes('identity.product_name')
     || normalized.includes('product name must be at least 2 characters')
@@ -1105,6 +1112,7 @@ export function CatalogWorkspace() {
                 <p className="workspace-field-note">
                   Product fields stay shared at parent level. Variant rows below represent the saleable SKUs and can override price and reorder values.
                 </p>
+                {inlineErrors.first_variant ? <p className="validation-message">{inlineErrors.first_variant}</p> : null}
                 {form.variants.map((variant, index) => {
                   const isSavedVariant = Boolean(variant.variant_id);
                   const skuPreview = buildSkuPreview(form.identity.product_name, form.identity.sku_root, variant);

@@ -129,6 +129,17 @@ describe('deriveCatalogInlineErrors', () => {
 
     expect(errors.product_name).toBe('Product name must be at least 2 characters.');
   });
+
+  test('maps first-variant validation failures to inline variant guidance', () => {
+    const errors = deriveCatalogInlineErrors(
+      new ApiError(
+        400,
+        'First variant details are required (add at least one option or barcode) (https://example.com/catalog/products/validate-step)'
+      )
+    );
+
+    expect(errors.first_variant).toBe('First variant details are required (add at least one option or barcode)');
+  });
 });
 
 describe('deriveCatalogStepSafeError', () => {
