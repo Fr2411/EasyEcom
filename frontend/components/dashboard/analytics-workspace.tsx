@@ -554,6 +554,7 @@ export function DashboardAnalyticsWorkspace() {
   const opportunityMatrix = dashboard?.charts.product_opportunity_matrix.items ?? [];
   const investmentRows = dashboard?.tables.stock_investment_by_product ?? [];
   const headlineKpi = dashboard?.kpis[0] ?? null;
+  const gridKpis = dashboard?.kpis.slice(headlineKpi ? 1 : 0) ?? [];
 
   return (
     <div className="dashboard-analytics space-y-6">
@@ -681,7 +682,7 @@ export function DashboardAnalyticsWorkspace() {
       {dashboard ? (
         <>
           <section className="kpi-grid dashboard-kpi-grid grid-cols-6 gap-4">
-            {dashboard.kpis.map((metric) => (
+            {gridKpis.map((metric) => (
               <article 
                 key={metric.id} 
                 className="kpi-card dashboard-kpi-card bg-glass p-6 rounded-lg shadow-glass transition-normal hover:shadow-glass-hover"
