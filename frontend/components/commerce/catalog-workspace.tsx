@@ -282,6 +282,23 @@ export function deriveCatalogStepSafeError(error: unknown): string {
   return 'Unable to continue to the next step.';
 }
 
+export function deriveCatalogStepBlockedSummary(
+  step: CatalogCreationStep,
+  inlineErrors: CatalogInlineErrors,
+  fallbackError?: string
+): string {
+  if (step === 'product' && inlineErrors.product_name) {
+    return 'Cannot continue: complete the required Product fields.';
+  }
+  if (step === 'first_variant' && inlineErrors.first_variant) {
+    return 'Cannot continue: complete the required First Variant fields.';
+  }
+  if (fallbackError) {
+    return `Cannot continue: ${fallbackError}`;
+  }
+  return 'Cannot continue to the next step until required fields are complete.';
+}
+
 function normalizeCatalogQuery(value: string) {
   return value.trim().toLowerCase();
 }
@@ -376,6 +393,7 @@ export function CatalogWorkspace() {
   const [saveToast, setSaveToast] = useState('');
   const [postCreateSuccess, setPostCreateSuccess] = useState<PostCreateSuccessState | null>(null);
   const [isStepTransitionPending, setIsStepTransitionPending] = useState(false);
+  const [stepTransitionErrorSummary, setStepTransitionErrorSummary] = useState('');
   const stepTransitionSeqRef = useRef(0);
   const [isPending, startTransition] = useTransition();
   const recommendation = deriveCatalogRecommendation(workspace);
@@ -436,6 +454,7 @@ export function CatalogWorkspace() {
     setError('');
     setInlineErrors({});
     setCreateStep('product');
+    setStepTransitionErrorSummary('');
     if (!options?.keepPostCreateSuccess) {
       setPostCreateSuccess(null);
     }
@@ -454,6 +473,7 @@ export function CatalogWorkspace() {
     setInlineErrors({});
     setPostCreateSuccess(null);
     setCreateStep('confirm');
+    setStepTransitionErrorSummary('');
   };
 
   const onWorkspaceIntent = async (query: string) => {
@@ -602,6 +622,7 @@ export function CatalogWorkspace() {
     stepTransitionSeqRef.current = requestSeq;
     setIsStepTransitionPending(true);
     setInlineErrors({});
+    setStepTransitionErrorSummary('');
     const payload = stepAtRequestStart === 'first_variant' ? normalizeFirstVariantForCreateFlow(form) : form;
     try {
       if (payload !== form) {
@@ -622,6 +643,7 @@ export function CatalogWorkspace() {
       });
       setNotice('');
       setError('');
+      setStepTransitionErrorSummary('');
     } catch (stepError) {
       if (requestSeq !== stepTransitionSeqRef.current) {
         return;
@@ -630,8 +652,11 @@ export function CatalogWorkspace() {
       setInlineErrors(nextInlineErrors);
       if (Object.keys(nextInlineErrors).length) {
         setError('Fix the highlighted fields and continue.');
+        setStepTransitionErrorSummary(deriveCatalogStepBlockedSummary(stepAtRequestStart, nextInlineErrors));
       } else {
-        setError(deriveCatalogStepSafeError(stepError));
+        const safeError = deriveCatalogStepSafeError(stepError);
+        setError(safeError);
+        setStepTransitionErrorSummary(deriveCatalogStepBlockedSummary(stepAtRequestStart, nextInlineErrors, safeError));
       }
     } finally {
       if (requestSeq === stepTransitionSeqRef.current) {
@@ -647,6 +672,7 @@ export function CatalogWorkspace() {
       setCreateStep(previousStep);
       setNotice('');
       setError('');
+      setStepTransitionErrorSummary('');
     }
   };
 
@@ -1101,7 +1127,6 @@ export function CatalogWorkspace() {
                 <p className="workspace-field-note">
                   Product fields stay shared at parent level. Variant rows below represent the saleable SKUs and can override price and reorder values.
                 </p>
-                {inlineErrors.first_variant ? <p className="validation-message">{inlineErrors.first_variant}</p> : null}
                 {form.variants.map((variant, index) => {
                   const isSavedVariant = Boolean(variant.variant_id);
                   const skuPreview = buildSkuPreview(form.identity.product_name, form.identity.sku_root, variant);
@@ -1208,6 +1233,7 @@ export function CatalogWorkspace() {
                             }
                           />
                         </label>
+                        {index === 0 && inlineErrors.first_variant ? <p className="validation-message">{inlineErrors.first_variant}</p> : null}
                         <label>
                           Cost
                           <input
@@ -1293,6 +1319,11 @@ export function CatalogWorkspace() {
             ) : null}
 
             <div className="workspace-actions">
+              {isCreateFlow && stepTransitionErrorSummary ? (
+                <p className="validation-message" role="alert">
+                  {stepTransitionErrorSummary}
+                </p>
+              ) : null}
               {isCreateFlow ? (
                 <>
                   <button type="button" onClick={goToPreviousCreateStep} disabled={createStep === 'product' || isStepTransitionPending}>
