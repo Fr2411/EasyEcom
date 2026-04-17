@@ -1893,6 +1893,31 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
   visibility: visible;
 }
 
+@media (max-width: 720px) {
+  .workspace-panel-header,
+  .workspace-subsection-header,
+  .guided-match-item-header,
+  .guided-draft-card-header,
+  .guided-action-footer {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+
+  .workspace-panel-actions {
+    width: 100%;
+  }
+
+  .workspace-panel-actions > * {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .guided-intent-form {
+    grid-template-columns: 1fr;
+  }
+}
+
 .workspace-card-grid {
   display: grid;
   gap: 1rem;
