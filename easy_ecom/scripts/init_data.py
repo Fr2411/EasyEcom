@@ -512,19 +512,21 @@ def main() -> None:
             )
         ).scalar_one_or_none()
         if existing_location is None:
-            session.add(
-                LocationModel(
-                    location_id=new_uuid(),
-                    client_id=settings.global_client_id,
-                    name="Global Warehouse",
-                    code="GLOBAL",
-                    is_default=True,
-                    status="active",
-                )
+            existing_location = LocationModel(
+                location_id=new_uuid(),
+                client_id=settings.global_client_id,
+                name="Global Warehouse",
+                code="GLOBAL",
+                is_default=True,
+                status="active",
             )
+            session.add(existing_location)
+            session.flush()
+        global_location_id = existing_location.location_id
 
         admin_email = settings.super_admin_email.strip().lower()
         admin_password = settings.super_admin_password
+        admin_id: str | None = None
         if admin_email and admin_password:
             existing_user = session.execute(
                 select(UserModel).where(UserModel.email == admin_email)
@@ -548,6 +550,60 @@ def main() -> None:
                     )
                 )
                 session.add(UserRoleModel(user_id=admin_id, role_code="SUPER_ADMIN"))
+            else:
+                admin_id = str(existing_user.user_id)
+
+        _seed_sample_business_data(
+            session,
+            client_id=settings.global_client_id,
+            location_id=str(global_location_id),
+            created_by_user_id=admin_id,
+        )
+        if admin_email:
+            admin_user = session.execute(
+                select(UserModel).where(UserModel.email == admin_email)
+            ).scalar_one_or_none()
+            if admin_user is not None and str(admin_user.client_id) != settings.global_client_id:
+                owner_client_id = str(admin_user.client_id)
+                owner_settings = session.execute(
+                    select(ClientSettingsModel).where(ClientSettingsModel.client_id == owner_client_id)
+                ).scalar_one_or_none()
+                if owner_settings is None:
+                    session.add(
+                        ClientSettingsModel(
+                            client_settings_id=new_uuid(),
+                            client_id=owner_client_id,
+                            low_stock_threshold=Decimal("5"),
+                            allow_backorder=settings.allow_backorder,
+                            default_location_name="Main Warehouse",
+                            require_discount_approval=False,
+                            order_prefix="SO",
+                            purchase_prefix="PO",
+                            return_prefix="RT",
+                        )
+                    )
+                owner_location = session.execute(
+                    select(LocationModel)
+                    .where(LocationModel.client_id == owner_client_id)
+                    .order_by(LocationModel.is_default.desc(), LocationModel.created_at.asc())
+                ).scalars().first()
+                if owner_location is None:
+                    owner_location = LocationModel(
+                        location_id=new_uuid(),
+                        client_id=owner_client_id,
+                        name="Main Warehouse",
+                        code="MAIN",
+                        is_default=True,
+                        status="active",
+                    )
+                    session.add(owner_location)
+                    session.flush()
+                _seed_sample_business_data(
+                    session,
+                    client_id=owner_client_id,
+                    location_id=str(owner_location.location_id),
+                    created_by_user_id=str(admin_user.user_id),
+                )
 
         if settings.create_default_client:
             default_slug = "default"
