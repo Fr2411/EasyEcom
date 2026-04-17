@@ -51,8 +51,8 @@ describe('CatalogWorkspace step errors', () => {
     render(<CatalogWorkspace />);
 
     await waitFor(() => expect(screen.getByText('No catalog items staged')).toBeTruthy());
-    expect(screen.getByText('Search catalog first. Open a new draft only when no match appears.')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Open new product draft' }));
+    expect(screen.queryByTestId('catalog-top-start-new-product')).toBeNull();
+    fireEvent.click(screen.getByRole('tab', { name: 'Start New Product' }));
 
     const productNameInput = await screen.findByLabelText('Product name');
     fireEvent.change(productNameInput, { target: { value: 'A' } });
@@ -93,7 +93,6 @@ describe('CatalogWorkspace step errors', () => {
     expect(screen.getByText('Your network or session may have timed out. Retry once to continue.')).toBeTruthy();
     expect(screen.getByText('Last search: all catalog products.')).toBeTruthy();
     expect(screen.queryByTestId('catalog-top-start-new-product')).toBeNull();
-    expect(screen.queryByText('Search catalog first. Open a new draft only when no match appears.')).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Retry catalog load' }));
     await waitFor(() => expect(mockGetCatalogWorkspace).toHaveBeenCalledTimes(2));
