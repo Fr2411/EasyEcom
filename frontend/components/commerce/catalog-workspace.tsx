@@ -377,7 +377,7 @@ export function deriveCatalogRecommendation(workspace: CatalogWorkspace | null):
     return {
       kind: 'idle',
       title: 'Find or create a product',
-      detail: 'Enter one clue like product name, SKU root, barcode, or variant SKU. If nothing matches, start a new product draft.',
+      detail: 'Type one detail (product name, SKU root, barcode, or variant SKU). If there is no match, you can start a new product.',
       actionLabel: 'Review next step',
       tone: 'info',
     };
@@ -746,20 +746,20 @@ export function CatalogWorkspace() {
             >
               Start New Product
             </button>
-            <span className="workspace-field-note">Primary catalog action: open a new parent product + first variant draft.</span>
+            <span className="workspace-field-note">Use this when the product does not already exist.</span>
           </div>
         </WorkspaceNotice>
       ) : null}
 
       <WorkspacePanel
         className="catalog-local-finder-panel"
-        title="Catalog local finder"
+        title="Catalog product finder"
         actions={
           <IntentInput
-            label="Find existing product (local to Catalog)"
-            hint="This finder searches Catalog records only by one clue (name, SKU root, barcode, or variant)."
+            label="Find an existing product"
+            hint="Search your Catalog by one detail: product name, SKU root, barcode, or variant."
             value={queryInput}
-            placeholder="Catalog-only: product, SKU root, barcode, or variant"
+            placeholder="Search by product name, SKU root, barcode, or variant"
             pending={isPending}
             submitLabel="Search catalog"
             submitTone="secondary"
@@ -864,7 +864,7 @@ export function CatalogWorkspace() {
           ) : (
             <WorkspaceEmpty
               title="No catalog items staged"
-              message="Use the Catalog local finder to open an existing product. If nothing matches, use Start New Product."
+              message="Use the product finder to open an existing product. If there is no match, click Start New Product."
             />
           )
         ) : (
