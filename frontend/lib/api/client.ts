@@ -17,15 +17,56 @@ export class ApiNetworkError extends Error {
   }
 }
 
-export async function apiClient<T>(path: string, init?: RequestInit): Promise<T> {
+export type ApiClientInit = RequestInit & {
+  timeoutMs?: number;
+};
+
+const DEFAULT_API_TIMEOUT_MS = 20000;
+
+function buildRequestSignal(sourceSignal: AbortSignal | null | undefined, timeoutMs: number) {
+  const timeoutController = new AbortController();
+  const combinedController = new AbortController();
+  const timeoutId = globalThis.setTimeout(() => timeoutController.abort('timeout'), timeoutMs);
+
+  const abortCombined = () => {
+    combinedController.abort();
+  };
+
+  timeoutController.signal.addEventListener('abort', abortCombined, { once: true });
+
+  if (sourceSignal) {
+    if (sourceSignal.aborted) {
+      combinedController.abort();
+    } else {
+      sourceSignal.addEventListener('abort', abortCombined, { once: true });
+    }
+  }
+
+  return {
+    signal: combinedController.signal,
+    timeoutSignal: timeoutController.signal,
+    cleanup: () => {
+      globalThis.clearTimeout(timeoutId);
+      timeoutController.signal.removeEventListener('abort', abortCombined);
+      if (sourceSignal) {
+        sourceSignal.removeEventListener('abort', abortCombined);
+      }
+    },
+  };
+}
+
+export async function apiClient<T>(path: string, init?: ApiClientInit): Promise<T> {
   const { apiBaseUrl } = getPublicEnv();
   const url = `${apiBaseUrl}${path}`;
   const isFormData = typeof FormData !== 'undefined' && init?.body instanceof FormData;
+  const timeoutMs = init?.timeoutMs ?? DEFAULT_API_TIMEOUT_MS;
+  const signalState = buildRequestSignal(init?.signal, timeoutMs);
 
   let response: Response;
   try {
     response = await fetch(url, {
       ...init,
+      signal: signalState.signal,
       credentials: 'include',
       cache: 'no-store',
       headers: {
@@ -34,9 +75,18 @@ export async function apiClient<T>(path: string, init?: RequestInit): Promise<T>
       },
     });
   } catch (error) {
+    const isAbortError = error instanceof DOMException && error.name === 'AbortError';
+    if (isAbortError && signalState.timeoutSignal.aborted) {
+      throw new ApiNetworkError(`Request timed out after ${timeoutMs}ms (${url})`);
+    }
+    if (isAbortError) {
+      throw new ApiNetworkError(`Request was cancelled (${url})`);
+    }
     throw new ApiNetworkError(
       error instanceof Error ? `${error.message} (${url})` : `Network request failed (${url})`,
     );
+  } finally {
+    signalState.cleanup();
   }
 
   const contentType = response.headers.get('content-type') ?? '';

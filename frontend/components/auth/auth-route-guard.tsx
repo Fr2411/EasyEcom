@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/components/auth/auth-provider';
 
@@ -37,6 +37,7 @@ function AuthErrorState({ message, onRetry }: { message: string; onRetry: () => 
 export function AuthRouteGuard({ mode, children }: AuthRouteGuardProps) {
   const router = useRouter();
   const { user, loading, bootstrapError, refreshAuth } = useAuth();
+  const [loadingExceededThreshold, setLoadingExceededThreshold] = useState(false);
 
   useEffect(() => {
     if (loading) {
@@ -53,7 +54,25 @@ export function AuthRouteGuard({ mode, children }: AuthRouteGuardProps) {
     }
   }, [bootstrapError, loading, mode, router, user]);
 
+  useEffect(() => {
+    if (mode !== 'protected' || !loading) {
+      setLoadingExceededThreshold(false);
+      return undefined;
+    }
+    const timeoutId = window.setTimeout(() => setLoadingExceededThreshold(true), 12000);
+    return () => window.clearTimeout(timeoutId);
+  }, [loading, mode]);
+
   if (mode === 'protected') {
+    if (loadingExceededThreshold) {
+      return (
+        <AuthErrorState
+          message="Session check is taking longer than expected. Retry once. If it keeps failing, check network quality and backend session health."
+          onRetry={refreshAuth}
+        />
+      );
+    }
+
     if (loading) {
       return <AuthLoadingState message="Loading your workspace..." />;
     }
