@@ -428,7 +428,7 @@ export function deriveCatalogRecommendation(workspace: CatalogWorkspace | null):
     return {
       kind: 'idle',
       title: 'Find or create a product',
-      detail: 'Enter one clue (product name, SKU, barcode, or variant SKU). If no match appears, start a new product.',
+      detail: 'Enter one clue (name, SKU, barcode, or variant). Open a new draft only when no match appears.',
       actionLabel: 'Review next step',
       tone: 'info',
     };
@@ -441,7 +441,7 @@ export function deriveCatalogRecommendation(workspace: CatalogWorkspace | null):
       title: `Exact catalog match: ${exact.name}`,
       detail: 'Open this product now to review or edit variant-level details.',
       actionLabel: 'Open product',
-      secondaryLabel: 'Create new instead',
+      secondaryLabel: 'No match? Start new draft',
       tone: 'success',
     };
   }
@@ -451,9 +451,9 @@ export function deriveCatalogRecommendation(workspace: CatalogWorkspace | null):
     return {
       kind: 'likely',
       title: `Possible match: ${likely.name}`,
-      detail: 'Check this product first. If it is not the right parent, start a new product draft.',
+      detail: 'Check this product first. Start a new draft only if this is not the right parent.',
       actionLabel: 'Review product',
-      secondaryLabel: 'Create new instead',
+      secondaryLabel: 'No match? Start new draft',
       tone: 'warning',
     };
   }
@@ -810,11 +810,11 @@ export function CatalogWorkspace() {
             onSubmit={() => void onWorkspaceIntent(queryInput)}
           >
             <p className="workspace-field-note catalog-decision-sentence">
-              Search one clue first (name, SKU, barcode, or variant), then open a new draft only when no match appears.
+              Search one clue first. Open a new draft only when no match appears.
             </p>
             <details className="catalog-decision-details">
               <summary>When to open a new draft</summary>
-              <p className="workspace-field-note">Use it only for products that do not already exist in this catalog.</p>
+              <p className="workspace-field-note">Use it only when the product is not already in this catalog.</p>
             </details>
           </IntentInput>
         }
