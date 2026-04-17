@@ -67,8 +67,9 @@ describe('TopHeader', () => {
   test('renders cross-module action as secondary by default so page-level actions remain primary', () => {
     render(<TopHeader />);
 
-    const action = screen.getByRole('button', { name: 'Open reports' });
+    const action = screen.getByRole('button', { name: 'Reports' });
     expect(action.className).toContain('header-btn-secondary');
+    expect(action.className).toContain('header-btn-quiet');
     expect(action.className).toContain('header-cross-module-action');
   });
 });

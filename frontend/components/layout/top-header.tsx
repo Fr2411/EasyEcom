@@ -17,7 +17,7 @@ type HeaderContext = {
   searchScope: SearchScope;
   actionLabel: string;
   actionHref: string;
-  actionTone?: 'primary' | 'secondary';
+  actionTone?: 'primary' | 'secondary' | 'quiet';
 };
 
 const SEARCH_SCOPE_ROUTES: Record<SearchScope, string> = {
@@ -46,8 +46,9 @@ function getHeaderContext(pathname: string): HeaderContext {
         subtitle: 'Business pulse',
         summary: 'Review stock health, revenue signals, and the exceptions that need attention now.',
         searchScope: 'sales',
-        actionLabel: 'Open reports',
+        actionLabel: 'Reports',
         actionHref: '/reports',
+        actionTone: 'quiet',
       };
     case '/reports':
       return {
@@ -253,8 +254,13 @@ export function TopHeader({ onOpenNavigation }: { onOpenNavigation?: () => void 
     const params = new URLSearchParams({ q: trimmed });
     router.push(`${SEARCH_SCOPE_ROUTES[scope]}?${params.toString()}`);
   };
-  const actionIsPrimary = pageContext.actionTone === 'primary';
-  const actionClassName = `header-btn ${actionIsPrimary ? '' : 'header-btn-secondary'} header-cross-module-action`.trim();
+  const actionToneClass =
+    pageContext.actionTone === 'primary'
+      ? ''
+      : pageContext.actionTone === 'quiet'
+        ? 'header-btn-secondary header-btn-quiet'
+        : 'header-btn-secondary';
+  const actionClassName = `header-btn ${actionToneClass} header-cross-module-action`.trim();
 
   return (
     <header className="top-header">

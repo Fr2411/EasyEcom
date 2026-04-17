@@ -450,6 +450,14 @@ button:disabled {
   color: var(--text);
   border-color: var(--border-strong);
 }
+.header-btn.header-btn-quiet {
+  opacity: 0.78;
+  font-size: 0.78rem;
+  padding-inline: 0.6rem;
+}
+.header-btn.header-btn-quiet:hover {
+  opacity: 1;
+}
 .header-pill { border: 1px solid #98dbd0; background: #ecfbf7; color: var(--primary-strong); border-radius: 999px; font-size: 0.8rem; padding: 0.3rem 0.65rem; }
 
 .page-content { padding: 1.1rem; }
@@ -2816,6 +2824,9 @@ button.secondary:hover,
   .dashboard-secondary-action-link {
     width: 100%;
   }
+  .dashboard-secondary-action-link-optional {
+    display: none;
+  }
 
   .dashboard-split-grid,
   .dashboard-custom-range { grid-template-columns: 1fr; }
@@ -5019,6 +5030,12 @@ html[data-theme='light'] body {
   background: rgba(255, 122, 61, 0.08);
   color: var(--app-text);
   border-color: rgba(255, 122, 61, 0.16);
+}
+.header-btn.header-btn-quiet {
+  opacity: 0.74;
+}
+.header-btn.header-btn-quiet:hover {
+  opacity: 1;
 }
 
 .header-cross-module-action {
