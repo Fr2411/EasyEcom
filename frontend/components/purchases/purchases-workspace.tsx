@@ -37,6 +37,7 @@ export function PurchasesWorkspace() {
   const [status, setStatus] = useState('');
   const [queryDraft, setQueryDraft] = useState('');
   const [query, setQuery] = useState('');
+  const [reloadToken, setReloadToken] = useState(0);
   const [items, setItems] = useState<Awaited<ReturnType<typeof listPurchaseOrders>>['items']>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -44,11 +45,11 @@ export function PurchasesWorkspace() {
   useEffect(() => {
     let active = true;
     setLoading(true);
+    setError('');
     void listPurchaseOrders({ status, q: query })
       .then((payload) => {
         if (!active) return;
         setItems(payload.items);
-        setError('');
       })
       .catch((loadError) => {
         if (!active) return;
@@ -60,7 +61,7 @@ export function PurchasesWorkspace() {
     return () => {
       active = false;
     };
-  }, [status, query]);
+  }, [status, query, reloadToken]);
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -70,10 +71,15 @@ export function PurchasesWorkspace() {
   const receivedCount = items.filter((item) => item.status === 'received').length;
   const draftCount = items.filter((item) => item.status === 'draft').length;
 
+  const onRetry = () => {
+    if (loading) return;
+    setReloadToken((current) => current + 1);
+  };
+
   return (
-    <div className="reports-module">
+    <div className="reports-module purchases-module">
       <WorkspaceNotice tone="info">
-        Purchases remain embedded in Inventory for stock receipt because that is the canonical ledger-backed write path. This workspace is the procurement board for orders and receiving status.
+        Use this page to track purchase orders and supplier progress. When stock arrives, complete receiving from Inventory.
       </WorkspaceNotice>
 
       <WorkspacePanel
@@ -116,7 +122,17 @@ export function PurchasesWorkspace() {
         </form>
 
         {loading ? <div className="reports-loading">Loading purchase orders…</div> : null}
-        {error ? <div className="reports-error">{error}</div> : null}
+        {error ? (
+          <div className="purchases-error-state" role="alert" aria-live="assertive">
+            <p className="purchases-error-title">Purchase orders could not be loaded</p>
+            <p className="purchases-error-copy">{error}</p>
+            <div className="purchases-error-actions">
+              <button type="button" className="btn-primary" onClick={onRetry} disabled={loading}>
+                {loading ? 'Retrying…' : 'Retry'}
+              </button>
+            </div>
+          </div>
+        ) : null}
 
         {!loading && !error && !items.length ? (
           <WorkspaceEmpty title="No purchase orders yet" message="Create or receive stock from Inventory when the first supplier delivery is ready." />
