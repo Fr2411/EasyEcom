@@ -66,6 +66,12 @@ const MOVEMENT_COLORS: Record<string, string> = {
   sales_return_restock: '#f55d24',
   adjustment: '#cdb49d',
 };
+const MOVEMENT_LABELS: Record<string, string> = {
+  stock_received: 'Received',
+  sale_fulfilled: 'Fulfilled',
+  sales_return_restock: 'Restocked',
+  adjustment: 'Adjusted',
+};
 
 
 function metricValue(metric: DashboardMetric) {
@@ -396,7 +402,7 @@ function StackedMovementChartRecharts({ items }: { items: DashboardStockMovement
           <Legend 
             verticalAlign="top" 
             height={36} 
-            formatter={(value) => value}
+            formatter={(value) => MOVEMENT_LABELS[String(value)] ?? String(value)}
             labelStyle={{ fontSize: 12, fill: '#aa9a8d' }}
           />
           <Bar 
@@ -619,7 +625,7 @@ export function DashboardAnalyticsWorkspace() {
           <h3 className="workspace-heading text-lg font-semibold mt-2">
             What to do now
             <HoverHint
-              text="This dashboard blends completed sales, returns, purchase receipts, and variant-level inventory ledger movement so owners can monitor growth, pressure, and product opportunities."
+              text="This dashboard combines sales, returns, stock updates, and product trends so owners can decide the next best action quickly."
               label="Dashboard controls help"
             />
           </h3>
@@ -634,7 +640,7 @@ export function DashboardAnalyticsWorkspace() {
               <Link href="/inventory" className="dashboard-secondary-action-link">
                 Inventory workspace
               </Link>
-              <Link href="/reports" className="dashboard-secondary-action-link">
+              <Link href="/reports" className="dashboard-secondary-action-link dashboard-secondary-action-link-optional">
                 Reports
               </Link>
             </div>
@@ -903,7 +909,7 @@ export function DashboardAnalyticsWorkspace() {
             <article className="section-card dashboard-section-card bg-glass p-6 rounded-lg shadow-glass transition-normal hover:shadow-glass-hover">
               <div className="dashboard-section-head flex items-start justify-between gap-4">
                 <div>
-                  <p className="eyebrow text-xs text-muted uppercase tracking-wider">Ledger Truth</p>
+                  <p className="eyebrow text-xs text-muted uppercase tracking-wider">Stock Flow</p>
                   <h3 className="text-lg font-semibold mt-2">Stock movement trend</h3>
                 </div>
                 <Link href="/inventory?tab=stock" className="dashboard-inline-link text-primary font-medium hover:text-primary-dark transition-fast">Stock details</Link>

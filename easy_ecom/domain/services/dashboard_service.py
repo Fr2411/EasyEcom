@@ -868,7 +868,7 @@ class DashboardAnalyticsService(CommerceBaseService):
                     "Stock On Hand",
                     stock_on_hand_units,
                     "quantity",
-                    help_text="Current ledger-derived quantity across the selected location scope.",
+                    help_text="Current available quantity across the selected locations.",
                 ),
                 self._metric(
                     "low_stock_variants",

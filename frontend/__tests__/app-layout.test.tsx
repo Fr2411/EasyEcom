@@ -46,7 +46,7 @@ describe('AppLayout', () => {
     expect(screen.getByRole('button', { name: 'Show workspace details' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Show workspace details' }));
     expect(screen.getByText('Easy-Ecom Internal')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Open reports' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Reports' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Admin' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Customers' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Purchases' })).toBeTruthy();
