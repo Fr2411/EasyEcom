@@ -441,7 +441,7 @@ export function deriveCatalogRecommendation(workspace: CatalogWorkspace | null):
       title: `Exact catalog match: ${exact.name}`,
       detail: 'Open this product now to review or edit variant-level details.',
       actionLabel: 'Open product',
-      secondaryLabel: 'No match? Start new draft',
+      secondaryLabel: 'Wrong match? Start new draft',
       tone: 'success',
     };
   }
@@ -453,7 +453,7 @@ export function deriveCatalogRecommendation(workspace: CatalogWorkspace | null):
       title: `Possible match: ${likely.name}`,
       detail: 'Check this product first. Start a new draft only if this is not the right parent.',
       actionLabel: 'Review product',
-      secondaryLabel: 'No match? Start new draft',
+      secondaryLabel: 'Wrong match? Start new draft',
       tone: 'warning',
     };
   }
@@ -810,11 +810,11 @@ export function CatalogWorkspace() {
             onSubmit={() => void onWorkspaceIntent(queryInput)}
           >
             <p className="workspace-field-note catalog-decision-sentence">
-              Search one clue first. Open a new draft only when no match appears.
+              Search one clue first. Open matched product first; create new only when nothing fits.
             </p>
             <details className="catalog-decision-details">
-              <summary>When to open a new draft</summary>
-              <p className="workspace-field-note">Use it only when the product is not already in this catalog.</p>
+              <summary>Use new draft only when no match fits</summary>
+              <p className="workspace-field-note">Keep product finder focused: if any match is close, open and verify before creating.</p>
             </details>
           </IntentInput>
         }

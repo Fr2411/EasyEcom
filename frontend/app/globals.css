@@ -6790,6 +6790,13 @@ button.secondary:hover,
     scroll-margin-bottom: calc(var(--mobile-bottom-nav-clearance) + 1.45rem);
   }
 
+  .page-content[data-route-root='catalog'] .catalog-local-finder-panel .guided-next-step[data-kind='exact'],
+  .page-content[data-route-root='catalog'] .catalog-local-finder-panel .guided-next-step[data-kind='likely'],
+  .page-content[data-route-root='catalog'] .catalog-local-finder-panel .guided-next-step[data-kind='new'] {
+    margin-bottom: calc(var(--mobile-bottom-nav-clearance) + 0.95rem);
+    scroll-margin-bottom: calc(var(--mobile-bottom-nav-clearance) + 1.55rem);
+  }
+
   .page-content[data-route-root='catalog'] .catalog-local-finder-panel .guided-next-step[data-kind='new'] strong {
     display: block;
     font-size: 0.96rem;
@@ -6827,9 +6834,9 @@ button.secondary:hover,
 
   .mobile-bottom-nav.is-catalog-context {
     border-color: color-mix(in srgb, var(--app-border-strong) 42%, transparent);
-    background: color-mix(in srgb, var(--app-surface) 66%, transparent);
-    box-shadow: 0 4px 10px rgba(9, 10, 15, 0.06);
-    backdrop-filter: blur(9px);
+    background: color-mix(in srgb, var(--app-surface) 82%, transparent);
+    box-shadow: 0 2px 6px rgba(9, 10, 15, 0.04);
+    backdrop-filter: blur(6px);
   }
 
   .mobile-bottom-nav.is-catalog-context .mobile-bottom-link {
