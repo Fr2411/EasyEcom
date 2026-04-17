@@ -131,6 +131,17 @@ describe('deriveCatalogInlineErrors', () => {
     expect(errors.product_name).toBe('Product name must be at least 2 characters.');
   });
 
+  test('maps legacy product-name required errors to the same safe inline message', () => {
+    const errors = deriveCatalogInlineErrors(
+      new ApiError(
+        400,
+        'Product name is required (https://example.com/catalog/products/validate-step)'
+      )
+    );
+
+    expect(errors.product_name).toBe('Product name must be at least 2 characters.');
+  });
+
   test('maps first-variant validation failures to inline variant guidance', () => {
     const errors = deriveCatalogInlineErrors(
       new ApiError(
@@ -140,6 +151,17 @@ describe('deriveCatalogInlineErrors', () => {
     );
 
     expect(errors.first_variant).toBe('First variant details are required (add at least one option or barcode)');
+  });
+
+  test('maps generic first-variant required errors to inline variant guidance', () => {
+    const errors = deriveCatalogInlineErrors(
+      new ApiError(
+        400,
+        'At least one variant is required (https://example.com/catalog/products/validate-step)'
+      )
+    );
+
+    expect(errors.first_variant).toBe('At least one variant is required');
   });
 });
 
