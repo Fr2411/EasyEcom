@@ -2092,6 +2092,18 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
   color: var(--text);
 }
 
+.catalog-finder-title {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.catalog-finder-scope-note {
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: var(--text-muted-readable);
+  font-weight: 500;
+}
+
 .guided-draft-card {
   display: grid;
   gap: 1rem;
@@ -6656,7 +6668,7 @@ button.secondary:hover,
   }
 
   .page-content[data-route-root='catalog'] .catalog-local-finder-panel .guided-next-step[data-kind='new'] {
-    margin-bottom: calc(var(--mobile-bottom-nav-clearance) * 0.62);
+    margin-bottom: calc(var(--mobile-bottom-nav-clearance) * 0.74);
     padding: 1rem 1rem calc(0.95rem + env(safe-area-inset-bottom, 0px) + (var(--mobile-bottom-nav-clearance) * 0.52));
     scroll-margin-bottom: calc(var(--mobile-bottom-nav-clearance) + 1.05rem);
   }
@@ -6692,14 +6704,14 @@ button.secondary:hover,
   }
 
   .mobile-bottom-nav.is-catalog-context {
-    border-color: color-mix(in srgb, var(--app-border-strong) 78%, transparent);
-    background: color-mix(in srgb, var(--app-surface) 90%, transparent);
-    box-shadow: 0 10px 26px rgba(9, 10, 15, 0.18);
-    backdrop-filter: blur(12px);
+    border-color: color-mix(in srgb, var(--app-border-strong) 62%, transparent);
+    background: color-mix(in srgb, var(--app-surface) 82%, transparent);
+    box-shadow: 0 8px 18px rgba(9, 10, 15, 0.12);
+    backdrop-filter: blur(9px);
   }
 
   .mobile-bottom-nav.is-catalog-context .mobile-bottom-link {
-    opacity: 0.88;
+    opacity: 0.82;
   }
 
   .mobile-bottom-nav.is-catalog-context .mobile-bottom-link.active {
@@ -6733,6 +6745,10 @@ html[data-theme='dark'] .page-content[data-route-root='catalog'] .catalog-local-
 
 html[data-theme='dark'] .page-content[data-route-root='catalog'] .catalog-decision-sentence strong {
   color: #f4f7ff;
+}
+
+html[data-theme='dark'] .catalog-finder-scope-note {
+  color: #c2c9d7;
 }
 
 html[data-theme='dark'] .page-content[data-route-root='catalog'] .catalog-parent-card-status.is-active {
