@@ -692,21 +692,19 @@ export function CatalogWorkspace() {
       />
 
       <WorkspacePanel
-        title="Variant-first catalog"
-        hint="Use one product clue to open an existing catalog parent or stage a new product draft with its saleable variants."
+        title="Find or stage a product"
         actions={
           <IntentInput
-            label="What product are you working on?"
-            hint="Use one clue to open an existing product or begin a new product draft."
+            label="Find an existing product"
+            hint="Search by one clue (name, SKU root, barcode, or variant)."
             value={queryInput}
             placeholder="Product, SKU root, barcode, or variant"
             pending={isPending}
             submitLabel="Find product"
+            submitTone="secondary"
             onChange={setQueryInput}
             onSubmit={() => void onWorkspaceIntent(queryInput)}
-          >
-            <span className="guided-assist-chip">No match starts a new product draft</span>
-          </IntentInput>
+          />
         }
       >
         {postCreateSuccess ? (
@@ -741,11 +739,14 @@ export function CatalogWorkspace() {
         {error ? <WorkspaceNotice tone="error">{error}</WorkspaceNotice> : null}
         {isPending && !workspace ? <WorkspaceNotice>Loading catalog…</WorkspaceNotice> : null}
 
-        <SuggestedNextStep
-          suggestion={recommendation}
-          onPrimary={openRecommendedProduct}
-          onSecondary={() => setNewProductForm(workspace?.query)}
-        />
+        {(workspace?.query ?? '').trim() ? (
+          <SuggestedNextStep
+            suggestion={recommendation}
+            primaryTone="secondary"
+            onPrimary={openRecommendedProduct}
+            onSecondary={() => setNewProductForm(workspace?.query)}
+          />
+        ) : null}
 
         {activeTab === 'products' ? (
           workspace?.items.length ? (
@@ -782,7 +783,7 @@ export function CatalogWorkspace() {
           ) : (
             <WorkspaceEmpty
               title="No catalog items staged"
-              message="Use the intent bar above to open an existing product or start a new parent record."
+              message="Use the search bar to open an existing product. If nothing matches, move to Start New Product."
             />
           )
         ) : (

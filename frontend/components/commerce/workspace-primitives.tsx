@@ -124,6 +124,7 @@ export function IntentInput({
   placeholder,
   pending = false,
   submitLabel = 'Continue',
+  submitTone = 'primary',
   onChange,
   onSubmit,
   children,
@@ -134,6 +135,7 @@ export function IntentInput({
   placeholder: string;
   pending?: boolean;
   submitLabel?: string;
+  submitTone?: 'primary' | 'secondary';
   onChange: (value: string) => void;
   onSubmit: () => void | Promise<void>;
   children?: React.ReactNode;
@@ -159,7 +161,7 @@ export function IntentInput({
           placeholder={placeholder}
           onChange={(event) => onChange(event.target.value)}
         />
-        <button type="submit" className="btn-primary" disabled={pending}>
+        <button type="submit" className={submitTone === 'secondary' ? 'secondary' : 'btn-primary'} disabled={pending}>
           {pending ? 'Looking up…' : submitLabel}
         </button>
       </form>
@@ -172,10 +174,12 @@ export function SuggestedNextStep({
   suggestion,
   onPrimary,
   onSecondary,
+  primaryTone = 'primary',
 }: {
   suggestion: SuggestedAction;
   onPrimary?: () => void;
   onSecondary?: () => void;
+  primaryTone?: 'primary' | 'secondary';
 }) {
   return (
     <div className={`guided-next-step ${suggestion.tone ?? 'info'}`}>
@@ -193,7 +197,11 @@ export function SuggestedNextStep({
             </button>
           ) : null}
           {suggestion.actionLabel ? (
-            <button type="button" className="btn-primary" onClick={onPrimary}>
+            <button
+              type="button"
+              className={primaryTone === 'secondary' ? 'secondary' : 'btn-primary'}
+              onClick={onPrimary}
+            >
               {suggestion.actionLabel}
             </button>
           ) : null}
