@@ -1,5 +1,10 @@
 :root {
   color-scheme: light;
+  --viewport-height: 100vh;
+  --mobile-bottom-nav-height: 5.85rem;
+  --mobile-bottom-nav-clearance: calc(
+    var(--mobile-bottom-nav-height) + env(safe-area-inset-bottom, 0px) + 0.5rem
+  );
   --bg-canvas: #f3f7f8;
   --bg-subtle: #ebf2f4;
   --surface: #ffffff;
@@ -21,6 +26,12 @@
 
   --shadow-sm: 0 1px 2px rgba(9, 30, 43, 0.06);
   --shadow-md: 0 10px 28px rgba(20, 43, 56, 0.08);
+}
+
+@supports (height: 100dvh) {
+  :root {
+    --viewport-height: 100dvh;
+  }
 }
 
 * { box-sizing: border-box; }
@@ -4479,7 +4490,8 @@ body {
 @media (max-width: 900px) {
   .shell {
     display: block;
-    padding-bottom: 5.6rem;
+    min-height: var(--viewport-height);
+    padding-bottom: var(--mobile-bottom-nav-clearance);
   }
 
   .shell-mobile-overlay {
@@ -4504,8 +4516,8 @@ body {
     position: fixed;
     inset: 0 auto 0 0;
     width: min(88vw, 320px);
-    height: 100vh;
-    max-height: 100vh;
+    height: var(--viewport-height);
+    max-height: var(--viewport-height);
     border-radius: 0 28px 28px 0;
     border-right: 1px solid rgba(90, 114, 108, 0.14);
     border-bottom: 0;
@@ -6097,17 +6109,6 @@ button.secondary:hover,
 
 /* TEA-83 (Wave 1 P0): authenticated mobile readability + bottom-nav non-overlap */
 @media (max-width: 900px) {
-  :root {
-    --mobile-bottom-nav-height: 5.85rem;
-    --mobile-bottom-nav-clearance: calc(
-      var(--mobile-bottom-nav-height) + env(safe-area-inset-bottom, 0px) + 0.5rem
-    );
-  }
-
-  .shell {
-    padding-bottom: var(--mobile-bottom-nav-clearance);
-  }
-
   .content-pane {
     min-width: 0;
   }
@@ -6115,6 +6116,7 @@ button.secondary:hover,
   .page-content {
     min-width: 0;
     padding: 0 0.75rem var(--mobile-bottom-nav-clearance);
+    scroll-padding-bottom: var(--mobile-bottom-nav-clearance);
   }
 
   .page-content > * {
