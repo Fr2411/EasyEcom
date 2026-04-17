@@ -5,7 +5,7 @@ export default function PurchasesPage() {
   return (
     <PageShell
       title="Purchases"
-      description="Manage purchase-order visibility here while inventory receipt remains inside the canonical variant-level receive-stock workflow."
+      description="Track purchase-order progress here. Receive incoming stock from the Inventory page when deliveries arrive."
     >
       <PurchasesWorkspace />
     </PageShell>
