@@ -24,6 +24,7 @@ function writeSidebarPreference(collapsed: boolean) {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const routeRoot = pathname.split('/').filter(Boolean)[0] ?? '';
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => readSidebarPreference());
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
@@ -56,7 +57,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       />
       <div className="content-pane">
         <TopHeader onOpenNavigation={() => setMobileNavOpen(true)} />
-        <main className="page-content">{children}</main>
+        <main className="page-content" data-route-root={routeRoot}>
+          {children}
+        </main>
       </div>
       <MobileBottomNav onOpenMenu={() => setMobileNavOpen(true)} />
     </div>

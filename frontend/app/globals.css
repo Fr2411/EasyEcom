@@ -6006,3 +6006,31 @@ button.secondary:hover,
     position: static;
   }
 }
+
+/* TEA-81: mobile sales create-entry shell width + bottom-nav clearance */
+@media (max-width: 900px) {
+  :root {
+    --mobile-bottom-nav-clearance: calc(6.35rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .shell {
+    padding-bottom: var(--mobile-bottom-nav-clearance);
+  }
+
+  .mobile-bottom-nav {
+    left: max(0.5rem, env(safe-area-inset-left, 0px));
+    right: max(0.5rem, env(safe-area-inset-right, 0px));
+    bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
+  }
+
+  .page-content[data-route-root='sales'] {
+    padding-bottom: var(--mobile-bottom-nav-clearance);
+  }
+
+  .page-content[data-route-root='sales'] .page-shell {
+    width: 100%;
+    border-left: 0;
+    border-right: 0;
+    border-radius: 0;
+  }
+}
