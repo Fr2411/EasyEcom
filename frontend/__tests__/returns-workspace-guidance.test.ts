@@ -22,7 +22,7 @@ describe('deriveReturnSuggestion', () => {
     const result = deriveReturnSuggestion('', [], null);
 
     expect(result.kind).toBe('idle');
-    expect(result.actionLabel).toBe('Interpret order clue');
+    expect(result.actionLabel).toBeUndefined();
   });
 
   test('returns exact when the order number matches directly', () => {

@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { PageShell } from '@/components/ui/page-shell';
 import { WorkspaceNotice, WorkspacePanel } from '@/components/commerce/workspace-primitives';
 
@@ -10,6 +11,12 @@ export default function CustomersPage() {
       >
         <WorkspaceNotice>
           Customer data is still stored for orders, returns, aggregate reporting, and future AI workflows, but day-to-day access stays inside transaction flows.
+        </WorkspaceNotice>
+        <WorkspaceNotice>
+          Start from the Sales workspace to create or reuse customers during checkout.
+          <div className="workspace-actions">
+            <Link href="/sales" className="btn-primary">Go to Sales workspace</Link>
+          </div>
         </WorkspaceNotice>
       </WorkspacePanel>
     </PageShell>

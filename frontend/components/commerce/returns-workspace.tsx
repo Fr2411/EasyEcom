@@ -99,7 +99,6 @@ export function deriveReturnSuggestion(
       kind: 'idle',
       title: 'Start with one completed order clue',
       detail: 'Type an order number, customer phone, or email. The workspace will stage the most likely return candidate.',
-      actionLabel: 'Interpret order clue',
       tone: 'info',
     };
   }
@@ -109,7 +108,6 @@ export function deriveReturnSuggestion(
       kind: 'idle',
       title: 'No completed order staged yet',
       detail: 'Search a completed order first, then the workspace will open eligible lines for review.',
-      actionLabel: 'Interpret order clue',
       tone: 'warning',
     };
   }
@@ -358,16 +356,15 @@ export function ReturnsWorkspace() {
           <div className="workspace-stack">
             <IntentInput
               label="Which completed order is being returned?"
-              hint="Type one clue. The workspace will interpret an order number, phone number, or email and stage the eligible lines."
+              hint="Type one clue to find a completed order, then open its eligible lines."
               value={intentQuery}
               placeholder="Order number, phone, or email"
               pending={lookupPending || eligiblePending}
-              submitLabel="Interpret order clue"
+              submitLabel="Find order"
               onChange={setIntentQuery}
               onSubmit={() => runOrderLookup(intentQuery)}
             >
-              <span className="guided-assist-chip">Exact order numbers open eligible lines automatically</span>
-              <span className="guided-assist-chip">Manual searching is replaced by staged order selection</span>
+              <span className="guided-assist-chip">Use one order clue, then select the right completed order once</span>
             </IntentInput>
 
             <SuggestedNextStep
