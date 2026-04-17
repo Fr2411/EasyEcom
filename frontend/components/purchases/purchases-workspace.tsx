@@ -37,7 +37,7 @@ function purchaseLoadFailureGuidance(error: unknown) {
   const message = safePurchaseWorkspaceErrorMessage(error);
   const steps = [
     'Existing purchase orders and received stock remain unchanged.',
-    'Use Retry to request a fresh tenant-scoped list from the server.',
+    'Use Retry to refresh your purchase order list.',
     'If needed, continue receiving stock from Inventory while this list reloads.',
   ];
 
@@ -168,9 +168,14 @@ export function PurchasesWorkspace() {
         {loading ? <div className="reports-loading">Loading purchase orders…</div> : null}
         {failureState ? (
           <div className="purchases-error-state" role="alert" aria-live="assertive">
-            <p className="purchases-error-title">Purchase orders could not be loaded</p>
+            <p className="purchases-error-eyebrow">Temporary loading issue</p>
+            <p className="purchases-error-title">We could not refresh purchase orders right now</p>
+            <p className="purchases-error-context">
+              This is a loading problem, not a no-orders result. Your existing order and stock records are still safe.
+            </p>
             <p className="purchases-error-copy">{failureState.message}</p>
             <p className="purchases-error-copy purchases-error-recovery-tip">{failureState.recoveryTip}</p>
+            <p className="purchases-error-guidance-title">What you can do now</p>
             <ul className="purchases-error-guidance">
               {failureState.steps.map((step) => (
                 <li key={step}>{step}</li>
@@ -178,7 +183,7 @@ export function PurchasesWorkspace() {
             </ul>
             <div className="purchases-error-actions">
               <button type="button" className="btn-primary" onClick={onRetry} disabled={loading}>
-                {loading ? 'Retrying…' : 'Retry'}
+                {loading ? 'Retrying…' : 'Retry purchase orders'}
               </button>
               <Link href="/inventory?tab=receive">Open Receive Stock</Link>
             </div>

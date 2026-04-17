@@ -1088,16 +1088,38 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
 .purchases-error-state {
   border: 1px solid #efc0b7;
   border-radius: var(--radius-md);
-  padding: 0.95rem;
+  padding: 1rem;
   background: #fff7f5;
   display: grid;
-  gap: 0.65rem;
+  gap: 0.75rem;
+}
+.purchases-error-eyebrow {
+  margin: 0;
+  width: fit-content;
+  border-radius: 999px;
+  border: 1px solid #efc0b7;
+  background: #fff1ed;
+  color: #8c3728;
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+  font-weight: 700;
+  padding: 0.15rem 0.5rem;
+  text-transform: uppercase;
 }
 .purchases-error-title {
   margin: 0;
   color: #7f3124;
   font-weight: 700;
-  font-size: 0.92rem;
+  font-size: 0.97rem;
+  line-height: 1.35;
+}
+.purchases-error-context {
+  margin: 0;
+  border-left: 3px solid #e39f92;
+  padding: 0.1rem 0 0.1rem 0.6rem;
+  color: #7a3a2f;
+  font-size: 0.84rem;
+  line-height: 1.5;
 }
 .purchases-error-copy {
   margin: 0;
@@ -1107,6 +1129,12 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
 }
 .purchases-error-recovery-tip {
   font-weight: 600;
+}
+.purchases-error-guidance-title {
+  margin: 0;
+  color: #6f3329;
+  font-size: 0.84rem;
+  font-weight: 700;
 }
 .purchases-error-guidance {
   margin: 0;
@@ -1121,6 +1149,10 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
   justify-content: flex-start;
   gap: 0.65rem;
   align-items: center;
+}
+.purchases-error-actions .btn-primary {
+  min-height: 2.35rem;
+  padding-inline: 0.95rem;
 }
 
 .integrations-layout { grid-template-columns: 1.5fr 1fr; }
@@ -6318,6 +6350,25 @@ button.secondary:hover,
 
   .quick-actions-popover {
     min-width: min(11rem, calc(100vw - 1rem));
+  }
+
+  .purchases-error-state {
+    gap: 0.7rem;
+    padding: 0.9rem;
+  }
+
+  .purchases-error-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+    align-items: stretch;
+  }
+
+  .purchases-error-actions .btn-primary,
+  .purchases-error-actions a {
+    width: 100%;
+    justify-content: center;
+    text-align: center;
   }
 }
 
