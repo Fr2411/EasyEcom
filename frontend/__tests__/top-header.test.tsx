@@ -28,9 +28,9 @@ describe('TopHeader', () => {
   test('submits scoped search query to the expected route', () => {
     render(<TopHeader />);
 
-    fireEvent.change(screen.getByLabelText('Search scope'), { target: { value: 'inventory' } });
-    fireEvent.change(screen.getByLabelText('Search query'), { target: { value: 'Blue Tee' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+    fireEvent.change(screen.getByLabelText('Global search scope'), { target: { value: 'inventory' } });
+    fireEvent.change(screen.getByLabelText('Global search query'), { target: { value: 'Blue Tee' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Search all' }));
 
     expect(pushMock).toHaveBeenCalledWith('/inventory?q=Blue+Tee');
   });
@@ -38,8 +38,8 @@ describe('TopHeader', () => {
   test('does not navigate for empty search values', () => {
     render(<TopHeader />);
 
-    fireEvent.change(screen.getByLabelText('Search query'), { target: { value: '   ' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+    fireEvent.change(screen.getByLabelText('Global search query'), { target: { value: '   ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Search all' }));
 
     expect(pushMock).not.toHaveBeenCalled();
   });

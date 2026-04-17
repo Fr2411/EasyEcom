@@ -265,12 +265,12 @@ export function TopHeader({ onOpenNavigation }: { onOpenNavigation?: () => void 
       <div className="header-copy">
         <p className="header-title">{pageContext.title ?? matchedRoute?.label ?? DEFAULT_TITLE}</p>
       </div>
-      <form className="header-search" aria-label="Global search" onSubmit={onSubmit}>
+      <form className="header-search" aria-label="Global workspace search" onSubmit={onSubmit}>
         <span className="header-search-icon" aria-hidden="true">
           <Search size={16} />
         </span>
         <select
-          aria-label="Search scope"
+          aria-label="Global search scope"
           className="header-search-scope"
           value={scope}
           onChange={(event) => setScope(event.target.value as SearchScope)}
@@ -281,13 +281,13 @@ export function TopHeader({ onOpenNavigation }: { onOpenNavigation?: () => void 
         </select>
         <input
           type="search"
-          aria-label="Search query"
+          aria-label="Global search query"
           className="header-search-input"
-          placeholder="Search orders, SKUs, returns"
+          placeholder="Global search: orders, SKUs, returns"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
-        <button type="submit" className="header-search-button">Search</button>
+        <button type="submit" className="header-search-button">Search all</button>
       </form>
       <div className="header-utilities">
         <button
