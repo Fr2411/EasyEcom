@@ -30,5 +30,7 @@ export async function logout() {
 }
 
 export async function getCurrentUser() {
-  return apiClient<SessionUser>('/auth/me');
+  return apiClient<SessionUser>('/auth/me', {
+    timeoutMs: 12000,
+  });
 }

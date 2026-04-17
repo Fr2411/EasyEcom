@@ -40,7 +40,10 @@ export async function getCatalogWorkspace(params: {
       q: params.q,
       location_id: params.locationId,
       include_oos: params.includeOos,
-    })}`
+    })}`,
+    {
+      timeoutMs: 12000,
+    }
   );
 }
 
