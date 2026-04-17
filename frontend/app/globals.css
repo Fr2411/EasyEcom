@@ -1097,9 +1097,22 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
   font-size: 0.84rem;
   line-height: 1.5;
 }
+.purchases-error-recovery-tip {
+  font-weight: 600;
+}
+.purchases-error-guidance {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: #6f3329;
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.82rem;
+}
 .purchases-error-actions {
   display: flex;
   justify-content: flex-start;
+  gap: 0.65rem;
+  align-items: center;
 }
 
 .integrations-layout { grid-template-columns: 1.5fr 1fr; }

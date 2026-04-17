@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { WorkspaceEmpty, WorkspaceNotice, WorkspacePanel } from '@/components/commerce/workspace-primitives';
 import { ApiError, ApiNetworkError } from '@/lib/api/client';
 import { listPurchaseOrders } from '@/lib/api/purchases';
@@ -33,6 +33,45 @@ export function safePurchaseWorkspaceErrorMessage(error: unknown) {
   return 'Unable to load purchase orders.';
 }
 
+function purchaseLoadFailureGuidance(error: unknown) {
+  const message = safePurchaseWorkspaceErrorMessage(error);
+  const steps = [
+    'Existing purchase orders and received stock remain unchanged.',
+    'Use Retry to request a fresh tenant-scoped list from the server.',
+    'If needed, continue receiving stock from Inventory while this list reloads.',
+  ];
+
+  if (error instanceof ApiNetworkError) {
+    return {
+      message,
+      steps,
+      recoveryTip: 'Reconnect to the internet or VPN, then retry.',
+    };
+  }
+
+  if (error instanceof ApiError && error.status === 403) {
+    return {
+      message,
+      steps,
+      recoveryTip: 'Ask your tenant owner/admin to grant Purchases view access for your role.',
+    };
+  }
+
+  if (error instanceof ApiError && error.status >= 500) {
+    return {
+      message,
+      steps,
+      recoveryTip: 'Backend purchase services are temporarily unavailable. Retry shortly.',
+    };
+  }
+
+  return {
+    message,
+    steps,
+    recoveryTip: 'Try clearing filters and searching again.',
+  };
+}
+
 export function PurchasesWorkspace() {
   const [status, setStatus] = useState('');
   const [queryDraft, setQueryDraft] = useState('');
@@ -40,20 +79,20 @@ export function PurchasesWorkspace() {
   const [reloadToken, setReloadToken] = useState(0);
   const [items, setItems] = useState<Awaited<ReturnType<typeof listPurchaseOrders>>['items']>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState<unknown>(null);
 
   useEffect(() => {
     let active = true;
     setLoading(true);
-    setError('');
+    setLoadError(null);
     void listPurchaseOrders({ status, q: query })
       .then((payload) => {
         if (!active) return;
         setItems(payload.items);
       })
-      .catch((loadError) => {
+      .catch((error) => {
         if (!active) return;
-        setError(safePurchaseWorkspaceErrorMessage(loadError));
+        setLoadError(error);
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -75,6 +114,11 @@ export function PurchasesWorkspace() {
     if (loading) return;
     setReloadToken((current) => current + 1);
   };
+
+  const failureState = useMemo(() => {
+    if (!loadError) return null;
+    return purchaseLoadFailureGuidance(loadError);
+  }, [loadError]);
 
   return (
     <div className="reports-module purchases-module">
@@ -122,23 +166,30 @@ export function PurchasesWorkspace() {
         </form>
 
         {loading ? <div className="reports-loading">Loading purchase orders…</div> : null}
-        {error ? (
+        {failureState ? (
           <div className="purchases-error-state" role="alert" aria-live="assertive">
             <p className="purchases-error-title">Purchase orders could not be loaded</p>
-            <p className="purchases-error-copy">{error}</p>
+            <p className="purchases-error-copy">{failureState.message}</p>
+            <p className="purchases-error-copy purchases-error-recovery-tip">{failureState.recoveryTip}</p>
+            <ul className="purchases-error-guidance">
+              {failureState.steps.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ul>
             <div className="purchases-error-actions">
               <button type="button" className="btn-primary" onClick={onRetry} disabled={loading}>
                 {loading ? 'Retrying…' : 'Retry'}
               </button>
+              <Link href="/inventory?tab=receive">Open Receive Stock</Link>
             </div>
           </div>
         ) : null}
 
-        {!loading && !error && !items.length ? (
+        {!loading && !failureState && !items.length ? (
           <WorkspaceEmpty title="No purchase orders yet" message="Create or receive stock from Inventory when the first supplier delivery is ready." />
         ) : null}
 
-        {!loading && !error && items.length ? (
+        {!loading && !failureState && items.length ? (
           <div className="admin-table-wrap">
             <table className="admin-table">
               <thead>

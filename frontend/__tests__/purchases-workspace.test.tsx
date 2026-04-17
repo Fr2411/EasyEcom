@@ -25,6 +25,9 @@ describe('PurchasesWorkspace', () => {
     render(<PurchasesWorkspace />);
 
     await waitFor(() => expect(screen.getByText('Purchase orders could not be loaded')).toBeTruthy());
+    expect(screen.getByText('Existing purchase orders and received stock remain unchanged.')).toBeTruthy();
+    const receiveStockLinks = screen.getAllByRole('link', { name: 'Open Receive Stock' });
+    expect(receiveStockLinks.some((link) => link.getAttribute('href') === '/inventory?tab=receive')).toBe(true);
     const retryButton = screen.getByRole('button', { name: 'Retry' });
     fireEvent.click(retryButton);
 
