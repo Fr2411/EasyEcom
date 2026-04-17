@@ -732,17 +732,34 @@ export function CatalogWorkspace() {
         activeTab={activeTab}
         onTabChange={setActiveTab}
       />
+      {activeTab !== 'edit' ? (
+        <WorkspaceNotice>
+          <div className="workspace-actions">
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => {
+                setNewProductForm(workspace?.query || '');
+                setActiveTab('edit');
+              }}
+            >
+              Start New Product
+            </button>
+            <span className="workspace-field-note">Primary catalog action: open a new parent product + first variant draft.</span>
+          </div>
+        </WorkspaceNotice>
+      ) : null}
 
       <WorkspacePanel
-        title="Find or stage a product"
+        title="Catalog local finder"
         actions={
           <IntentInput
-            label="Find an existing product"
-            hint="Search by one clue (name, SKU root, barcode, or variant)."
+            label="Find existing product (local to Catalog)"
+            hint="This finder searches Catalog records only by one clue (name, SKU root, barcode, or variant)."
             value={queryInput}
-            placeholder="Product, SKU root, barcode, or variant"
+            placeholder="Catalog-only: product, SKU root, barcode, or variant"
             pending={isPending}
-            submitLabel="Find product"
+            submitLabel="Search catalog"
             submitTone="secondary"
             onChange={setQueryInput}
             onSubmit={() => void onWorkspaceIntent(queryInput)}
@@ -845,7 +862,7 @@ export function CatalogWorkspace() {
           ) : (
             <WorkspaceEmpty
               title="No catalog items staged"
-              message="Use the search bar to open an existing product. If nothing matches, move to Start New Product."
+              message="Use the Catalog local finder to open an existing product. If nothing matches, use Start New Product."
             />
           )
         ) : (

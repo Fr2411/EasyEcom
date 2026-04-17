@@ -51,7 +51,8 @@ describe('CatalogWorkspace step errors', () => {
     render(<CatalogWorkspace />);
 
     await waitFor(() => expect(screen.getByText('No catalog items staged')).toBeTruthy());
-    fireEvent.click(screen.getByRole('tab', { name: 'Start New Product' }));
+    expect(screen.getByText('Primary catalog action: open a new parent product + first variant draft.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Start New Product' }));
 
     const productNameInput = await screen.findByLabelText('Product name');
     fireEvent.change(productNameInput, { target: { value: 'A' } });
