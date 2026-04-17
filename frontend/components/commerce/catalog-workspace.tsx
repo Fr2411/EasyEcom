@@ -441,7 +441,7 @@ export function deriveCatalogRecommendation(workspace: CatalogWorkspace | null):
       title: `Exact catalog match: ${exact.name}`,
       detail: 'Open this product now to review or edit variant-level details.',
       actionLabel: 'Open product',
-      secondaryLabel: 'Start new product',
+      secondaryLabel: 'Create new instead',
       tone: 'success',
     };
   }
@@ -453,7 +453,7 @@ export function deriveCatalogRecommendation(workspace: CatalogWorkspace | null):
       title: `Possible match: ${likely.name}`,
       detail: 'Check this product first. If it is not the right parent, start a new product draft.',
       actionLabel: 'Review product',
-      secondaryLabel: 'Start new product',
+      secondaryLabel: 'Create new instead',
       tone: 'warning',
     };
   }

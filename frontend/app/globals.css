@@ -428,6 +428,21 @@ button:disabled {
   align-items: center;
 }
 
+.top-header.top-header-catalog {
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 500px) auto;
+  column-gap: 1.2rem;
+}
+
+.top-header.top-header-catalog .header-search {
+  margin-right: 0.1rem;
+}
+
+.top-header.top-header-catalog .header-utilities {
+  justify-self: end;
+  padding-left: 0.95rem;
+  border-left: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
+}
+
 .header-title { margin: 0.2rem 0 0; font-weight: 650; }
 .header-subtitle { margin: 0.12rem 0 0; color: var(--text-muted); font-size: 0.76rem; }
 .header-search { border: 1px solid var(--border); border-radius: 999px; color: var(--text-muted); padding: 0.2rem; font-size: 0.86rem; background: #fff; display: flex; align-items: center; gap: 0.35rem; min-width: 360px; }
@@ -1890,6 +1905,28 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
   flex-wrap: wrap;
   gap: 0.65rem;
   align-items: center;
+}
+
+.page-content[data-route-root='catalog'] .catalog-local-finder-panel .guided-next-step[data-kind='exact'] .guided-next-step-actions .btn-primary,
+.page-content[data-route-root='catalog'] .catalog-local-finder-panel .guided-next-step[data-kind='likely'] .guided-next-step-actions .btn-primary {
+  order: -1;
+  font-weight: 650;
+}
+
+.page-content[data-route-root='catalog'] .catalog-local-finder-panel .guided-next-step[data-kind='exact'] .guided-next-step-actions .secondary,
+.page-content[data-route-root='catalog'] .catalog-local-finder-panel .guided-next-step[data-kind='likely'] .guided-next-step-actions .secondary {
+  background: transparent;
+  color: var(--text-muted-readable);
+  border-color: color-mix(in srgb, var(--border) 84%, transparent);
+  box-shadow: none;
+  opacity: 0.84;
+}
+
+.page-content[data-route-root='catalog'] .catalog-local-finder-panel .guided-next-step[data-kind='exact'] .guided-next-step-actions .secondary:hover,
+.page-content[data-route-root='catalog'] .catalog-local-finder-panel .guided-next-step[data-kind='likely'] .guided-next-step-actions .secondary:hover {
+  opacity: 1;
+  border-color: color-mix(in srgb, var(--primary) 32%, var(--border));
+  color: var(--text);
 }
 
 .guided-match-group {
@@ -5937,6 +5974,10 @@ button.secondary:hover,
   background: var(--app-surface);
   border-color: var(--app-border);
   box-shadow: none;
+}
+
+.top-header.top-header-catalog {
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 520px) auto;
 }
 
 .header-copy {
