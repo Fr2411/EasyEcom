@@ -6319,8 +6319,8 @@ button.secondary:hover,
 
   .page-content {
     min-width: 0;
-    padding: 0 0.75rem var(--mobile-bottom-nav-clearance);
-    scroll-padding-bottom: var(--mobile-bottom-nav-clearance);
+    padding: 0 0.75rem calc(var(--mobile-bottom-nav-clearance) + 0.65rem);
+    scroll-padding-bottom: calc(var(--mobile-bottom-nav-clearance) + 0.65rem);
   }
 
   .page-content > * {
