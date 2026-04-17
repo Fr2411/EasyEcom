@@ -146,11 +146,16 @@ export function SettingsWorkspace() {
             <dt>Currency</dt>
             <dd>{workspace?.tenant_context.currency_code}</dd>
           </div>
-          <div>
-            <dt>Tenant ID</dt>
-            <dd>{workspace?.tenant_context.client_id}</dd>
-          </div>
         </dl>
+        <details className="settings-technical-details">
+          <summary>Advanced technical details</summary>
+          <dl className="settings-context settings-context-technical">
+            <div>
+              <dt>Tenant ID</dt>
+              <dd>{workspace?.tenant_context.client_id}</dd>
+            </div>
+          </dl>
+        </details>
       </WorkspacePanel>
 
       <form onSubmit={saveSettings}>

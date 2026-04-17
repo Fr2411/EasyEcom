@@ -968,6 +968,9 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
 .settings-context div { display: grid; grid-template-columns: 160px 1fr; gap: 0.5rem; }
 .settings-context dt { color: var(--text-muted); }
 .settings-context dd { margin: 0; }
+.settings-technical-details { margin-top: 0.7rem; border-top: 1px dashed rgba(90, 114, 108, 0.22); padding-top: 0.7rem; }
+.settings-technical-details summary { cursor: pointer; color: var(--text-muted); font-size: 0.82rem; }
+.settings-context-technical { margin-top: 0.55rem; }
 .settings-notice { border-color: #ace8de; background: #ecfbf7; color: #0e5f58; }
 
 .reports-filter-bar { display: flex; gap: 0.75rem; align-items: flex-end; flex-wrap: wrap; }
@@ -2894,6 +2897,35 @@ button:hover {
   margin: 0.5rem 0 0;
   font-size: 0.82rem;
   line-height: 1.55;
+}
+
+.sidebar-theme-control {
+  margin-top: 0.75rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.sidebar-meta-toggle {
+  margin-top: 0.8rem;
+  width: 100%;
+  border: 1px solid rgba(90, 114, 108, 0.16);
+  background: rgba(255, 255, 255, 0.74);
+  color: var(--text);
+  border-radius: 12px;
+  min-height: 2rem;
+  padding: 0.4rem 0.65rem;
+  font-size: 0.8rem;
+  text-align: left;
+}
+
+.sidebar-meta-toggle:hover {
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.sidebar-user-card-expanded {
+  margin-top: 0.65rem;
+  border-top: 1px solid rgba(90, 114, 108, 0.12);
+  padding-top: 0.65rem;
 }
 
 .sidebar-logout-btn {

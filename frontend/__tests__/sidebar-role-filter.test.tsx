@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { Sidebar } from '@/components/layout/sidebar';
 
@@ -15,6 +15,10 @@ vi.mock('next/navigation', () => ({
 
 vi.mock('@/lib/api/auth', () => ({
   logout: vi.fn(async () => undefined),
+}));
+
+vi.mock('@/components/theme/theme-toggle', () => ({
+  ThemeToggle: () => <div>Theme toggle</div>,
 }));
 
 describe('Sidebar role filtering', () => {
@@ -98,6 +102,10 @@ describe('Sidebar role filtering', () => {
 
     render(<Sidebar />);
 
+    expect(screen.queryByText('Codex Footwear')).toBeNull();
+    expect(screen.queryByText('Codex User')).toBeNull();
+    expect(screen.queryByText('codex@example.com')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Show workspace details' }));
     expect(screen.getByText('Codex Footwear')).toBeTruthy();
     expect(screen.getByText('Codex User')).toBeTruthy();
     expect(screen.getByText('codex@example.com')).toBeTruthy();

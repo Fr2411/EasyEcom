@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, test, vi } from 'vitest';
 import type { ReactNode } from 'react';
 import AppLayout from '@/app/(app)/layout';
@@ -43,7 +43,9 @@ describe('AppLayout', () => {
     expect(screen.getByTestId('auth-route-guard')).toBeTruthy();
     expect(screen.getByLabelText('Primary')).toBeTruthy();
     expect(screen.getByRole('img', { name: 'Easy-Ecom' })).toBeTruthy();
-    expect(screen.getByText('Command Center')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Show workspace details' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Show workspace details' }));
+    expect(screen.getByText('Easy-Ecom Internal')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Open reports' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Admin' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Customers' })).toBeTruthy();
