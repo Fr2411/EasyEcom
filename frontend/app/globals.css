@@ -6201,6 +6201,38 @@ html[data-theme='dark'] {
   gap: 0.8rem;
 }
 
+/* TEA-106: iPhone mobile compression guard for dashboard + sales */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+@media (max-width: 900px) {
+  .page-content[data-route-root='dashboard'],
+  .page-content[data-route-root='sales'] {
+    min-width: 0;
+  }
+
+  .page-content[data-route-root='dashboard'] .page-shell,
+  .page-content[data-route-root='sales'] .page-shell,
+  .page-content[data-route-root='dashboard'] .page-shell-body,
+  .page-content[data-route-root='sales'] .page-shell-body {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .page-content[data-route-root='dashboard'] .dashboard-filter,
+  .page-content[data-route-root='dashboard'] .dashboard-toolbar-meta,
+  .page-content[data-route-root='dashboard'] .dashboard-bar-meta,
+  .page-content[data-route-root='dashboard'] .dashboard-chart-caption,
+  .page-content[data-route-root='sales'] .guided-intent-form,
+  .page-content[data-route-root='sales'] .guided-next-step-actions,
+  .page-content[data-route-root='sales'] .guided-draft-card-actions,
+  .page-content[data-route-root='sales'] .guided-action-footer-actions {
+    min-width: 0;
+  }
+}
+
 .guided-draft-card-header h4,
 .guided-intent-copy h4,
 .guided-match-group-header h4,
