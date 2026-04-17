@@ -1259,14 +1259,14 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
 }
 
 .auth-page {
-  width: min(1180px, calc(100vw - 2rem));
+  width: min(1180px, 100%);
   margin: 0 auto;
   min-height: 100vh;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(360px, 0.95fr);
   gap: 1.25rem;
   align-items: center;
-  padding: 1.25rem 0 2rem;
+  padding: 1.25rem 1rem 2rem;
 }
 
 .auth-hero,
@@ -4485,7 +4485,8 @@ body {
   }
 
   .auth-page {
-    width: min(100vw - 1rem, 1180px);
+    width: min(1180px, 100%);
+    padding-inline: 0.5rem;
   }
 
   .auth-hero,
