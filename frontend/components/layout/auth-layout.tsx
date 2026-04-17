@@ -19,7 +19,7 @@ export function AuthLayout({
     <main className="auth-page">
       <section className="auth-hero">
         <div className="auth-hero-logo">
-          <Link href="/" className="marketing-brand" aria-label="EasyEcom home">
+          <Link href="/" className="marketing-brand auth-hero-brand" aria-label="EasyEcom home">
             <EasyEcomLogo className="easyecom-logo easyecom-logo-hero" imageClassName="easyecom-logo-image easyecom-logo-hero" />
             <div>
               <strong>EasyEcom</strong>
