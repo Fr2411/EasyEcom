@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { ApiError, ApiNetworkError } from '@/lib/api/client';
 import {
+  deriveCatalogVariantOperationalScan,
   deriveCatalogInlineErrors,
   deriveCatalogRecommendation,
   deriveCatalogStepBlockedSummary,
@@ -87,6 +88,136 @@ describe('deriveCatalogRecommendation', () => {
     expect(result.kind).toBe('new');
     expect(result.title).toContain('No catalog match');
     expect(result.actionLabel).toBe('Start new product');
+  });
+});
+
+describe('deriveCatalogVariantOperationalScan', () => {
+  test('prioritizes active variants and lowest available stock for operational scanning', () => {
+    const rows = deriveCatalogVariantOperationalScan([
+      {
+        variant_id: 'v-archived',
+        product_id: 'p-1',
+        product_name: 'Runner',
+        title: 'Archived',
+        label: 'Archived / Legacy',
+        sku: 'RUN-OLD',
+        barcode: '',
+        status: 'archived',
+        options: { size: '40', color: 'Gray', other: '' },
+        unit_cost: null,
+        unit_price: null,
+        min_price: null,
+        effective_unit_price: null,
+        effective_min_price: null,
+        is_price_inherited: false,
+        is_min_price_inherited: false,
+        reorder_level: '4',
+        on_hand: '12',
+        reserved: '0',
+        available_to_sell: '12',
+      },
+      {
+        variant_id: 'v-active-low',
+        product_id: 'p-1',
+        product_name: 'Runner',
+        title: 'Low',
+        label: '41 / Black',
+        sku: 'RUN-41-BLK',
+        barcode: '',
+        status: 'active',
+        options: { size: '41', color: 'Black', other: '' },
+        unit_cost: null,
+        unit_price: null,
+        min_price: null,
+        effective_unit_price: null,
+        effective_min_price: null,
+        is_price_inherited: false,
+        is_min_price_inherited: false,
+        reorder_level: '5',
+        on_hand: '2',
+        reserved: '0',
+        available_to_sell: '2',
+      },
+      {
+        variant_id: 'v-active-high',
+        product_id: 'p-1',
+        product_name: 'Runner',
+        title: 'High',
+        label: '42 / Black',
+        sku: 'RUN-42-BLK',
+        barcode: '',
+        status: 'active',
+        options: { size: '42', color: 'Black', other: '' },
+        unit_cost: null,
+        unit_price: null,
+        min_price: null,
+        effective_unit_price: null,
+        effective_min_price: null,
+        is_price_inherited: false,
+        is_min_price_inherited: false,
+        reorder_level: '5',
+        on_hand: '15',
+        reserved: '0',
+        available_to_sell: '15',
+      },
+    ]);
+
+    expect(rows.map((row) => row.variant_id)).toEqual(['v-active-low', 'v-active-high', 'v-archived']);
+  });
+
+  test('limits scan output to the requested number of rows', () => {
+    const rows = deriveCatalogVariantOperationalScan(
+      [
+        {
+          variant_id: 'v-1',
+          product_id: 'p-1',
+          product_name: 'Runner',
+          title: 'One',
+          label: '41 / Black',
+          sku: 'RUN-41-BLK',
+          barcode: '',
+          status: 'active',
+          options: { size: '41', color: 'Black', other: '' },
+          unit_cost: null,
+          unit_price: null,
+          min_price: null,
+          effective_unit_price: null,
+          effective_min_price: null,
+          is_price_inherited: false,
+          is_min_price_inherited: false,
+          reorder_level: '5',
+          on_hand: '2',
+          reserved: '0',
+          available_to_sell: '2',
+        },
+        {
+          variant_id: 'v-2',
+          product_id: 'p-1',
+          product_name: 'Runner',
+          title: 'Two',
+          label: '42 / Black',
+          sku: 'RUN-42-BLK',
+          barcode: '',
+          status: 'active',
+          options: { size: '42', color: 'Black', other: '' },
+          unit_cost: null,
+          unit_price: null,
+          min_price: null,
+          effective_unit_price: null,
+          effective_min_price: null,
+          is_price_inherited: false,
+          is_min_price_inherited: false,
+          reorder_level: '5',
+          on_hand: '5',
+          reserved: '0',
+          available_to_sell: '5',
+        },
+      ],
+      1
+    );
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].variant_id).toBe('v-1');
   });
 });
 
