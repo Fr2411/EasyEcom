@@ -3,8 +3,35 @@
 import Link from 'next/link';
 import { FormEvent, useEffect, useState } from 'react';
 import { WorkspaceEmpty, WorkspaceNotice, WorkspacePanel } from '@/components/commerce/workspace-primitives';
+import { ApiError, ApiNetworkError } from '@/lib/api/client';
 import { listPurchaseOrders } from '@/lib/api/purchases';
 import { formatMoney } from '@/lib/commerce-format';
+
+function stripRequestUrlFromMessage(message: string) {
+  return message.replace(/\s*\(https?:\/\/[^)]+\)\s*$/i, '').trim();
+}
+
+export function safePurchaseWorkspaceErrorMessage(error: unknown) {
+  if (error instanceof ApiNetworkError) {
+    return 'Unable to load purchase orders right now. Check your connection and try again.';
+  }
+  if (error instanceof ApiError) {
+    if (error.status === 403) {
+      return 'You do not have permission to view purchase orders.';
+    }
+    if (error.status >= 500) {
+      return 'Purchase orders are temporarily unavailable. Please try again in a moment.';
+    }
+    return 'Unable to load purchase orders. Adjust filters and try again.';
+  }
+  if (error instanceof Error) {
+    const cleaned = stripRequestUrlFromMessage(error.message);
+    if (cleaned) {
+      return cleaned;
+    }
+  }
+  return 'Unable to load purchase orders.';
+}
 
 export function PurchasesWorkspace() {
   const [status, setStatus] = useState('');
@@ -25,7 +52,7 @@ export function PurchasesWorkspace() {
       })
       .catch((loadError) => {
         if (!active) return;
-        setError(loadError instanceof Error ? loadError.message : 'Unable to load purchase orders.');
+        setError(safePurchaseWorkspaceErrorMessage(loadError));
       })
       .finally(() => {
         if (active) setLoading(false);
