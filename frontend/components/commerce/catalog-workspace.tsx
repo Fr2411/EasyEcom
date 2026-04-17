@@ -44,6 +44,15 @@ type PostCreateSuccessState = {
   productName: string;
 };
 
+type CatalogVariantScanRow = {
+  variant_id: string;
+  label: string;
+  sku: string;
+  available_to_sell: string;
+  reorder_level: string;
+  status: string;
+};
+
 type VariantGeneratorState = {
   size_values: string;
   color_values: string;
@@ -214,6 +223,39 @@ function newVariantFromCombo(
 
 function cloneVariant(variant: CatalogVariantInput): CatalogVariantInput {
   return { ...variant };
+}
+
+function variantOperationalPriority(variant: CatalogProduct['variants'][number]) {
+  const activeRank = variant.status === 'active' ? 0 : 1;
+  const available = numberFromString(variant.available_to_sell);
+  return [activeRank, available];
+}
+
+export function deriveCatalogVariantOperationalScan(
+  variants: CatalogProduct['variants'],
+  maxRows = 3
+): CatalogVariantScanRow[] {
+  return [...variants]
+    .sort((left, right) => {
+      const [leftActiveRank, leftAvailable] = variantOperationalPriority(left);
+      const [rightActiveRank, rightAvailable] = variantOperationalPriority(right);
+      if (leftActiveRank !== rightActiveRank) {
+        return leftActiveRank - rightActiveRank;
+      }
+      if (leftAvailable !== rightAvailable) {
+        return leftAvailable - rightAvailable;
+      }
+      return left.label.localeCompare(right.label);
+    })
+    .slice(0, maxRows)
+    .map((variant) => ({
+      variant_id: variant.variant_id,
+      label: variant.label,
+      sku: variant.sku,
+      available_to_sell: variant.available_to_sell,
+      reorder_level: variant.reorder_level,
+      status: variant.status,
+    }));
 }
 
 function stripRequestUrlFromMessage(message: string) {
@@ -770,7 +812,27 @@ export function CatalogWorkspace() {
                       Open product
                     </button>
                   </div>
+                  <div className="guided-match-variant-scan" aria-label={`Variant-first operational scan for ${product.name}`}>
+                    <p className="workspace-field-note">
+                      Variant-first operational scan
+                    </p>
+                    {product.variants.length ? (
+                      <ul className="guided-match-variant-list">
+                        {deriveCatalogVariantOperationalScan(product.variants).map((variant) => (
+                          <li key={variant.variant_id}>
+                            <strong>{variant.label}</strong>
+                            <span>
+                              SKU {variant.sku} · Available {formatQuantity(variant.available_to_sell)} · Reorder {formatQuantity(variant.reorder_level)} · {variant.status}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="workspace-field-note">No variants added yet.</p>
+                    )}
+                  </div>
                   <div className="guided-match-item-meta">
+                    <span>Parent: {product.brand || 'No brand'} · {product.category || 'Uncategorized'} · {product.supplier || 'No supplier'}</span>
                     <span>SKU Base: {product.sku_root || 'Generated from product name'}</span>
                     <span>Variants: {product.variants.length}</span>
                     <span>Template Price: {formatMoney(product.default_price)}</span>
