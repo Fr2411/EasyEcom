@@ -553,6 +553,7 @@ export function DashboardAnalyticsWorkspace() {
   const revenueTrend = dashboard?.charts.revenue_profit_trend.items ?? [];
   const opportunityMatrix = dashboard?.charts.product_opportunity_matrix.items ?? [];
   const investmentRows = dashboard?.tables.stock_investment_by_product ?? [];
+  const headlineKpi = dashboard?.kpis[0] ?? null;
 
   return (
     <div className="dashboard-analytics space-y-6">
@@ -566,6 +567,23 @@ export function DashboardAnalyticsWorkspace() {
               label="Dashboard controls help"
             />
           </h3>
+          {headlineKpi ? (
+            <article className="dashboard-headline-kpi bg-glass rounded-lg shadow-glass" title={headlineKpi.help_text ?? undefined}>
+              <p className="dashboard-headline-kpi-label text-xs text-muted">{headlineKpi.label}</p>
+              <strong className="dashboard-headline-kpi-value">{metricValue(headlineKpi)}</strong>
+              <span
+                className={`dashboard-headline-kpi-delta delta-${headlineKpi.delta_direction ?? 'flat'} ${
+                  headlineKpi.delta_direction === 'up'
+                    ? 'text-green-600'
+                    : headlineKpi.delta_direction === 'down'
+                      ? 'text-red-600'
+                      : 'text-muted'
+                }`}
+              >
+                {metricDelta(headlineKpi)}
+              </span>
+            </article>
+          ) : null}
         </div>
         <div className="dashboard-toolbar flex flex-wrap items-end justify-between gap-4 mt-4">
           <div className="dashboard-filters flex flex-wrap items-end gap-4">
