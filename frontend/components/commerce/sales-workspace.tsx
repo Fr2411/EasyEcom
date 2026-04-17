@@ -168,6 +168,7 @@ export function SalesWorkspace() {
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [lookupPending, setLookupPending] = useState(false);
+  const [showAdvancedTools, setShowAdvancedTools] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const loadOrders = (query = '') => {
@@ -440,82 +441,117 @@ export function SalesWorkspace() {
         {activeTab === 'new' ? (
           <div className="workspace-two-column">
             <div className="workspace-stack">
+              <DraftRecommendationCard
+                title="Start new order"
+                summary="Begin with one customer or product clue. Advanced matching stays hidden until you need it."
+                actions={(
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    onClick={() => {
+                      setShowAdvancedTools(false);
+                      setIntentLookup(null);
+                      setVariantResults([]);
+                      setCustomerResults([]);
+                      stageManualCustomer();
+                    }}
+                  >
+                    Start new order
+                  </button>
+                )}
+              >
+                <div className="workspace-inline-actions">
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => setShowAdvancedTools((current) => !current)}
+                  >
+                    {showAdvancedTools ? 'Hide advanced matching tools' : 'Show advanced matching tools'}
+                  </button>
+                </div>
+              </DraftRecommendationCard>
+
               <IntentInput
                 label="Who is buying or what do they want?"
                 hint="Use one clue. A phone number, email, SKU, barcode, or product text is enough for the workspace to stage the next likely action."
                 value={intentQuery}
                 placeholder="Phone, email, order clue, SKU, barcode, or product"
                 pending={lookupPending}
-                submitLabel="Interpret intent"
+                submitLabel="Find customer or item"
                 onChange={setIntentQuery}
                 onSubmit={() => runIntentLookup(intentQuery)}
               >
-                <span className="guided-assist-chip">Exact SKU or barcode auto-stages the variant</span>
-                <span className="guided-assist-chip">Customer clues prefill manual entry when no account matches</span>
+                <span className="guided-assist-chip">One clue is enough to stage the next step quickly</span>
               </IntentInput>
 
-              <SuggestedNextStep
-                suggestion={intentSuggestion}
-                onPrimary={() => {
-                  if (intentSuggestion.kind === 'variant' && intentLookup?.exact[0]) {
-                    addVariantToDraft(intentLookup.exact[0]);
-                    return;
-                  }
-                  stageManualCustomer();
-                }}
-                onSecondary={() => {
-                  if (intentLookup?.query) {
-                    setCustomerPhone(intentLookup.suggestedNew?.phone ?? '');
-                    setCustomerEmail(intentLookup.suggestedNew?.email ?? '');
-                  }
-                  stageManualCustomer();
-                }}
-              />
+              {showAdvancedTools ? (
+                <SuggestedNextStep
+                  suggestion={intentSuggestion}
+                  onPrimary={() => {
+                    if (intentSuggestion.kind === 'variant' && intentLookup?.exact[0]) {
+                      addVariantToDraft(intentLookup.exact[0]);
+                      return;
+                    }
+                    stageManualCustomer();
+                  }}
+                  onSecondary={() => {
+                    if (intentLookup?.query) {
+                      setCustomerPhone(intentLookup.suggestedNew?.phone ?? '');
+                      setCustomerEmail(intentLookup.suggestedNew?.email ?? '');
+                    }
+                    stageManualCustomer();
+                  }}
+                />
+              ) : null}
 
-              <MatchGroupList
-                title="Likely customer matches"
-                description="Use an existing customer when one is clearly correct. Otherwise continue with the staged manual entry."
-                items={customerResults}
-                emptyMessage="No customer account matched yet."
-                renderItem={(item) => (
-                  <article key={item.customer_id} className="guided-match-item">
-                    <div className="guided-match-item-header">
-                      <div>
-                        <h5>{item.name}</h5>
-                        <p>{item.phone || item.email || 'No contact details'}</p>
+              {showAdvancedTools ? (
+                <MatchGroupList
+                  title="Likely customer matches"
+                  description="Use an existing customer when one is clearly correct. Otherwise continue with the staged manual entry."
+                  items={customerResults}
+                  emptyMessage="No customer account matched yet."
+                  renderItem={(item) => (
+                    <article key={item.customer_id} className="guided-match-item">
+                      <div className="guided-match-item-header">
+                        <div>
+                          <h5>{item.name}</h5>
+                          <p>{item.phone || item.email || 'No contact details'}</p>
+                        </div>
+                        <button type="button" onClick={() => useCustomer(item)}>
+                          Use customer
+                        </button>
                       </div>
-                      <button type="button" onClick={() => useCustomer(item)}>
-                        Use customer
-                      </button>
-                    </div>
-                  </article>
-                )}
-              />
+                    </article>
+                  )}
+                />
+              ) : null}
 
-              <MatchGroupList
-                title="Likely saleable items"
-                description="Only variants with saleable stock are shown here."
-                items={variantResults}
-                emptyMessage="No sellable variants matched the current clue yet."
-                renderItem={(variant) => (
-                  <article key={variant.variant_id} className="guided-match-item">
-                    <div className="guided-match-item-header">
-                      <div>
-                        <h5>{variant.label}</h5>
-                        <p>{variant.sku}</p>
+              {showAdvancedTools ? (
+                <MatchGroupList
+                  title="Likely saleable items"
+                  description="Only variants with saleable stock are shown here."
+                  items={variantResults}
+                  emptyMessage="No sellable variants matched the current clue yet."
+                  renderItem={(variant) => (
+                    <article key={variant.variant_id} className="guided-match-item">
+                      <div className="guided-match-item-header">
+                        <div>
+                          <h5>{variant.label}</h5>
+                          <p>{variant.sku}</p>
+                        </div>
+                        <button type="button" onClick={() => addVariantToDraft(variant)}>
+                          Add to draft order
+                        </button>
                       </div>
-                      <button type="button" onClick={() => addVariantToDraft(variant)}>
-                        Add to draft order
-                      </button>
-                    </div>
-                    <div className="guided-match-item-meta">
-                      <span>Available {formatQuantity(variant.available_to_sell)}</span>
-                      <span>Price {formatMoney(variant.unit_price)}</span>
-                      <span>Min {formatMoney(variant.min_price)}</span>
-                    </div>
-                  </article>
-                )}
-              />
+                      <div className="guided-match-item-meta">
+                        <span>Available {formatQuantity(variant.available_to_sell)}</span>
+                        <span>Price {formatMoney(variant.unit_price)}</span>
+                        <span>Min {formatMoney(variant.min_price)}</span>
+                      </div>
+                    </article>
+                  )}
+                />
+              ) : null}
 
               <DraftRecommendationCard
                 title="Customer staging"

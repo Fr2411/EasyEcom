@@ -694,16 +694,15 @@ export function CatalogWorkspace() {
         actions={
           <IntentInput
             label="What product are you working on?"
-            hint="Search by product name, SKU root, barcode, or a variant code. The best match will be staged first."
+            hint="Use one clue to open an existing product or begin a new product draft."
             value={queryInput}
             placeholder="Product, SKU root, barcode, or variant"
             pending={isPending}
-            submitLabel="Interpret intent"
+            submitLabel="Find product"
             onChange={setQueryInput}
             onSubmit={() => void onWorkspaceIntent(queryInput)}
           >
-            <span className="guided-assist-chip">Exact product matches open the editor</span>
-            <span className="guided-assist-chip">No match stages a new product draft</span>
+            <span className="guided-assist-chip">No match starts a new product draft</span>
           </IntentInput>
         }
       >
