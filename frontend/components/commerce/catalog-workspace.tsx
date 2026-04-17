@@ -409,8 +409,8 @@ export function deriveCatalogRecommendation(workspace: CatalogWorkspace | null):
 
   return {
     kind: 'new',
-    title: `No catalog match for "${workspace.query}"`,
-    detail: 'A new product draft is ready with the typed clue preserved as the starting context.',
+    title: `No catalog match: "${workspace.query}"`,
+    detail: 'Start a new draft now. Your typed clue is already kept in the product name field.',
     actionLabel: 'Start new product',
     tone: 'warning',
   };

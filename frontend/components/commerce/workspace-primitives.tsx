@@ -179,13 +179,13 @@ export function SuggestedNextStep({
   onSecondary,
   primaryTone = 'primary',
 }: {
-  suggestion: SuggestedAction;
+  suggestion: SuggestedAction & { kind?: string };
   onPrimary?: () => void;
   onSecondary?: () => void;
   primaryTone?: 'primary' | 'secondary';
 }) {
   return (
-    <div className={`guided-next-step ${suggestion.tone ?? 'info'}`}>
+    <div className={`guided-next-step ${suggestion.tone ?? 'info'}`} data-kind={suggestion.kind ?? undefined}>
       <div>
         <strong>{suggestion.title}</strong>
         <div className="mt-2">

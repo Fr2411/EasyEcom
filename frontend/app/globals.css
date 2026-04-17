@@ -6176,6 +6176,25 @@ button.secondary:hover,
     scroll-margin-bottom: calc(var(--mobile-bottom-nav-clearance) + 0.45rem);
     padding-bottom: calc(var(--mobile-bottom-nav-clearance) * 0.28);
   }
+
+  .page-content[data-route-root='catalog'] .catalog-local-finder-panel .guided-next-step[data-kind='new'] {
+    margin-bottom: 0.35rem;
+    padding: 1rem 1rem calc(0.95rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .page-content[data-route-root='catalog'] .catalog-local-finder-panel .guided-next-step[data-kind='new'] strong {
+    display: block;
+    font-size: 0.96rem;
+    line-height: 1.3;
+  }
+
+  .page-content[data-route-root='catalog'] .catalog-local-finder-panel .guided-next-step[data-kind='new'] .mt-2 {
+    margin-top: 0.4rem;
+  }
+
+  .page-content[data-route-root='catalog'] .catalog-local-finder-panel .guided-next-step[data-kind='new'] .guided-next-step-actions {
+    margin-top: 0.2rem;
+  }
 }
 
 /* TEA-87 Wave 4: typography, contrast, and spacing normalization */
