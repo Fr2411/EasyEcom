@@ -153,6 +153,8 @@ export function SalesWorkspace() {
   const searchParams = useSearchParams();
   const searchKey = searchParams.toString();
   const [activeTab, setActiveTab] = useState<SalesTab>('new');
+  const [isCompactViewport, setIsCompactViewport] = useState(false);
+  const [orderStarted, setOrderStarted] = useState(false);
   const [variantResults, setVariantResults] = useState<SaleLookupVariant[]>([]);
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
@@ -194,6 +196,26 @@ export function SalesWorkspace() {
     setOrderQuery(query);
     loadOrders(query);
   }, [searchKey]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      setIsCompactViewport(false);
+      setOrderStarted(true);
+      return;
+    }
+
+    const mobileQuery = window.matchMedia('(max-width: 900px)');
+    const updateViewportState = () => {
+      setIsCompactViewport(mobileQuery.matches);
+      if (!mobileQuery.matches) {
+        setOrderStarted(true);
+      }
+    };
+
+    updateViewportState();
+    mobileQuery.addEventListener('change', updateViewportState);
+    return () => mobileQuery.removeEventListener('change', updateViewportState);
+  }, []);
 
   const filteredOrders = orders.filter((order) => {
     if (activeTab === 'open') {
@@ -400,6 +422,7 @@ export function SalesWorkspace() {
   };
 
   const intentSuggestion = deriveSalesIntentSuggestion(intentLookup);
+  const shouldGateMobileStart = isCompactViewport && !orderStarted;
 
   return (
     <div className="workspace-stack">
@@ -443,12 +466,17 @@ export function SalesWorkspace() {
             <div className="workspace-stack">
               <DraftRecommendationCard
                 title="Start new order"
-                summary="Begin with one customer or product clue. Advanced matching stays hidden until you need it."
+                summary={
+                  shouldGateMobileStart
+                    ? 'Tap start once to open customer and variant staging.'
+                    : 'Begin with one customer or product clue. Advanced matching stays hidden until you need it.'
+                }
                 actions={(
                   <button
                     type="button"
                     className="btn-primary"
                     onClick={() => {
+                      setOrderStarted(true);
                       setShowAdvancedTools(false);
                       setIntentLookup(null);
                       setVariantResults([]);
@@ -461,16 +489,19 @@ export function SalesWorkspace() {
                 )}
               >
                 <div className="workspace-inline-actions">
-                  <button
-                    type="button"
-                    className="secondary"
-                    onClick={() => setShowAdvancedTools((current) => !current)}
-                  >
-                    {showAdvancedTools ? 'Hide advanced matching tools' : 'Show advanced matching tools'}
-                  </button>
+                  {!shouldGateMobileStart ? (
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => setShowAdvancedTools((current) => !current)}
+                    >
+                      {showAdvancedTools ? 'Hide advanced matching tools' : 'Show advanced matching tools'}
+                    </button>
+                  ) : null}
                 </div>
               </DraftRecommendationCard>
 
+              {!shouldGateMobileStart ? (
               <IntentInput
                 label="Who is buying or what do they want?"
                 hint="Use one clue. A phone number, email, SKU, barcode, or product text is enough for the workspace to stage the next likely action."
@@ -483,8 +514,9 @@ export function SalesWorkspace() {
               >
                 <span className="guided-assist-chip">One clue is enough to stage the next step quickly</span>
               </IntentInput>
+              ) : null}
 
-              {showAdvancedTools ? (
+              {!shouldGateMobileStart && showAdvancedTools ? (
                 <SuggestedNextStep
                   suggestion={intentSuggestion}
                   onPrimary={() => {
@@ -504,7 +536,7 @@ export function SalesWorkspace() {
                 />
               ) : null}
 
-              {showAdvancedTools ? (
+              {!shouldGateMobileStart && showAdvancedTools ? (
                 <MatchGroupList
                   title="Likely customer matches"
                   description="Use an existing customer when one is clearly correct. Otherwise continue with the staged manual entry."
@@ -526,7 +558,7 @@ export function SalesWorkspace() {
                 />
               ) : null}
 
-              {showAdvancedTools ? (
+              {!shouldGateMobileStart && showAdvancedTools ? (
                 <MatchGroupList
                   title="Likely saleable items"
                   description="Only variants with saleable stock are shown here."
@@ -553,55 +585,62 @@ export function SalesWorkspace() {
                 />
               ) : null}
 
-              <DraftRecommendationCard
-                title="Customer staging"
-                summary={customer.customer_id
-                  ? `Existing customer ${customer.name} is staged for this order.`
-                  : customer.name || customer.phone || customer.email
-                    ? 'A manual customer draft is staged. Complete any missing details before confirming.'
-                    : 'No customer is staged yet. The intent bar above can prefill this area for you.'}
-              >
-                <div className="workspace-inline-actions">
-                  <label>
-                    Phone
-                    <input value={customerPhone} onChange={(event) => setCustomerPhone(event.target.value)} />
-                  </label>
-                  <label>
-                    Email
-                    <input value={customerEmail} onChange={(event) => setCustomerEmail(event.target.value)} />
-                  </label>
-                  <button type="button" onClick={() => void runIntentLookup(customerPhone || customerEmail)}>
-                    Refresh customer clues
-                  </button>
-                </div>
-                <div className="workspace-form-grid compact">
-                  <label>
-                    Name
-                    <input
-                      value={customer.name}
-                      onChange={(event) => setCustomer((current) => ({ ...current, name: event.target.value }))}
-                      required
-                    />
-                  </label>
-                  <label>
-                    Phone
-                    <input
-                      value={customer.phone}
-                      onChange={(event) => setCustomer((current) => ({ ...current, phone: event.target.value }))}
-                      required
-                    />
-                  </label>
-                  <label>
-                    Email
-                    <input
-                      value={customer.email}
-                      onChange={(event) => setCustomer((current) => ({ ...current, email: event.target.value }))}
-                    />
-                  </label>
-                </div>
-              </DraftRecommendationCard>
+              {!shouldGateMobileStart ? (
+                <DraftRecommendationCard
+                  title="Customer staging"
+                  summary={customer.customer_id
+                    ? `Existing customer ${customer.name} is staged for this order.`
+                    : customer.name || customer.phone || customer.email
+                      ? 'A manual customer draft is staged. Complete any missing details before confirming.'
+                      : 'No customer is staged yet. The intent bar above can prefill this area for you.'}
+                >
+                  <div className="workspace-inline-actions">
+                    <label>
+                      Phone
+                      <input value={customerPhone} onChange={(event) => setCustomerPhone(event.target.value)} />
+                    </label>
+                    <label>
+                      Email
+                      <input value={customerEmail} onChange={(event) => setCustomerEmail(event.target.value)} />
+                    </label>
+                    <button type="button" onClick={() => void runIntentLookup(customerPhone || customerEmail)}>
+                      Refresh customer clues
+                    </button>
+                  </div>
+                  <div className="workspace-form-grid compact">
+                    <label>
+                      Name
+                      <input
+                        value={customer.name}
+                        onChange={(event) => setCustomer((current) => ({ ...current, name: event.target.value }))}
+                        required
+                      />
+                    </label>
+                    <label>
+                      Phone
+                      <input
+                        value={customer.phone}
+                        onChange={(event) => setCustomer((current) => ({ ...current, phone: event.target.value }))}
+                        required
+                      />
+                    </label>
+                    <label>
+                      Email
+                      <input
+                        value={customer.email}
+                        onChange={(event) => setCustomer((current) => ({ ...current, email: event.target.value }))}
+                      />
+                    </label>
+                  </div>
+                </DraftRecommendationCard>
+              ) : (
+                <WorkspaceNotice>
+                  Tap Start new order above to open customer and item staging.
+                </WorkspaceNotice>
+              )}
             </div>
 
+            {!shouldGateMobileStart ? (
             <DraftRecommendationCard
               title="Order draft"
               summary={draftLines.length
@@ -703,6 +742,7 @@ export function SalesWorkspace() {
                 </button>
               </StagedActionFooter>
             </DraftRecommendationCard>
+            ) : null}
           </div>
         ) : (
           <div className="workspace-two-column">
