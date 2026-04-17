@@ -89,12 +89,15 @@ describe('CatalogWorkspace step errors', () => {
     render(<CatalogWorkspace />);
 
     await waitFor(() => expect(screen.getByText('Catalog is taking longer than expected to load.')).toBeTruthy());
+    expect(screen.getByText('Retry catalog load first. If it still fails, use Go to Dashboard to refresh your session.')).toBeTruthy();
     expect(screen.getByText('Your network or session may have timed out. Retry once to continue.')).toBeTruthy();
     expect(screen.getByText('Last search: all catalog products.')).toBeTruthy();
+    expect(screen.queryByTestId('catalog-top-start-new-product')).toBeNull();
+    expect(screen.queryByText('Use this when the product does not already exist.')).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Retry catalog load' }));
     await waitFor(() => expect(mockGetCatalogWorkspace).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(screen.getByText('Still failing after retry. Use Dashboard, wait a moment, then open Catalog again.')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Repeated failures: open Dashboard to refresh your session, wait a moment, then return to Catalog.')).toBeTruthy());
 
     fireEvent.click(screen.getByRole('button', { name: 'Go to Dashboard' }));
     expect(mockRouterPush).toHaveBeenCalledWith('/dashboard');
