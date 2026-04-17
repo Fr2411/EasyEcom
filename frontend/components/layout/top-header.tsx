@@ -17,6 +17,7 @@ type HeaderContext = {
   searchScope: SearchScope;
   actionLabel: string;
   actionHref: string;
+  actionTone?: 'primary' | 'secondary';
 };
 
 const SEARCH_SCOPE_ROUTES: Record<SearchScope, string> = {
@@ -67,6 +68,7 @@ function getHeaderContext(pathname: string): HeaderContext {
         searchScope: 'inventory',
         actionLabel: 'Open inventory',
         actionHref: '/inventory',
+        actionTone: 'secondary',
       };
     case '/inventory':
       return {
@@ -292,7 +294,7 @@ export function TopHeader({ onOpenNavigation }: { onOpenNavigation?: () => void 
       <div className="header-utilities">
         <button
           type="button"
-          className="header-btn"
+          className={`header-btn ${pageContext.actionTone === 'secondary' ? 'header-btn-secondary' : ''}`.trim()}
           onClick={() => router.push(pageContext.actionHref)}
           aria-label={pageContext.actionLabel}
         >
