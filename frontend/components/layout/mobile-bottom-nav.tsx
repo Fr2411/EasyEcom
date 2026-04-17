@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect, useRef } from 'react';
 import {
   BadgeDollarSign,
   BarChart3,
@@ -53,9 +54,38 @@ export function MobileBottomNav({ onOpenMenu }: { onOpenMenu: () => void }) {
   const pathname = usePathname();
   const { user } = useAuth();
   const primaryItems = getMobilePrimaryItems(user);
+  const navRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const navElement = navRef.current;
+    if (!navElement) {
+      return;
+    }
+
+    const updateHeightVar = () => {
+      root.style.setProperty('--mobile-bottom-nav-height', `${Math.ceil(navElement.offsetHeight)}px`);
+    };
+
+    updateHeightVar();
+    window.addEventListener('resize', updateHeightVar);
+    window.addEventListener('orientationchange', updateHeightVar);
+
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(updateHeightVar);
+      observer.observe(navElement);
+    }
+
+    return () => {
+      window.removeEventListener('resize', updateHeightVar);
+      window.removeEventListener('orientationchange', updateHeightVar);
+      observer?.disconnect();
+    };
+  }, []);
 
   return (
-    <nav className="mobile-bottom-nav" aria-label="Mobile navigation">
+    <nav ref={navRef} className="mobile-bottom-nav" aria-label="Mobile navigation">
       {primaryItems.map((item) => {
         const Icon = getMobileNavigationIcon(item.icon);
         const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
