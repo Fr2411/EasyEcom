@@ -6324,8 +6324,8 @@ html {
   .page-content[data-route-root='dashboard'] .dashboard-headline-kpi {
     display: grid;
     gap: 0.2rem;
-    padding: 0.7rem 0.85rem;
-    margin-top: 0.75rem;
+    padding: 0.5rem 0.65rem;
+    margin-top: 0.35rem;
     border: 1px solid var(--border);
   }
 
@@ -6341,9 +6341,16 @@ html {
   }
 
   .page-content[data-route-root='dashboard'] .dashboard-headline-kpi-delta {
-    font-size: 0.78rem;
-    line-height: 1.35;
-    font-weight: 600;
+    display: none;
+  }
+
+  .page-content[data-route-root='dashboard'] .foundation-hero h3 {
+    margin: 0.2rem 0 0.2rem;
+    font-size: 1.05rem;
+  }
+
+  .page-content[data-route-root='dashboard'] .dashboard-toolbar {
+    margin-top: 0.45rem;
   }
 }
 
