@@ -1864,6 +1864,10 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
   padding-top: 0.9rem;
 }
 
+.mobile-action-safe-spacer {
+  display: none;
+}
+
 .workspace-search,
 .workspace-inline-actions,
 .workspace-actions {
@@ -6308,6 +6312,13 @@ html {
   .page-content[data-route-root='sales'] .guided-action-footer,
   .page-content[data-route-root='sales'] .workspace-actions {
     scroll-margin-bottom: calc(var(--mobile-bottom-nav-clearance) + 0.75rem);
+  }
+
+  .page-content[data-route-root='dashboard'] .mobile-action-safe-spacer,
+  .page-content[data-route-root='sales'] .mobile-action-safe-spacer {
+    display: block;
+    height: calc(var(--mobile-bottom-nav-clearance) + 0.35rem);
+    pointer-events: none;
   }
 
   .page-content[data-route-root='dashboard'] .dashboard-headline-kpi {

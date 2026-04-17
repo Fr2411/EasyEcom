@@ -1040,6 +1040,7 @@ export function DashboardAnalyticsWorkspace() {
               <ActivityList items={dashboard.tables.recent_activity} />
             </article>
           </section>
+          <div className="mobile-action-safe-spacer" aria-hidden="true" />
         </>
       ) : null}
     </div>
