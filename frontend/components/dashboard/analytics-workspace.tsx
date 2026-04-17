@@ -130,6 +130,60 @@ function toneClass(tone: DashboardInsightCard['tone']) {
   return `dashboard-insight-card tone-${tone}`;
 }
 
+type DashboardActionLead = {
+  title: string;
+  summary: string;
+  href: string;
+  cta: string;
+};
+
+function resolveActionLead(dashboard: DashboardAnalytics | null, financialVisible: boolean): DashboardActionLead {
+  if (!dashboard) {
+    return {
+      title: 'Review inventory pressure first',
+      summary: 'Start by checking low-stock variants so near-term orders do not fail.',
+      href: '/inventory?tab=low-stock',
+      cta: 'Open low stock',
+    };
+  }
+
+  if (dashboard.tables.low_stock_variants.length) {
+    return {
+      title: 'Replenish low-stock variants now',
+      summary: `${dashboard.tables.low_stock_variants.length} variants are at or below reorder level and can block upcoming sales.`,
+      href: '/inventory?tab=low-stock',
+      cta: 'Open low stock',
+    };
+  }
+
+  if (dashboard.tables.slow_movers.length) {
+    return {
+      title: 'Move aging stock',
+      summary: `${dashboard.tables.slow_movers.length} products have stock but no recent sales. Review pricing or campaign actions next.`,
+      href: '/inventory',
+      cta: 'Review stock',
+    };
+  }
+
+  if (!dashboard.tables.top_products_by_units_sold.length) {
+    return {
+      title: 'Capture your first completed sale',
+      summary: 'No completed sales are visible in this range yet. Finish one sale to unlock operational signals.',
+      href: '/sales',
+      cta: 'Open sales',
+    };
+  }
+
+  return {
+    title: financialVisible ? 'Validate sales quality and margin trend' : 'Validate sales momentum',
+    summary: financialVisible
+      ? 'Use sales quality trends to confirm growth is not sacrificing margin.'
+      : 'Use sales trends to confirm demand and conversion are improving.',
+    href: '/sales',
+    cta: 'Open sales quality',
+  };
+}
+
 
 function chartPoints(
   items: Array<{ period: string; revenue?: string | number; estimated_gross_profit?: string | number | null; returns_count?: number; refund_amount?: string | number | null }>
@@ -555,6 +609,7 @@ export function DashboardAnalyticsWorkspace() {
   const investmentRows = dashboard?.tables.stock_investment_by_product ?? [];
   const headlineKpi = dashboard?.kpis[0] ?? null;
   const gridKpis = dashboard?.kpis.slice(headlineKpi ? 1 : 0) ?? [];
+  const actionLead = resolveActionLead(dashboard ?? null, financialVisible);
 
   return (
     <div className="dashboard-analytics space-y-6">
@@ -562,12 +617,28 @@ export function DashboardAnalyticsWorkspace() {
         <div className="foundation-hero">
           <p className="eyebrow text-xs text-muted uppercase tracking-wider">Business Analytics Dashboard</p>
           <h3 className="workspace-heading text-lg font-semibold mt-2">
-            Dashboard controls
+            What to do now
             <HoverHint
               text="This dashboard blends completed sales, returns, purchase receipts, and variant-level inventory ledger movement so owners can monitor growth, pressure, and product opportunities."
               label="Dashboard controls help"
             />
           </h3>
+          <article className="dashboard-action-lead bg-glass rounded-lg shadow-glass" aria-label="Dashboard first action">
+            <span className="dashboard-action-eyebrow">Do this now</span>
+            <strong className="dashboard-action-title">{actionLead.title}</strong>
+            <p className="dashboard-action-summary">{actionLead.summary}</p>
+            <div className="dashboard-action-links">
+              <Link href={actionLead.href} className="dashboard-primary-action-link">
+                {actionLead.cta}
+              </Link>
+              <Link href="/inventory" className="dashboard-secondary-action-link">
+                Inventory workspace
+              </Link>
+              <Link href="/reports" className="dashboard-secondary-action-link">
+                Reports
+              </Link>
+            </div>
+          </article>
           {headlineKpi ? (
             <article className="dashboard-headline-kpi bg-glass rounded-lg shadow-glass" title={headlineKpi.help_text ?? undefined}>
               <p className="dashboard-headline-kpi-label text-xs text-muted">{headlineKpi.label}</p>
@@ -738,7 +809,7 @@ export function DashboardAnalyticsWorkspace() {
             ))}
           </section>
 
-          <section className="dashboard-grid dashboard-panel-grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <section className="dashboard-grid dashboard-panel-grid dashboard-primary-panels grid-cols-1 gap-6 lg:grid-cols-2">
             <article className="section-card section-card-wide dashboard-section-card bg-glass p-6 rounded-lg shadow-glass transition-normal hover:shadow-glass-hover col-span-1 lg:col-span-2">
               <div className="dashboard-section-head flex items-start justify-between gap-4">
                 <div>
@@ -860,7 +931,7 @@ export function DashboardAnalyticsWorkspace() {
             ) : null}
           </section>
 
-          <section className="dashboard-grid dashboard-panel-grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <section className="dashboard-grid dashboard-panel-grid dashboard-secondary-panels grid-cols-1 gap-6 lg:grid-cols-2">
             <article className="section-card dashboard-section-card bg-glass p-6 rounded-lg shadow-glass transition-normal hover:shadow-glass-hover">
               <div className="dashboard-section-head flex items-start justify-between gap-4">
                 <div>
