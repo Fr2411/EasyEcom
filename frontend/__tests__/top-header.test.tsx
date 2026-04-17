@@ -63,4 +63,12 @@ describe('TopHeader', () => {
     fireEvent.click(screen.getByRole('button', { name: 'View pricing' }));
     expect(pushMock).toHaveBeenCalledWith('/pricing');
   });
+
+  test('renders cross-module action as secondary by default so page-level actions remain primary', () => {
+    render(<TopHeader />);
+
+    const action = screen.getByRole('button', { name: 'Open reports' });
+    expect(action.className).toContain('header-btn-secondary');
+    expect(action.className).toContain('header-cross-module-action');
+  });
 });

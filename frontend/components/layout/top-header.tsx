@@ -253,6 +253,8 @@ export function TopHeader({ onOpenNavigation }: { onOpenNavigation?: () => void 
     const params = new URLSearchParams({ q: trimmed });
     router.push(`${SEARCH_SCOPE_ROUTES[scope]}?${params.toString()}`);
   };
+  const actionIsPrimary = pageContext.actionTone === 'primary';
+  const actionClassName = `header-btn ${actionIsPrimary ? '' : 'header-btn-secondary'} header-cross-module-action`.trim();
 
   return (
     <header className="top-header">
@@ -294,7 +296,7 @@ export function TopHeader({ onOpenNavigation }: { onOpenNavigation?: () => void 
       <div className="header-utilities">
         <button
           type="button"
-          className={`header-btn ${pageContext.actionTone === 'secondary' ? 'header-btn-secondary' : ''}`.trim()}
+          className={actionClassName}
           onClick={() => router.push(pageContext.actionHref)}
           aria-label={pageContext.actionLabel}
         >
