@@ -19,6 +19,20 @@
   --danger: #b42318;
   --warning: #b54708;
   --success: #157f3b;
+  --workspace-card-bg: #ffffff;
+  --workspace-card-active-bg: #f3fffc;
+  --workspace-card-selected-bg: #f8fdfc;
+  --workspace-card-active-border: #8bdccf;
+  --workspace-card-selected-border: #8ad3c8;
+  --workspace-card-selected-shadow: 0 8px 24px rgba(15, 118, 110, 0.08);
+  --guided-card-border: rgba(90, 114, 108, 0.12);
+  --guided-card-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, rgba(248, 250, 248, 0.82) 100%);
+  --guided-card-warning-border: rgba(201, 126, 36, 0.2);
+  --guided-card-warning-bg: linear-gradient(180deg, rgba(255, 250, 244, 0.95) 0%, rgba(255, 255, 255, 0.82) 100%);
+  --guided-card-success-border: rgba(17, 114, 74, 0.18);
+  --guided-item-bg: rgba(255, 255, 255, 0.82);
+  --guided-item-border: rgba(90, 114, 108, 0.12);
+  --guided-divider: rgba(90, 114, 108, 0.12);
 
   --radius-sm: 10px;
   --radius-md: 14px;
@@ -1684,9 +1698,9 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
 .guided-next-step,
 .guided-draft-card,
 .guided-match-group {
-  border: 1px solid rgba(90, 114, 108, 0.12);
+  border: 1px solid var(--guided-card-border);
   border-radius: 20px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, rgba(248, 250, 248, 0.82) 100%);
+  background: var(--guided-card-bg);
   box-shadow: var(--shadow-sm);
 }
 
@@ -1745,12 +1759,12 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
 }
 
 .guided-next-step.warning {
-  border-color: rgba(201, 126, 36, 0.2);
-  background: linear-gradient(180deg, rgba(255, 250, 244, 0.95) 0%, rgba(255, 255, 255, 0.82) 100%);
+  border-color: var(--guided-card-warning-border);
+  background: var(--guided-card-warning-bg);
 }
 
 .guided-next-step.success {
-  border-color: rgba(17, 114, 74, 0.18);
+  border-color: var(--guided-card-success-border);
 }
 
 .guided-next-step-actions,
@@ -1778,9 +1792,9 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
 }
 
 .guided-match-item {
-  border: 1px solid rgba(90, 114, 108, 0.12);
+  border: 1px solid var(--guided-item-border);
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.82);
+  background: var(--guided-item-bg);
   padding: 0.95rem;
   display: grid;
   gap: 0.65rem;
@@ -1860,7 +1874,7 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
   justify-content: space-between;
   align-items: center;
   gap: 1rem;
-  border-top: 1px solid rgba(90, 114, 108, 0.12);
+  border-top: 1px solid var(--guided-divider);
   padding-top: 0.9rem;
 }
 
@@ -2052,7 +2066,7 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
 .selection-card {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: #fff;
+  background: var(--workspace-card-bg);
   padding: 1rem;
   display: grid;
   gap: 0.8rem;
@@ -2065,14 +2079,14 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
 
 .selection-card.active,
 .selection-card:hover {
-  border-color: #8bdccf;
-  background: #f3fffc;
+  border-color: var(--workspace-card-active-border);
+  background: var(--workspace-card-active-bg);
 }
 
 .commerce-card.selected {
-  border-color: #8ad3c8;
-  box-shadow: 0 8px 24px rgba(15, 118, 110, 0.08);
-  background: #f8fdfc;
+  border-color: var(--workspace-card-selected-border);
+  box-shadow: var(--workspace-card-selected-shadow);
+  background: var(--workspace-card-selected-bg);
 }
 
 .commerce-card-header {
@@ -5057,6 +5071,20 @@ thead th {
   --app-text: #0a0a0a;
   --app-muted: #666666;
   --app-accent: #ff4c00;
+  --workspace-card-bg: var(--surface);
+  --workspace-card-active-bg: color-mix(in srgb, var(--surface) 84%, var(--primary-soft));
+  --workspace-card-selected-bg: color-mix(in srgb, var(--surface) 80%, var(--primary-soft));
+  --workspace-card-active-border: color-mix(in srgb, var(--primary) 44%, var(--border));
+  --workspace-card-selected-border: color-mix(in srgb, var(--primary) 52%, var(--border));
+  --workspace-card-selected-shadow: 0 8px 24px rgba(250, 93, 25, 0.12);
+  --guided-card-border: color-mix(in srgb, var(--border) 84%, var(--primary-soft));
+  --guided-card-bg: color-mix(in srgb, var(--surface-raised) 92%, transparent);
+  --guided-card-warning-border: color-mix(in srgb, var(--warning) 38%, var(--border));
+  --guided-card-warning-bg: color-mix(in srgb, var(--surface-raised) 88%, rgba(245, 158, 11, 0.12));
+  --guided-card-success-border: color-mix(in srgb, var(--success) 40%, var(--border));
+  --guided-item-border: color-mix(in srgb, var(--border) 86%, var(--primary-soft));
+  --guided-item-bg: color-mix(in srgb, var(--surface) 94%, transparent);
+  --guided-divider: color-mix(in srgb, var(--border) 88%, var(--primary-soft));
 }
 
 html[data-theme='dark'] {
@@ -5084,6 +5112,20 @@ html[data-theme='dark'] {
   --app-text: #fafafa;
   --app-muted: #a3a3a3;
   --app-accent: #ff4c00;
+  --workspace-card-bg: #121212;
+  --workspace-card-active-bg: rgba(250, 93, 25, 0.14);
+  --workspace-card-selected-bg: rgba(250, 93, 25, 0.18);
+  --workspace-card-active-border: rgba(250, 93, 25, 0.38);
+  --workspace-card-selected-border: rgba(250, 93, 25, 0.46);
+  --workspace-card-selected-shadow: 0 10px 30px rgba(0, 0, 0, 0.36);
+  --guided-card-border: rgba(255, 255, 255, 0.12);
+  --guided-card-bg: #131313;
+  --guided-card-warning-border: rgba(245, 158, 11, 0.44);
+  --guided-card-warning-bg: rgba(245, 158, 11, 0.14);
+  --guided-card-success-border: rgba(16, 185, 129, 0.42);
+  --guided-item-border: rgba(255, 255, 255, 0.1);
+  --guided-item-bg: #171717;
+  --guided-divider: rgba(255, 255, 255, 0.12);
 }
 
 html,
