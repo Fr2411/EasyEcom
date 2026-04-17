@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 from pathlib import Path
+from datetime import datetime, UTC
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -315,6 +316,43 @@ def test_inventory_receipt_can_create_product_and_multiple_variant_lines(monkeyp
     stock_items = inventory_response.json()["stock_items"]
     assert len(stock_items) == 2
     assert {item["available_to_sell"] for item in stock_items} == {"5.000", "3.000"}
+
+
+def test_purchases_orders_default_load_handles_missing_reference_number_field(monkeypatch, tmp_path: Path):
+    runtime = _setup_runtime(tmp_path, monkeypatch)
+    client = _login_client(runtime)
+
+    with runtime.session_factory() as session:
+        supplier = SupplierModel(
+            supplier_id=new_uuid(),
+            client_id=CLIENT_ID,
+            name="Source Supplier",
+            code="SUP-PO-LIST",
+            status="active",
+        )
+        purchase = PurchaseModel(
+            purchase_id=new_uuid(),
+            client_id=CLIENT_ID,
+            supplier_id=supplier.supplier_id,
+            location_id=LOCATION_ID,
+            purchase_number="PO-TEST-001",
+            status="received",
+            ordered_at=datetime(2026, 4, 10, 10, 0, tzinfo=UTC),
+            received_at=datetime(2026, 4, 11, 10, 0, tzinfo=UTC),
+            notes="Legacy purchase row",
+            created_by_user_id=USER_ID,
+            subtotal_amount=Decimal("1250.00"),
+            total_amount=Decimal("1250.00"),
+        )
+        session.add_all([supplier, purchase])
+        session.commit()
+
+    response = client.get("/purchases/orders")
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload["items"]) == 1
+    assert payload["items"][0]["purchase_no"] == "PO-TEST-001"
+    assert payload["items"][0]["reference_no"] == ""
 
 
 def test_inventory_receipt_can_attach_staged_product_media(monkeypatch, tmp_path: Path):

@@ -1737,7 +1737,7 @@ class InventoryService(CommerceBaseService):
                     "purchase_date": purchase.ordered_at.isoformat() if purchase.ordered_at else "",
                     "supplier_id": str(purchase.supplier_id) if purchase.supplier_id else "",
                     "supplier_name": self._get_supplier_name(session, purchase.supplier_id) if purchase.supplier_id else "",
-                    "reference_no": purchase.reference_no,
+                    "reference_no": self._purchase_reference_no(purchase),
                     "subtotal": purchase.subtotal_amount,
                     "status": purchase.status,
                     "created_at": purchase.created_at.isoformat() if purchase.created_at else "",
@@ -1770,7 +1770,7 @@ class InventoryService(CommerceBaseService):
                 "purchase_date": purchase.ordered_at.isoformat() if purchase.ordered_at else "",
                 "supplier_id": str(purchase.supplier_id) if purchase.supplier_id else "",
                 "supplier_name": supplier_name,
-                "reference_no": purchase.reference_no,
+                "reference_no": self._purchase_reference_no(purchase),
                 "note": purchase.notes,
                 "subtotal": purchase.subtotal_amount,
                 "status": purchase.status,
@@ -1979,7 +1979,8 @@ class InventoryService(CommerceBaseService):
                 _require(supplier is not None, message="Supplier not found", code="NOT_FOUND", status_code=404)
                 purchase.supplier_id = supplier_id
             if reference_no is not None:
-                purchase.reference_no = reference_no
+                if hasattr(purchase, "reference_no"):
+                    purchase.reference_no = reference_no
             if note is not None:
                 purchase.notes = note.strip()
             if payment_status is not None:
@@ -2130,6 +2131,9 @@ class InventoryService(CommerceBaseService):
             select(SupplierModel.name).where(SupplierModel.supplier_id == supplier_id)
         ).scalar_one_or_none()
         return supplier or ""
+
+    def _purchase_reference_no(self, purchase: PurchaseModel) -> str:
+        return str(getattr(purchase, "reference_no", "") or "")
 
     def _get_default_location_id(self, session: Session, client_id: str) -> str:
         location = session.execute(
