@@ -812,7 +812,7 @@ export function CatalogWorkspace() {
         actions={
           <IntentInput
             label="Find an existing product"
-            hint="Search your Catalog by one detail: product name, SKU root, barcode, or variant."
+            hint="Search your Catalog by one detail: product name, SKU, barcode, or variant."
             value={queryInput}
             placeholder="Search by product name, SKU root, barcode, or variant"
             pending={isPending}
@@ -820,7 +820,9 @@ export function CatalogWorkspace() {
             submitTone="secondary"
             onChange={setQueryInput}
             onSubmit={() => void onWorkspaceIntent(queryInput)}
-          />
+          >
+            <p className="workspace-field-note">Type one detail. If no product matches, click Start New Product.</p>
+          </IntentInput>
         }
       >
         {postCreateSuccess ? (
