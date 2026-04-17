@@ -823,6 +823,9 @@ export function CatalogWorkspace() {
             onChange={setQueryInput}
             onSubmit={() => void onWorkspaceIntent(queryInput)}
           >
+            <p className="workspace-field-note catalog-decision-sentence">
+              Use <strong>Open product</strong> when it already exists. Use <strong>Start New Product</strong> only when no match appears.
+            </p>
             <p className="workspace-field-note">Type one detail. If no product matches, click Start New Product.</p>
           </IntentInput>
         }
@@ -920,18 +923,26 @@ export function CatalogWorkspace() {
                       Open product
                     </button>
                   </div>
-                  <div className="guided-match-variant-scan" aria-label={`Variant-first operational scan for ${product.name}`}>
+                  <div className="guided-match-variant-scan" aria-label={`Variant scan summary for ${product.name}`}>
                     <p className="workspace-field-note">
-                      Variant-first operational scan
+                      Quick variant scan
                     </p>
                     {product.variants.length ? (
                       <ul className="guided-match-variant-list">
                         {deriveCatalogVariantOperationalScan(product.variants).map((variant) => (
                           <li key={variant.variant_id}>
-                            <strong>{variant.label}</strong>
-                            <span>
-                              SKU {variant.sku} · Available {formatQuantity(variant.available_to_sell)} · Reorder {formatQuantity(variant.reorder_level)} · {variant.status}
-                            </span>
+                            <div className="guided-match-variant-row-main">
+                              <strong>{variant.label}</strong>
+                              <span className="guided-match-variant-primary-metric">
+                                Available {formatQuantity(variant.available_to_sell)}
+                              </span>
+                            </div>
+                            <details className="guided-match-variant-row-details">
+                              <summary>More details</summary>
+                              <span>SKU {variant.sku || 'Not set'}</span>
+                              <span>Reorder {formatQuantity(variant.reorder_level)}</span>
+                              <span>Status {variant.status}</span>
+                            </details>
                           </li>
                         ))}
                       </ul>
@@ -940,11 +951,11 @@ export function CatalogWorkspace() {
                     )}
                   </div>
                   <div className="guided-match-item-meta">
-                    <span>SKU Base: {product.sku_root || 'Generated from product name'}</span>
-                    <span>Variants: {product.variants.length}</span>
-                    <span>Template Price: {formatMoney(product.default_price)}</span>
-                    <span>Min Price: {formatMoney(product.min_price)}</span>
-                    <span>Equivalent Max Discount: {formatPercent(product.max_discount_percent)}</span>
+                    <span className="catalog-meta-chip is-critical">Variants: {product.variants.length}</span>
+                    <span className="catalog-meta-chip is-critical">Min Price: {formatMoney(product.min_price)}</span>
+                    <span className="catalog-meta-chip">Template Price: {formatMoney(product.default_price)}</span>
+                    <span className="catalog-meta-chip">SKU Base: {product.sku_root || 'Generated from product name'}</span>
+                    <span className="catalog-meta-chip">Equivalent Max Discount: {formatPercent(product.max_discount_percent)}</span>
                   </div>
                 </article>
               )}

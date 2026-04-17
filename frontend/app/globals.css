@@ -1955,12 +1955,61 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
 
 .guided-match-variant-list li {
   display: grid;
-  gap: 0.1rem;
+  gap: 0.24rem;
 }
 
 .guided-match-variant-list li strong {
   font-size: 0.86rem;
   line-height: 1.3;
+}
+
+.guided-match-variant-row-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem;
+}
+
+.guided-match-variant-primary-metric {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.16rem 0.56rem;
+  font-size: 0.74rem;
+  font-weight: 700;
+  border: 1px solid rgba(36, 125, 80, 0.34);
+  background: rgba(44, 125, 78, 0.12);
+  color: #1f6f45;
+  white-space: nowrap;
+}
+
+.guided-match-variant-row-details {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.guided-match-variant-row-details > summary {
+  cursor: pointer;
+  color: var(--text-muted-readable);
+  font-size: 0.76rem;
+  list-style: none;
+}
+
+.guided-match-variant-row-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.guided-match-variant-row-details > summary::before {
+  content: '+ ';
+}
+
+.guided-match-variant-row-details[open] > summary::before {
+  content: '- ';
+}
+
+.guided-match-variant-row-details span {
+  color: var(--text-muted-readable);
+  font-size: 0.76rem;
 }
 
 .guided-match-variant-list li span {
@@ -2026,6 +2075,21 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
   padding: 0.22rem 0.58rem;
   background: var(--surface-raised);
   border: 1px solid var(--border-faint);
+}
+
+.catalog-meta-chip {
+  color: var(--text-muted-readable);
+}
+
+.catalog-meta-chip.is-critical {
+  border-color: rgba(16, 76, 126, 0.36);
+  background: rgba(34, 119, 192, 0.14);
+  color: #0f4d7d;
+  font-weight: 700;
+}
+
+.catalog-decision-sentence strong {
+  color: var(--text);
 }
 
 .guided-draft-card {
@@ -6572,6 +6636,10 @@ html[data-theme='dark'] .page-content[data-route-root='catalog'] .catalog-local-
   color: #d4d9e2;
 }
 
+html[data-theme='dark'] .page-content[data-route-root='catalog'] .catalog-decision-sentence strong {
+  color: #f4f7ff;
+}
+
 html[data-theme='dark'] .page-content[data-route-root='catalog'] .catalog-parent-card-status.is-active {
   background: rgba(69, 180, 115, 0.18);
   border-color: rgba(103, 215, 147, 0.45);
@@ -6587,6 +6655,30 @@ html[data-theme='dark'] .page-content[data-route-root='catalog'] .catalog-parent
 html[data-theme='dark'] .page-content[data-route-root='catalog'] .catalog-parent-card .guided-match-item-meta span {
   border-color: rgba(126, 142, 175, 0.4);
   background: rgba(31, 35, 45, 0.9);
+}
+
+html[data-theme='dark'] .page-content[data-route-root='catalog'] .catalog-parent-card .catalog-meta-chip {
+  color: #e3e8f3;
+}
+
+html[data-theme='dark'] .page-content[data-route-root='catalog'] .catalog-parent-card .catalog-meta-chip.is-critical {
+  border-color: rgba(116, 189, 255, 0.56);
+  background: rgba(28, 98, 153, 0.42);
+  color: #f0f7ff;
+}
+
+html[data-theme='dark'] .page-content[data-route-root='catalog'] .guided-match-variant-primary-metric {
+  border-color: rgba(112, 228, 168, 0.52);
+  background: rgba(24, 92, 61, 0.62);
+  color: #e7fff3;
+}
+
+html[data-theme='dark'] .page-content[data-route-root='catalog'] .guided-match-variant-row-details span {
+  color: #d7deea;
+}
+
+html[data-theme='dark'] .page-content[data-route-root='catalog'] .guided-match-variant-row-details > summary {
+  color: #d7deea;
 }
 
 .workspace-panel-header {
@@ -6716,6 +6808,23 @@ html {
     text-align: center;
     line-height: 1.32;
     font-size: 0.8rem;
+  }
+
+  .page-content[data-route-root='catalog'] .guided-match-variant-row-main {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.28rem;
+  }
+
+  .page-content[data-route-root='catalog'] .guided-match-variant-primary-metric {
+    font-size: 0.78rem;
+    padding: 0.2rem 0.6rem;
+  }
+
+  .page-content[data-route-root='catalog'] .guided-match-variant-row-details > summary,
+  .page-content[data-route-root='catalog'] .guided-match-variant-row-details span {
+    font-size: 0.8rem;
+    line-height: 1.3;
   }
 }
 
