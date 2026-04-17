@@ -425,6 +425,17 @@ button:disabled {
 .header-utilities { display: flex; align-items: center; gap: 0.6rem; }
 .header-btn { background: var(--primary); color: #fff; border-color: var(--primary); }
 .header-btn:hover { background: var(--primary-strong); }
+.header-btn.header-btn-secondary {
+  background: #f7f8fa;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  box-shadow: none;
+}
+.header-btn.header-btn-secondary:hover {
+  background: #edf1f6;
+  color: var(--text);
+  border-color: var(--border-strong);
+}
 .header-pill { border: 1px solid #98dbd0; background: #ecfbf7; color: var(--primary-strong); border-radius: 999px; font-size: 0.8rem; padding: 0.3rem 0.65rem; }
 
 .page-content { padding: 1.1rem; }
@@ -4847,6 +4858,19 @@ html[data-theme='light'] body {
 .login-card button:hover,
 .button-link.btn-primary:hover {
   background: linear-gradient(135deg, #ff6b26 0%, #bf4a16 100%);
+}
+
+.header-btn.header-btn-secondary {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--app-muted);
+  border-color: var(--app-border);
+  box-shadow: none;
+}
+
+.header-btn.header-btn-secondary:hover {
+  background: rgba(255, 122, 61, 0.08);
+  color: var(--app-text);
+  border-color: rgba(255, 122, 61, 0.16);
 }
 
 button.secondary,
