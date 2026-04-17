@@ -188,7 +188,7 @@ describe('deriveCatalogStepBlockedSummary', () => {
       product_name: 'Product name must be at least 2 characters.',
     });
 
-    expect(summary).toBe('Cannot continue: complete the required Product fields.');
+    expect(summary).toBe('Cannot continue: Product name needs attention. Product name must be at least 2 characters.');
   });
 
   test('returns first-variant summary for blocked required first variant fields', () => {

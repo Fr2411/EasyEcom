@@ -291,7 +291,7 @@ export function deriveCatalogStepBlockedSummary(
   fallbackError?: string
 ): string {
   if (step === 'product' && inlineErrors.product_name) {
-    return 'Cannot continue: complete the required Product fields.';
+    return `Cannot continue: Product name needs attention. ${inlineErrors.product_name}`;
   }
   if (step === 'first_variant' && inlineErrors.first_variant) {
     return 'Cannot continue: complete the required First Variant fields.';
