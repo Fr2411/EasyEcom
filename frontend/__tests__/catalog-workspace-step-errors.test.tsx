@@ -59,6 +59,26 @@ describe('CatalogWorkspace step errors', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Next: First Variant' }));
 
     await waitFor(() => expect(screen.getByText('Product name must be at least 2 characters.')).toBeTruthy());
-    expect(screen.getByRole('alert').textContent).toContain('Cannot continue: complete the required Product fields.');
+    const summaryAlert = screen.getByRole('alert');
+    expect(summaryAlert.textContent).toContain('Cannot continue: Product name needs attention.');
+    expect(summaryAlert.textContent).toContain('Product name must be at least 2 characters.');
+  });
+
+  test('advances deterministically to First Variant when Product name is valid', async () => {
+    mockValidateCatalogCreationStep.mockResolvedValue({ ok: true });
+
+    render(<CatalogWorkspace />);
+
+    await waitFor(() => expect(screen.getByText('No catalog items staged')).toBeTruthy());
+    fireEvent.click(screen.getByRole('tab', { name: 'Start New Product' }));
+
+    const productNameInput = await screen.findByLabelText('Product name');
+    fireEvent.change(productNameInput, { target: { value: 'Runner Shoe' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next: First Variant' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /2\. First Variant \(Current\)/ })).toBeTruthy();
+    });
   });
 });
