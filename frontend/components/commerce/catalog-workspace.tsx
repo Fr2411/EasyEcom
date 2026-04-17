@@ -816,18 +816,23 @@ export function CatalogWorkspace() {
               description="Pick the strongest match first. Each product remains editable as a parent record with saleable child variants."
               items={workspace.items}
               renderItem={(product) => (
-                <article key={product.product_id} className="guided-match-item">
+                <article key={product.product_id} className="guided-match-item catalog-parent-card">
                   <div className="guided-match-item-header">
                     <div className="guided-match-item-identity">
                       {product.image?.thumbnail_url ? (
                         <img className="guided-match-item-thumb" src={product.image.thumbnail_url} alt={product.name} />
                       ) : null}
-                      <div>
-                      <h5>{product.name}</h5>
-                      <p>{product.brand || 'No brand'} · {product.category || 'Uncategorized'} · {product.supplier || 'No supplier'}</p>
+                      <div className="catalog-parent-card-identity-copy">
+                        <div className="catalog-parent-card-primary-line">
+                          <h5>{product.name}</h5>
+                          <span className={`catalog-parent-card-status ${product.status === 'active' ? 'is-active' : 'is-archived'}`}>
+                            {product.status === 'active' ? 'Active' : 'Archived'}
+                          </span>
+                        </div>
+                        <p>{product.brand || 'No brand'} · {product.category || 'Uncategorized'} · {product.supplier || 'No supplier'}</p>
                       </div>
                     </div>
-                    <button type="button" onClick={() => onProductEdit(product)}>
+                    <button type="button" className="catalog-parent-card-open-btn" onClick={() => onProductEdit(product)}>
                       Open product
                     </button>
                   </div>
@@ -851,7 +856,6 @@ export function CatalogWorkspace() {
                     )}
                   </div>
                   <div className="guided-match-item-meta">
-                    <span>Parent: {product.brand || 'No brand'} · {product.category || 'Uncategorized'} · {product.supplier || 'No supplier'}</span>
                     <span>SKU Base: {product.sku_root || 'Generated from product name'}</span>
                     <span>Variants: {product.variants.length}</span>
                     <span>Template Price: {formatMoney(product.default_price)}</span>
