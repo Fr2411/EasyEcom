@@ -3,7 +3,9 @@ import { IntegrationsWorkspace } from '@/components/integrations/integrations-wo
 
 export default function IntegrationsPage() {
   return (
-    <PageShell title="Integrations & Channels" description="Configure tenant communication channels with explicit verification and auditable message intents.">
+    <PageShell title="Integrations & Channels" description="Configure tenant communication channels with explicit verification and auditable message intents."
+      hideHeader
+    >
       <IntegrationsWorkspace />
     </PageShell>
   );

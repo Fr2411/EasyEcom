@@ -6,6 +6,7 @@ export default function BillingPage() {
     <PageShell
       title="Billing"
       description="Owner-only billing workspace that trusts backend subscription state, separates plan changes from hosted billing actions, and keeps redirects explicit."
+      hideHeader
     >
       <BillingWorkspace />
     </PageShell>

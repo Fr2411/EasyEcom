@@ -6,6 +6,7 @@ export default function PurchasesPage() {
     <PageShell
       title="Purchases"
       description="Track purchase-order progress here. Receive incoming stock from the Inventory page when deliveries arrive."
+      hideHeader
     >
       <PurchasesWorkspace />
     </PageShell>

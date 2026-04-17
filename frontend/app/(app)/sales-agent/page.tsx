@@ -7,6 +7,7 @@ export default function SalesAgentPage() {
     <PageShell
       title="Sales Agent"
       description="Monitor WhatsApp conversations, review AI drafts, and confirm agent-created draft orders with full tenant-safe context."
+      hideHeader
     >
       <SalesAgentWorkspace />
     </PageShell>

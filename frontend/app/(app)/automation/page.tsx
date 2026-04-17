@@ -6,6 +6,7 @@ export default function AutomationPage() {
     <PageShell
       title="Automation"
       description="Review tenant-safe automation readiness, configured rules, and recent run history while write paths remain intentionally locked down."
+      hideHeader
     >
       <AutomationWorkspace />
     </PageShell>

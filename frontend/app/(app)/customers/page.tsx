@@ -4,7 +4,9 @@ import { WorkspaceNotice, WorkspacePanel } from '@/components/commerce/workspace
 
 export default function CustomersPage() {
   return (
-    <PageShell title="Customers" description="Customer data stays embedded inside Sales and Returns instead of living as a browsable tenant directory.">
+    <PageShell title="Customers" description="Customer data stays embedded inside Sales and Returns instead of living as a browsable tenant directory."
+      hideHeader
+    >
       <WorkspacePanel
         title="Embedded customer records"
         description="UI users find customers by phone or email during a transaction. There is no standalone customer list for tenant teams."

@@ -6,6 +6,7 @@ export default function SettingsPage() {
     <PageShell
       title="Settings"
       description="Business profile, operational preferences, and tenant configuration controls."
+      hideHeader
     >
       <SettingsWorkspace />
     </PageShell>
