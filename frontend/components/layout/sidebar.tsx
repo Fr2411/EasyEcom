@@ -82,7 +82,8 @@ export function Sidebar({
         <p className="sidebar-footer-copy">Tenant-safe, ledger-backed workflows.</p>
         <div className="sidebar-theme-control">
           <p className="eyebrow">Display mode</p>
-          <p className="workspace-field-note">Pick Light, Dark, or Auto to match your screen.</p>
+          <p className="workspace-field-note">Choose the view mode for this workspace.</p>
+          <p className="sidebar-theme-label-row" aria-hidden="true">Light · Dark · Auto</p>
           <ThemeToggle />
         </div>
         <button

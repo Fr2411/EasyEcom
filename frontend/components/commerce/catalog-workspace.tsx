@@ -828,7 +828,7 @@ export function CatalogWorkspace() {
             onChange={setQueryInput}
             onSubmit={() => void onWorkspaceIntent(queryInput)}
           >
-            <p className="workspace-field-note catalog-decision-sentence">Search first with one clue (name, SKU, barcode, or variant); choose <strong>Start New Product</strong> only when no match appears.</p>
+            <p className="workspace-field-note catalog-decision-sentence">Search one clue first (name, SKU, barcode, or variant). Use <strong>Start New Product</strong> only when no match appears.</p>
           </IntentInput>
         }
       >
@@ -965,7 +965,7 @@ export function CatalogWorkspace() {
           ) : (
             <WorkspaceEmpty
               title="No catalog items staged"
-              message="Use the product finder to open an existing product. If there is no match, click Start New Product."
+              message="Search by one clue first. If nothing matches, use Start New Product."
             />
           )
         ) : (
