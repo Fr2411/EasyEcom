@@ -6,6 +6,7 @@ export default function WorkspaceHomePage() {
     <PageShell
       title="Home"
       description="Quick access to the core workspaces."
+      hideHeader
     >
       <FoundationLaunchpad
         title="Core workspaces"

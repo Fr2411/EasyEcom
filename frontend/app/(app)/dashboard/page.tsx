@@ -6,6 +6,7 @@ export default function DashboardPage() {
     <PageShell
       title="Dashboard"
       description="Track month-to-date business performance, stock health, product opportunity signals, and operational movement from tenant-safe transactional truth."
+      hideHeader
     >
       <DashboardAnalyticsWorkspace />
     </PageShell>

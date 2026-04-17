@@ -6,6 +6,7 @@ export default function BillingSuccessPage() {
     <PageShell
       title="Billing success"
       description="Review the live backend subscription state after PayPal returns the browser to the app."
+      hideHeader
     >
       <BillingStatusPage mode="success" />
     </PageShell>

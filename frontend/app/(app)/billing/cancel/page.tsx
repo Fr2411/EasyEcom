@@ -6,6 +6,7 @@ export default function BillingCancelPage() {
     <PageShell
       title="Billing cancelled"
       description="Cancellation requests keep benefits live through the end of the billing cycle, so the workspace always reads the live backend account state."
+      hideHeader
     >
       <BillingStatusPage mode="cancel" />
     </PageShell>
