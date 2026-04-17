@@ -2376,6 +2376,34 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
   color: var(--text-muted);
 }
 
+.catalog-fallback-notice {
+  gap: 0.45rem;
+}
+
+.catalog-fallback-primary-guidance {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.35;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.catalog-fallback-context {
+  margin-top: 0.15rem;
+}
+
+.catalog-fallback-retry-warning {
+  display: block;
+  margin-top: 0.1rem;
+  font-size: 0.84rem;
+  line-height: 1.35;
+  color: #9b1c1c;
+}
+
+html[data-theme='dark'] .catalog-fallback-retry-warning {
+  color: #ffb3b3;
+}
+
 .workspace-two-column {
   display: grid;
   gap: 1rem;

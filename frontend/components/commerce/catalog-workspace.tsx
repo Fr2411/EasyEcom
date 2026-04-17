@@ -496,6 +496,7 @@ export function CatalogWorkspace() {
   const [isPending, startTransition] = useTransition();
   const recommendation = deriveCatalogRecommendation(workspace);
   const recommendationPrimaryTone = recommendation.kind === 'new' ? 'primary' : 'secondary';
+  const showTopCreateNotice = activeTab !== 'edit' && !workspaceLoadFallback;
   const requestedProductId = searchParams.get('product_id') ?? '';
   const shouldAutoOpenEdit = searchParams.get('edit') === '1';
 
@@ -788,11 +789,12 @@ export function CatalogWorkspace() {
         activeTab={activeTab}
         onTabChange={setActiveTab}
       />
-      {activeTab !== 'edit' ? (
+      {showTopCreateNotice ? (
         <WorkspaceNotice>
           <div className="workspace-actions">
             <button
               type="button"
+              data-testid="catalog-top-start-new-product"
               className="btn-primary"
               onClick={() => {
                 setNewProductForm(workspace?.query || '');
@@ -857,14 +859,17 @@ export function CatalogWorkspace() {
         {error ? <WorkspaceNotice tone="error">{error}</WorkspaceNotice> : null}
         {workspaceLoadFallback ? (
           <WorkspaceNotice tone="error">
-            <div className="workspace-stack">
+            <div className="workspace-stack catalog-fallback-notice">
               <strong>{workspaceLoadFallback.title}</strong>
+              <p className="catalog-fallback-primary-guidance">
+                Retry catalog load first. If it still fails, use Go to Dashboard to refresh your session.
+              </p>
               <span>{workspaceLoadFallback.detail}</span>
-              <span className="workspace-field-note">{workspaceLoadFallback.context}</span>
+              <span className="workspace-field-note catalog-fallback-context">{workspaceLoadFallback.context}</span>
               {workspaceLoadFailureCount >= 2 ? (
-                <span className="workspace-field-note">
-                  Still failing after retry. Use Dashboard, wait a moment, then open Catalog again.
-                </span>
+                <strong className="catalog-fallback-retry-warning">
+                  Repeated failures: open Dashboard to refresh your session, wait a moment, then return to Catalog.
+                </strong>
               ) : null}
               <div className="workspace-actions">
                 <button type="button" onClick={() => loadWorkspace(queryInput)}>
