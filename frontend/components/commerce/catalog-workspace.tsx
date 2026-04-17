@@ -428,7 +428,7 @@ export function deriveCatalogRecommendation(workspace: CatalogWorkspace | null):
     return {
       kind: 'idle',
       title: 'Find or create a product',
-      detail: 'Type one detail (product name, SKU root, barcode, or variant SKU). If there is no match, you can start a new product.',
+      detail: 'Enter one clue (product name, SKU, barcode, or variant SKU). If no match appears, start a new product.',
       actionLabel: 'Review next step',
       tone: 'info',
     };
@@ -810,11 +810,11 @@ export function CatalogWorkspace() {
 
       <WorkspacePanel
         className="catalog-local-finder-panel"
-        title="Catalog product finder"
+        title="Find or open a product"
         actions={
           <IntentInput
-            label="Find an existing product"
-            hint="Search your Catalog by one detail: product name, SKU, barcode, or variant."
+            label="Find product"
+            hint="Search Catalog by product name, SKU, barcode, or variant."
             value={queryInput}
             placeholder="Search by product name, SKU root, barcode, or variant"
             pending={isPending}
@@ -824,7 +824,7 @@ export function CatalogWorkspace() {
             onSubmit={() => void onWorkspaceIntent(queryInput)}
           >
             <p className="workspace-field-note catalog-decision-sentence">
-              Use <strong>Open product</strong> when it already exists. Use <strong>Start New Product</strong> only when no match appears.
+              Use <strong>Open product</strong> for existing products. Use <strong>Start New Product</strong> only when there is no match.
             </p>
             <p className="workspace-field-note">Type one detail. If no product matches, click Start New Product.</p>
           </IntentInput>
@@ -900,7 +900,7 @@ export function CatalogWorkspace() {
           workspace?.items.length ? (
             <MatchGroupList
               title="Catalog parents"
-              description="Pick the strongest match first. Each product remains editable as a parent record with saleable child variants."
+              description="Open the best match first. Each product keeps shared details, and each variant is the saleable SKU."
               items={workspace.items}
               renderItem={(product) => (
                 <article key={product.product_id} className="guided-match-item catalog-parent-card">

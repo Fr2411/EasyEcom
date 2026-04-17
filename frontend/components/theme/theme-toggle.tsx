@@ -10,14 +10,14 @@ const OPTIONS: Array<{
 }> = [
   { value: 'light', label: 'Light', icon: SunMedium },
   { value: 'dark', label: 'Dark', icon: MoonStar },
-  { value: 'system', label: 'System', icon: LaptopMinimal },
+  { value: 'system', label: 'Auto', icon: LaptopMinimal },
 ];
 
 export function ThemeToggle() {
   const { preference, setPreference } = useThemePreference();
 
   return (
-    <div className="theme-toggle" role="group" aria-label="Theme mode">
+    <div className="theme-toggle" role="group" aria-label="Display mode">
       {OPTIONS.map((option) => {
         const Icon = option.icon;
         const active = preference === option.value;
@@ -32,6 +32,7 @@ export function ThemeToggle() {
             onClick={() => setPreference(option.value)}
           >
             <Icon size={14} aria-hidden="true" />
+            <span>{option.label}</span>
           </button>
         );
       })}
