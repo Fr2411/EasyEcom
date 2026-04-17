@@ -84,8 +84,10 @@ export function MobileBottomNav({ onOpenMenu }: { onOpenMenu: () => void }) {
     };
   }, []);
 
+  const isCatalogRoute = pathname === '/catalog' || pathname.startsWith('/catalog/');
+
   return (
-    <nav ref={navRef} className="mobile-bottom-nav" aria-label="Mobile navigation">
+    <nav ref={navRef} className={isCatalogRoute ? 'mobile-bottom-nav is-catalog-context' : 'mobile-bottom-nav'} aria-label="Mobile navigation">
       {primaryItems.map((item) => {
         const Icon = getMobileNavigationIcon(item.icon);
         const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);

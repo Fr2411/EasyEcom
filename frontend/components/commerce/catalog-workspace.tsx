@@ -496,7 +496,7 @@ export function CatalogWorkspace() {
   const [isPending, startTransition] = useTransition();
   const recommendation = deriveCatalogRecommendation(workspace);
   const recommendationPrimaryTone = recommendation.kind === 'new' ? 'primary' : 'secondary';
-  const showTopCreateNotice = activeTab !== 'edit' && !workspaceLoadFallback;
+  const showTopCreateNotice = activeTab !== 'edit' && !workspaceLoadFallback && !(workspace?.query ?? '').trim();
   const requestedProductId = searchParams.get('product_id') ?? '';
   const shouldAutoOpenEdit = searchParams.get('edit') === '1';
 
