@@ -6075,6 +6075,14 @@ button.secondary:hover,
     width: 100%;
     border-radius: 18px;
   }
+
+  .page-content[data-route-root='sales'] {
+    padding-inline: 0;
+  }
+
+  .page-content[data-route-root='sales'] .page-shell {
+    border-radius: 0;
+  }
 }
 
 /* TEA-87 Wave 4: typography, contrast, and spacing normalization */
