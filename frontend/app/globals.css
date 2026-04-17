@@ -6373,6 +6373,22 @@ button.secondary:hover,
   .page-content[data-route-root='catalog'] .catalog-local-finder-panel .guided-next-step[data-kind='new'] .guided-next-step-actions {
     margin-top: 0.2rem;
   }
+
+  .page-content[data-route-root='catalog'] .catalog-local-finder-panel .guided-next-step-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.55rem;
+  }
+
+  .page-content[data-route-root='catalog'] .catalog-local-finder-panel .guided-next-step-actions .btn-primary {
+    order: -1;
+  }
+
+  .page-content[data-route-root='catalog'] .catalog-local-finder-panel .guided-next-step-actions > button {
+    width: 100%;
+    justify-content: center;
+    min-height: 2.5rem;
+  }
 }
 
 /* TEA-87 Wave 4: typography, contrast, and spacing normalization */
@@ -6382,6 +6398,21 @@ button.secondary:hover,
 
 html[data-theme='dark'] {
   --text-muted-readable: #b5b8c2;
+}
+
+html[data-theme='dark'] .page-content[data-route-root='catalog'] .catalog-local-finder-panel .guided-next-step[data-kind='new'] {
+  border-color: rgba(255, 151, 104, 0.52);
+  background: linear-gradient(180deg, rgba(255, 122, 61, 0.24) 0%, rgba(29, 21, 18, 0.94) 100%);
+}
+
+html[data-theme='dark'] .page-content[data-route-root='catalog'] .catalog-local-finder-panel .guided-next-step[data-kind='new'] strong {
+  color: #fff4ec;
+}
+
+html[data-theme='dark'] .page-content[data-route-root='catalog'] .catalog-local-finder-panel .guided-next-step[data-kind='new'] p,
+html[data-theme='dark'] .page-content[data-route-root='catalog'] .catalog-local-finder-panel .workspace-field-note,
+html[data-theme='dark'] .page-content[data-route-root='catalog'] .catalog-local-finder-panel .guided-match-item-meta span {
+  color: #d4d9e2;
 }
 
 .workspace-panel-header {

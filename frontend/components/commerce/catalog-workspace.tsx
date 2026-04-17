@@ -376,8 +376,8 @@ export function deriveCatalogRecommendation(workspace: CatalogWorkspace | null):
   if (!workspace || !query) {
     return {
       kind: 'idle',
-      title: 'Start with one product clue',
-      detail: 'Type a product name, SKU root, barcode, or variant code. The workspace will stage the best match or open a new product draft.',
+      title: 'Find or create a product',
+      detail: 'Enter one clue like product name, SKU root, barcode, or variant SKU. If nothing matches, start a new product draft.',
       actionLabel: 'Review next step',
       tone: 'info',
     };
@@ -388,7 +388,7 @@ export function deriveCatalogRecommendation(workspace: CatalogWorkspace | null):
     return {
       kind: 'exact',
       title: `Exact catalog match: ${exact.name}`,
-      detail: 'The matching product can be opened immediately for review or edit.',
+      detail: 'Open this product now to review or edit variant-level details.',
       actionLabel: 'Open product',
       secondaryLabel: 'Start new product',
       tone: 'success',
@@ -399,8 +399,8 @@ export function deriveCatalogRecommendation(workspace: CatalogWorkspace | null):
   if (likely) {
     return {
       kind: 'likely',
-      title: `Likely match: ${likely.name}`,
-      detail: 'Review this product first. If it is not the right catalog parent, continue with a new product draft.',
+      title: `Possible match: ${likely.name}`,
+      detail: 'Check this product first. If it is not the right parent, start a new product draft.',
       actionLabel: 'Review product',
       secondaryLabel: 'Start new product',
       tone: 'warning',
@@ -410,7 +410,7 @@ export function deriveCatalogRecommendation(workspace: CatalogWorkspace | null):
   return {
     kind: 'new',
     title: `No catalog match: "${workspace.query}"`,
-    detail: 'Start a new draft now. Your typed clue is already kept in the product name field.',
+    detail: 'Create a new product draft. Your current search text is already prefilled as product name.',
     actionLabel: 'Start new product',
     tone: 'warning',
   };
@@ -442,6 +442,7 @@ export function CatalogWorkspace() {
   const stepTransitionSeqRef = useRef(0);
   const [isPending, startTransition] = useTransition();
   const recommendation = deriveCatalogRecommendation(workspace);
+  const recommendationPrimaryTone = recommendation.kind === 'new' ? 'primary' : 'secondary';
   const requestedProductId = searchParams.get('product_id') ?? '';
   const shouldAutoOpenEdit = searchParams.get('edit') === '1';
 
@@ -802,7 +803,7 @@ export function CatalogWorkspace() {
         {(workspace?.query ?? '').trim() ? (
           <SuggestedNextStep
             suggestion={recommendation}
-            primaryTone="secondary"
+            primaryTone={recommendationPrimaryTone}
             onPrimary={openRecommendedProduct}
             onSecondary={() => setNewProductForm(workspace?.query)}
           />
