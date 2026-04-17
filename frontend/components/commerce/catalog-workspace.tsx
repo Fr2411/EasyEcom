@@ -69,6 +69,12 @@ type CatalogRecommendation = SuggestedAction & {
   kind: 'idle' | 'exact' | 'likely' | 'new';
 };
 
+type CatalogWorkspaceLoadFallback = {
+  title: string;
+  detail: string;
+  context: string;
+};
+
 const EMPTY_IDENTITY: ProductIdentityInput = {
   product_name: '',
   supplier: '',
@@ -344,6 +350,51 @@ export function deriveCatalogStepBlockedSummary(
   return 'Cannot continue to the next step until required fields are complete.';
 }
 
+function deriveCatalogWorkspaceLoadFallback(error: unknown, query: string): CatalogWorkspaceLoadFallback {
+  const context = query ? `Last search: "${query}".` : 'Last search: all catalog products.';
+  if (error instanceof ApiNetworkError) {
+    return {
+      title: 'Catalog is taking longer than expected to load.',
+      detail: 'Your network or session may have timed out. Retry once to continue.',
+      context,
+    };
+  }
+  if (error instanceof ApiError) {
+    if (error.status === 404) {
+      return {
+        title: 'Catalog workspace is not available on this API yet.',
+        detail: 'Deploy the latest backend build, then retry loading Catalog.',
+        context,
+      };
+    }
+    if (error.status === 401 || error.status === 403) {
+      return {
+        title: 'We could not verify your catalog session.',
+        detail: 'Use Dashboard to refresh your session, then return to Catalog.',
+        context,
+      };
+    }
+    if (error.status >= 500) {
+      return {
+        title: 'Catalog is temporarily unavailable.',
+        detail: 'Retry in a moment. If it keeps failing, refresh your session from Dashboard.',
+        context,
+      };
+    }
+    const cleaned = stripRequestUrlFromMessage(error.message);
+    return {
+      title: 'Catalog could not be loaded right now.',
+      detail: cleaned || 'Retry once. If it keeps failing, refresh your session from Dashboard.',
+      context,
+    };
+  }
+  return {
+    title: 'Catalog could not be loaded right now.',
+    detail: 'Retry once. If it keeps failing, refresh your session from Dashboard.',
+    context,
+  };
+}
+
 function normalizeCatalogQuery(value: string) {
   return value.trim().toLowerCase();
 }
@@ -433,6 +484,8 @@ export function CatalogWorkspace() {
   const [productImage, setProductImage] = useState<ProductMedia | null>(null);
   const [createStep, setCreateStep] = useState<CatalogCreationStep>('product');
   const [error, setError] = useState('');
+  const [workspaceLoadFallback, setWorkspaceLoadFallback] = useState<CatalogWorkspaceLoadFallback | null>(null);
+  const [workspaceLoadFailureCount, setWorkspaceLoadFailureCount] = useState(0);
   const [inlineErrors, setInlineErrors] = useState<CatalogInlineErrors>({});
   const [notice, setNotice] = useState('');
   const [saveToast, setSaveToast] = useState('');
@@ -453,18 +506,18 @@ export function CatalogWorkspace() {
   }, [saveToast]);
 
   const loadWorkspace = (query = '') => {
+    const trimmedQuery = query.trim();
     startTransition(async () => {
       try {
-        const payload = await getCatalogWorkspace({ q: query });
+        const payload = await getCatalogWorkspace({ q: trimmedQuery });
         setWorkspace(payload);
         setError('');
+        setWorkspaceLoadFallback(null);
+        setWorkspaceLoadFailureCount(0);
       } catch (loadError) {
-        if (loadError instanceof ApiError && loadError.status === 404) {
-          setWorkspace(null);
-          setError('Catalog workspace is not available on the connected API yet. Deploy the latest backend to load and list saved products.');
-          return;
-        }
-        setError(loadError instanceof Error ? loadError.message : 'Unable to load catalog workspace.');
+        setWorkspace(null);
+        setWorkspaceLoadFailureCount((count) => count + 1);
+        setWorkspaceLoadFallback(deriveCatalogWorkspaceLoadFallback(loadError, trimmedQuery));
       }
     });
   };
@@ -528,6 +581,8 @@ export function CatalogWorkspace() {
       setWorkspace(null);
       setQueryInput('');
       setPostCreateSuccess(null);
+      setWorkspaceLoadFallback(null);
+      setWorkspaceLoadFailureCount(0);
       return;
     }
     setQueryInput(trimmed);
@@ -798,6 +853,28 @@ export function CatalogWorkspace() {
         ) : null}
         {notice ? <WorkspaceNotice tone="success">{notice}</WorkspaceNotice> : null}
         {error ? <WorkspaceNotice tone="error">{error}</WorkspaceNotice> : null}
+        {workspaceLoadFallback ? (
+          <WorkspaceNotice tone="error">
+            <div className="workspace-stack">
+              <strong>{workspaceLoadFallback.title}</strong>
+              <span>{workspaceLoadFallback.detail}</span>
+              <span className="workspace-field-note">{workspaceLoadFallback.context}</span>
+              {workspaceLoadFailureCount >= 2 ? (
+                <span className="workspace-field-note">
+                  Still failing after retry. Use Dashboard, wait a moment, then open Catalog again.
+                </span>
+              ) : null}
+              <div className="workspace-actions">
+                <button type="button" onClick={() => loadWorkspace(queryInput)}>
+                  Retry catalog load
+                </button>
+                <button type="button" className="secondary" onClick={() => router.push('/dashboard')}>
+                  Go to Dashboard
+                </button>
+              </div>
+            </div>
+          </WorkspaceNotice>
+        ) : null}
         {isPending && !workspace ? <WorkspaceNotice>Loading catalog…</WorkspaceNotice> : null}
 
         {(workspace?.query ?? '').trim() ? (

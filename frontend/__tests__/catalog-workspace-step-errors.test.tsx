@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { CatalogWorkspace } from '@/components/commerce/catalog-workspace';
-import { ApiError } from '@/lib/api/client';
+import { ApiError, ApiNetworkError } from '@/lib/api/client';
 
 const mockGetCatalogWorkspace = vi.fn();
 const mockSaveCatalogProduct = vi.fn();
@@ -51,7 +51,7 @@ describe('CatalogWorkspace step errors', () => {
     render(<CatalogWorkspace />);
 
     await waitFor(() => expect(screen.getByText('No catalog items staged')).toBeTruthy());
-    expect(screen.getByText('Primary catalog action: open a new parent product + first variant draft.')).toBeTruthy();
+    expect(screen.getByText('Use this when the product does not already exist.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Start New Product' }));
 
     const productNameInput = await screen.findByLabelText('Product name');
@@ -81,5 +81,22 @@ describe('CatalogWorkspace step errors', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /2\. First Variant \(Current\)/ })).toBeTruthy();
     });
+  });
+
+  test('shows plain-language workspace fallback with retry and secondary recovery path', async () => {
+    mockGetCatalogWorkspace.mockRejectedValue(new ApiNetworkError('request timeout'));
+
+    render(<CatalogWorkspace />);
+
+    await waitFor(() => expect(screen.getByText('Catalog is taking longer than expected to load.')).toBeTruthy());
+    expect(screen.getByText('Your network or session may have timed out. Retry once to continue.')).toBeTruthy();
+    expect(screen.getByText('Last search: all catalog products.')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry catalog load' }));
+    await waitFor(() => expect(mockGetCatalogWorkspace).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.getByText('Still failing after retry. Use Dashboard, wait a moment, then open Catalog again.')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Go to Dashboard' }));
+    expect(mockRouterPush).toHaveBeenCalledWith('/dashboard');
   });
 });
