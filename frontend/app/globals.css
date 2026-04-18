@@ -452,6 +452,7 @@ button:disabled {
 .header-search-button { border: 1px solid var(--border); border-radius: 999px; background: #f7f8fa; color: var(--text); padding: 0.35rem 0.7rem; font-size: 0.8rem; }
 .header-search-button:hover { background: #edf1f6; }
 .header-utilities { display: flex; align-items: center; gap: 0.6rem; }
+.header-theme-mobile { display: none; }
 .header-btn { background: var(--primary); color: #fff; border-color: var(--primary); }
 .header-btn:hover { background: var(--primary-strong); }
 .header-btn.header-btn-secondary {
@@ -5078,6 +5079,25 @@ body {
   .header-utilities {
     grid-column: 1 / -1;
     width: 100%;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 0.55rem;
+  }
+
+  .header-theme-mobile {
+    display: inline-flex;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .header-theme-mobile .theme-toggle {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .header-theme-mobile .theme-toggle-option span {
+    font-size: 0.7rem;
   }
 
   .mobile-bottom-nav {
