@@ -16,7 +16,7 @@ afterEach(() => {
 
 function AuthConsumer() {
   const auth = useAuth();
-  return <div data-testid="auth-state">{`${auth.loading}|${auth.user ? 'user' : 'none'}|${auth.bootstrapError}`}</div>;
+  return <div data-testid="auth-state">{`${auth.loading}|${auth.user ? 'user' : 'none'}|${auth.bootstrapError}|${auth.hasVerifiedSession ? 'verified' : 'unverified'}`}</div>;
 }
 
 describe('AuthProvider bootstrap states', () => {
@@ -50,7 +50,7 @@ describe('AuthProvider bootstrap states', () => {
       </AuthProvider>
     );
 
-    await waitFor(() => expect(screen.getByTestId('auth-state').textContent).toBe('false|none|unauthorized'));
+    await waitFor(() => expect(screen.getByTestId('auth-state').textContent).toBe('false|none|unauthorized|unverified'));
   });
 
   test('marks 500 as server', async () => {
@@ -61,7 +61,7 @@ describe('AuthProvider bootstrap states', () => {
       </AuthProvider>
     );
 
-    await waitFor(() => expect(screen.getByTestId('auth-state').textContent).toBe('false|none|server'));
+    await waitFor(() => expect(screen.getByTestId('auth-state').textContent).toBe('false|none|server|unverified'));
   });
 
   test('marks network failures distinctly', async () => {
@@ -72,7 +72,7 @@ describe('AuthProvider bootstrap states', () => {
       </AuthProvider>
     );
 
-    await waitFor(() => expect(screen.getByTestId('auth-state').textContent).toBe('false|none|network'));
+    await waitFor(() => expect(screen.getByTestId('auth-state').textContent).toBe('false|none|network|unverified'));
   });
 
   test('keeps existing authenticated user when a later bootstrap refresh hits transient network failure', async () => {
@@ -105,10 +105,37 @@ describe('AuthProvider bootstrap states', () => {
       </AuthProvider>
     );
 
-    await waitFor(() => expect(screen.getByTestId('auth-state').textContent).toBe('false|user|none'));
+    await waitFor(() => expect(screen.getByTestId('auth-state').textContent).toBe('false|user|none|verified'));
 
     screen.getByRole('button', { name: 'Refresh auth' }).click();
 
-    await waitFor(() => expect(screen.getByTestId('auth-state').textContent).toBe('false|user|none'));
+    await waitFor(() => expect(screen.getByTestId('auth-state').textContent).toBe('false|user|none|verified'));
+  });
+
+  test('hydrates verified-session grace from sessionStorage and keeps it during transient server failures', async () => {
+    window.sessionStorage.setItem('easyecom.auth.verified_session', '1');
+    vi.mocked(getCurrentUser).mockRejectedValueOnce(new ApiError(503, 'server'));
+
+    render(
+      <AuthProvider>
+        <AuthConsumer />
+      </AuthProvider>
+    );
+
+    await waitFor(() => expect(screen.getByTestId('auth-state').textContent).toBe('false|none|server|verified'));
+  });
+
+  test('clears verified-session grace marker on 401 unauthorized', async () => {
+    window.sessionStorage.setItem('easyecom.auth.verified_session', '1');
+    vi.mocked(getCurrentUser).mockRejectedValueOnce(new ApiError(401, 'unauthorized'));
+
+    render(
+      <AuthProvider>
+        <AuthConsumer />
+      </AuthProvider>
+    );
+
+    await waitFor(() => expect(screen.getByTestId('auth-state').textContent).toBe('false|none|unauthorized|unverified'));
+    expect(window.sessionStorage.getItem('easyecom.auth.verified_session')).toBeNull();
   });
 });

@@ -36,7 +36,7 @@ function AuthErrorState({ message, onRetry }: { message: string; onRetry: () => 
 
 export function AuthRouteGuard({ mode, children }: AuthRouteGuardProps) {
   const router = useRouter();
-  const { user, loading, bootstrapError, refreshAuth } = useAuth();
+  const { user, loading, bootstrapError, hasVerifiedSession, refreshAuth } = useAuth();
   const [loadingExceededThreshold, setLoadingExceededThreshold] = useState(false);
 
   useEffect(() => {
@@ -65,6 +65,9 @@ export function AuthRouteGuard({ mode, children }: AuthRouteGuardProps) {
 
   if (mode === 'protected') {
     if (loadingExceededThreshold) {
+      if (hasVerifiedSession) {
+        return <>{children}</>;
+      }
       return (
         <AuthErrorState
           message="Session check is taking longer than expected. Retry once. If it keeps failing, check network quality and backend session health."
@@ -82,6 +85,9 @@ export function AuthRouteGuard({ mode, children }: AuthRouteGuardProps) {
     }
 
     if (bootstrapError !== 'none' && !user) {
+      if (hasVerifiedSession) {
+        return <>{children}</>;
+      }
       return (
         <AuthErrorState
           message="Please retry. If this persists, your network or backend session endpoint may be unavailable."
