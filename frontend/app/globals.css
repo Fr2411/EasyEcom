@@ -1145,6 +1145,12 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
 .purchases-error-recovery-tip {
   font-weight: 600;
 }
+.purchases-error-repeat-warning {
+  border-left: 3px solid #d57b6d;
+  padding: 0.1rem 0 0.1rem 0.6rem;
+  color: #7f3124;
+  font-weight: 700;
+}
 .purchases-error-guidance-title {
   margin: 0;
   color: #6f3329;
