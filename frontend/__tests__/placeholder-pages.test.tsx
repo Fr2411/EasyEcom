@@ -8,7 +8,6 @@ import DashboardPage from '@/app/(app)/dashboard/page';
 import FinancePage from '@/app/(app)/finance/page';
 import IntegrationsPage from '@/app/(app)/integrations/page';
 import InventoryPage from '@/app/(app)/inventory/page';
-import HomePage from '@/app/(app)/home/page';
 import ProductsPage from '@/app/(app)/products/page';
 import ProductsStockPage from '@/app/(app)/products-stock/page';
 import PurchasesPage from '@/app/(app)/purchases/page';
@@ -510,7 +509,6 @@ vi.mock('@/lib/api/automation', () => ({
 }));
 
 const cases = [
-  ['Home', HomePage, /quick links to the main operating modules/i],
   ['Dashboard', DashboardPage, /business analytics dashboard/i],
   ['Reports', ReportsPage, /loading tenant reports|sales revenue/i],
   ['Catalog', CatalogPage, /variant-first catalog/i],

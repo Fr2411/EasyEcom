@@ -30,15 +30,15 @@ const SEARCH_SCOPE_ROUTES: Record<SearchScope, string> = {
 function getHeaderContext(pathname: string): HeaderContext {
   switch (pathname) {
     case '/':
-    case '/home':
       return {
         section: 'Today',
-        title: 'Home',
-        subtitle: 'Daily control room',
-        summary: 'Monitor the most important operational signals and jump into the right workspace faster.',
+        title: 'Dashboard',
+        subtitle: 'Business pulse',
+        summary: 'Review stock health, revenue signals, and the exceptions that need attention now.',
         searchScope: 'sales',
-        actionLabel: 'Open dashboard',
-        actionHref: '/dashboard',
+        actionLabel: 'Reports',
+        actionHref: '/reports',
+        actionTone: 'quiet',
       };
     case '/dashboard':
       return {

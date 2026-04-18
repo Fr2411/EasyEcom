@@ -5,7 +5,6 @@ export type NavigationItem = {
   label: string;
   group: NavigationGroup;
   icon:
-    | 'home'
     | 'dashboard'
     | 'reports'
     | 'package'
@@ -33,7 +32,6 @@ export const NAV_GROUP_ORDER: NavigationGroup[] = [
 ];
 
 export const NAV_ITEMS: NavigationItem[] = [
-  { href: '/home', label: 'Home', group: 'Today', icon: 'home' },
   { href: '/dashboard', label: 'Dashboard', group: 'Today', icon: 'dashboard' },
   { href: '/reports', label: 'Reports', group: 'Today', icon: 'reports' },
   { href: '/catalog', label: 'Catalog', group: 'Commerce', icon: 'catalog' },
