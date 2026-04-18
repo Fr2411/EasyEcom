@@ -66,6 +66,12 @@ function channelDraftFromIntegration(channel: ChannelIntegration): ChannelDraft 
   };
 }
 
+function sectionStatus(completed: number, total: number) {
+  if (completed === total) return { label: 'Ready', tone: 'is-ready' as const };
+  if (completed > 0) return { label: `${completed}/${total} complete`, tone: 'is-in-progress' as const };
+  return { label: 'Needs setup', tone: 'is-empty' as const };
+}
+
 export function SettingsWorkspace() {
   const [workspace, setWorkspace] = useState<SettingsWorkspacePayload | null>(null);
   const [form, setForm] = useState<SettingsWorkspacePayload | null>(null);
@@ -159,6 +165,27 @@ export function SettingsWorkspace() {
     return null;
   }
 
+  const profileCompleted = [
+    form.profile.business_name,
+    form.profile.contact_name,
+    form.profile.email,
+    form.profile.phone,
+    form.profile.whatsapp_number,
+    form.profile.address,
+  ].filter((value) => value.trim().length > 0).length;
+  const defaultsCompleted = [
+    form.defaults.default_location_name,
+    String(form.defaults.low_stock_threshold),
+  ].filter((value) => value.trim().length > 0).length;
+  const numberingCompleted = [
+    form.prefixes.sales_prefix,
+    form.prefixes.purchases_prefix,
+    form.prefixes.returns_prefix,
+  ].filter((value) => value.trim().length > 0).length;
+  const profileStatus = sectionStatus(profileCompleted, 6);
+  const defaultsStatus = sectionStatus(defaultsCompleted, 2);
+  const numberingStatus = sectionStatus(numberingCompleted, 3);
+
   return (
     <div className="settings-layout">
       {notice ? <WorkspaceNotice tone="success">{notice}</WorkspaceNotice> : null}
@@ -200,6 +227,7 @@ export function SettingsWorkspace() {
             <div className="workspace-subsection-header">
               <h4>Business profile</h4>
               <p>Keep core contact details first for fast routine updates.</p>
+              <span className={`settings-section-status ${profileStatus.tone}`}>{profileStatus.label}</span>
             </div>
             <div className="settings-grid">
               <label>
@@ -298,6 +326,7 @@ export function SettingsWorkspace() {
             <div className="workspace-subsection-header">
               <h4>Operational defaults</h4>
               <p>Review default inventory and approval rules that affect day-to-day operations.</p>
+              <span className={`settings-section-status ${defaultsStatus.tone}`}>{defaultsStatus.label}</span>
             </div>
             <div className="settings-grid">
               <label>
@@ -340,6 +369,7 @@ export function SettingsWorkspace() {
             <div className="workspace-subsection-header">
               <h4>Document numbering</h4>
               <p>Keep prefixes consistent so order, purchase, and return IDs stay easy to scan.</p>
+              <span className={`settings-section-status ${numberingStatus.tone}`}>{numberingStatus.label}</span>
             </div>
             <div className="settings-grid">
               <label>
