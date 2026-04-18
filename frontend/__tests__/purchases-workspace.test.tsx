@@ -34,4 +34,26 @@ describe('PurchasesWorkspace', () => {
     await waitFor(() => expect(mockListPurchaseOrders).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(screen.queryByText('We could not refresh purchase orders right now')).toBeNull());
   });
+
+  test('shows repeated-failure guidance when retry does not recover', async () => {
+    mockListPurchaseOrders
+      .mockRejectedValueOnce(new ApiNetworkError('fetch failed (https://api.easy-ecom.online/purchases/orders)'))
+      .mockRejectedValueOnce(new ApiNetworkError('fetch failed (https://api.easy-ecom.online/purchases/orders)'));
+
+    render(<PurchasesWorkspace />);
+
+    await waitFor(() => expect(screen.getByText('We could not refresh purchase orders right now')).toBeTruthy());
+    expect(screen.queryByText('Repeated retries are still failing. Open Dashboard to refresh your session, wait a moment, then return to Purchases.')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry purchase orders' }));
+
+    await waitFor(() => expect(mockListPurchaseOrders).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          'Repeated retries are still failing. Open Dashboard to refresh your session, wait a moment, then return to Purchases.'
+        )
+      ).toBeTruthy()
+    );
+  });
 });

@@ -80,6 +80,7 @@ export function PurchasesWorkspace() {
   const [items, setItems] = useState<Awaited<ReturnType<typeof listPurchaseOrders>>['items']>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<unknown>(null);
+  const [loadFailureCount, setLoadFailureCount] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -89,10 +90,12 @@ export function PurchasesWorkspace() {
       .then((payload) => {
         if (!active) return;
         setItems(payload.items);
+        setLoadFailureCount(0);
       })
       .catch((error) => {
         if (!active) return;
         setLoadError(error);
+        setLoadFailureCount((current) => current + 1);
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -175,6 +178,11 @@ export function PurchasesWorkspace() {
             </p>
             <p className="purchases-error-copy">{failureState.message}</p>
             <p className="purchases-error-copy purchases-error-recovery-tip">{failureState.recoveryTip}</p>
+            {loadFailureCount >= 2 ? (
+              <p className="purchases-error-copy purchases-error-repeat-warning">
+                Repeated retries are still failing. Open Dashboard to refresh your session, wait a moment, then return to Purchases.
+              </p>
+            ) : null}
             <p className="purchases-error-guidance-title">What you can do now</p>
             <ul className="purchases-error-guidance">
               {failureState.steps.map((step) => (
