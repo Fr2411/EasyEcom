@@ -279,7 +279,7 @@ export function TopHeader({ onOpenNavigation }: { onOpenNavigation?: () => void 
       </div>
       <form className="header-search" aria-label="Global workspace search" onSubmit={onSubmit}>
         {isCatalogRoute ? (
-          <span className="header-search-context">Global search only. Catalog lookup is in Catalog finder.</span>
+          <span className="header-search-context">Secondary action: global navigation search. Primary catalog lookup is in Catalog finder.</span>
         ) : null}
         <span className="header-search-icon" aria-hidden="true">
           <Search size={16} />
@@ -305,7 +305,7 @@ export function TopHeader({ onOpenNavigation }: { onOpenNavigation?: () => void 
         <button type="submit" className="header-search-button">Search all</button>
       </form>
       <div className="header-utilities">
-        <div className="header-theme-mobile" aria-label="Display mode">
+        <div className={isCatalogRoute ? 'header-theme-mobile header-theme-catalog' : 'header-theme-mobile'} aria-label="Display mode">
           <ThemeToggle />
         </div>
         <button

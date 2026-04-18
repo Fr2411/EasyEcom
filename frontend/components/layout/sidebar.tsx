@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { Building2, Mail, PanelLeftClose, PanelLeftOpen, UserRound, X } from 'lucide-react';
 import { NAV_GROUP_ORDER } from '@/types/navigation';
 import { NavItem } from '@/components/ui/nav-item';
@@ -22,6 +23,8 @@ export function Sidebar({
   onClose?: () => void;
 }) {
   const { user } = useAuth();
+  const pathname = usePathname();
+  const isCatalogRoute = pathname === '/catalog';
   const visibleItems = getVisibleNavigationItems(user);
   const groupedNavigation = NAV_GROUP_ORDER.map((group) => ({
     group,
@@ -80,7 +83,7 @@ export function Sidebar({
       </nav>
       <footer className="sidebar-footer">
         <p className="sidebar-footer-copy">Tenant-safe, ledger-backed workflows.</p>
-        <div className="sidebar-theme-control">
+        <div className={isCatalogRoute ? 'sidebar-theme-control sidebar-theme-control-catalog' : 'sidebar-theme-control'}>
           <p className="eyebrow">Display mode</p>
           <p className="workspace-field-note">Choose the view mode for this workspace.</p>
           <p className="sidebar-theme-label-row" aria-hidden="true">Light · Dark · Auto</p>
