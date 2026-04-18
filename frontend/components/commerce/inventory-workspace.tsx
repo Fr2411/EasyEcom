@@ -1519,7 +1519,7 @@ export function InventoryWorkspace() {
                                       <th>Available</th>
                                       <th>Reorder</th>
                                       <th>Unit Cost</th>
-                                      <th>Unit Price</th>
+                                      <th>Effective Selling Price</th>
                                       <th>Status</th>
                                     </tr>
                                   </thead>
@@ -1859,7 +1859,7 @@ export function InventoryWorkspace() {
                             <th>SKU</th>
                             <th>Available</th>
                             <th>Cost</th>
-                            <th>Price</th>
+                            <th>Effective Selling Price</th>
                             <th>Action</th>
                           </tr>
                         </thead>
