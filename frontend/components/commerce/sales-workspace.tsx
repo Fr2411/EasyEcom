@@ -423,6 +423,7 @@ export function SalesWorkspace() {
 
   const intentSuggestion = deriveSalesIntentSuggestion(intentLookup);
   const shouldGateMobileStart = isCompactViewport && !orderStarted;
+  const showOrderSearchInHeader = !(isCompactViewport && activeTab === 'new');
 
   return (
     <div className="workspace-stack">
@@ -439,7 +440,7 @@ export function SalesWorkspace() {
       <WorkspacePanel
         title="Order-first sales workspace"
         hint="Create orders from available variants only, reserve truthfully, and fulfill with audited stock impact."
-        actions={
+        actions={showOrderSearchInHeader ? (
           <form
             className="workspace-search"
             onSubmit={(event) => {
@@ -455,7 +456,7 @@ export function SalesWorkspace() {
             />
             <button type="submit">Search</button>
           </form>
-        }
+        ) : null}
       >
         {notice ? <WorkspaceNotice tone="success">{notice}</WorkspaceNotice> : null}
         {error ? <WorkspaceNotice tone="error">{error}</WorkspaceNotice> : null}
@@ -464,6 +465,11 @@ export function SalesWorkspace() {
         {activeTab === 'new' ? (
           <div className="workspace-two-column">
             <div className="workspace-stack">
+              {isCompactViewport ? (
+                <WorkspaceNotice tone="info">
+                  Mobile priority mode keeps start actions above the fold. Order search stays in Open/Completed tabs.
+                </WorkspaceNotice>
+              ) : null}
               <DraftRecommendationCard
                 title="Start new order"
                 summary={

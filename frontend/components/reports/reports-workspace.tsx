@@ -89,6 +89,9 @@ export function ReportsWorkspace() {
 
   return (
     <div className="reports-module">
+      <WorkspaceNotice tone="info">
+        Start here: set the date range, refresh once, then review Sales and Inventory before deeper finance and returns diagnostics.
+      </WorkspaceNotice>
       <form className="reports-filter-bar" onSubmit={onSubmit}>
         <label>
           From
@@ -109,7 +112,12 @@ export function ReportsWorkspace() {
         <button type="submit">Refresh reports</button>
       </form>
 
-      {loading ? <div className="reports-loading">Loading tenant reports…</div> : null}
+      {loading ? (
+        <div className="reports-loading" role="status" aria-live="polite">
+          <strong>Loading tenant reports…</strong>
+          <p className="muted">Refreshing tenant-scoped metrics from audited records. Existing orders and stock ledgers stay unchanged during loading.</p>
+        </div>
+      ) : null}
       {error ? <div className="reports-error">{error}</div> : null}
 
       {!loading && !error && state ? (

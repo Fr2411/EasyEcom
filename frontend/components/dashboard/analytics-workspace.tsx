@@ -751,8 +751,13 @@ export function DashboardAnalyticsWorkspace() {
       ) : null}
 
       {isPending && !dashboard ? (
-        <div className="dashboard-loading bg-glass p-6 rounded-lg shadow-glass flex items-center justify-center">
-          <p className="text-muted">Loading business analytics dashboard…</p>
+        <div className="dashboard-loading bg-glass p-6 rounded-lg shadow-glass" role="status" aria-live="polite">
+          <p className="text-muted">
+            Loading business analytics dashboard…
+          </p>
+          <p className="text-muted">
+            We are recomputing tenant-scoped signals from recorded sales, returns, and inventory movements. Existing records remain unchanged.
+          </p>
         </div>
       ) : null}
 
