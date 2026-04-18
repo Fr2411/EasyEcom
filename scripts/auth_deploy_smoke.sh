@@ -22,34 +22,53 @@ run_check() {
   local expect_auth="${3:-false}"
   local tmp_file
   local http_code
-  tmp_file="$(mktemp)"
+  local attempts=0
+  local max_attempts=12
 
-  if [[ -n "${SESSION_COOKIE}" ]]; then
-    http_code="$(curl -sS -o "${tmp_file}" -w '%{http_code}' -H "Cookie: ${SESSION_COOKIE}" "${api_url}${path}")"
-  else
-    http_code="$(curl -sS -o "${tmp_file}" -w '%{http_code}' "${api_url}${path}")"
-  fi
+  while true; do
+    tmp_file="$(mktemp)"
 
-  echo "[${label}] ${path} -> HTTP ${http_code}"
-  cat "${tmp_file}"
-  echo
-  rm -f "${tmp_file}"
+    if [[ -n "${SESSION_COOKIE}" ]]; then
+      http_code="$(curl -sS -o "${tmp_file}" -w '%{http_code}' -H "Cookie: ${SESSION_COOKIE}" "${api_url}${path}")"
+    else
+      http_code="$(curl -sS -o "${tmp_file}" -w '%{http_code}' "${api_url}${path}")"
+    fi
 
-  if [[ "${expect_auth}" == "false" && "${http_code}" != "200" ]]; then
-    echo "[${label}] failed: expected HTTP 200"
-    exit 1
-  fi
+    echo "[${label}] ${path} -> HTTP ${http_code}"
+    cat "${tmp_file}"
+    echo
 
-  if [[ "${expect_auth}" == "true" ]]; then
-    if [[ -n "${SESSION_COOKIE}" && "${http_code}" != "200" ]]; then
-      echo "[${label}] failed: expected HTTP 200 with SESSION_COOKIE provided"
+    if [[ "${expect_auth}" == "false" && "${http_code}" == "200" ]]; then
+      rm -f "${tmp_file}"
+      break
+    fi
+
+    if [[ "${expect_auth}" == "true" ]]; then
+      if [[ -n "${SESSION_COOKIE}" && "${http_code}" == "200" ]]; then
+        rm -f "${tmp_file}"
+        break
+      fi
+      if [[ -z "${SESSION_COOKIE}" && ( "${http_code}" == "401" || "${http_code}" == "403" || "${http_code}" == "200" ) ]]; then
+        rm -f "${tmp_file}"
+        break
+      fi
+    fi
+
+    rm -f "${tmp_file}"
+    attempts=$((attempts + 1))
+    if [[ "${attempts}" -ge "${max_attempts}" ]]; then
+      if [[ "${expect_auth}" == "false" ]]; then
+        echo "[${label}] failed: expected HTTP 200"
+      elif [[ -n "${SESSION_COOKIE}" ]]; then
+        echo "[${label}] failed: expected HTTP 200 with SESSION_COOKIE provided"
+      else
+        echo "[${label}] unexpected status without SESSION_COOKIE"
+      fi
       exit 1
     fi
-    if [[ -z "${SESSION_COOKIE}" && "${http_code}" != "401" && "${http_code}" != "403" && "${http_code}" != "200" ]]; then
-      echo "[${label}] unexpected status without SESSION_COOKIE"
-      exit 1
-    fi
-  fi
+
+    sleep 5
+  done
 }
 
 run_post_check() {
