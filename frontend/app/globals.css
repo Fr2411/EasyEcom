@@ -7575,6 +7575,7 @@ html {
   }
 
   .page-content[data-route-root='dashboard'],
+  .page-content[data-route-root='reports'],
   .page-content[data-route-root='sales'] {
     min-width: 0;
     padding-bottom: calc(var(--mobile-bottom-nav-clearance) + 1.1rem);
@@ -7608,16 +7609,55 @@ html {
 
   .page-content[data-route-root='dashboard'] .dashboard-inline-link,
   .page-content[data-route-root='sales'] .guided-action-footer,
+  .page-content[data-route-root='reports'] .workspace-panel,
+  .page-content[data-route-root='reports'] .reports-filter-bar button,
   .page-content[data-route-root='sales'] .workspace-actions {
     scroll-margin-bottom: calc(var(--mobile-bottom-nav-clearance) + 0.75rem);
   }
 
   .page-content[data-route-root='dashboard'] .mobile-action-safe-spacer,
   .page-content[data-route-root='sales'] .mobile-action-safe-spacer,
+  .page-content[data-route-root='reports'] .mobile-action-safe-spacer,
   .page-content[data-route-root='purchases'] .mobile-action-safe-spacer {
     display: block;
     height: calc(var(--mobile-bottom-nav-clearance) + 0.35rem);
     pointer-events: none;
+  }
+
+  .top-header.top-header-sales .header-utilities {
+    gap: 0.45rem;
+    align-items: flex-start;
+  }
+
+  .top-header.top-header-sales .header-theme-mobile {
+    flex: 1 1 56%;
+    opacity: 0.84;
+  }
+
+  .top-header.top-header-sales .header-theme-mobile .theme-toggle {
+    min-width: 0;
+    padding: 0.14rem;
+  }
+
+  .top-header.top-header-sales .header-theme-mobile .theme-toggle-option {
+    height: 1.75rem;
+    padding-inline: 0.35rem;
+  }
+
+  .top-header.top-header-sales .header-theme-mobile .theme-toggle-option span {
+    font-size: 0.65rem;
+  }
+
+  .top-header.top-header-sales .header-theme-mobile .theme-toggle-applied {
+    display: none;
+  }
+
+  .top-header.top-header-sales .header-cross-module-action {
+    min-height: 2rem;
+    padding: 0.36rem 0.65rem;
+    font-size: 0.74rem;
+    line-height: 1.1;
+    opacity: 0.82;
   }
 
   .page-content[data-route-root='customers'] .customers-action-strip {

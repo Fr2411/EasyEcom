@@ -243,6 +243,14 @@ export function TopHeader({ onOpenNavigation }: { onOpenNavigation?: () => void 
   const [scope, setScope] = useState<SearchScope>(pageContext.searchScope);
   const [query, setQuery] = useState('');
   const isCatalogRoute = pathname === '/catalog';
+  const isSalesRoute = pathname === '/sales';
+  const headerClassName = [
+    'top-header',
+    isCatalogRoute ? 'top-header-catalog' : '',
+    isSalesRoute ? 'top-header-sales' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   useEffect(() => {
     setScope(pageContext.searchScope);
@@ -266,7 +274,7 @@ export function TopHeader({ onOpenNavigation }: { onOpenNavigation?: () => void 
   const actionClassName = `header-btn ${actionToneClass} header-cross-module-action`.trim();
 
   return (
-    <header className={isCatalogRoute ? 'top-header top-header-catalog' : 'top-header'}>
+    <header className={headerClassName}>
       <button
         type="button"
         className="header-mobile-menu"
