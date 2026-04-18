@@ -7103,6 +7103,11 @@ html {
 }
 
 @media (max-width: 900px) {
+  .page-content[data-route-root='purchases'] {
+    padding-bottom: calc(var(--mobile-bottom-nav-clearance) + 1.1rem);
+    scroll-padding-bottom: calc(var(--mobile-bottom-nav-clearance) + 1.1rem);
+  }
+
   .page-content[data-route-root='dashboard'],
   .page-content[data-route-root='sales'] {
     min-width: 0;
@@ -7136,10 +7141,17 @@ html {
   }
 
   .page-content[data-route-root='dashboard'] .mobile-action-safe-spacer,
-  .page-content[data-route-root='sales'] .mobile-action-safe-spacer {
+  .page-content[data-route-root='sales'] .mobile-action-safe-spacer,
+  .page-content[data-route-root='purchases'] .mobile-action-safe-spacer {
     display: block;
     height: calc(var(--mobile-bottom-nav-clearance) + 0.35rem);
     pointer-events: none;
+  }
+
+  .page-content[data-route-root='purchases'] .admin-table-wrap,
+  .page-content[data-route-root='purchases'] .purchases-error-state,
+  .page-content[data-route-root='purchases'] .workspace-empty {
+    scroll-margin-bottom: calc(var(--mobile-bottom-nav-clearance) + 0.75rem);
   }
 
   .page-content[data-route-root='dashboard'] .dashboard-headline-kpi {
