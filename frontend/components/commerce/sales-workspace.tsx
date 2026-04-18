@@ -490,6 +490,11 @@ export function SalesWorkspace() {
                 )}
               >
                 <div className="workspace-inline-actions">
+                  {isCompactViewport && orderStarted ? (
+                    <p className="sales-start-continue-cue" role="status" aria-live="polite">
+                      Next step: enter one customer or product clue in the field below to stage the draft.
+                    </p>
+                  ) : null}
                   {!shouldGateMobileStart ? (
                     <button
                       type="button"
