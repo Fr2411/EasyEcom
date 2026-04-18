@@ -7812,6 +7812,13 @@ html {
     padding-bottom: calc(var(--mobile-bottom-nav-clearance) + 0.55rem);
   }
 
+  .page-content[data-route-root='sales'] .page-shell-body,
+  .page-content[data-route-root='reports'] .page-shell-body,
+  .page-content[data-route-root='settings'] .page-shell-body {
+    padding-bottom: calc(var(--mobile-bottom-nav-clearance) + 1rem);
+    scroll-padding-bottom: calc(var(--mobile-bottom-nav-clearance) + 1rem);
+  }
+
   .page-content[data-route-root='customers'] {
     min-width: 0;
     padding-bottom: calc(var(--mobile-bottom-nav-clearance) + 1.1rem);
@@ -7852,6 +7859,12 @@ html {
     padding-bottom: calc(var(--mobile-bottom-nav-clearance) + 0.45rem);
   }
 
+  .page-content[data-route-root='sales'] .sales-module,
+  .page-content[data-route-root='reports'] .reports-module,
+  .page-content[data-route-root='settings'] .settings-layout {
+    padding-bottom: calc(var(--mobile-bottom-nav-clearance) + 0.9rem);
+  }
+
   .page-content[data-route-root='reports'] .header-theme-mobile {
     opacity: 0.62;
   }
@@ -7871,6 +7884,12 @@ html {
     display: block;
     height: calc(var(--mobile-bottom-nav-clearance) + 0.35rem);
     pointer-events: none;
+  }
+
+  .page-content[data-route-root='sales'] .mobile-action-safe-spacer,
+  .page-content[data-route-root='reports'] .mobile-action-safe-spacer,
+  .page-content[data-route-root='settings'] .mobile-action-safe-spacer {
+    height: calc(var(--mobile-bottom-nav-clearance) + 0.9rem);
   }
 
   .top-header.top-header-sales .header-utilities,
