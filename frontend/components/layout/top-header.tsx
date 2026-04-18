@@ -309,23 +309,27 @@ export function TopHeader({ onOpenNavigation }: { onOpenNavigation?: () => void 
         <button type="submit" className="header-search-button">{isCatalogRoute ? 'Global search' : 'Search all'}</button>
       </form>
       <div className={isCatalogRoute ? 'header-utilities header-utilities-catalog' : 'header-utilities'}>
-        <div className={isCatalogRoute ? 'header-theme-mobile header-theme-catalog' : 'header-theme-mobile'} aria-label="Display mode">
-          <ThemeToggle />
+        <div className={isCatalogRoute ? 'header-theme-cluster' : undefined}>
+          <div className={isCatalogRoute ? 'header-theme-mobile header-theme-catalog' : 'header-theme-mobile'} aria-label="Display mode">
+            <ThemeToggle variant={isCatalogRoute ? 'header-catalog' : 'default'} />
+          </div>
+          {isCatalogRoute ? (
+            <span className="header-mobile-global-search-cue" aria-live="polite">
+              Secondary global search lives in the top bar on larger screens.
+            </span>
+          ) : null}
         </div>
-        {isCatalogRoute ? (
-          <span className="header-mobile-global-search-cue" aria-live="polite">
-            Secondary global search lives in the top bar on larger screens.
-          </span>
-        ) : null}
-        <button
-          type="button"
-          className={actionClassName}
-          onClick={() => router.push(pageContext.actionHref)}
-          aria-label={pageContext.actionLabel}
-        >
-          {pageContext.actionLabel}
-          <ArrowRight size={14} aria-hidden="true" />
-        </button>
+        <div className={isCatalogRoute ? 'header-action-cluster' : undefined}>
+          <button
+            type="button"
+            className={actionClassName}
+            onClick={() => router.push(pageContext.actionHref)}
+            aria-label={pageContext.actionLabel}
+          >
+            {pageContext.actionLabel}
+            <ArrowRight size={14} aria-hidden="true" />
+          </button>
+        </div>
       </div>
     </header>
   );
