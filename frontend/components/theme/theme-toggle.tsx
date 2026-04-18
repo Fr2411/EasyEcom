@@ -20,35 +20,37 @@ export function ThemeToggle({ variant = 'default' }: { variant?: 'default' | 'he
 
   return (
     <div className={rootClassName} role="group" aria-label="Display mode" data-applied-theme={appliedTheme}>
-      {OPTIONS.map((option) => {
-        const Icon = option.icon;
-        const active = preference === option.value;
-        const applied =
-          option.value === 'system'
-            ? false
-            : (option.value === 'light' && appliedTheme === 'light') || (option.value === 'dark' && appliedTheme === 'dark');
-        const className = [
-          'theme-toggle-option',
-          active ? 'active' : '',
-          applied ? 'is-applied' : '',
-        ]
-          .filter(Boolean)
-          .join(' ');
-        return (
-          <button
-            key={option.value}
-            type="button"
-            className={className}
-            aria-pressed={active}
-            aria-label={`${option.label} theme`}
-            title={option.label}
-            onClick={() => setPreference(option.value)}
-          >
-            <Icon size={14} aria-hidden="true" />
-            <span>{option.label}</span>
-          </button>
-        );
-      })}
+      <div className="theme-toggle-options-row">
+        {OPTIONS.map((option) => {
+          const Icon = option.icon;
+          const active = preference === option.value;
+          const applied =
+            option.value === 'system'
+              ? false
+              : (option.value === 'light' && appliedTheme === 'light') || (option.value === 'dark' && appliedTheme === 'dark');
+          const className = [
+            'theme-toggle-option',
+            active ? 'active' : '',
+            applied ? 'is-applied' : '',
+          ]
+            .filter(Boolean)
+            .join(' ');
+          return (
+            <button
+              key={option.value}
+              type="button"
+              className={className}
+              aria-pressed={active}
+              aria-label={`${option.label} theme`}
+              title={option.label}
+              onClick={() => setPreference(option.value)}
+            >
+              <Icon size={14} aria-hidden="true" />
+              <span>{option.label}</span>
+            </button>
+          );
+        })}
+      </div>
       <span className="theme-toggle-applied" aria-live="polite">
         {appliedLabelPrefix}: {appliedTheme === 'dark' ? 'Dark' : 'Light'}
       </span>
