@@ -26,6 +26,7 @@ import {
   WorkspaceTabs,
 } from '@/components/commerce/workspace-primitives';
 import { formatDateTime, formatMoney, formatQuantity } from '@/lib/commerce-format';
+import { ApiError, ApiNetworkError } from '@/lib/api/client';
 
 
 type SalesTab = 'new' | 'open' | 'completed';
@@ -59,6 +60,32 @@ const EMPTY_CUSTOMER: DraftCustomer = {
   email: '',
   address: '',
 };
+
+function stripRequestUrlFromMessage(message: string) {
+  return message.replace(/\s*\(https?:\/\/[^)]+\)\s*$/i, '').trim();
+}
+
+function safeSalesWorkspaceErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof ApiNetworkError) {
+    return 'Unable to reach sales services right now. Check your connection and try again.';
+  }
+  if (error instanceof ApiError) {
+    if (error.status === 403) {
+      return 'You do not have permission to access sales in this workspace.';
+    }
+    if (error.status >= 500) {
+      return 'Sales is temporarily unavailable. Please try again in a moment.';
+    }
+    return fallback;
+  }
+  if (error instanceof Error) {
+    const cleaned = stripRequestUrlFromMessage(error.message);
+    if (cleaned) {
+      return cleaned;
+    }
+  }
+  return fallback;
+}
 
 function financeStatusLabel(order: SalesOrder) {
   if (order.finance_status === 'posted') return 'Posted to finance';
@@ -186,7 +213,7 @@ export function SalesWorkspace() {
         }
         setError('');
       } catch (loadError) {
-        setError(loadError instanceof Error ? loadError.message : 'Unable to load orders.');
+        setError(safeSalesWorkspaceErrorMessage(loadError, 'Unable to load sales orders. Try refreshing the workspace.'));
       }
     });
   };
@@ -311,7 +338,7 @@ export function SalesWorkspace() {
         setNotice(`Added ${exactVariants[0].label} to the draft. Review quantity and customer details before saving.`);
       }
     } catch (lookupError) {
-      setError(lookupError instanceof Error ? lookupError.message : 'Unable to interpret the sales intent.');
+      setError(safeSalesWorkspaceErrorMessage(lookupError, 'Unable to interpret the sales intent. Try another customer or product clue.'));
     } finally {
       setLookupPending(false);
     }
@@ -385,7 +412,7 @@ export function SalesWorkspace() {
       await loadOrders(orderQuery.trim());
       setActiveTab(action === 'confirm_and_fulfill' ? 'completed' : 'open');
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : 'Unable to save order.');
+      setError(safeSalesWorkspaceErrorMessage(submitError, 'Unable to save the order. Review details and try again.'));
     }
   };
 
@@ -395,7 +422,7 @@ export function SalesWorkspace() {
       setSelectedOrder(payload);
       setError('');
     } catch (detailError) {
-      setError(detailError instanceof Error ? detailError.message : 'Unable to load order.');
+      setError(safeSalesWorkspaceErrorMessage(detailError, 'Unable to load order details right now.'));
     }
   };
 
@@ -417,7 +444,7 @@ export function SalesWorkspace() {
       );
       await loadOrders(orderQuery.trim());
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : 'Unable to update order.');
+      setError(safeSalesWorkspaceErrorMessage(actionError, 'Unable to update the order right now. Try again.'));
     }
   };
 
