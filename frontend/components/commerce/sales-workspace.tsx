@@ -470,7 +470,7 @@ export function SalesWorkspace() {
                 summary={
                   shouldGateMobileStart
                     ? 'Open a new order first so the team can immediately capture the sale.'
-                    : 'Start with one buyer or product clue and move quickly from intent to confirmed revenue.'
+                    : 'Start with one buyer or product clue, then stage customer and lines before confirmation.'
                 }
                 actions={(
                   <button
@@ -513,7 +513,7 @@ export function SalesWorkspace() {
                 onChange={setIntentQuery}
                 onSubmit={() => runIntentLookup(intentQuery)}
               >
-                <span className="guided-assist-chip">One clue is enough to stage the next step quickly</span>
+                <span className="guided-assist-chip">One clue is enough. Stage the best match, then keep the order moving.</span>
               </IntentInput>
               ) : null}
 
@@ -754,7 +754,7 @@ export function SalesWorkspace() {
                 </button>
               </StagedActionFooter>
               <p className="sales-primary-action-note">
-                Primary next action is <strong>Confirm</strong>. Finalize becomes available only after draft lines are staged and reviewed.
+                Primary next action is <strong>Confirm</strong>. Use Confirm &amp; Fulfill only after draft lines and pricing are reviewed.
               </p>
             </DraftRecommendationCard>
             ) : null}

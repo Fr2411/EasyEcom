@@ -794,7 +794,7 @@ export function CatalogWorkspace() {
         title={
           <div className="catalog-finder-title">
             <span className="workspace-heading">Catalog finder</span>
-            <span className="catalog-finder-scope-note">Step 1: search Catalog. Step 2: open the best match. Step 3: create new only if nothing fits.</span>
+            <span className="catalog-finder-scope-note">Step 1: search Catalog. Step 2: open the best match. Step 3: create new only when no match fits.</span>
           </div>
         }
         actions={
@@ -810,11 +810,11 @@ export function CatalogWorkspace() {
             onSubmit={() => void onWorkspaceIntent(queryInput)}
           >
             <p className="workspace-field-note catalog-decision-sentence">
-              Start with one clue, then follow one path: open a matched product first.
+              Start with one clue, then open the closest match before starting a new draft.
             </p>
             <details className="catalog-decision-details">
-              <summary>Step 3: use a new draft only when no match fits</summary>
-              <p className="workspace-field-note">If any result is close, open and verify it before creating a new product.</p>
+              <summary>Step 3 details</summary>
+              <p className="workspace-field-note">If a result is close, open and verify it first. Create only when no existing product fits.</p>
             </details>
           </IntentInput>
         }
@@ -889,7 +889,7 @@ export function CatalogWorkspace() {
           workspace?.items.length ? (
             <MatchGroupList
               title="Catalog parents"
-              description="Open the best match first. Each product keeps shared details, and each variant is the saleable SKU."
+              description="Open the best match first. Product rows hold shared details; variants are the saleable SKUs."
               items={workspace.items}
               renderItem={(product) => (
                 <article key={product.product_id} className="guided-match-item catalog-parent-card">
