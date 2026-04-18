@@ -1151,6 +1151,43 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
 .reports-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; }
 .reports-loading,
 .reports-error { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 0.8rem; background: #fff; }
+.settings-loading-layout {
+  gap: 0.75rem;
+}
+.settings-loading-copy {
+  display: grid;
+  gap: 0.35rem;
+}
+.settings-loading-copy strong {
+  font-size: 0.95rem;
+  color: #204957;
+}
+.settings-loading-copy p {
+  margin: 0;
+}
+.settings-loading-context {
+  margin-top: 0.55rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+.settings-loading-pill,
+.settings-loading-field {
+  border-radius: var(--radius-sm);
+  border: 1px solid #deebef;
+  background: linear-gradient(180deg, #f8fcff 0%, #eef6fa 100%);
+}
+.settings-loading-pill {
+  min-height: 2.25rem;
+}
+.settings-loading-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+.settings-loading-field {
+  min-height: 2.6rem;
+}
 .reports-kpi-grid {
   grid-template-columns: repeat(6, minmax(0, 1fr));
 }
@@ -3409,6 +3446,9 @@ button.secondary:hover,
   .admin-access-row,
   .admin-inline-grid,
   .admin-inline-grid-wide { grid-template-columns: 1fr; }
+
+  .settings-loading-grid,
+  .settings-loading-context { grid-template-columns: 1fr; }
 
   .workspace-form-grid,
   .workspace-form-grid.compact,
