@@ -254,7 +254,8 @@ export function TopHeader({ onOpenNavigation }: { onOpenNavigation?: () => void 
     if (!trimmed) return;
 
     const params = new URLSearchParams({ q: trimmed });
-    router.push(`${SEARCH_SCOPE_ROUTES[scope]}?${params.toString()}`);
+    const targetRoute = isCatalogRoute ? '/catalog' : SEARCH_SCOPE_ROUTES[scope];
+    router.push(`${targetRoute}?${params.toString()}`);
   };
   const actionToneClass =
     pageContext.actionTone === 'primary'
