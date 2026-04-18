@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { Building2, Mail, PanelLeftClose, PanelLeftOpen, UserRound, X } from 'lucide-react';
+import { Building2, Mail, PanelLeftClose, PanelLeftOpen, UserRound } from 'lucide-react';
 import { NAV_GROUP_ORDER } from '@/types/navigation';
 import { NavItem } from '@/components/ui/nav-item';
 import { SidebarLogoutButton } from '@/components/layout/sidebar-logout-button';
@@ -13,14 +13,10 @@ import { getVisibleNavigationItems } from '@/lib/navigation';
 
 export function Sidebar({
   collapsed = false,
-  mobileOpen = false,
   onToggle,
-  onClose,
 }: {
   collapsed?: boolean;
-  mobileOpen?: boolean;
   onToggle?: () => void;
-  onClose?: () => void;
 }) {
   const { user } = useAuth();
   const pathname = usePathname();
@@ -35,7 +31,7 @@ export function Sidebar({
   const [showWorkspaceDetails, setShowWorkspaceDetails] = useState(false);
 
   return (
-    <aside className={collapsed ? `sidebar sidebar-collapsed ${mobileOpen ? 'mobile-open' : ''}` : `sidebar ${mobileOpen ? 'mobile-open' : ''}`} aria-label="Primary">
+    <aside className={collapsed ? 'sidebar sidebar-collapsed' : 'sidebar'} aria-label="Primary">
       <div className="brand-block">
         <div className="brand-top-row">
           <div className="brand-logo-wrap">
@@ -45,15 +41,6 @@ export function Sidebar({
             />
           </div>
           <div className="sidebar-actions">
-            <button
-              type="button"
-              className="sidebar-close-mobile"
-              onClick={onClose}
-              aria-label="Close navigation"
-              title="Close navigation"
-            >
-              <X size={16} aria-hidden="true" />
-            </button>
             <button
               type="button"
               className="sidebar-toggle"
@@ -74,7 +61,7 @@ export function Sidebar({
             <ul className="nav-list">
               {items.map((item) => (
                 <li key={item.href}>
-                  <NavItem item={item} collapsed={collapsed} onSelect={onClose} />
+                  <NavItem item={item} collapsed={collapsed} />
                 </li>
               ))}
             </ul>
