@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import { getCurrentUser, type SessionUser } from '@/lib/api/auth';
@@ -34,6 +35,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [bootstrapError, setBootstrapError] =
     useState<AuthBootstrapError>('none');
+  const userRef = useRef<SessionUser | null>(null);
+
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
 
   const refreshAuth = useCallback(async () => {
     setLoading(true);
@@ -45,15 +51,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (error instanceof ApiError && error.status === 401) {
         setUser(null);
         setBootstrapError('unauthorized');
-      } else if (error instanceof ApiError && error.status >= 500) {
-        setUser(null);
-        setBootstrapError('server');
-      } else if (error instanceof ApiNetworkError) {
-        setUser(null);
-        setBootstrapError('network');
       } else {
-        setUser(null);
-        setBootstrapError('unknown');
+        const existingUser = userRef.current;
+        // Preserve the last verified session for transient failures so active
+        // operators are not interrupted mid-workflow by intermittent mobile
+        // network instability.
+        if (existingUser) {
+          setUser(existingUser);
+          setBootstrapError('none');
+        } else if (error instanceof ApiError && error.status >= 500) {
+          setUser(null);
+          setBootstrapError('server');
+        } else if (error instanceof ApiNetworkError) {
+          setUser(null);
+          setBootstrapError('network');
+        } else {
+          setUser(null);
+          setBootstrapError('unknown');
+        }
       }
     } finally {
       setLoading(false);

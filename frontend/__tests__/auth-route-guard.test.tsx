@@ -50,6 +50,19 @@ describe('AuthRouteGuard', () => {
     expect(refreshAuthMock).toHaveBeenCalledTimes(1);
   });
 
+  test('protected mode keeps rendering content when user is present despite transient bootstrap error', () => {
+    useAuthMock.mockReturnValue({ user: { id: '1' }, loading: false, bootstrapError: 'network', refreshAuth: refreshAuthMock });
+
+    render(
+      <AuthRouteGuard mode="protected">
+        <div>Dashboard Content</div>
+      </AuthRouteGuard>
+    );
+
+    expect(screen.getByText('Dashboard Content')).toBeTruthy();
+    expect(replaceMock).not.toHaveBeenCalled();
+  });
+
   test('protected mode displays loading then renders dashboard once auth is resolved', () => {
     useAuthMock.mockReturnValueOnce({ user: null, loading: true, bootstrapError: 'none', refreshAuth: refreshAuthMock });
     const { rerender } = render(
