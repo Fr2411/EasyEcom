@@ -463,19 +463,19 @@ export function SalesWorkspace() {
         {isPending && !orders.length ? <WorkspaceNotice>Loading sales workspace…</WorkspaceNotice> : null}
 
         {activeTab === 'new' ? (
-          <div className="workspace-two-column">
+          <div className={shouldGateMobileStart ? 'workspace-two-column sales-start-focus-mode' : 'workspace-two-column'}>
             <div className="workspace-stack">
               <DraftRecommendationCard
                 title="Start new order"
                 summary={
                   shouldGateMobileStart
-                    ? 'Tap Start new order to open customer and variant staging.'
-                    : 'Begin with one customer or product clue. Advanced matching stays hidden until you need it.'
+                    ? 'Open a new order first so the team can immediately capture the sale.'
+                    : 'Start with one buyer or product clue and move quickly from intent to confirmed revenue.'
                 }
                 actions={(
                   <button
                     type="button"
-                    className="btn-primary"
+                    className="btn-primary sales-start-order-btn"
                     onClick={() => {
                       setOrderStarted(true);
                       setShowAdvancedTools(false);
@@ -505,7 +505,7 @@ export function SalesWorkspace() {
               {!shouldGateMobileStart ? (
               <IntentInput
                 label="Who is buying or what do they want?"
-                hint="Use one clue. A phone number, email, SKU, barcode, or product text is enough for the workspace to stage the next likely action."
+                hint="Use one clue to stage the fastest path to a completed order and avoid back-and-forth lookup work."
                 value={intentQuery}
                 placeholder="Phone, email, order clue, SKU, barcode, or product"
                 pending={lookupPending}
@@ -540,7 +540,7 @@ export function SalesWorkspace() {
               {!shouldGateMobileStart && showAdvancedTools ? (
                 <MatchGroupList
                   title="Likely customer matches"
-                  description="Use an existing customer when one is clearly correct. Otherwise continue with the staged manual entry."
+                  description="Reuse known customer profiles to shorten checkout time and reduce order-entry errors."
                   items={customerResults}
                   emptyMessage="No customer account matched yet."
                   renderItem={(item) => (
@@ -562,7 +562,7 @@ export function SalesWorkspace() {
               {!shouldGateMobileStart && showAdvancedTools ? (
                 <MatchGroupList
                   title="Likely saleable items"
-                  description="Only variants with saleable stock are shown here."
+                  description="Only sellable variants are shown so the draft stays aligned with real available stock."
                   items={variantResults}
                   emptyMessage="No sellable variants matched the current clue yet."
                   renderItem={(variant) => (
@@ -592,8 +592,8 @@ export function SalesWorkspace() {
                   summary={customer.customer_id
                     ? `Existing customer ${customer.name} is staged for this order.`
                     : customer.name || customer.phone || customer.email
-                      ? 'A manual customer draft is staged. Complete any missing details before confirming.'
-                      : 'No customer is staged yet. The intent bar above can prefill this area for you.'}
+                      ? 'A manual customer draft is staged. Complete missing details now to prevent fulfillment delays.'
+                      : 'No customer is staged yet. Use the intent bar to prefill this step and reduce checkout time.'}
                 >
                   <div className="workspace-inline-actions">
                     <label>
@@ -641,9 +641,9 @@ export function SalesWorkspace() {
             <DraftRecommendationCard
               title="Order draft"
               summary={draftLines.length
-                ? `${draftLines.length} line${draftLines.length === 1 ? '' : 's'} staged. Review pricing, customer, and notes before the final confirmation step.`
+                ? `${draftLines.length} line${draftLines.length === 1 ? '' : 's'} staged. Validate pricing now so margin stays protected before confirmation.`
                 : 'No lines staged yet.'}
-              summaryHint={!draftLines.length ? 'The draft is empty. Use the intent bar to stage a customer, a variant, or both.' : undefined}
+              summaryHint={!draftLines.length ? 'The draft is empty. Stage customer and variant details first so the order can move to confirmation without rework.' : undefined}
             >
               {draftLines.length ? (
                 <div className="table-scroll">
@@ -727,7 +727,7 @@ export function SalesWorkspace() {
                 Order notes
                 <textarea rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} />
               </label>
-              <StagedActionFooter summary="The workspace will only write when you explicitly choose draft, confirm, or confirm and fulfill.">
+              <StagedActionFooter summary="No stock or finance write happens until you choose draft, confirm, or confirm and fulfill.">
                 <button type="button" onClick={() => submitOrder('save_draft')} disabled={!draftLines.length}>
                   Review before saving
                 </button>
