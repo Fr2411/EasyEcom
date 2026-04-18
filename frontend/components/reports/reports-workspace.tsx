@@ -90,7 +90,12 @@ export function ReportsWorkspace() {
   return (
     <div className="reports-module">
       <WorkspaceNotice tone="info">
-        Start here: set the date range, refresh once, then review Sales and Inventory before deeper finance and returns diagnostics.
+        <strong>Start here</strong>
+        <ol>
+          <li>Set the date range.</li>
+          <li>Refresh reports once.</li>
+          <li>Review Sales and Inventory before Finance and Returns.</li>
+        </ol>
       </WorkspaceNotice>
       <form className="reports-filter-bar" onSubmit={onSubmit}>
         <label>
