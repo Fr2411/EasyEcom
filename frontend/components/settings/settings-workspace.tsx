@@ -196,146 +196,175 @@ export function SettingsWorkspace() {
           description="Update business profile fields, operational defaults, and numbering prefixes used by sales, purchases, and returns."
           actions={<button type="submit" className="btn-primary settings-save-btn" disabled={savingSettings}>{savingSettings ? 'Saving…' : 'Save settings'}</button>}
         >
-          <div className="settings-grid">
-            <label>
-              Business name
-              <input
-                value={form.profile.business_name}
-                onChange={(event) => setForm({ ...form, profile: { ...form.profile, business_name: event.target.value } })}
-              />
-            </label>
-            <label>
-              Contact name
-              <input
-                value={form.profile.contact_name}
-                onChange={(event) => setForm({ ...form, profile: { ...form.profile, contact_name: event.target.value } })}
-              />
-            </label>
-            <label>
-              Owner name
-              <input
-                value={form.profile.owner_name}
-                onChange={(event) => setForm({ ...form, profile: { ...form.profile, owner_name: event.target.value } })}
-              />
-            </label>
-            <label>
-              Email
-              <input
-                value={form.profile.email}
-                onChange={(event) => setForm({ ...form, profile: { ...form.profile, email: event.target.value } })}
-              />
-            </label>
-            <label>
-              Phone
-              <input
-                value={form.profile.phone}
-                onChange={(event) => setForm({ ...form, profile: { ...form.profile, phone: event.target.value } })}
-              />
-            </label>
-            <label>
-              WhatsApp number
-              <input
-                value={form.profile.whatsapp_number}
-                onChange={(event) => setForm({ ...form, profile: { ...form.profile, whatsapp_number: event.target.value } })}
-              />
-            </label>
-            <label>
-              Website URL
-              <input
-                value={form.profile.website_url}
-                onChange={(event) => setForm({ ...form, profile: { ...form.profile, website_url: event.target.value } })}
-              />
-            </label>
-            <label>
-              Timezone
-              <input
-                value={form.profile.timezone}
-                onChange={(event) => setForm({ ...form, profile: { ...form.profile, timezone: event.target.value } })}
-              />
-            </label>
-            <label>
-              Currency code
-              <input
-                value={form.profile.currency_code}
-                onChange={(event) => setForm({ ...form, profile: { ...form.profile, currency_code: event.target.value } })}
-              />
-            </label>
-            <label>
-              Currency symbol
-              <input
-                value={form.profile.currency_symbol}
-                onChange={(event) => setForm({ ...form, profile: { ...form.profile, currency_symbol: event.target.value } })}
-              />
-            </label>
-            <label className="field-span-2">
-              Address
-              <textarea
-                value={form.profile.address}
-                onChange={(event) => setForm({ ...form, profile: { ...form.profile, address: event.target.value } })}
-              />
-            </label>
-            <label className="field-span-2">
-              Notes
-              <textarea
-                value={form.profile.notes}
-                onChange={(event) => setForm({ ...form, profile: { ...form.profile, notes: event.target.value } })}
-              />
-            </label>
-            <label>
-              Default warehouse name
-              <input
-                value={form.defaults.default_location_name}
-                onChange={(event) => setForm({ ...form, defaults: { ...form.defaults, default_location_name: event.target.value } })}
-              />
-            </label>
-            <label>
-              Low-stock threshold
-              <input
-                type="number"
-                min="0"
-                step="1"
-                value={form.defaults.low_stock_threshold}
-                onChange={(event) => setForm({ ...form, defaults: { ...form.defaults, low_stock_threshold: Number(event.target.value) } })}
-              />
-            </label>
-            <label>
-              Sales prefix
-              <input
-                value={form.prefixes.sales_prefix}
-                onChange={(event) => setForm({ ...form, prefixes: { ...form.prefixes, sales_prefix: event.target.value.toUpperCase() } })}
-              />
-            </label>
-            <label>
-              Purchases prefix
-              <input
-                value={form.prefixes.purchases_prefix}
-                onChange={(event) => setForm({ ...form, prefixes: { ...form.prefixes, purchases_prefix: event.target.value.toUpperCase() } })}
-              />
-            </label>
-            <label>
-              Returns prefix
-              <input
-                value={form.prefixes.returns_prefix}
-                onChange={(event) => setForm({ ...form, prefixes: { ...form.prefixes, returns_prefix: event.target.value.toUpperCase() } })}
-              />
-            </label>
-            <label className="admin-checkbox">
-              <input
-                type="checkbox"
-                checked={form.defaults.allow_backorder}
-                onChange={(event) => setForm({ ...form, defaults: { ...form.defaults, allow_backorder: event.target.checked } })}
-              />
-              Allow backorder
-            </label>
-            <label className="admin-checkbox">
-              <input
-                type="checkbox"
-                checked={form.defaults.require_discount_approval}
-                onChange={(event) => setForm({ ...form, defaults: { ...form.defaults, require_discount_approval: event.target.checked } })}
-              />
-              Require discount approval
-            </label>
-          </div>
+          <section className="settings-section">
+            <div className="workspace-subsection-header">
+              <h4>Business profile</h4>
+              <p>Keep core contact details first for fast routine updates.</p>
+            </div>
+            <div className="settings-grid">
+              <label>
+                Business name
+                <input
+                  value={form.profile.business_name}
+                  onChange={(event) => setForm({ ...form, profile: { ...form.profile, business_name: event.target.value } })}
+                />
+              </label>
+              <label>
+                Contact name
+                <input
+                  value={form.profile.contact_name}
+                  onChange={(event) => setForm({ ...form, profile: { ...form.profile, contact_name: event.target.value } })}
+                />
+              </label>
+              <label>
+                Email
+                <input
+                  value={form.profile.email}
+                  onChange={(event) => setForm({ ...form, profile: { ...form.profile, email: event.target.value } })}
+                />
+              </label>
+              <label>
+                Phone
+                <input
+                  value={form.profile.phone}
+                  onChange={(event) => setForm({ ...form, profile: { ...form.profile, phone: event.target.value } })}
+                />
+              </label>
+              <label>
+                WhatsApp number
+                <input
+                  value={form.profile.whatsapp_number}
+                  onChange={(event) => setForm({ ...form, profile: { ...form.profile, whatsapp_number: event.target.value } })}
+                />
+              </label>
+              <label className="field-span-2">
+                Address
+                <textarea
+                  value={form.profile.address}
+                  onChange={(event) => setForm({ ...form, profile: { ...form.profile, address: event.target.value } })}
+                />
+              </label>
+            </div>
+            <details className="settings-technical-details settings-advanced-profile">
+              <summary>Additional profile details</summary>
+              <div className="settings-grid settings-grid-advanced">
+                <label>
+                  Owner name
+                  <input
+                    value={form.profile.owner_name}
+                    onChange={(event) => setForm({ ...form, profile: { ...form.profile, owner_name: event.target.value } })}
+                  />
+                </label>
+                <label>
+                  Website URL
+                  <input
+                    value={form.profile.website_url}
+                    onChange={(event) => setForm({ ...form, profile: { ...form.profile, website_url: event.target.value } })}
+                  />
+                </label>
+                <label>
+                  Timezone
+                  <input
+                    value={form.profile.timezone}
+                    onChange={(event) => setForm({ ...form, profile: { ...form.profile, timezone: event.target.value } })}
+                  />
+                </label>
+                <label>
+                  Currency code
+                  <input
+                    value={form.profile.currency_code}
+                    onChange={(event) => setForm({ ...form, profile: { ...form.profile, currency_code: event.target.value } })}
+                  />
+                </label>
+                <label>
+                  Currency symbol
+                  <input
+                    value={form.profile.currency_symbol}
+                    onChange={(event) => setForm({ ...form, profile: { ...form.profile, currency_symbol: event.target.value } })}
+                  />
+                </label>
+                <label className="field-span-2">
+                  Notes
+                  <textarea
+                    value={form.profile.notes}
+                    onChange={(event) => setForm({ ...form, profile: { ...form.profile, notes: event.target.value } })}
+                  />
+                </label>
+              </div>
+            </details>
+          </section>
+
+          <section className="settings-section">
+            <div className="workspace-subsection-header">
+              <h4>Operational defaults</h4>
+              <p>Review default inventory and approval rules that affect day-to-day operations.</p>
+            </div>
+            <div className="settings-grid">
+              <label>
+                Default warehouse name
+                <input
+                  value={form.defaults.default_location_name}
+                  onChange={(event) => setForm({ ...form, defaults: { ...form.defaults, default_location_name: event.target.value } })}
+                />
+              </label>
+              <label>
+                Low-stock threshold
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={form.defaults.low_stock_threshold}
+                  onChange={(event) => setForm({ ...form, defaults: { ...form.defaults, low_stock_threshold: Number(event.target.value) } })}
+                />
+              </label>
+              <label className="admin-checkbox">
+                <input
+                  type="checkbox"
+                  checked={form.defaults.allow_backorder}
+                  onChange={(event) => setForm({ ...form, defaults: { ...form.defaults, allow_backorder: event.target.checked } })}
+                />
+                Allow backorder
+              </label>
+              <label className="admin-checkbox">
+                <input
+                  type="checkbox"
+                  checked={form.defaults.require_discount_approval}
+                  onChange={(event) => setForm({ ...form, defaults: { ...form.defaults, require_discount_approval: event.target.checked } })}
+                />
+                Require discount approval
+              </label>
+            </div>
+          </section>
+
+          <section className="settings-section">
+            <div className="workspace-subsection-header">
+              <h4>Document numbering</h4>
+              <p>Keep prefixes consistent so order, purchase, and return IDs stay easy to scan.</p>
+            </div>
+            <div className="settings-grid">
+              <label>
+                Sales prefix
+                <input
+                  value={form.prefixes.sales_prefix}
+                  onChange={(event) => setForm({ ...form, prefixes: { ...form.prefixes, sales_prefix: event.target.value.toUpperCase() } })}
+                />
+              </label>
+              <label>
+                Purchases prefix
+                <input
+                  value={form.prefixes.purchases_prefix}
+                  onChange={(event) => setForm({ ...form, prefixes: { ...form.prefixes, purchases_prefix: event.target.value.toUpperCase() } })}
+                />
+              </label>
+              <label>
+                Returns prefix
+                <input
+                  value={form.prefixes.returns_prefix}
+                  onChange={(event) => setForm({ ...form, prefixes: { ...form.prefixes, returns_prefix: event.target.value.toUpperCase() } })}
+                />
+              </label>
+            </div>
+          </section>
         </WorkspacePanel>
       </form>
 

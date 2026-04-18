@@ -71,9 +71,8 @@ export function Sidebar({
       <footer className="sidebar-footer">
         <p className="sidebar-footer-copy">Tenant-safe, ledger-backed workflows.</p>
         <div className={isCatalogRoute ? 'sidebar-theme-control sidebar-theme-control-catalog' : 'sidebar-theme-control'}>
-          <p className="eyebrow">Display mode</p>
-          <p className="workspace-field-note">Choose the view mode for this workspace.</p>
-          <p className="sidebar-theme-label-row" aria-hidden="true">Light · Dark · Auto</p>
+          <p className="eyebrow">Display mode (optional)</p>
+          <p className="workspace-field-note">Use this only when you need better comfort or contrast.</p>
           <ThemeToggle />
         </div>
         <button

@@ -92,14 +92,14 @@ export function ReportsWorkspace() {
       <div className="reports-start-here">
         <WorkspaceNotice tone="info">
           <p className="reports-start-here-quick">
-            <strong>Start here:</strong> set the date window, refresh KPI outcomes, then read the outcome cards first.
+            <strong>Start here:</strong> set the date range, refresh the report, then scan KPI cards first.
           </p>
           <details className="reports-start-here-details">
             <summary>See review sequence</summary>
             <ol>
-              <li>Confirm today&apos;s result first: revenue captured and orders converted.</li>
-              <li>Review Sales and Inventory next to decide demand push versus stock protection.</li>
-              <li>Finish with Purchases, Finance, and Returns to check cash pressure and margin drag.</li>
+              <li>Check core outcomes first: sales revenue and completed orders.</li>
+              <li>Review Sales and Inventory next to balance demand and stock coverage.</li>
+              <li>Finish with Purchases, Finance, and Returns to validate cash and margin pressure.</li>
             </ol>
           </details>
         </WorkspaceNotice>
@@ -107,7 +107,7 @@ export function ReportsWorkspace() {
       <section className="reports-filter-kpi-bridge" aria-label="KPI outcome controls">
         <p className="reports-filter-kpi-eyebrow">Step 1</p>
         <h2>Set KPI window</h2>
-        <p className="reports-filter-kpi-note">Date filters and refresh directly control the KPI outcomes shown below.</p>
+        <p className="reports-filter-kpi-note">The selected date range controls every KPI and report section below.</p>
         <form className="reports-filter-bar" onSubmit={onSubmit}>
           <label>
             From
@@ -125,7 +125,7 @@ export function ReportsWorkspace() {
               onChange={(event) => setDraftFilters({ ...draftFilters, toDate: event.target.value })}
             />
           </label>
-          <button type="submit" className="btn-primary reports-refresh-btn">Refresh KPI outcomes</button>
+          <button type="submit" className="btn-primary reports-refresh-btn">Refresh report</button>
         </form>
       </section>
 
@@ -141,29 +141,29 @@ export function ReportsWorkspace() {
         <>
           <div className="reports-grid reports-kpi-grid">
             <article className="ps-card reports-kpi-card reports-kpi-card-featured reports-kpi-card-primary">
-              <p>Revenue captured</p>
+              <p>Sales revenue</p>
               <strong>{formatMoney(state.overview.sales_revenue_total)}</strong>
-              <span>Total money collected from completed sales in this window.</span>
+              <span>Total money collected from completed sales in this range.</span>
             </article>
             <article className="ps-card reports-kpi-card reports-kpi-card-featured reports-kpi-card-primary">
-              <p>Orders converted</p>
+              <p>Completed orders</p>
               <strong>{state.overview.sales_count}</strong>
-              <span>Completed orders your team turned into shipped business.</span>
+              <span>Orders your team completed in this reporting window.</span>
             </article>
             <article className="ps-card reports-kpi-card reports-kpi-card-secondary">
-              <p>Operating expenses</p>
+              <p>Operating expense</p>
               <strong>{formatMoney(state.overview.expense_total)}</strong>
-              <span>Spend pressure currently reducing operating margin.</span>
+              <span>Total operating spend booked in this range.</span>
             </article>
             <article className="ps-card reports-kpi-card reports-kpi-card-secondary">
               <p>Units returned</p>
               <strong>{state.overview.returns_total}</strong>
-              <span>Items coming back that can slow net growth.</span>
+              <span>Items returned that reduce net sold volume.</span>
             </article>
             <article className="ps-card reports-kpi-card reports-kpi-card-secondary">
-              <p>Inventory purchased</p>
+              <p>Purchase spend</p>
               <strong>{formatMoney(state.overview.purchases_total)}</strong>
-              <span>Inbound stock investment committed in this period.</span>
+              <span>Money committed to inbound inventory in this range.</span>
             </article>
           </div>
 
