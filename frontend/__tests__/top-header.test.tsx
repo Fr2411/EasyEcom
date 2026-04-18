@@ -35,6 +35,16 @@ describe('TopHeader', () => {
     expect(pushMock).toHaveBeenCalledWith('/inventory?q=Blue+Tee');
   });
 
+  test('keeps search in catalog context when submitting from catalog route', () => {
+    pathname = '/catalog';
+    render(<TopHeader />);
+
+    fireEvent.change(screen.getByLabelText('Global search query'), { target: { value: 'shirt' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Global search' }));
+
+    expect(pushMock).toHaveBeenCalledWith('/catalog?q=shirt');
+  });
+
   test('does not navigate for empty search values', () => {
     render(<TopHeader />);
 
