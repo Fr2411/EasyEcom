@@ -2731,6 +2731,14 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
   min-width: 12.5rem;
 }
 
+.sales-start-continue-cue {
+  margin: 0;
+  color: #1f4f4a;
+  font-size: 0.84rem;
+  line-height: 1.35;
+  font-weight: 600;
+}
+
 @media (max-width: 900px) {
   .sales-start-focus-mode {
     grid-template-columns: minmax(0, 1fr);
@@ -7889,7 +7897,15 @@ html {
   .page-content[data-route-root='sales'] .mobile-action-safe-spacer,
   .page-content[data-route-root='reports'] .mobile-action-safe-spacer,
   .page-content[data-route-root='settings'] .mobile-action-safe-spacer {
-    height: calc(var(--mobile-bottom-nav-clearance) + 0.9rem);
+    height: calc(var(--mobile-bottom-nav-clearance) + 1.25rem);
+  }
+
+  .page-content[data-route-root='sales'] .sales-start-order-btn,
+  .page-content[data-route-root='sales'] .sales-primary-next-action,
+  .page-content[data-route-root='sales'] .sales-finalize-action,
+  .page-content[data-route-root='reports'] .reports-refresh-btn,
+  .page-content[data-route-root='settings'] .settings-save-btn {
+    scroll-margin-bottom: calc(var(--mobile-bottom-nav-clearance) + 1.3rem);
   }
 
   .top-header.top-header-sales .header-utilities,
