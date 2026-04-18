@@ -421,6 +421,7 @@ export function SettingsWorkspace() {
           </WorkspaceNotice>
         )}
       </WorkspacePanel>
+      <div className="mobile-action-safe-spacer" aria-hidden="true" />
     </div>
   );
 }
