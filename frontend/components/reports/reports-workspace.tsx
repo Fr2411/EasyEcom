@@ -90,19 +90,17 @@ export function ReportsWorkspace() {
   return (
     <div className="reports-module">
       <div className="reports-start-here">
-        <WorkspaceNotice tone="info">
-          <p className="reports-start-here-quick">
-            <strong>Start here:</strong> set the date range, refresh the report, then scan KPI cards first.
-          </p>
+        <div className="reports-start-here-helper" role="note" aria-label="Reports review guidance">
+          <p className="reports-start-here-quick">Set range, refresh once, then scan KPI cards first.</p>
           <details className="reports-start-here-details">
-            <summary>See review sequence</summary>
+            <summary>Review sequence</summary>
             <ol>
               <li>Check core outcomes first: sales revenue and completed orders.</li>
               <li>Review Sales and Inventory next to balance demand and stock coverage.</li>
               <li>Finish with Purchases, Finance, and Returns to validate cash and margin pressure.</li>
             </ol>
           </details>
-        </WorkspaceNotice>
+        </div>
       </div>
       <section className="reports-filter-kpi-bridge" aria-label="KPI outcome controls">
         <p className="reports-filter-kpi-eyebrow">Step 1</p>
