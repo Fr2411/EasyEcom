@@ -1280,7 +1280,7 @@ export function InventoryWorkspace() {
                 setOpenQuickActionsFor(null);
               }}
             >
-              Add New Product
+              Start Variant Intake
             </button>
           </div>
         }
