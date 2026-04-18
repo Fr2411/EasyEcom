@@ -308,10 +308,15 @@ export function TopHeader({ onOpenNavigation }: { onOpenNavigation?: () => void 
         />
         <button type="submit" className="header-search-button">{isCatalogRoute ? 'Global search' : 'Search all'}</button>
       </form>
-      <div className="header-utilities">
+      <div className={isCatalogRoute ? 'header-utilities header-utilities-catalog' : 'header-utilities'}>
         <div className={isCatalogRoute ? 'header-theme-mobile header-theme-catalog' : 'header-theme-mobile'} aria-label="Display mode">
           <ThemeToggle />
         </div>
+        {isCatalogRoute ? (
+          <span className="header-mobile-global-search-cue" aria-live="polite">
+            Secondary global search lives in the top bar on larger screens.
+          </span>
+        ) : null}
         <button
           type="button"
           className={actionClassName}
