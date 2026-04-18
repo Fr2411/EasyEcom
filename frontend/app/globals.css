@@ -1175,6 +1175,53 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
   min-height: 2.35rem;
   padding-inline: 0.95rem;
 }
+.receive-po-error-state {
+  border: 1px solid #efc0b7;
+  border-radius: var(--radius-md);
+  background: #fff7f5;
+  padding: 0.95rem;
+  display: grid;
+  gap: 0.6rem;
+}
+.receive-po-error-eyebrow {
+  margin: 0;
+  width: fit-content;
+  border-radius: 999px;
+  border: 1px solid #efc0b7;
+  background: #fff1ed;
+  color: #8c3728;
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+  font-weight: 700;
+  padding: 0.15rem 0.5rem;
+  text-transform: uppercase;
+}
+.receive-po-error-title {
+  margin: 0;
+  color: #7f3124;
+  font-weight: 700;
+  font-size: 0.95rem;
+  line-height: 1.35;
+}
+.receive-po-error-copy {
+  margin: 0;
+  color: #8f4a3f;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+.receive-po-error-recovery {
+  font-weight: 600;
+}
+.receive-po-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+}
+.receive-po-error-actions .btn-primary {
+  min-height: 2.35rem;
+  padding-inline: 0.95rem;
+}
 
 .integrations-layout { grid-template-columns: 1.5fr 1fr; }
 .integrations-events { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.55rem; }
@@ -6635,6 +6682,19 @@ button.secondary:hover,
     justify-content: center;
     text-align: center;
   }
+
+  .receive-po-error-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.5rem;
+  }
+
+  .receive-po-error-actions .btn-primary,
+  .receive-po-error-actions .btn-secondary {
+    width: 100%;
+    justify-content: center;
+    text-align: center;
+  }
 }
 
 @media (max-width: 960px) {
@@ -6681,6 +6741,10 @@ button.secondary:hover,
 
   .page-content[data-route-root='purchases'] .purchases-module {
     padding-bottom: calc(var(--mobile-bottom-nav-clearance) + 0.35rem);
+  }
+
+  .page-content[data-route-root='inventory'] .inventory-command-center {
+    padding-bottom: calc(var(--mobile-bottom-nav-clearance) + 0.7rem);
   }
 
   .page-content[data-route-root='catalog'] .catalog-local-finder-panel {
