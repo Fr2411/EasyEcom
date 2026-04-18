@@ -465,16 +465,11 @@ export function SalesWorkspace() {
         {activeTab === 'new' ? (
           <div className="workspace-two-column">
             <div className="workspace-stack">
-              {isCompactViewport ? (
-                <WorkspaceNotice tone="info">
-                  Mobile priority mode keeps start actions above the fold. Order search stays in Open/Completed tabs.
-                </WorkspaceNotice>
-              ) : null}
               <DraftRecommendationCard
                 title="Start new order"
                 summary={
                   shouldGateMobileStart
-                    ? 'Tap start once to open customer and variant staging.'
+                    ? 'Tap Start new order to open customer and variant staging.'
                     : 'Begin with one customer or product clue. Advanced matching stays hidden until you need it.'
                 }
                 actions={(
