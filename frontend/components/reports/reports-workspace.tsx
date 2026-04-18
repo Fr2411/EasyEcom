@@ -89,33 +89,45 @@ export function ReportsWorkspace() {
 
   return (
     <div className="reports-module">
-      <WorkspaceNotice tone="info">
-        <strong>Start here</strong>
-        <ol>
-          <li>Confirm today&apos;s result first: revenue captured and orders converted.</li>
-          <li>Use Sales and Inventory to decide your next action: push demand or protect stock.</li>
-          <li>Then verify Purchases, Finance, and Returns to control cash pressure and margin drag.</li>
-        </ol>
-      </WorkspaceNotice>
-      <form className="reports-filter-bar" onSubmit={onSubmit}>
-        <label>
-          From
-          <input
-            type="date"
-            value={draftFilters.fromDate}
-            onChange={(event) => setDraftFilters({ ...draftFilters, fromDate: event.target.value })}
-          />
-        </label>
-        <label>
-          To
-          <input
-            type="date"
-            value={draftFilters.toDate}
-            onChange={(event) => setDraftFilters({ ...draftFilters, toDate: event.target.value })}
-          />
-        </label>
-        <button type="submit">Refresh reports</button>
-      </form>
+      <div className="reports-start-here">
+        <WorkspaceNotice tone="info">
+          <p className="reports-start-here-quick">
+            <strong>Start here:</strong> set the date window, refresh KPI outcomes, then review what changed.
+          </p>
+          <details className="reports-start-here-details">
+            <summary>See review sequence</summary>
+            <ol>
+              <li>Confirm today&apos;s result first: revenue captured and orders converted.</li>
+              <li>Use Sales and Inventory to decide your next action: push demand or protect stock.</li>
+              <li>Then verify Purchases, Finance, and Returns to control cash pressure and margin drag.</li>
+            </ol>
+          </details>
+        </WorkspaceNotice>
+      </div>
+      <section className="reports-filter-kpi-bridge" aria-label="KPI outcome controls">
+        <p className="reports-filter-kpi-eyebrow">Step 1</p>
+        <h2>Set KPI window</h2>
+        <p className="reports-filter-kpi-note">Date filters and refresh directly control the KPI outcomes shown below.</p>
+        <form className="reports-filter-bar" onSubmit={onSubmit}>
+          <label>
+            From
+            <input
+              type="date"
+              value={draftFilters.fromDate}
+              onChange={(event) => setDraftFilters({ ...draftFilters, fromDate: event.target.value })}
+            />
+          </label>
+          <label>
+            To
+            <input
+              type="date"
+              value={draftFilters.toDate}
+              onChange={(event) => setDraftFilters({ ...draftFilters, toDate: event.target.value })}
+            />
+          </label>
+          <button type="submit">Refresh KPI outcomes</button>
+        </form>
+      </section>
 
       {loading ? (
         <div className="reports-loading" role="status" aria-live="polite">
