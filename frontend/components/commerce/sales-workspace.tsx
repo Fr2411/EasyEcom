@@ -634,11 +634,7 @@ export function SalesWorkspace() {
                     </label>
                   </div>
                 </DraftRecommendationCard>
-              ) : (
-                <WorkspaceNotice>
-                  Tap Start new order above to open customer and item staging.
-                </WorkspaceNotice>
-              )}
+              ) : null}
             </div>
 
             {!shouldGateMobileStart ? (
