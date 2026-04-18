@@ -2439,6 +2439,7 @@ export function InventoryWorkspace() {
           )
         ) : null}
       </WorkspacePanel>
+      <div className="mobile-action-safe-spacer" aria-hidden="true" />
     </div>
   );
 }
