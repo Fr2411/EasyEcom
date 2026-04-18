@@ -6430,6 +6430,7 @@ html[data-theme='dark'] .theme-toggle-applied {
     align-items: stretch;
     gap: 0.5rem;
     min-width: 0;
+    overflow: visible;
     border-left: 0;
     padding-left: 0;
   }
@@ -6454,16 +6455,25 @@ html[data-theme='dark'] .theme-toggle-applied {
 
   .header-utilities-catalog .theme-toggle.theme-toggle-header-catalog .theme-toggle-option {
     min-width: 0;
+    min-height: 2.35rem;
     flex: 1 1 calc(33.333% - 0.25rem);
   }
 
+  .header-utilities-catalog .theme-toggle.theme-toggle-header-catalog .theme-toggle-option span {
+    font-size: 0.78rem;
+  }
+
   .header-utilities-catalog .header-action-cluster {
-    width: 100%;
+    width: auto;
+    justify-self: start;
   }
 
   .header-utilities-catalog .header-cross-module-action {
-    width: 100%;
-    justify-content: center;
+    width: auto;
+    min-height: 2.1rem;
+    padding: 0.46rem 0.72rem;
+    justify-content: flex-start;
+    font-size: 0.76rem;
   }
 
   .sidebar-theme-control-catalog {

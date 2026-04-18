@@ -70,7 +70,7 @@ function getHeaderContext(pathname: string): HeaderContext {
         searchScope: 'inventory',
         actionLabel: 'Open inventory',
         actionHref: '/inventory',
-        actionTone: 'secondary',
+        actionTone: 'quiet',
       };
     case '/inventory':
       return {
@@ -313,11 +313,6 @@ export function TopHeader({ onOpenNavigation }: { onOpenNavigation?: () => void 
           <div className={isCatalogRoute ? 'header-theme-mobile header-theme-catalog' : 'header-theme-mobile'} aria-label="Display mode">
             <ThemeToggle variant={isCatalogRoute ? 'header-catalog' : 'default'} />
           </div>
-          {isCatalogRoute ? (
-            <span className="header-mobile-global-search-cue" aria-live="polite">
-              Secondary global search lives in the top bar on larger screens.
-            </span>
-          ) : null}
         </div>
         <div className={isCatalogRoute ? 'header-action-cluster' : undefined}>
           <button
