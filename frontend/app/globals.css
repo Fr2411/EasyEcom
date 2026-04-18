@@ -7763,6 +7763,11 @@ html {
     padding-bottom: calc(var(--mobile-bottom-nav-clearance) + 0.55rem);
   }
 
+  .page-content[data-route-root='sales'] .page-shell-body,
+  .page-content[data-route-root='finance'] .page-shell-body {
+    padding-bottom: calc(var(--mobile-bottom-nav-clearance) + 0.55rem);
+  }
+
   .page-content[data-route-root='customers'] {
     min-width: 0;
     padding-bottom: calc(var(--mobile-bottom-nav-clearance) + 1.1rem);
@@ -7791,9 +7796,16 @@ html {
   .page-content[data-route-root='dashboard'] .dashboard-inline-link,
   .page-content[data-route-root='sales'] .guided-action-footer,
   .page-content[data-route-root='reports'] .workspace-panel,
+  .page-content[data-route-root='finance'] .workspace-panel,
   .page-content[data-route-root='reports'] .reports-filter-bar button,
   .page-content[data-route-root='sales'] .workspace-actions {
     scroll-margin-bottom: calc(var(--mobile-bottom-nav-clearance) + 0.75rem);
+  }
+
+  .page-content[data-route-root='sales'] .sales-module,
+  .page-content[data-route-root='reports'] .reports-module,
+  .page-content[data-route-root='finance'] .finance-module {
+    padding-bottom: calc(var(--mobile-bottom-nav-clearance) + 0.45rem);
   }
 
   .page-content[data-route-root='reports'] .header-theme-mobile {
