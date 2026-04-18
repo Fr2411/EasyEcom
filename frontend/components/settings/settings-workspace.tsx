@@ -20,6 +20,38 @@ type ChannelDraft = {
   persona_prompt: string;
 };
 
+function SettingsLoadingState() {
+  return (
+    <div className="settings-layout settings-loading-layout" role="status" aria-live="polite">
+      <WorkspacePanel
+        title="Tenant settings"
+        description="Loading tenant identity, profile defaults, and channel preferences."
+      >
+        <div className="settings-loading-copy">
+          <strong>Loading tenant settings…</strong>
+          <p className="settings-muted">Preparing tenant-scoped configuration fields. No stock, sales, or ledger data is modified during loading.</p>
+        </div>
+        <div className="settings-loading-context">
+          <div className="settings-loading-pill" />
+          <div className="settings-loading-pill" />
+          <div className="settings-loading-pill" />
+        </div>
+      </WorkspacePanel>
+
+      <WorkspacePanel
+        title="Profile, defaults, and document prefixes"
+        description="This section will load business profile fields, operational defaults, and document prefixes."
+      >
+        <div className="settings-loading-grid">
+          {Array.from({ length: 8 }).map((_, index) => (
+            <div key={`settings-loading-profile-${index}`} className="settings-loading-field" />
+          ))}
+        </div>
+      </WorkspacePanel>
+    </div>
+  );
+}
+
 function channelDraftFromIntegration(channel: ChannelIntegration): ChannelDraft {
   return {
     display_name: channel.display_name,
@@ -116,7 +148,7 @@ export function SettingsWorkspace() {
   };
 
   if (loading) {
-    return <div className="reports-loading">Loading tenant settings…</div>;
+    return <SettingsLoadingState />;
   }
 
   if (error && !form) {
