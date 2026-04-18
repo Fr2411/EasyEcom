@@ -260,6 +260,35 @@ export function safePurchaseOrderErrorMessage(error: unknown, fallback: string) 
   return fallback;
 }
 
+function purchaseOrderLoadFailureGuidance(error: unknown) {
+  if (error instanceof ApiNetworkError) {
+    return {
+      message: 'Unable to refresh outstanding purchase orders right now.',
+      recoveryTip: 'Check your internet connection, then retry outstanding orders.',
+      actionLabel: 'Retry outstanding orders',
+    };
+  }
+  if (error instanceof ApiError && error.status === 403) {
+    return {
+      message: 'You do not have permission to view outstanding purchase orders.',
+      recoveryTip: 'Ask your tenant owner/admin to grant Purchases view access for your role.',
+      actionLabel: 'Retry outstanding orders',
+    };
+  }
+  if (error instanceof ApiError && error.status >= 500) {
+    return {
+      message: 'Outstanding purchase orders are temporarily unavailable.',
+      recoveryTip: 'Retry shortly, or continue with manual receiving.',
+      actionLabel: 'Retry outstanding orders',
+    };
+  }
+  return {
+    message: safePurchaseOrderErrorMessage(error, 'Unable to load outstanding purchase orders right now.'),
+    recoveryTip: 'Retry once, or continue with manual receiving.',
+    actionLabel: 'Retry outstanding orders',
+  };
+}
+
 export function safeReceiveStockErrorMessage(error: unknown, sourcePurchaseOrderId?: string) {
   if (error instanceof ApiNetworkError) {
     return 'Unable to save stock receipt right now. Check your connection and try again.';
@@ -513,6 +542,7 @@ export function InventoryWorkspace() {
   const [outstandingPurchaseOrders, setOutstandingPurchaseOrders] = useState<Awaited<ReturnType<typeof listPurchaseOrders>>['items']>([]);
   const [selectedPurchaseOrderId, setSelectedPurchaseOrderId] = useState('');
   const [loadingPurchaseOrders, setLoadingPurchaseOrders] = useState(false);
+  const [purchaseOrderLoadError, setPurchaseOrderLoadError] = useState<unknown>(null);
   const [isPending, startTransition] = useTransition();
   const quickActionsMenuRef = useRef<HTMLDivElement | null>(null);
   const quickActionsButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
@@ -601,15 +631,10 @@ export function InventoryWorkspace() {
     try {
       const payload = await listPurchaseOrders({ status: 'draft' });
       setOutstandingPurchaseOrders(payload.items);
-      setError('');
+      setPurchaseOrderLoadError(null);
     } catch (loadError) {
       setOutstandingPurchaseOrders([]);
-      setError(
-        safePurchaseOrderErrorMessage(
-          loadError,
-          'Unable to load outstanding purchase orders. You can still receive stock manually.'
-        )
-      );
+      setPurchaseOrderLoadError(loadError);
     } finally {
       setLoadingPurchaseOrders(false);
     }
@@ -1135,6 +1160,10 @@ export function InventoryWorkspace() {
     adjust: 'Adjustments',
     'low-stock': 'Low Stock',
   };
+  const purchaseOrderLoadFailure = useMemo(() => {
+    if (!purchaseOrderLoadError) return null;
+    return purchaseOrderLoadFailureGuidance(purchaseOrderLoadError);
+  }, [purchaseOrderLoadError]);
 
   return (
     <div className="workspace-stack inventory-command-center">
@@ -1613,6 +1642,22 @@ export function InventoryWorkspace() {
                   />
                 </h4>
               </div>
+              {purchaseOrderLoadFailure ? (
+                <div className="receive-po-error-state" role="alert" aria-live="assertive">
+                  <p className="receive-po-error-eyebrow">Outstanding orders unavailable</p>
+                  <p className="receive-po-error-title">Purchase order prefill is currently unavailable</p>
+                  <p className="receive-po-error-copy">{purchaseOrderLoadFailure.message}</p>
+                  <p className="receive-po-error-copy receive-po-error-recovery">{purchaseOrderLoadFailure.recoveryTip}</p>
+                  <div className="receive-po-error-actions">
+                    <button type="button" className="btn-primary" onClick={() => void loadOutstandingPurchaseOrders()} disabled={loadingPurchaseOrders}>
+                      {loadingPurchaseOrders ? 'Retrying…' : purchaseOrderLoadFailure.actionLabel}
+                    </button>
+                    <button type="button" className="btn-secondary" onClick={() => setPurchaseOrderLoadError(null)}>
+                      Continue with manual receiving
+                    </button>
+                  </div>
+                </div>
+              ) : null}
               <div className="workspace-inline-actions">
                 <label>
                   Draft purchase order

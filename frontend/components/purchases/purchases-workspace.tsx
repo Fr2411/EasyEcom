@@ -5,7 +5,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { WorkspaceEmpty, WorkspaceNotice, WorkspacePanel } from '@/components/commerce/workspace-primitives';
 import { ApiError, ApiNetworkError } from '@/lib/api/client';
 import { listPurchaseOrders } from '@/lib/api/purchases';
-import { formatMoney } from '@/lib/commerce-format';
+import { formatDateTime, formatMoney } from '@/lib/commerce-format';
 
 function stripRequestUrlFromMessage(message: string) {
   return message.replace(/\s*\(https?:\/\/[^)]+\)\s*$/i, '').trim();
@@ -38,7 +38,7 @@ function purchaseLoadFailureGuidance(error: unknown) {
   const steps = [
     'Existing purchase orders and received stock remain unchanged.',
     'Use Retry to refresh your purchase order list.',
-    'If needed, continue receiving stock from Inventory while this list reloads.',
+    'If needed, continue receiving stock from Inventory while this list refreshes.',
   ];
 
   if (error instanceof ApiNetworkError) {
@@ -61,7 +61,7 @@ function purchaseLoadFailureGuidance(error: unknown) {
     return {
       message,
       steps,
-      recoveryTip: 'Backend purchase services are temporarily unavailable. Retry shortly.',
+      recoveryTip: 'Purchase services are temporarily unavailable. Retry shortly.',
     };
   }
 
@@ -131,7 +131,7 @@ export function PurchasesWorkspace() {
 
       <WorkspacePanel
         title="Procurement posture"
-        description="Track purchase-order volume here, then receive stock through the inventory intake flow that writes the variant ledger."
+        description="Track purchase-order volume here, then continue receiving stock from Inventory."
         actions={<Link href="/inventory?tab=receive">Open Receive Stock</Link>}
       >
         <div className="reports-grid">
@@ -219,7 +219,7 @@ export function PurchasesWorkspace() {
                   <tr key={item.purchase_id}>
                     <td>{item.purchase_no}</td>
                     <td>{item.supplier_name}</td>
-                    <td>{item.purchase_date}</td>
+                    <td>{formatDateTime(item.purchase_date)}</td>
                     <td>{item.status}</td>
                     <td>{formatMoney(item.subtotal)}</td>
                   </tr>
