@@ -2534,6 +2534,32 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
   }
 }
 
+@media (max-width: 640px) {
+  .reports-kpi-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.7rem;
+  }
+
+  .reports-kpi-grid .reports-kpi-card,
+  .reports-kpi-grid .reports-kpi-card-featured {
+    grid-column: span 1;
+  }
+
+  .reports-kpi-grid .reports-kpi-card-secondary {
+    padding: 0.75rem 0.8rem;
+    row-gap: 0.18rem;
+  }
+
+  .reports-kpi-grid .reports-kpi-card-secondary strong {
+    margin-top: 0.28rem;
+  }
+
+  .reports-kpi-grid .reports-kpi-card-secondary span {
+    margin-top: 0.26rem;
+    line-height: 1.33;
+  }
+}
+
 .sales-start-order-btn {
   min-width: 12.5rem;
 }

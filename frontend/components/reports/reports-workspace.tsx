@@ -138,17 +138,17 @@ export function ReportsWorkspace() {
               <strong>{state.overview.sales_count}</strong>
               <span>Completed orders your team turned into shipped business.</span>
             </article>
-            <article className="ps-card reports-kpi-card">
+            <article className="ps-card reports-kpi-card reports-kpi-card-secondary">
               <p>Operating expenses</p>
               <strong>{formatMoney(state.overview.expense_total)}</strong>
               <span>Spend pressure currently reducing operating margin.</span>
             </article>
-            <article className="ps-card reports-kpi-card">
+            <article className="ps-card reports-kpi-card reports-kpi-card-secondary">
               <p>Units returned</p>
               <strong>{state.overview.returns_total}</strong>
               <span>Items coming back that can slow net growth.</span>
             </article>
-            <article className="ps-card reports-kpi-card">
+            <article className="ps-card reports-kpi-card reports-kpi-card-secondary">
               <p>Inventory purchased</p>
               <strong>{formatMoney(state.overview.purchases_total)}</strong>
               <span>Inbound stock investment committed in this period.</span>
