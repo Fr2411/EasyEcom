@@ -92,13 +92,20 @@ What it does:
 - restart the backend service
 
 GitHub-driven backend deploy:
-- Push to `main` triggers `.github/workflows/deploy-backend.yml`
-- Manual rollback or redeploy is available through GitHub Actions `workflow_dispatch`
+- Production deploy is manual-only via `.github/workflows/deploy-backend.yml` (`workflow_dispatch`)
+- Use `develop` as staging integration and promote to `main` only after staging validation
 - Required GitHub Secrets:
   - `EC2_HOST`
   - `EC2_USER`
   - `EC2_SSH_PRIVATE_KEY`
   - optional `API_BASE_URL` for post-deploy smoke checks
+
+Staging workflow checks:
+- Local internal preview-before-push: `./scripts/local_preview_before_push.sh`
+- Shared quality gate (local + CI): `./scripts/staging_quality_gate.sh`
+- GitHub staging gate workflow: `.github/workflows/staging-policy-gate.yml`
+- Branch protection rollout helper: `./scripts/apply_branch_protection.sh`
+- Policy reference: `docs/staging-workflow-policy.md`
 
 Frontend deploy to AWS Amplify:
 ```bash
