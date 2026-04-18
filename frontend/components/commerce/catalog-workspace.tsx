@@ -794,7 +794,7 @@ export function CatalogWorkspace() {
         title={
           <div className="catalog-finder-title">
             <span className="workspace-heading">Catalog finder</span>
-            <span className="catalog-finder-scope-note">Catalog-only lookup. Top-bar search is for global navigation.</span>
+            <span className="catalog-finder-scope-note">Primary search for this page. Use top-bar search only for global navigation.</span>
           </div>
         }
         actions={
