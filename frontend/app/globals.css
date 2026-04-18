@@ -6430,6 +6430,7 @@ html[data-theme='dark'] .theme-toggle-applied {
     align-items: stretch;
     gap: 0.5rem;
     min-width: 0;
+    max-width: 100%;
     overflow: visible;
     border-left: 0;
     padding-left: 0;
@@ -6437,6 +6438,9 @@ html[data-theme='dark'] .theme-toggle-applied {
 
   .header-utilities-catalog .header-theme-catalog,
   .header-utilities-catalog .header-theme-cluster {
+    display: flex;
+    min-width: 0;
+    max-width: 100%;
     width: 100%;
     border-right: 0;
     margin-right: 0;
@@ -6445,26 +6449,34 @@ html[data-theme='dark'] .theme-toggle-applied {
 
   .header-utilities-catalog .theme-toggle.theme-toggle-header-catalog {
     min-width: 0;
+    max-width: 100%;
     width: 100%;
+    padding: 0.18rem;
+    box-sizing: border-box;
   }
 
   .header-utilities-catalog .theme-toggle.theme-toggle-header-catalog .theme-toggle-options-row {
     width: 100%;
+    min-width: 0;
+    gap: 0.16rem;
     justify-content: space-between;
   }
 
   .header-utilities-catalog .theme-toggle.theme-toggle-header-catalog .theme-toggle-option {
     min-width: 0;
     min-height: 2.35rem;
-    flex: 1 1 calc(33.333% - 0.25rem);
+    padding: 0 0.3rem;
+    flex: 1 1 0;
   }
 
   .header-utilities-catalog .theme-toggle.theme-toggle-header-catalog .theme-toggle-option span {
-    font-size: 0.78rem;
+    font-size: 0.72rem;
+    letter-spacing: 0.01em;
   }
 
   .header-utilities-catalog .header-action-cluster {
-    width: auto;
+    width: 100%;
+    min-width: 0;
     justify-self: start;
   }
 
