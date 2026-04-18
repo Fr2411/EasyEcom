@@ -26,15 +26,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const routeRoot = pathname.split('/').filter(Boolean)[0] ?? '';
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => readSidebarPreference());
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useEffect(() => {
     writeSidebarPreference(sidebarCollapsed);
   }, [sidebarCollapsed]);
-
-  useEffect(() => {
-    setMobileNavOpen(false);
-  }, [pathname]);
 
   return (
     <div className={sidebarCollapsed ? 'shell sidebar-collapsed' : 'shell'}>
@@ -43,25 +38,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <span className="shell-orb shell-orb-b" />
         <span className="shell-grid" />
       </div>
-      <button
-        type="button"
-        className={mobileNavOpen ? 'shell-mobile-overlay visible' : 'shell-mobile-overlay'}
-        aria-label="Close navigation drawer"
-        onClick={() => setMobileNavOpen(false)}
-      />
       <Sidebar
         collapsed={sidebarCollapsed}
-        mobileOpen={mobileNavOpen}
         onToggle={() => setSidebarCollapsed((current) => !current)}
-        onClose={() => setMobileNavOpen(false)}
       />
       <div className="content-pane">
-        <TopHeader onOpenNavigation={() => setMobileNavOpen(true)} />
+        <TopHeader />
         <main className="page-content" data-route-root={routeRoot}>
           {children}
         </main>
       </div>
-      <MobileBottomNav onOpenMenu={() => setMobileNavOpen(true)} />
+      <MobileBottomNav />
     </div>
   );
 }

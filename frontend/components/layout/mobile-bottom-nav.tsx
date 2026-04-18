@@ -50,7 +50,7 @@ function getMobileNavigationIcon(icon: NavigationItem['icon']) {
   return ICONS[icon];
 }
 
-export function MobileBottomNav({ onOpenMenu }: { onOpenMenu: () => void }) {
+export function MobileBottomNav() {
   const pathname = usePathname();
   const { user } = useAuth();
   const primaryItems = getMobilePrimaryItems(user);
@@ -103,10 +103,6 @@ export function MobileBottomNav({ onOpenMenu }: { onOpenMenu: () => void }) {
           </Link>
         );
       })}
-      <button type="button" className="mobile-bottom-link" onClick={onOpenMenu} aria-label="Open navigation menu">
-        <Menu size={18} aria-hidden="true" />
-        <span>More</span>
-      </button>
     </nav>
   );
 }

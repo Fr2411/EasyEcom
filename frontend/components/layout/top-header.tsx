@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { ArrowRight, Menu, Search } from 'lucide-react';
+import { ArrowRight, Search } from 'lucide-react';
 import { NAV_ITEMS } from '@/types/navigation';
 import { ThemeToggle } from '@/components/theme/theme-toggle';
 
@@ -235,7 +235,7 @@ function getHeaderContext(pathname: string): HeaderContext {
   }
 }
 
-export function TopHeader({ onOpenNavigation }: { onOpenNavigation?: () => void }) {
+export function TopHeader() {
   const router = useRouter();
   const pathname = usePathname();
   const matchedRoute = NAV_ITEMS.find((item) => item.href === pathname);
@@ -275,14 +275,6 @@ export function TopHeader({ onOpenNavigation }: { onOpenNavigation?: () => void 
 
   return (
     <header className={headerClassName}>
-      <button
-        type="button"
-        className="header-mobile-menu"
-        onClick={onOpenNavigation}
-        aria-label="Open navigation"
-      >
-        <Menu size={18} aria-hidden="true" />
-      </button>
       <div className="header-copy">
         <p className="header-title">{pageContext.title ?? matchedRoute?.label ?? DEFAULT_TITLE}</p>
       </div>
