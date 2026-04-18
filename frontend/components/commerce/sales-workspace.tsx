@@ -470,6 +470,8 @@ export function SalesWorkspace() {
                 summary={
                   shouldGateMobileStart
                     ? 'Open a new order first so the team can immediately capture the sale.'
+                    : isCompactViewport
+                      ? 'Order started. Next: enter one customer or product clue below to stage the draft.'
                     : 'Start with one buyer or product clue, then stage customer and lines before confirmation.'
                 }
                 actions={(
@@ -490,11 +492,6 @@ export function SalesWorkspace() {
                 )}
               >
                 <div className="workspace-inline-actions">
-                  {isCompactViewport && orderStarted ? (
-                    <p className="sales-start-continue-cue" role="status" aria-live="polite">
-                      Next step: enter one customer or product clue in the field below to stage the draft.
-                    </p>
-                  ) : null}
                   {!shouldGateMobileStart ? (
                     <button
                       type="button"
