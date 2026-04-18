@@ -125,7 +125,7 @@ export function ReportsWorkspace() {
               onChange={(event) => setDraftFilters({ ...draftFilters, toDate: event.target.value })}
             />
           </label>
-          <button type="submit">Refresh KPI outcomes</button>
+          <button type="submit" className="btn-primary reports-refresh-btn">Refresh KPI outcomes</button>
         </form>
       </section>
 

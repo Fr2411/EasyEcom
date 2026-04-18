@@ -194,7 +194,7 @@ export function SettingsWorkspace() {
         <WorkspacePanel
           title="Profile, defaults, and document prefixes"
           description="Update the tenant profile, operational defaults, and numbering prefixes used by sales, purchases, and returns."
-          actions={<button type="submit" disabled={savingSettings}>{savingSettings ? 'Saving…' : 'Save settings'}</button>}
+          actions={<button type="submit" className="btn-primary settings-save-btn" disabled={savingSettings}>{savingSettings ? 'Saving…' : 'Save settings'}</button>}
         >
           <div className="settings-grid">
             <label>
@@ -344,7 +344,7 @@ export function SettingsWorkspace() {
         description="Tenant-level AI selling behavior stays channel-scoped so it remains aligned with the live WhatsApp integration."
         actions={
           channelDraft ? (
-            <button type="button" onClick={saveChannelPreferences} disabled={savingChannel}>
+            <button type="button" className="btn-primary settings-save-btn" onClick={saveChannelPreferences} disabled={savingChannel}>
               {savingChannel ? 'Saving…' : 'Save channel preferences'}
             </button>
           ) : null
