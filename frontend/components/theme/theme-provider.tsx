@@ -13,6 +13,27 @@ type ThemeContextValue = {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 const STORAGE_KEY = 'easyecom-theme-preference';
+const VALID_PREFERENCES: ThemePreference[] = ['light', 'dark', 'system'];
+
+function normalizePreference(value: string | null | undefined): ThemePreference | null {
+  if (value && VALID_PREFERENCES.includes(value as ThemePreference)) {
+    return value as ThemePreference;
+  }
+  return null;
+}
+
+function readPersistedPreference(): ThemePreference {
+  try {
+    const stored = normalizePreference(window.localStorage.getItem(STORAGE_KEY));
+    if (stored) {
+      return stored;
+    }
+  } catch {
+    // Ignore storage read issues (private mode/restricted environments).
+  }
+  const datasetValue = normalizePreference(document.documentElement.dataset.themePreference);
+  return datasetValue ?? 'system';
+}
 
 function resolveTheme(preference: ThemePreference): AppliedTheme {
   if (preference === 'system') {
@@ -36,9 +57,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [appliedTheme, setAppliedTheme] = useState<AppliedTheme>('light');
 
   useEffect(() => {
-    const stored = window.localStorage.getItem(STORAGE_KEY);
-    const initialPreference: ThemePreference =
-      stored === 'light' || stored === 'dark' || stored === 'system' ? stored : 'system';
+    const initialPreference = readPersistedPreference();
     setPreferenceState(initialPreference);
     setAppliedTheme(applyTheme(initialPreference));
   }, []);
@@ -48,13 +67,24 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const syncSystemTheme = () => {
       setAppliedTheme(applyTheme(preference));
     };
-    media.addEventListener('change', syncSystemTheme);
-    return () => media.removeEventListener('change', syncSystemTheme);
+
+    if (typeof media.addEventListener === 'function') {
+      media.addEventListener('change', syncSystemTheme);
+      return () => media.removeEventListener('change', syncSystemTheme);
+    }
+
+    // Safari fallback for older MediaQueryList implementations.
+    media.addListener(syncSystemTheme);
+    return () => media.removeListener(syncSystemTheme);
   }, [preference]);
 
   const setPreference = (nextPreference: ThemePreference) => {
     setPreferenceState(nextPreference);
-    window.localStorage.setItem(STORAGE_KEY, nextPreference);
+    try {
+      window.localStorage.setItem(STORAGE_KEY, nextPreference);
+    } catch {
+      // Ignore storage write issues while keeping in-memory + DOM state updated.
+    }
     setAppliedTheme(applyTheme(nextPreference));
   };
 

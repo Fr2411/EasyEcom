@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { ArrowRight, Menu, Search } from 'lucide-react';
 import { NAV_ITEMS } from '@/types/navigation';
+import { ThemeToggle } from '@/components/theme/theme-toggle';
 
 const DEFAULT_TITLE = 'Operations Workspace';
 
@@ -304,6 +305,9 @@ export function TopHeader({ onOpenNavigation }: { onOpenNavigation?: () => void 
         <button type="submit" className="header-search-button">Search all</button>
       </form>
       <div className="header-utilities">
+        <div className="header-theme-mobile" aria-label="Display mode">
+          <ThemeToggle />
+        </div>
         <button
           type="button"
           className={actionClassName}
