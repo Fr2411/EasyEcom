@@ -127,30 +127,35 @@ export function ReportsWorkspace() {
 
       {!loading && !error && state ? (
         <>
-          <div className="reports-grid">
-            <article className="ps-card">
-              <p>Sales revenue</p>
+          <div className="reports-grid reports-kpi-grid">
+            <article className="ps-card reports-kpi-card reports-kpi-card-featured">
+              <p>Revenue captured</p>
               <strong>{formatMoney(state.overview.sales_revenue_total)}</strong>
+              <span>Total money collected from completed sales in this window.</span>
             </article>
-            <article className="ps-card">
-              <p>Sales count</p>
+            <article className="ps-card reports-kpi-card reports-kpi-card-featured">
+              <p>Orders converted</p>
               <strong>{state.overview.sales_count}</strong>
+              <span>Completed orders your team turned into shipped business.</span>
             </article>
-            <article className="ps-card">
-              <p>Expenses</p>
+            <article className="ps-card reports-kpi-card">
+              <p>Operating expenses</p>
               <strong>{formatMoney(state.overview.expense_total)}</strong>
+              <span>Spend pressure currently reducing operating margin.</span>
             </article>
-            <article className="ps-card">
-              <p>Returns</p>
+            <article className="ps-card reports-kpi-card">
+              <p>Units returned</p>
               <strong>{state.overview.returns_total}</strong>
+              <span>Items coming back that can slow net growth.</span>
             </article>
-            <article className="ps-card">
-              <p>Purchases</p>
+            <article className="ps-card reports-kpi-card">
+              <p>Inventory purchased</p>
               <strong>{formatMoney(state.overview.purchases_total)}</strong>
+              <span>Inbound stock investment committed in this period.</span>
             </article>
           </div>
 
-          <WorkspacePanel title="Sales" description="Revenue, top products, and top customers for the selected date window.">
+          <WorkspacePanel title="Sales" description="Use this first to verify what actually generated revenue in the selected window.">
             {state.sales.top_products.length ? (
               <ul className="admin-match-list">
                 {state.sales.top_products.slice(0, 5).map((item) => (
@@ -186,7 +191,7 @@ export function ReportsWorkspace() {
             <DeferredList items={state.inventory.deferred_metrics} />
           </WorkspacePanel>
 
-          <WorkspacePanel title="Purchases & Finance" description="Inbound purchasing, expenses, and receivables for the same reporting window.">
+          <WorkspacePanel title="Purchases & Finance" description="Then validate cash-out and receivable pressure against sales performance.">
             <div className="reports-grid">
               <article className="ps-card">
                 <p>Purchase orders</p>
@@ -212,7 +217,7 @@ export function ReportsWorkspace() {
             <DeferredList items={[...state.purchases.deferred_metrics, ...state.finance.deferred_metrics]} />
           </WorkspacePanel>
 
-          <WorkspacePanel title="Returns & Products" description="Return pressure and product performance outliers.">
+          <WorkspacePanel title="Returns & Products" description="Finally confirm return drag and product-level outliers impacting margin.">
             <div className="settings-context">
               <div>
                 <dt>Returns count</dt>
