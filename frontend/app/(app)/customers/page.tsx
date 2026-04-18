@@ -4,20 +4,21 @@ import { WorkspaceNotice, WorkspacePanel } from '@/components/commerce/workspace
 
 export default function CustomersPage() {
   return (
-    <PageShell title="Customers" description="Customer data stays embedded inside Sales and Returns instead of living as a browsable tenant directory."
+    <PageShell title="Customers" description="Use this page to understand where customer records are created and managed in daily operations."
       hideHeader
     >
       <WorkspacePanel
-        title="Embedded customer records"
-        description="UI users find customers by phone or email during a transaction. There is no standalone customer list for tenant teams."
+        title="Customer records live inside transactions"
+        description="There is no standalone customer directory. Teams create and reuse customer records during checkout, then update them while handling sales and returns."
       >
         <WorkspaceNotice>
-          Customer data is still stored for orders, returns, aggregate reporting, and future AI workflows, but day-to-day access stays inside transaction flows.
+          Customer data is stored for orders, returns, reporting, and future AI workflows, but day-to-day customer work stays inside Sales and Returns.
         </WorkspaceNotice>
         <WorkspaceNotice>
-          Start from the Sales workspace to create or reuse customers during checkout.
+          Primary next action: start in Sales to create or reuse a customer while placing an order.
           <div className="workspace-actions">
             <Link href="/sales" className="btn-primary">Go to Sales workspace</Link>
+            <Link href="/returns" className="secondary">Go to Returns workspace</Link>
           </div>
         </WorkspaceNotice>
       </WorkspacePanel>

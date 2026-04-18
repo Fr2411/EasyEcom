@@ -514,7 +514,7 @@ const cases = [
   ['Dashboard', DashboardPage, /business analytics dashboard/i],
   ['Reports', ReportsPage, /loading tenant reports|sales revenue/i],
   ['Catalog', CatalogPage, /variant-first catalog/i],
-  ['Customers', CustomersPage, /embedded customer records/i],
+  ['Customers', CustomersPage, /customer records live inside transactions/i],
   ['Inventory', InventoryPage, /variant-level inventory control/i],
   ['Purchases', PurchasesPage, /trusted supplier/i],
   ['Sales', SalesPage, /order-first sales workspace/i],
