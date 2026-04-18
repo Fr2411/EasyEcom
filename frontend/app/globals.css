@@ -8045,3 +8045,120 @@ html {
 .reports-deferred {
   padding: 0.85rem 0.95rem;
 }
+
+/* TEA-177: remediate R-10/R-11/R-12 + unify mobile nav behavior */
+:root {
+  --text-muted-readable: #434b57;
+}
+
+html[data-theme='dark'] {
+  --text-muted-readable: #c5cbd8;
+}
+
+@media (max-width: 900px) {
+  .sidebar:not(.mobile-open),
+  .sidebar.sidebar-collapsed:not(.mobile-open) {
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .sidebar .sidebar-toggle {
+    display: none;
+  }
+}
+
+.page-content[data-route-root='dashboard'] .workspace-panel-header h3,
+.page-content[data-route-root='sales'] .workspace-panel-header h3,
+.page-content[data-route-root='returns'] .workspace-panel-header h3,
+.page-content[data-route-root='purchases'] .workspace-panel-header h3,
+.page-content[data-route-root='catalog'] .workspace-panel-header h3,
+.page-content[data-route-root='inventory'] .workspace-panel-header h3,
+.page-content[data-route-root='dashboard'] .workspace-subsection-header h4,
+.page-content[data-route-root='sales'] .workspace-subsection-header h4,
+.page-content[data-route-root='returns'] .workspace-subsection-header h4,
+.page-content[data-route-root='purchases'] .workspace-subsection-header h4,
+.page-content[data-route-root='catalog'] .workspace-subsection-header h4,
+.page-content[data-route-root='inventory'] .workspace-subsection-header h4,
+.page-content[data-route-root='dashboard'] .guided-intent-copy h4,
+.page-content[data-route-root='sales'] .guided-intent-copy h4,
+.page-content[data-route-root='returns'] .guided-intent-copy h4,
+.page-content[data-route-root='purchases'] .guided-intent-copy h4,
+.page-content[data-route-root='catalog'] .guided-intent-copy h4,
+.page-content[data-route-root='inventory'] .guided-intent-copy h4,
+.page-content[data-route-root='dashboard'] .guided-draft-card-header h4,
+.page-content[data-route-root='sales'] .guided-draft-card-header h4,
+.page-content[data-route-root='returns'] .guided-draft-card-header h4,
+.page-content[data-route-root='purchases'] .guided-draft-card-header h4,
+.page-content[data-route-root='catalog'] .guided-draft-card-header h4,
+.page-content[data-route-root='inventory'] .guided-draft-card-header h4,
+.page-content[data-route-root='dashboard'] .guided-match-group-header h4,
+.page-content[data-route-root='sales'] .guided-match-group-header h4,
+.page-content[data-route-root='returns'] .guided-match-group-header h4,
+.page-content[data-route-root='purchases'] .guided-match-group-header h4,
+.page-content[data-route-root='catalog'] .guided-match-group-header h4,
+.page-content[data-route-root='inventory'] .guided-match-group-header h4 {
+  font-size: 0.98rem;
+  line-height: 1.36;
+  letter-spacing: -0.006em;
+}
+
+.page-content[data-route-root='dashboard'] .workspace-panel-header p,
+.page-content[data-route-root='sales'] .workspace-panel-header p,
+.page-content[data-route-root='returns'] .workspace-panel-header p,
+.page-content[data-route-root='purchases'] .workspace-panel-header p,
+.page-content[data-route-root='catalog'] .workspace-panel-header p,
+.page-content[data-route-root='inventory'] .workspace-panel-header p,
+.page-content[data-route-root='dashboard'] .workspace-subsection-header p,
+.page-content[data-route-root='sales'] .workspace-subsection-header p,
+.page-content[data-route-root='returns'] .workspace-subsection-header p,
+.page-content[data-route-root='purchases'] .workspace-subsection-header p,
+.page-content[data-route-root='catalog'] .workspace-subsection-header p,
+.page-content[data-route-root='inventory'] .workspace-subsection-header p,
+.page-content[data-route-root='dashboard'] .workspace-field-note,
+.page-content[data-route-root='sales'] .workspace-field-note,
+.page-content[data-route-root='returns'] .workspace-field-note,
+.page-content[data-route-root='purchases'] .workspace-field-note,
+.page-content[data-route-root='catalog'] .workspace-field-note,
+.page-content[data-route-root='inventory'] .workspace-field-note,
+.page-content[data-route-root='dashboard'] .muted,
+.page-content[data-route-root='sales'] .muted,
+.page-content[data-route-root='returns'] .muted,
+.page-content[data-route-root='purchases'] .muted,
+.page-content[data-route-root='catalog'] .muted,
+.page-content[data-route-root='inventory'] .muted {
+  color: var(--text-muted-readable);
+  font-size: 0.83rem;
+  line-height: 1.45;
+}
+
+.page-content[data-route-root='sales'] .workspace-helper-copy,
+.page-content[data-route-root='returns'] .workspace-helper-copy,
+.page-content[data-route-root='catalog'] .workspace-helper-copy,
+.page-content[data-route-root='reports'] .workspace-helper-copy {
+  color: var(--text-muted-readable);
+}
+
+.page-content[data-route-root='dashboard'] thead th,
+.page-content[data-route-root='sales'] thead th,
+.page-content[data-route-root='returns'] thead th,
+.page-content[data-route-root='purchases'] thead th,
+.page-content[data-route-root='catalog'] thead th,
+.page-content[data-route-root='inventory'] thead th {
+  font-size: 0.76rem;
+  letter-spacing: 0.06em;
+}
+
+@media (min-width: 901px) {
+  .page-content[data-route-root='dashboard'] .dashboard-analytics,
+  .page-content[data-route-root='sales'] .sales-module,
+  .page-content[data-route-root='inventory'] .inventory-module {
+    gap: 0.95rem;
+  }
+
+  .page-content[data-route-root='returns'] .page-shell-body,
+  .page-content[data-route-root='purchases'] .page-shell-body,
+  .page-content[data-route-root='catalog'] .page-shell-body,
+  .page-content[data-route-root='inventory'] .page-shell-body {
+    min-height: 180px;
+  }
+}
