@@ -18,14 +18,18 @@ type AuthContextValue = {
   user: SessionUser | null;
   loading: boolean;
   bootstrapError: AuthBootstrapError;
+  hasVerifiedSession: boolean;
   refreshAuth: () => Promise<void>;
   clearAuth: () => void;
 };
+
+const VERIFIED_SESSION_STORAGE_KEY = 'easyecom.auth.verified_session';
 
 const AuthContext = createContext<AuthContextValue>({
   user: null,
   loading: true,
   bootstrapError: 'none',
+  hasVerifiedSession: false,
   refreshAuth: async () => undefined,
   clearAuth: () => undefined,
 });
@@ -35,6 +39,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [bootstrapError, setBootstrapError] =
     useState<AuthBootstrapError>('none');
+  const [hasVerifiedSession, setHasVerifiedSession] = useState(() => {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+    return window.sessionStorage.getItem(VERIFIED_SESSION_STORAGE_KEY) === '1';
+  });
   const userRef = useRef<SessionUser | null>(null);
 
   useEffect(() => {
@@ -47,10 +57,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const currentUser = await getCurrentUser();
       setUser(currentUser);
       setBootstrapError('none');
+      setHasVerifiedSession(true);
+      if (typeof window !== 'undefined') {
+        window.sessionStorage.setItem(VERIFIED_SESSION_STORAGE_KEY, '1');
+      }
     } catch (error: unknown) {
       if (error instanceof ApiError && error.status === 401) {
         setUser(null);
         setBootstrapError('unauthorized');
+        setHasVerifiedSession(false);
+        if (typeof window !== 'undefined') {
+          window.sessionStorage.removeItem(VERIFIED_SESSION_STORAGE_KEY);
+        }
       } else {
         const existingUser = userRef.current;
         // Preserve the last verified session for transient failures so active
@@ -78,6 +96,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const clearAuth = useCallback(() => {
     setUser(null);
     setBootstrapError('unauthorized');
+    setHasVerifiedSession(false);
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.removeItem(VERIFIED_SESSION_STORAGE_KEY);
+    }
     setLoading(false);
   }, []);
 
@@ -86,8 +108,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [refreshAuth]);
 
   const value = useMemo(
-    () => ({ user, loading, bootstrapError, refreshAuth, clearAuth }),
-    [user, loading, bootstrapError, refreshAuth, clearAuth]
+    () => ({
+      user,
+      loading,
+      bootstrapError,
+      hasVerifiedSession,
+      refreshAuth,
+      clearAuth,
+    }),
+    [user, loading, bootstrapError, hasVerifiedSession, refreshAuth, clearAuth]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -23,7 +23,13 @@ afterEach(() => {
 
 describe('AuthRouteGuard', () => {
   test('public-only mode shows visible redirect state for authenticated users', async () => {
-    useAuthMock.mockReturnValue({ user: { id: '1' }, loading: false, bootstrapError: 'none', refreshAuth: refreshAuthMock });
+    useAuthMock.mockReturnValue({
+      user: { id: '1' },
+      loading: false,
+      bootstrapError: 'none',
+      hasVerifiedSession: true,
+      refreshAuth: refreshAuthMock,
+    });
 
     render(
       <AuthRouteGuard mode="public-only">
@@ -37,7 +43,13 @@ describe('AuthRouteGuard', () => {
   });
 
   test('protected mode shows error state when bootstrap fails and allows retry', () => {
-    useAuthMock.mockReturnValue({ user: null, loading: false, bootstrapError: 'server', refreshAuth: refreshAuthMock });
+    useAuthMock.mockReturnValue({
+      user: null,
+      loading: false,
+      bootstrapError: 'server',
+      hasVerifiedSession: false,
+      refreshAuth: refreshAuthMock,
+    });
 
     render(
       <AuthRouteGuard mode="protected">
@@ -51,7 +63,13 @@ describe('AuthRouteGuard', () => {
   });
 
   test('protected mode keeps rendering content when user is present despite transient bootstrap error', () => {
-    useAuthMock.mockReturnValue({ user: { id: '1' }, loading: false, bootstrapError: 'network', refreshAuth: refreshAuthMock });
+    useAuthMock.mockReturnValue({
+      user: { id: '1' },
+      loading: false,
+      bootstrapError: 'network',
+      hasVerifiedSession: true,
+      refreshAuth: refreshAuthMock,
+    });
 
     render(
       <AuthRouteGuard mode="protected">
@@ -64,7 +82,13 @@ describe('AuthRouteGuard', () => {
   });
 
   test('protected mode displays loading then renders dashboard once auth is resolved', () => {
-    useAuthMock.mockReturnValueOnce({ user: null, loading: true, bootstrapError: 'none', refreshAuth: refreshAuthMock });
+    useAuthMock.mockReturnValueOnce({
+      user: null,
+      loading: true,
+      bootstrapError: 'none',
+      hasVerifiedSession: false,
+      refreshAuth: refreshAuthMock,
+    });
     const { rerender } = render(
       <AuthRouteGuard mode="protected">
         <div>Dashboard Content</div>
@@ -73,7 +97,13 @@ describe('AuthRouteGuard', () => {
 
     expect(screen.getByText('Loading your workspace...')).toBeTruthy();
 
-    useAuthMock.mockReturnValue({ user: { id: '1' }, loading: false, bootstrapError: 'none', refreshAuth: refreshAuthMock });
+    useAuthMock.mockReturnValue({
+      user: { id: '1' },
+      loading: false,
+      bootstrapError: 'none',
+      hasVerifiedSession: true,
+      refreshAuth: refreshAuthMock,
+    });
     rerender(
       <AuthRouteGuard mode="protected">
         <div>Dashboard Content</div>
@@ -81,5 +111,43 @@ describe('AuthRouteGuard', () => {
     );
 
     expect(screen.getByText('Dashboard Content')).toBeTruthy();
+  });
+
+  test('protected mode keeps rendering content when bootstrap fails after reload but session was previously verified', () => {
+    useAuthMock.mockReturnValue({
+      user: null,
+      loading: false,
+      bootstrapError: 'server',
+      hasVerifiedSession: true,
+      refreshAuth: refreshAuthMock,
+    });
+
+    render(
+      <AuthRouteGuard mode="protected">
+        <div>Dashboard Content</div>
+      </AuthRouteGuard>
+    );
+
+    expect(screen.getByText('Dashboard Content')).toBeTruthy();
+    expect(screen.queryByText('We could not verify your session')).toBeNull();
+    expect(replaceMock).not.toHaveBeenCalled();
+  });
+
+  test('protected mode still redirects to login for 401 unauthorized', async () => {
+    useAuthMock.mockReturnValue({
+      user: null,
+      loading: false,
+      bootstrapError: 'unauthorized',
+      hasVerifiedSession: false,
+      refreshAuth: refreshAuthMock,
+    });
+
+    render(
+      <AuthRouteGuard mode="protected">
+        <div>Dashboard Content</div>
+      </AuthRouteGuard>
+    );
+
+    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith('/login'));
   });
 });
