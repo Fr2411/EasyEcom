@@ -568,6 +568,7 @@ export function FinanceWorkspace() {
           )}
         </section>
       </WorkspacePanel>
+      <div className="mobile-action-safe-spacer" aria-hidden="true" />
     </div>
   );
 }

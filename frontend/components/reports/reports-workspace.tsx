@@ -262,6 +262,7 @@ export function ReportsWorkspace() {
           </WorkspacePanel>
         </>
       ) : null}
+      <div className="mobile-action-safe-spacer" aria-hidden="true" />
     </div>
   );
 }

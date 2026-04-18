@@ -58,7 +58,7 @@ function getHeaderContext(pathname: string): HeaderContext {
         subtitle: 'Operational review',
         summary: 'Move from daily execution into trend review, finance visibility, and exception analysis.',
         searchScope: 'sales',
-        actionLabel: 'Open finance',
+        actionLabel: 'Open Finance workspace',
         actionHref: '/finance',
       };
     case '/catalog':
@@ -89,7 +89,7 @@ function getHeaderContext(pathname: string): HeaderContext {
         subtitle: 'Order desk',
         summary: 'Move quickly through order entry, fulfillment, and the exceptions that affect revenue.',
         searchScope: 'sales',
-        actionLabel: 'Open customers',
+        actionLabel: 'Open Customers workspace',
         actionHref: '/customers',
       };
     case '/customers':
@@ -159,7 +159,7 @@ function getHeaderContext(pathname: string): HeaderContext {
         subtitle: 'Cash and reconciliation',
         summary: 'Monitor money movement, reconciliation, and financial visibility from the same workspace.',
         searchScope: 'sales',
-        actionLabel: 'Open billing',
+        actionLabel: 'Open Billing workspace',
         actionHref: '/billing',
       };
     case '/returns':

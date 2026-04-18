@@ -2065,6 +2065,21 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
   align-items: center;
 }
 
+.sales-primary-action-note {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: var(--text-muted-readable);
+}
+
+.sales-primary-next-action {
+  font-weight: 700;
+}
+
+.sales-finalize-action:disabled {
+  opacity: 0.55;
+}
+
 .page-content[data-route-root='catalog'] .catalog-local-finder-panel .guided-next-step[data-kind='exact'] .guided-next-step-actions .btn-primary,
 .page-content[data-route-root='catalog'] .catalog-local-finder-panel .guided-next-step[data-kind='likely'] .guided-next-step-actions .btn-primary {
   order: -1;
@@ -7736,6 +7751,7 @@ html {
   }
 
   .page-content[data-route-root='dashboard'],
+  .page-content[data-route-root='finance'],
   .page-content[data-route-root='reports'],
   .page-content[data-route-root='sales'] {
     min-width: 0;
@@ -7791,6 +7807,7 @@ html {
 
   .page-content[data-route-root='dashboard'] .mobile-action-safe-spacer,
   .page-content[data-route-root='sales'] .mobile-action-safe-spacer,
+  .page-content[data-route-root='finance'] .mobile-action-safe-spacer,
   .page-content[data-route-root='reports'] .mobile-action-safe-spacer,
   .page-content[data-route-root='purchases'] .mobile-action-safe-spacer {
     display: block;
@@ -7798,35 +7815,49 @@ html {
     pointer-events: none;
   }
 
-  .top-header.top-header-sales .header-utilities {
+  .top-header.top-header-sales .header-utilities,
+  .page-content[data-route-root='finance'] .top-header .header-utilities,
+  .page-content[data-route-root='reports'] .top-header .header-utilities {
     gap: 0.45rem;
     align-items: flex-start;
   }
 
-  .top-header.top-header-sales .header-theme-mobile {
+  .top-header.top-header-sales .header-theme-mobile,
+  .page-content[data-route-root='finance'] .top-header .header-theme-mobile,
+  .page-content[data-route-root='reports'] .top-header .header-theme-mobile {
     flex: 1 1 56%;
     opacity: 0.84;
   }
 
-  .top-header.top-header-sales .header-theme-mobile .theme-toggle {
+  .top-header.top-header-sales .header-theme-mobile .theme-toggle,
+  .page-content[data-route-root='finance'] .top-header .header-theme-mobile .theme-toggle,
+  .page-content[data-route-root='reports'] .top-header .header-theme-mobile .theme-toggle {
     min-width: 0;
     padding: 0.14rem;
   }
 
-  .top-header.top-header-sales .header-theme-mobile .theme-toggle-option {
+  .top-header.top-header-sales .header-theme-mobile .theme-toggle-option,
+  .page-content[data-route-root='finance'] .top-header .header-theme-mobile .theme-toggle-option,
+  .page-content[data-route-root='reports'] .top-header .header-theme-mobile .theme-toggle-option {
     height: 1.75rem;
     padding-inline: 0.35rem;
   }
 
-  .top-header.top-header-sales .header-theme-mobile .theme-toggle-option span {
+  .top-header.top-header-sales .header-theme-mobile .theme-toggle-option span,
+  .page-content[data-route-root='finance'] .top-header .header-theme-mobile .theme-toggle-option span,
+  .page-content[data-route-root='reports'] .top-header .header-theme-mobile .theme-toggle-option span {
     font-size: 0.65rem;
   }
 
-  .top-header.top-header-sales .header-theme-mobile .theme-toggle-applied {
+  .top-header.top-header-sales .header-theme-mobile .theme-toggle-applied,
+  .page-content[data-route-root='finance'] .top-header .header-theme-mobile .theme-toggle-applied,
+  .page-content[data-route-root='reports'] .top-header .header-theme-mobile .theme-toggle-applied {
     display: none;
   }
 
-  .top-header.top-header-sales .header-cross-module-action {
+  .top-header.top-header-sales .header-cross-module-action,
+  .page-content[data-route-root='finance'] .top-header .header-cross-module-action,
+  .page-content[data-route-root='reports'] .top-header .header-cross-module-action {
     min-height: 2rem;
     padding: 0.36rem 0.65rem;
     font-size: 0.74rem;
