@@ -427,8 +427,8 @@ export function deriveCatalogRecommendation(workspace: CatalogWorkspace | null):
   if (!workspace || !query) {
     return {
       kind: 'idle',
-      title: 'Find or create a product',
-      detail: 'Enter one clue (name, SKU, barcode, or variant). Open a new draft only when no match appears.',
+      title: 'Step 1: Find existing product',
+      detail: 'Enter one clue (name, SKU, barcode, or variant), then open a match first. Start a new draft only when no match fits.',
       actionLabel: 'Review next step',
       tone: 'info',
     };
@@ -794,7 +794,7 @@ export function CatalogWorkspace() {
         title={
           <div className="catalog-finder-title">
             <span className="workspace-heading">Catalog finder</span>
-            <span className="catalog-finder-scope-note">Primary search for this page. Use top-bar search only for global navigation.</span>
+            <span className="catalog-finder-scope-note">Step 1: search Catalog. Step 2: open the best match. Step 3: create new only if nothing fits.</span>
           </div>
         }
         actions={
@@ -810,11 +810,11 @@ export function CatalogWorkspace() {
             onSubmit={() => void onWorkspaceIntent(queryInput)}
           >
             <p className="workspace-field-note catalog-decision-sentence">
-              Search one clue first. Open matched product first; create new only when nothing fits.
+              Start with one clue, then follow one path: open a matched product first.
             </p>
             <details className="catalog-decision-details">
-              <summary>Use new draft only when no match fits</summary>
-              <p className="workspace-field-note">Keep product finder focused: if any match is close, open and verify before creating.</p>
+              <summary>Step 3: use a new draft only when no match fits</summary>
+              <p className="workspace-field-note">If any result is close, open and verify it before creating a new product.</p>
             </details>
           </IntentInput>
         }
