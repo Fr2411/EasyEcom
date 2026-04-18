@@ -92,9 +92,9 @@ export function ReportsWorkspace() {
       <WorkspaceNotice tone="info">
         <strong>Start here</strong>
         <ol>
-          <li>Set the date range.</li>
-          <li>Refresh reports once.</li>
-          <li>Review Sales and Inventory before Finance and Returns.</li>
+          <li>Confirm today&apos;s result first: revenue captured and orders converted.</li>
+          <li>Use Sales and Inventory to decide your next action: push demand or protect stock.</li>
+          <li>Then verify Purchases, Finance, and Returns to control cash pressure and margin drag.</li>
         </ol>
       </WorkspaceNotice>
       <form className="reports-filter-bar" onSubmit={onSubmit}>
@@ -128,12 +128,12 @@ export function ReportsWorkspace() {
       {!loading && !error && state ? (
         <>
           <div className="reports-grid reports-kpi-grid">
-            <article className="ps-card reports-kpi-card reports-kpi-card-featured">
+            <article className="ps-card reports-kpi-card reports-kpi-card-featured reports-kpi-card-primary">
               <p>Revenue captured</p>
               <strong>{formatMoney(state.overview.sales_revenue_total)}</strong>
               <span>Total money collected from completed sales in this window.</span>
             </article>
-            <article className="ps-card reports-kpi-card reports-kpi-card-featured">
+            <article className="ps-card reports-kpi-card reports-kpi-card-featured reports-kpi-card-primary">
               <p>Orders converted</p>
               <strong>{state.overview.sales_count}</strong>
               <span>Completed orders your team turned into shipped business.</span>

@@ -1108,36 +1108,52 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
   grid-column: span 2;
   border: 1px solid #d5e5ea;
   background: linear-gradient(180deg, #ffffff 0%, #f8fcff 100%);
+  box-shadow: none;
 }
 .reports-kpi-grid .reports-kpi-card p {
   margin: 0;
   color: #365364;
-  font-size: 0.78rem;
+  font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  font-weight: 700;
+  font-weight: 650;
 }
 .reports-kpi-grid .reports-kpi-card strong {
   display: block;
   margin-top: 0.42rem;
-  font-size: clamp(1.06rem, 1.9vw, 1.5rem);
+  font-size: clamp(1rem, 1.65vw, 1.34rem);
   line-height: 1.25;
-  color: #0d2533;
+  color: #143447;
 }
 .reports-kpi-grid .reports-kpi-card span {
   display: block;
   margin-top: 0.4rem;
-  color: #4b6473;
-  font-size: 0.78rem;
+  color: #5d7482;
+  font-size: 0.75rem;
   line-height: 1.4;
 }
 .reports-kpi-grid .reports-kpi-card-featured {
-  border-color: #9fc2d6;
-  background: linear-gradient(180deg, #f2f9ff 0%, #ffffff 100%);
-  box-shadow: 0 10px 18px rgba(10, 54, 87, 0.08);
+  border-color: #86adc4;
+  background: linear-gradient(180deg, #edf7ff 0%, #ffffff 100%);
+  box-shadow: 0 10px 20px rgba(10, 54, 87, 0.12);
 }
 .reports-kpi-grid .reports-kpi-card-featured strong {
   font-size: clamp(1.2rem, 2.2vw, 1.72rem);
+}
+.reports-kpi-grid .reports-kpi-card-primary {
+  border-width: 2px;
+}
+.reports-kpi-grid .reports-kpi-card-primary p {
+  color: #254d64;
+  font-size: 0.78rem;
+}
+.reports-kpi-grid .reports-kpi-card-primary strong {
+  font-size: clamp(1.34rem, 2.45vw, 2.02rem);
+  color: #0d2533;
+}
+.reports-kpi-grid .reports-kpi-card-primary span {
+  font-size: 0.79rem;
+  color: #3f6072;
 }
 .purchases-error-state {
   border: 1px solid #efc0b7;
@@ -2511,6 +2527,10 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
 
   .reports-kpi-grid .reports-kpi-card-featured {
     grid-column: span 2;
+  }
+
+  .reports-kpi-grid .reports-kpi-card-primary strong {
+    font-size: clamp(1.2rem, 4.2vw, 1.72rem);
   }
 }
 
