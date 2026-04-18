@@ -13,11 +13,13 @@ const OPTIONS: Array<{
   { value: 'system', label: 'Auto', icon: LaptopMinimal },
 ];
 
-export function ThemeToggle() {
+export function ThemeToggle({ variant = 'default' }: { variant?: 'default' | 'header-catalog' }) {
   const { preference, appliedTheme, setPreference } = useThemePreference();
+  const rootClassName = variant === 'header-catalog' ? 'theme-toggle theme-toggle-header-catalog' : 'theme-toggle';
+  const appliedLabelPrefix = variant === 'header-catalog' ? 'Now' : 'Active';
 
   return (
-    <div className="theme-toggle" role="group" aria-label="Display mode" data-applied-theme={appliedTheme}>
+    <div className={rootClassName} role="group" aria-label="Display mode" data-applied-theme={appliedTheme}>
       {OPTIONS.map((option) => {
         const Icon = option.icon;
         const active = preference === option.value;
@@ -48,7 +50,7 @@ export function ThemeToggle() {
         );
       })}
       <span className="theme-toggle-applied" aria-live="polite">
-        Active: {appliedTheme === 'dark' ? 'Dark' : 'Light'}
+        {appliedLabelPrefix}: {appliedTheme === 'dark' ? 'Dark' : 'Light'}
       </span>
     </div>
   );
