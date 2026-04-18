@@ -45,7 +45,7 @@ describe('Sidebar role filtering', () => {
     useAuthMock.mockReturnValue({
       user: {
         roles: ['CLIENT_OWNER'],
-        allowed_pages: ['Home', 'Dashboard', 'Inventory', 'Sales', 'Returns', 'Settings'],
+        allowed_pages: ['Dashboard', 'Inventory', 'Sales', 'Returns', 'Settings'],
       },
       clearAuth: vi.fn(),
     });
@@ -61,7 +61,7 @@ describe('Sidebar role filtering', () => {
     useAuthMock.mockReturnValue({
       user: {
         roles: ['FINANCE_STAFF'],
-        allowed_pages: ['Home', 'Dashboard', 'Automation', 'Finance', 'Reports', 'Settings'],
+        allowed_pages: ['Dashboard', 'Automation', 'Finance', 'Reports', 'Settings'],
       },
       clearAuth: vi.fn(),
     });
@@ -76,7 +76,7 @@ describe('Sidebar role filtering', () => {
     useAuthMock.mockReturnValue({
       user: {
         roles: ['CLIENT_OWNER'],
-        allowed_pages: ['Home', 'Dashboard', 'Catalog', 'Inventory', 'Sales', 'Billing', 'Settings'],
+        allowed_pages: ['Dashboard', 'Catalog', 'Inventory', 'Sales', 'Billing', 'Settings'],
       },
       clearAuth: vi.fn(),
     });
