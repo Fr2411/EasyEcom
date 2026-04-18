@@ -25,7 +25,7 @@ function SettingsLoadingState() {
     <div className="settings-layout settings-loading-layout" role="status" aria-live="polite">
       <WorkspacePanel
         title="Tenant settings"
-        description="Loading tenant identity, profile defaults, and channel preferences."
+        description="Loading tenant identity, profile defaults, and channel preferences for this workspace."
       >
         <div className="settings-loading-copy">
           <strong>Loading tenant settings…</strong>
@@ -40,7 +40,7 @@ function SettingsLoadingState() {
 
       <WorkspacePanel
         title="Profile, defaults, and document prefixes"
-        description="This section will load business profile fields, operational defaults, and document prefixes."
+        description="This section loads profile fields, operational defaults, and document prefixes."
       >
         <div className="settings-loading-grid">
           {Array.from({ length: 8 }).map((_, index) => (
@@ -164,7 +164,7 @@ export function SettingsWorkspace() {
       {notice ? <WorkspaceNotice tone="success">{notice}</WorkspaceNotice> : null}
       {error ? <WorkspaceNotice tone="error">{error}</WorkspaceNotice> : null}
 
-      <WorkspacePanel title="Tenant settings" description="Current tenant identity and the scope of this settings page.">
+      <WorkspacePanel title="Tenant settings" description="Confirm the active tenant identity and scope before editing settings.">
         <dl className="settings-context">
           <div>
             <dt>Business</dt>
@@ -193,7 +193,7 @@ export function SettingsWorkspace() {
       <form onSubmit={saveSettings}>
         <WorkspacePanel
           title="Profile, defaults, and document prefixes"
-          description="Update the tenant profile, operational defaults, and numbering prefixes used by sales, purchases, and returns."
+          description="Update business profile fields, operational defaults, and numbering prefixes used by sales, purchases, and returns."
           actions={<button type="submit" className="btn-primary settings-save-btn" disabled={savingSettings}>{savingSettings ? 'Saving…' : 'Save settings'}</button>}
         >
           <div className="settings-grid">

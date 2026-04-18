@@ -92,14 +92,14 @@ export function ReportsWorkspace() {
       <div className="reports-start-here">
         <WorkspaceNotice tone="info">
           <p className="reports-start-here-quick">
-            <strong>Start here:</strong> set the date window, refresh KPI outcomes, then review what changed.
+            <strong>Start here:</strong> set the date window, refresh KPI outcomes, then read the outcome cards first.
           </p>
           <details className="reports-start-here-details">
             <summary>See review sequence</summary>
             <ol>
               <li>Confirm today&apos;s result first: revenue captured and orders converted.</li>
-              <li>Use Sales and Inventory to decide your next action: push demand or protect stock.</li>
-              <li>Then verify Purchases, Finance, and Returns to control cash pressure and margin drag.</li>
+              <li>Review Sales and Inventory next to decide demand push versus stock protection.</li>
+              <li>Finish with Purchases, Finance, and Returns to check cash pressure and margin drag.</li>
             </ol>
           </details>
         </WorkspaceNotice>
@@ -167,7 +167,7 @@ export function ReportsWorkspace() {
             </article>
           </div>
 
-          <WorkspacePanel title="Sales" description="Use this first to verify what actually generated revenue in the selected window.">
+          <WorkspacePanel title="Sales" description="Review this first to see what generated revenue in the selected window.">
             {state.sales.top_products.length ? (
               <ul className="admin-match-list">
                 {state.sales.top_products.slice(0, 5).map((item) => (
@@ -185,7 +185,7 @@ export function ReportsWorkspace() {
             <DeferredList items={state.sales.deferred_metrics} />
           </WorkspacePanel>
 
-          <WorkspacePanel title="Inventory" description="Variant-first stock posture and low-stock pressure from the live ledger.">
+          <WorkspacePanel title="Inventory" description="Check variant-level stock posture and low-stock pressure from the live ledger.">
             <div className="settings-context">
               <div>
                 <dt>SKUs with stock</dt>
@@ -229,7 +229,7 @@ export function ReportsWorkspace() {
             <DeferredList items={[...state.purchases.deferred_metrics, ...state.finance.deferred_metrics]} />
           </WorkspacePanel>
 
-          <WorkspacePanel title="Returns & Products" description="Finally confirm return drag and product-level outliers impacting margin.">
+          <WorkspacePanel title="Returns & Products" description="Finally confirm return drag and product-level outliers that impact margin.">
             <div className="settings-context">
               <div>
                 <dt>Returns count</dt>
