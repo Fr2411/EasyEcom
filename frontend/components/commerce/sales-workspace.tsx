@@ -577,7 +577,7 @@ export function SalesWorkspace() {
                       </div>
                       <div className="guided-match-item-meta">
                         <span>Available {formatQuantity(variant.available_to_sell)}</span>
-                        <span>Price {formatMoney(variant.unit_price)}</span>
+                        <span>Effective selling price {formatMoney(variant.unit_price)}</span>
                         <span>Min {formatMoney(variant.min_price)}</span>
                       </div>
                     </article>
@@ -655,7 +655,7 @@ export function SalesWorkspace() {
                       <tr>
                         <th>Variant</th>
                         <th>Quantity</th>
-                        <th>Unit Price</th>
+                        <th>Line Selling Price</th>
                         <th>Discount</th>
                         <th>Total</th>
                         <th />

@@ -941,8 +941,8 @@ export function CatalogWorkspace() {
                   </div>
                   <div className="guided-match-item-meta">
                     <span className="catalog-meta-chip is-critical">Variants: {product.variants.length}</span>
-                    <span className="catalog-meta-chip is-critical">Min Price: {formatMoney(product.min_price)}</span>
-                    <span className="catalog-meta-chip">Template Price: {formatMoney(product.default_price)}</span>
+                    <span className="catalog-meta-chip is-critical">Product Min Selling Price (Template): {formatMoney(product.min_price)}</span>
+                    <span className="catalog-meta-chip">Product Default Selling Price (Template): {formatMoney(product.default_price)}</span>
                     <span className="catalog-meta-chip">SKU Base: {product.sku_root || 'Generated from product name'}</span>
                     <span className="catalog-meta-chip">Equivalent Max Discount: {formatPercent(product.max_discount_percent)}</span>
                   </div>
@@ -1422,7 +1422,7 @@ export function CatalogWorkspace() {
                           />
                         </label>
                         <label>
-                          Price
+                          Variant entered selling price
                           <input
                             inputMode="decimal"
                             value={variant.default_selling_price}
@@ -1438,7 +1438,7 @@ export function CatalogWorkspace() {
                           />
                         </label>
                         <label>
-                          Minimum price
+                          Variant entered minimum selling price
                           <input
                             inputMode="decimal"
                             value={variant.min_selling_price}
