@@ -14,18 +14,29 @@ const OPTIONS: Array<{
 ];
 
 export function ThemeToggle() {
-  const { preference, setPreference } = useThemePreference();
+  const { preference, appliedTheme, setPreference } = useThemePreference();
 
   return (
-    <div className="theme-toggle" role="group" aria-label="Display mode">
+    <div className="theme-toggle" role="group" aria-label="Display mode" data-applied-theme={appliedTheme}>
       {OPTIONS.map((option) => {
         const Icon = option.icon;
         const active = preference === option.value;
+        const applied =
+          option.value === 'system'
+            ? false
+            : (option.value === 'light' && appliedTheme === 'light') || (option.value === 'dark' && appliedTheme === 'dark');
+        const className = [
+          'theme-toggle-option',
+          active ? 'active' : '',
+          applied ? 'is-applied' : '',
+        ]
+          .filter(Boolean)
+          .join(' ');
         return (
           <button
             key={option.value}
             type="button"
-            className={active ? 'theme-toggle-option active' : 'theme-toggle-option'}
+            className={className}
             aria-pressed={active}
             aria-label={`${option.label} theme`}
             title={option.label}
@@ -36,6 +47,9 @@ export function ThemeToggle() {
           </button>
         );
       })}
+      <span className="theme-toggle-applied" aria-live="polite">
+        Active: {appliedTheme === 'dark' ? 'Dark' : 'Light'}
+      </span>
     </div>
   );
 }

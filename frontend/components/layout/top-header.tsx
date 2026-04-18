@@ -277,9 +277,13 @@ export function TopHeader({ onOpenNavigation }: { onOpenNavigation?: () => void 
       <div className="header-copy">
         <p className="header-title">{pageContext.title ?? matchedRoute?.label ?? DEFAULT_TITLE}</p>
       </div>
-      <form className="header-search" aria-label="Global workspace search" onSubmit={onSubmit}>
+      <form
+        className={isCatalogRoute ? 'header-search header-search-secondary' : 'header-search'}
+        aria-label={isCatalogRoute ? 'Secondary global workspace search' : 'Global workspace search'}
+        onSubmit={onSubmit}
+      >
         {isCatalogRoute ? (
-          <span className="header-search-context">Secondary action: global navigation search. Primary catalog lookup is in Catalog finder.</span>
+          <span className="header-search-context">Catalog finder is primary on this page. Use this only for cross-module navigation.</span>
         ) : null}
         <span className="header-search-icon" aria-hidden="true">
           <Search size={16} />
@@ -298,11 +302,11 @@ export function TopHeader({ onOpenNavigation }: { onOpenNavigation?: () => void 
           type="search"
           aria-label="Global search query"
           className="header-search-input"
-          placeholder={isCatalogRoute ? 'Global search only: orders, SKUs, returns' : 'Global search: orders, SKUs, returns'}
+          placeholder={isCatalogRoute ? 'Secondary global search: orders, SKUs, returns' : 'Global search: orders, SKUs, returns'}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
-        <button type="submit" className="header-search-button">Search all</button>
+        <button type="submit" className="header-search-button">{isCatalogRoute ? 'Global search' : 'Search all'}</button>
       </form>
       <div className="header-utilities">
         <div className={isCatalogRoute ? 'header-theme-mobile header-theme-catalog' : 'header-theme-mobile'} aria-label="Display mode">
