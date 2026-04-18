@@ -74,4 +74,41 @@ describe('AuthProvider bootstrap states', () => {
 
     await waitFor(() => expect(screen.getByTestId('auth-state').textContent).toBe('false|none|network'));
   });
+
+  test('keeps existing authenticated user when a later bootstrap refresh hits transient network failure', async () => {
+    vi.mocked(getCurrentUser)
+      .mockResolvedValueOnce({
+        user_id: 'user-1',
+        email: 'user@example.com',
+        name: 'User',
+        role: 'SUPER_ADMIN',
+        client_id: 'client-1',
+        roles: ['SUPER_ADMIN'],
+        allowed_pages: ['Home', 'Dashboard'],
+        is_authenticated: true,
+      })
+      .mockRejectedValueOnce(new ApiNetworkError('network down'));
+
+    function RefreshButton() {
+      const auth = useAuth();
+      return (
+        <button type="button" onClick={() => void auth.refreshAuth()}>
+          Refresh auth
+        </button>
+      );
+    }
+
+    render(
+      <AuthProvider>
+        <AuthConsumer />
+        <RefreshButton />
+      </AuthProvider>
+    );
+
+    await waitFor(() => expect(screen.getByTestId('auth-state').textContent).toBe('false|user|none'));
+
+    screen.getByRole('button', { name: 'Refresh auth' }).click();
+
+    await waitFor(() => expect(screen.getByTestId('auth-state').textContent).toBe('false|user|none'));
+  });
 });

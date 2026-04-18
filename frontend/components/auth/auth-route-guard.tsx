@@ -44,7 +44,7 @@ export function AuthRouteGuard({ mode, children }: AuthRouteGuardProps) {
       return;
     }
 
-    if (mode === 'protected' && bootstrapError === 'unauthorized') {
+    if (mode === 'protected' && bootstrapError === 'unauthorized' && !user) {
       router.replace('/login');
       return;
     }
@@ -77,11 +77,11 @@ export function AuthRouteGuard({ mode, children }: AuthRouteGuardProps) {
       return <AuthLoadingState message="Loading your workspace..." />;
     }
 
-    if (bootstrapError === 'unauthorized') {
+    if (bootstrapError === 'unauthorized' && !user) {
       return <AuthLoadingState message="Redirecting to login..." />;
     }
 
-    if (bootstrapError !== 'none') {
+    if (bootstrapError !== 'none' && !user) {
       return (
         <AuthErrorState
           message="Please retry. If this persists, your network or backend session endpoint may be unavailable."
