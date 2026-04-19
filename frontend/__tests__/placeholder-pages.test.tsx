@@ -8,6 +8,7 @@ import DashboardPage from '@/app/(app)/dashboard/page';
 import FinancePage from '@/app/(app)/finance/page';
 import IntegrationsPage from '@/app/(app)/integrations/page';
 import InventoryPage from '@/app/(app)/inventory/page';
+import InventoryProductsLegacyPage from '@/app/(app)/inventory/products/page';
 import ProductsPage from '@/app/(app)/products/page';
 import ProductsStockPage from '@/app/(app)/products-stock/page';
 import PurchasesPage from '@/app/(app)/purchases/page';
@@ -578,11 +579,30 @@ describe('Business pages', () => {
     vi.resetModules();
   });
 
+  test('legacy inventory products route redirects into inventory workspace', async () => {
+    vi.resetModules();
+    const redirectMock = vi.fn();
+    vi.doMock('next/navigation', () => ({
+      redirect: redirectMock,
+    }));
+
+    const module = await import('@/app/(app)/inventory/products/page');
+    module.default();
+
+    expect(redirectMock).toHaveBeenCalledWith('/inventory?tab=receive');
+    vi.doUnmock('next/navigation');
+    vi.resetModules();
+  });
+
   test('preloaded products-stock page import remains available', () => {
     expect(ProductsStockPage).toBeTruthy();
   });
 
   test('preloaded products page import remains available', () => {
     expect(ProductsPage).toBeTruthy();
+  });
+
+  test('preloaded legacy inventory products page import remains available', () => {
+    expect(InventoryProductsLegacyPage).toBeTruthy();
   });
 });

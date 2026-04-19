@@ -26,6 +26,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const routeRoot = pathname.split('/').filter(Boolean)[0] ?? '';
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => readSidebarPreference());
+  const focusCatalogFinder = () => {
+    if (typeof window === 'undefined') return;
+    window.requestAnimationFrame(() => {
+      const finder = document.getElementById('catalog-local-finder-input');
+      if (finder instanceof HTMLInputElement) {
+        finder.focus();
+        finder.select();
+      }
+    });
+  };
 
   useEffect(() => {
     writeSidebarPreference(sidebarCollapsed);
@@ -33,6 +43,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className={sidebarCollapsed ? 'shell sidebar-collapsed' : 'shell'}>
+      {routeRoot === 'catalog' ? (
+        <a className="shell-catalog-primary-link" href="#catalog-local-finder-input" onClick={focusCatalogFinder} tabIndex={1}>
+          Jump to Catalog finder
+        </a>
+      ) : null}
       <div className="shell-backdrop" aria-hidden="true">
         <span className="shell-orb shell-orb-a" />
         <span className="shell-orb shell-orb-b" />

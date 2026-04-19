@@ -7,6 +7,16 @@ const nextConfig = {
         source: '/home',
         destination: '/dashboard',
         permanent: false
+      },
+      {
+        source: '/products',
+        destination: '/catalog',
+        permanent: false
+      },
+      {
+        source: '/inventory/products',
+        destination: '/inventory?tab=receive',
+        permanent: false
       }
     ];
   }

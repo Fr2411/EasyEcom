@@ -504,7 +504,7 @@ export function SalesWorkspace() {
                 actions={(
                   <button
                     type="button"
-                    className="btn-primary sales-start-order-btn"
+                    className={`btn-primary sales-start-order-btn${shouldGateMobileStart ? ' sales-start-order-btn--mobile-gate' : ''}`}
                     onClick={() => {
                       setOrderStarted(true);
                       setShowAdvancedTools(false);
@@ -756,35 +756,37 @@ export function SalesWorkspace() {
                 Order notes
                 <textarea rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} />
               </label>
-              <StagedActionFooter summary="No stock or finance write happens until you choose draft, confirm, or confirm and fulfill.">
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => submitOrder('save_draft')}
-                  disabled={!draftLines.length}
-                >
-                  Review before saving
-                </button>
-                <button
-                  type="button"
-                  className="btn-primary sales-primary-next-action"
-                  onClick={() => submitOrder('confirm')}
-                  disabled={!draftLines.length}
-                >
-                  Confirm
-                </button>
-                <button
-                  type="button"
-                  className="secondary sales-finalize-action"
-                  onClick={() => submitOrder('confirm_and_fulfill')}
-                  disabled={!draftLines.length}
-                >
-                  Confirm & Fulfill
-                </button>
-              </StagedActionFooter>
-              <p className="sales-primary-action-note">
-                Primary next action is <strong>Confirm</strong>. Use Confirm &amp; Fulfill only after draft lines and pricing are reviewed.
-              </p>
+              <div className="sales-post-start-action-region">
+                <StagedActionFooter summary="No stock or finance write happens until you choose draft, confirm, or confirm and fulfill.">
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => submitOrder('save_draft')}
+                    disabled={!draftLines.length}
+                  >
+                    Review before saving
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-primary sales-primary-next-action"
+                    onClick={() => submitOrder('confirm')}
+                    disabled={!draftLines.length}
+                  >
+                    Confirm
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary sales-finalize-action"
+                    onClick={() => submitOrder('confirm_and_fulfill')}
+                    disabled={!draftLines.length}
+                  >
+                    Confirm & Fulfill
+                  </button>
+                </StagedActionFooter>
+                <p className="sales-primary-action-note">
+                  Primary next action is <strong>Confirm</strong>. Use Confirm &amp; Fulfill only after draft lines and pricing are reviewed.
+                </p>
+              </div>
             </DraftRecommendationCard>
             ) : null}
           </div>

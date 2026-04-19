@@ -1,5 +1,6 @@
 'use client';
 
+import type { ButtonHTMLAttributes } from 'react';
 import { HoverHint } from '@/components/ui/hover-hint';
 import type { SuggestedAction } from '@/types/guided-workflow';
 
@@ -7,10 +8,12 @@ export function WorkspaceTabs<T extends string>({
   tabs,
   activeTab,
   onTabChange,
+  tabButtonProps,
 }: {
   tabs: Array<{ id: T; label: string }>;
   activeTab: T;
   onTabChange: (tab: T) => void;
+  tabButtonProps?: (tab: { id: T; label: string }) => ButtonHTMLAttributes<HTMLButtonElement>;
 }) {
   return (
     <div className="workspace-tabs" role="tablist" aria-label="Workspace tabs">
@@ -22,6 +25,7 @@ export function WorkspaceTabs<T extends string>({
           aria-selected={activeTab === tab.id}
           className={activeTab === tab.id ? 'workspace-tab active' : 'workspace-tab'}
           onClick={() => onTabChange(tab.id)}
+          {...tabButtonProps?.(tab)}
         >
           {tab.label}
         </button>
@@ -123,6 +127,10 @@ export function WorkspaceEmpty({
 export function IntentInput({
   label,
   hint,
+  inputId,
+  autoFocus = false,
+  inputTabIndex,
+  submitTabIndex,
   value,
   placeholder,
   pending = false,
@@ -134,6 +142,10 @@ export function IntentInput({
 }: {
   label: string;
   hint?: string;
+  inputId?: string;
+  autoFocus?: boolean;
+  inputTabIndex?: number;
+  submitTabIndex?: number;
   value: string;
   placeholder: string;
   pending?: boolean;
@@ -159,12 +171,20 @@ export function IntentInput({
         }}
       >
         <input
+          id={inputId}
           type="search"
           value={value}
           placeholder={placeholder}
+          autoFocus={autoFocus}
+          tabIndex={inputTabIndex}
           onChange={(event) => onChange(event.target.value)}
         />
-        <button type="submit" className={submitTone === 'secondary' ? 'secondary' : 'btn-primary'} disabled={pending}>
+        <button
+          type="submit"
+          className={submitTone === 'secondary' ? 'secondary' : 'btn-primary'}
+          disabled={pending}
+          tabIndex={submitTabIndex}
+        >
           {pending ? 'Looking up…' : submitLabel}
         </button>
       </form>
