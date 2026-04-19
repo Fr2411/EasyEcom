@@ -1,23 +1,22 @@
-# Staging Workflow Policy (TEA-196 / TEA-190A)
+# Main Branch Workflow Policy
 
 ## Branch Model
-- `feature/*`: implementation branches, no production deploy.
-- `develop`: staging integration branch.
-- `main`: production release branch.
+- `main`: primary implementation and production release branch.
 
 ## Required Flow
-1. Run local internal preview before push:
-   - `./scripts/local_preview_before_push.sh`
-2. Open PRs into `develop` first.
-3. Merge into `main` only after staging validation is complete.
-4. Production backend deploy is manual-only from GitHub Actions `Deploy Backend` (`workflow_dispatch`).
+1. Implement changes directly on local `main`.
+2. Run validation before push:
+   - `./scripts/staging_quality_gate.sh`
+3. Commit and push directly to `origin/main`.
+4. Frontend production deploy auto-triggers from `main` push.
+5. Production backend deploy remains manual-only from GitHub Actions `Deploy Backend` (`workflow_dispatch`).
 
 ## Required Checks
 - GitHub status check: `Staging Policy Gate / verify`
 - This check runs from `.github/workflows/staging-policy-gate.yml` and uses `./scripts/staging_quality_gate.sh`.
 
 ## Branch Protection Rollout
-Apply branch protection for `main` and `develop` with:
+Apply branch protection for `main` with:
 
 ```bash
 ./scripts/apply_branch_protection.sh
@@ -32,4 +31,4 @@ The rollout script enforces:
 
 ## Notes
 - This policy keeps CI/check definitions single-sourced in `scripts/staging_quality_gate.sh` (local and CI both use the same script).
-- Frontend deploy/staging URL setup is handled in TEA-197.
+- `main` push keeps current production behavior: frontend deploy is automatic, backend deploy is manual.

@@ -93,19 +93,18 @@ What it does:
 
 GitHub-driven backend deploy:
 - Production deploy is manual-only via `.github/workflows/deploy-backend.yml` (`workflow_dispatch`)
-- Use `develop` as staging integration and promote to `main` only after staging validation
 - Required GitHub Secrets:
   - `EC2_HOST`
   - `EC2_USER`
   - `EC2_SSH_PRIVATE_KEY`
   - optional `API_BASE_URL` for post-deploy smoke checks
 
-Staging workflow checks:
-- Local internal preview-before-push: `./scripts/local_preview_before_push.sh`
-- Shared quality gate (local + CI): `./scripts/staging_quality_gate.sh`
-- GitHub staging gate workflow: `.github/workflows/staging-policy-gate.yml`
-- Branch protection rollout helper: `./scripts/apply_branch_protection.sh`
-- Policy reference: `docs/staging-workflow-policy.md`
+Direct-main workflow:
+- Implement locally on `main`.
+- Run checks before push: `./scripts/staging_quality_gate.sh`.
+- Commit and push directly: `git push origin main`.
+- Frontend production deploy auto-triggers from `main` push.
+- Run backend deploy manually when backend changes are included.
 
 Frontend deploy to AWS Amplify:
 ```bash
