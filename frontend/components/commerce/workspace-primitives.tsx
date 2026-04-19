@@ -129,6 +129,8 @@ export function IntentInput({
   hint,
   inputId,
   autoFocus = false,
+  inputTabIndex,
+  submitTabIndex,
   value,
   placeholder,
   pending = false,
@@ -142,6 +144,8 @@ export function IntentInput({
   hint?: string;
   inputId?: string;
   autoFocus?: boolean;
+  inputTabIndex?: number;
+  submitTabIndex?: number;
   value: string;
   placeholder: string;
   pending?: boolean;
@@ -172,9 +176,15 @@ export function IntentInput({
           value={value}
           placeholder={placeholder}
           autoFocus={autoFocus}
+          tabIndex={inputTabIndex}
           onChange={(event) => onChange(event.target.value)}
         />
-        <button type="submit" className={submitTone === 'secondary' ? 'secondary' : 'btn-primary'} disabled={pending}>
+        <button
+          type="submit"
+          className={submitTone === 'secondary' ? 'secondary' : 'btn-primary'}
+          disabled={pending}
+          tabIndex={submitTabIndex}
+        >
           {pending ? 'Looking up…' : submitLabel}
         </button>
       </form>

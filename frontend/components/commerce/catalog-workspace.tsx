@@ -802,7 +802,7 @@ export function CatalogWorkspace() {
         title={
           <div className="catalog-finder-title">
             <span className="workspace-heading">Catalog finder</span>
-            <span className="catalog-finder-scope-note">Step 1: search products. Step 2: open the closest match. Step 3: start new only when no match fits.</span>
+            <span className="catalog-finder-scope-note">Search first. Open the closest match. Start new only when nothing fits.</span>
           </div>
         }
         actions={
@@ -811,6 +811,8 @@ export function CatalogWorkspace() {
             hint="Search by product name, SKU, barcode, or variant details."
             inputId="catalog-local-finder-input"
             autoFocus
+            inputTabIndex={2}
+            submitTabIndex={3}
             value={queryInput}
             placeholder="Search product name, SKU, barcode, or variant"
             pending={isPending}
@@ -820,11 +822,11 @@ export function CatalogWorkspace() {
             onSubmit={() => void onWorkspaceIntent(queryInput)}
           >
             <p className="workspace-field-note catalog-decision-sentence">
-              Start with one clue, then open the closest match before creating a new product.
+              Use one clue first, then open the closest product.
             </p>
             <details className="catalog-decision-details">
-              <summary>Step 3 details</summary>
-              <p className="workspace-field-note">If a result looks close, open and verify it first. Create only when no product fits.</p>
+              <summary>When to start new</summary>
+              <p className="workspace-field-note">Start a new draft only after you check likely matches.</p>
             </details>
           </IntentInput>
         }
@@ -980,10 +982,10 @@ export function CatalogWorkspace() {
                   <h4 className="workspace-heading">Create flow</h4>
                 </div>
                 <p className="workspace-field-note">
-                  Step {activeStepIndex + 1} of {CREATE_STEPS.length}. Complete Product, First Variant, then Confirm before final submit.
+                  Step {activeStepIndex + 1} of {CREATE_STEPS.length}. Complete Product, First Variant, then Confirm.
                 </p>
                 <p className="workspace-field-note">
-                  Current step: {activeStepIndex + 1}. {CREATE_STEP_LABELS[createStep]}. Completed = validated and unlocked, Current = work in progress, Locked = waiting for previous step validation.
+                  Current: {CREATE_STEP_LABELS[createStep]}. Completed = ready, Current = in progress, Locked = finish the previous step first.
                 </p>
                 <div className="workspace-inline-actions">
                   {CREATE_STEPS.map((step, index) => (

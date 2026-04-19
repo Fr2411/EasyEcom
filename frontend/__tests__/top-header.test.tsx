@@ -39,7 +39,7 @@ describe('TopHeader', () => {
     pathname = '/catalog';
     render(<TopHeader />);
 
-    expect(screen.getByRole('link', { name: 'Skip to Start New Product' }).getAttribute('href')).toBe('#catalog-primary-action');
+    expect(screen.getByRole('link', { name: 'Skip to Catalog finder' }).getAttribute('href')).toBe('#catalog-local-finder-input');
     fireEvent.change(screen.getByLabelText('Global search query'), { target: { value: 'shirt' } });
     fireEvent.click(screen.getByRole('button', { name: 'Global search' }));
 
