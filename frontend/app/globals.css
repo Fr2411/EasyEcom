@@ -2337,6 +2337,19 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
   font-weight: 500;
 }
 
+.page-content[data-route-root='catalog'] .catalog-local-finder-panel.is-draft-create-mode .workspace-panel-header,
+.page-content[data-route-root='catalog'] .catalog-local-finder-panel.is-draft-create-mode .guided-intent,
+.page-content[data-route-root='catalog'] .catalog-local-finder-panel.is-draft-create-mode .guided-next-step {
+  opacity: 0.58;
+  filter: saturate(0.72);
+}
+
+.page-content[data-route-root='catalog'] .catalog-local-finder-panel.is-draft-create-mode .guided-intent input,
+.page-content[data-route-root='catalog'] .catalog-local-finder-panel.is-draft-create-mode .guided-intent button,
+.page-content[data-route-root='catalog'] .catalog-local-finder-panel.is-draft-create-mode .guided-next-step button {
+  opacity: 0.88;
+}
+
 .catalog-decision-details {
   margin: 0;
 }
@@ -7476,14 +7489,14 @@ html[data-theme='dark'] .theme-toggle-applied {
 
   .page-content[data-route-root='catalog'] .catalog-local-finder-panel {
     scroll-margin-top: 6.8rem;
-    scroll-margin-bottom: calc(var(--mobile-bottom-nav-clearance) + 1.3rem);
-    padding-bottom: calc(var(--mobile-bottom-nav-clearance) * 0.9);
+    scroll-margin-bottom: calc(var(--mobile-bottom-nav-clearance) + 1.6rem);
+    padding-bottom: calc(var(--mobile-bottom-nav-clearance) + 1rem);
   }
 
   .page-content[data-route-root='catalog'] {
     scroll-padding-top: 6.8rem;
-    padding-bottom: calc(var(--mobile-bottom-nav-clearance) + 1.45rem);
-    scroll-padding-bottom: calc(var(--mobile-bottom-nav-clearance) + 1.45rem);
+    padding-bottom: calc(var(--mobile-bottom-nav-clearance) + 1.7rem);
+    scroll-padding-bottom: calc(var(--mobile-bottom-nav-clearance) + 1.7rem);
   }
 
   .page-content[data-route-root='catalog'] .workspace-panel,
@@ -7913,12 +7926,13 @@ html {
   .page-content[data-route-root='dashboard'] .mobile-action-safe-spacer,
   .page-content[data-route-root='inventory'] .mobile-action-safe-spacer,
   .page-content[data-route-root='sales'] .mobile-action-safe-spacer,
+  .page-content[data-route-root='catalog'] .mobile-action-safe-spacer,
   .page-content[data-route-root='finance'] .mobile-action-safe-spacer,
   .page-content[data-route-root='reports'] .mobile-action-safe-spacer,
   .page-content[data-route-root='settings'] .mobile-action-safe-spacer,
   .page-content[data-route-root='purchases'] .mobile-action-safe-spacer {
     display: block;
-    height: calc(var(--mobile-bottom-nav-clearance) + 0.35rem);
+    height: calc(var(--mobile-bottom-nav-clearance) + 0.6rem);
     pointer-events: none;
   }
 
