@@ -6754,8 +6754,8 @@ html[data-theme='dark'] .theme-toggle-applied {
 
   .top-header.top-header-catalog .header-utilities.header-utilities-catalog {
     min-width: 0;
-    width: 100%;
-    max-width: 100%;
+    width: min(100%, calc(100vw - 2.5rem));
+    max-width: calc(100vw - 2.5rem);
     justify-self: stretch;
     box-sizing: border-box;
     padding-left: 0;
@@ -6795,7 +6795,7 @@ html[data-theme='dark'] .theme-toggle-applied {
     display: flex;
     min-width: 0;
     max-width: 100%;
-    width: 100%;
+    width: min(100%, calc(100vw - 2.5rem));
     border-right: 0;
     margin-right: 0;
     padding-right: 0;
