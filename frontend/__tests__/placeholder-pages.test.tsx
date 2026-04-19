@@ -589,7 +589,7 @@ describe('Business pages', () => {
     const module = await import('@/app/(app)/inventory/products/page');
     module.default();
 
-    expect(redirectMock).toHaveBeenCalledWith('/inventory');
+    expect(redirectMock).toHaveBeenCalledWith('/inventory?tab=receive');
     vi.doUnmock('next/navigation');
     vi.resetModules();
   });
