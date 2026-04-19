@@ -25,7 +25,7 @@ describe('deriveIntakeRecommendation', () => {
     const result = deriveIntakeRecommendation(null);
 
     expect(result.kind).toBe('idle');
-    expect(result.actionLabel).toBe('Review next step');
+    expect(result.actionLabel).toBe('Find intake match');
   });
 
   test('prefers exact variant matches over product matches', () => {

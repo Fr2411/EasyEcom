@@ -340,7 +340,7 @@ export function deriveIntakeRecommendation(results: Awaited<ReturnType<typeof ge
       kind: 'idle',
       title: 'Start with one item',
       summary: 'Scan a barcode, SKU, product name, or variant and the workspace will stage the best match.',
-      actionLabel: 'Review next step',
+      actionLabel: 'Find intake match',
     };
   }
 
@@ -1164,6 +1164,8 @@ export function InventoryWorkspace() {
     if (!purchaseOrderLoadError) return null;
     return purchaseOrderLoadFailureGuidance(purchaseOrderLoadError);
   }, [purchaseOrderLoadError]);
+  const hasOutstandingPurchaseOrders = outstandingPurchaseOrders.length > 0;
+  const prioritizeManualReceiving = !loadingPurchaseOrders && !purchaseOrderLoadFailure && !hasOutstandingPurchaseOrders;
 
   return (
     <div className="workspace-stack inventory-command-center">
@@ -1631,7 +1633,8 @@ export function InventoryWorkspace() {
           : null}
 
         {activeTab === 'receive' ? (
-          <div className="workspace-stack">
+          <div className="workspace-stack receive-stock-sections">
+            {!prioritizeManualReceiving ? (
             <section className="workspace-subsection">
               <div className="workspace-subsection-header">
                 <h4 className="workspace-heading">
@@ -1658,39 +1661,48 @@ export function InventoryWorkspace() {
                   </div>
                 </div>
               ) : null}
-              <div className="workspace-inline-actions">
-                <label>
-                  Draft purchase order
-                  <select
-                    value={selectedPurchaseOrderId}
-                    onChange={(event) => setSelectedPurchaseOrderId(event.target.value)}
-                    disabled={loadingPurchaseOrders}
-                  >
-                    <option value="">Select outstanding PO</option>
-                    {outstandingPurchaseOrders.map((order) => (
-                      <option key={order.purchase_id} value={order.purchase_id}>
-                        {order.purchase_no} · {order.supplier_name || 'No supplier'} · {order.purchase_date || 'No date'}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <button type="button" onClick={() => void applyPurchaseOrderToReceive()} disabled={!selectedPurchaseOrderId || lookupPending}>
-                  {lookupPending ? 'Loading…' : 'Load PO lines'}
-                </button>
-                <button type="button" className="btn-secondary" onClick={() => void loadOutstandingPurchaseOrders()}>
-                  Refresh POs
-                </button>
-                <span>
-                  {loadingPurchaseOrders
-                    ? 'Refreshing outstanding orders…'
-                    : outstandingPurchaseOrders.length
-                      ? `${outstandingPurchaseOrders.length} draft PO(s) available`
-                      : 'No outstanding draft POs'}
-                </span>
-              </div>
+              {hasOutstandingPurchaseOrders ? (
+                <div className="workspace-inline-actions">
+                  <label>
+                    Draft purchase order
+                    <select
+                      value={selectedPurchaseOrderId}
+                      onChange={(event) => setSelectedPurchaseOrderId(event.target.value)}
+                      disabled={loadingPurchaseOrders}
+                    >
+                      <option value="">Select outstanding PO</option>
+                      {outstandingPurchaseOrders.map((order) => (
+                        <option key={order.purchase_id} value={order.purchase_id}>
+                          {order.purchase_no} · {order.supplier_name || 'No supplier'} · {order.purchase_date || 'No date'}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button type="button" onClick={() => void applyPurchaseOrderToReceive()} disabled={!selectedPurchaseOrderId || lookupPending}>
+                    {lookupPending ? 'Loading…' : 'Load PO lines'}
+                  </button>
+                  <button type="button" className="btn-secondary" onClick={() => void loadOutstandingPurchaseOrders()}>
+                    Refresh POs
+                  </button>
+                  <span>{loadingPurchaseOrders ? 'Refreshing outstanding orders…' : `${outstandingPurchaseOrders.length} draft PO(s) available`}</span>
+                </div>
+              ) : (
+                <WorkspaceNotice tone="info">
+                  <div className="workspace-stack">
+                    <strong>No outstanding draft POs</strong>
+                    <span>Receiving can continue manually. Refresh orders once procurement creates the next draft PO.</span>
+                  </div>
+                  <div className="workspace-inline-actions">
+                    <button type="button" className="btn-secondary" onClick={() => void loadOutstandingPurchaseOrders()}>
+                      {loadingPurchaseOrders ? 'Refreshing…' : 'Refresh POs'}
+                    </button>
+                  </div>
+                </WorkspaceNotice>
+              )}
             </section>
+            ) : null}
 
-            <section className="workspace-subsection">
+            <section className={prioritizeManualReceiving ? 'workspace-subsection receive-manual-priority' : 'workspace-subsection'}>
               <div className="workspace-subsection-header">
                 <h4 className="workspace-heading">
                   What are you receiving?
@@ -1701,10 +1713,18 @@ export function InventoryWorkspace() {
                 </h4>
                 {showAdvancedCatalog ? (
                   <Link href="/catalog" className="nav-link">
-                    Open Advanced Catalog
+                    Open Catalog Maintenance
                   </Link>
                 ) : null}
               </div>
+              {prioritizeManualReceiving ? (
+                <WorkspaceNotice tone="info">
+                  <div className="workspace-stack">
+                    <strong>Manual receiving is ready now</strong>
+                    <span>No outstanding draft POs. Continue with manual receiving below and add PO prefill later when available.</span>
+                  </div>
+                </WorkspaceNotice>
+              ) : null}
 
               <form className="workspace-inline-actions" onSubmit={onIntakeSearch}>
                 <input
