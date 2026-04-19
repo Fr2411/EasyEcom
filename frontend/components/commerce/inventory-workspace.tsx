@@ -546,6 +546,7 @@ export function InventoryWorkspace() {
   const [isPending, startTransition] = useTransition();
   const quickActionsMenuRef = useRef<HTMLDivElement | null>(null);
   const quickActionsButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const receiveSectionsRef = useRef<HTMLDivElement | null>(null);
   const intakeRecommendation = deriveIntakeRecommendation(intakeResults);
   const exactVariantMatches = intakeResults?.exact_variants ?? [];
   const visibleProductMatches = useMemo(() => {
@@ -686,6 +687,18 @@ export function InventoryWorkspace() {
       return;
     }
     void loadOutstandingPurchaseOrders();
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== 'receive' || typeof window === 'undefined') {
+      return;
+    }
+    if (!window.matchMedia('(max-width: 900px)').matches) {
+      return;
+    }
+    window.requestAnimationFrame(() => {
+      receiveSectionsRef.current?.scrollIntoView({ block: 'start', behavior: 'auto' });
+    });
   }, [activeTab]);
 
   useEffect(() => {
@@ -1633,7 +1646,7 @@ export function InventoryWorkspace() {
           : null}
 
         {activeTab === 'receive' ? (
-          <div className="workspace-stack receive-stock-sections">
+          <div ref={receiveSectionsRef} className="workspace-stack receive-stock-sections">
             {!prioritizeManualReceiving ? (
             <section className="workspace-subsection">
               <div className="workspace-subsection-header">
