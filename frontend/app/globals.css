@@ -6754,6 +6754,10 @@ html[data-theme='dark'] .theme-toggle-applied {
 
   .top-header.top-header-catalog .header-utilities.header-utilities-catalog {
     min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    justify-self: stretch;
+    box-sizing: border-box;
     padding-left: 0;
     border-left: 0;
   }
