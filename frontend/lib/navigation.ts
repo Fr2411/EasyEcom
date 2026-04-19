@@ -31,7 +31,7 @@ export function getMobilePrimaryItems(user: SessionUser | null | undefined) {
   }
 
   for (const item of visibleItems) {
-    if (primary.some((entry) => entry.href === item.href) || item.href === '/home') {
+    if (primary.some((entry) => entry.href === item.href)) {
       continue;
     }
     primary.push(item);
