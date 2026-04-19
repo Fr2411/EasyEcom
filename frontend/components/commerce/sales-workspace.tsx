@@ -504,7 +504,7 @@ export function SalesWorkspace() {
                 actions={(
                   <button
                     type="button"
-                    className="btn-primary sales-start-order-btn"
+                    className={`btn-primary sales-start-order-btn${shouldGateMobileStart ? ' sales-start-order-btn--mobile-gate' : ''}`}
                     onClick={() => {
                       setOrderStarted(true);
                       setShowAdvancedTools(false);
