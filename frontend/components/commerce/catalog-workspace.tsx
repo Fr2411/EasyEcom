@@ -794,6 +794,7 @@ export function CatalogWorkspace() {
         ]}
         activeTab={activeTab}
         onTabChange={setActiveTab}
+        tabButtonProps={(tab) => (tab.id === 'edit' ? { id: 'catalog-primary-action' } : {})}
       />
 
       <WorkspacePanel

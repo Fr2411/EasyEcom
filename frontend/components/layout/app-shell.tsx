@@ -33,6 +33,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className={sidebarCollapsed ? 'shell sidebar-collapsed' : 'shell'}>
+      {routeRoot === 'catalog' ? (
+        <a className="shell-catalog-primary-link" href="#catalog-primary-action">
+          Jump to Start New Product
+        </a>
+      ) : null}
       <div className="shell-backdrop" aria-hidden="true">
         <span className="shell-orb shell-orb-a" />
         <span className="shell-orb shell-orb-b" />
