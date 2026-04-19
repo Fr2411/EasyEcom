@@ -7936,7 +7936,7 @@ html {
     scroll-margin-bottom: calc(var(--mobile-bottom-nav-clearance) + 1.3rem);
   }
 
-  .page-content[data-route-root='sales'] .sales-start-order-btn,
+  .page-content[data-route-root='sales'] .sales-start-order-btn--mobile-gate,
   .page-content[data-route-root='reports'] .reports-refresh-btn,
   .page-content[data-route-root='settings'] .settings-save-btn {
     position: sticky;
