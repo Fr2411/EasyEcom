@@ -3,6 +3,8 @@ import { describe, expect, test, vi } from 'vitest';
 import type { ReactNode } from 'react';
 import AppLayout from '@/app/(app)/layout';
 
+let pathname = '/dashboard';
+
 vi.mock('@/components/auth/auth-route-guard', () => ({
   AuthRouteGuard: ({ children }: { mode: 'protected' | 'public-only'; children: ReactNode }) => (
     <div data-testid="auth-route-guard">{children}</div>
@@ -25,7 +27,7 @@ vi.mock('@/components/theme/theme-toggle', () => ({
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ replace: vi.fn() }),
-  usePathname: () => '/dashboard'
+  usePathname: () => pathname
 }));
 
 vi.mock('@/lib/api/auth', () => ({
@@ -34,6 +36,7 @@ vi.mock('@/lib/api/auth', () => ({
 
 describe('AppLayout', () => {
   test('renders children inside the app shell wrapper', () => {
+    pathname = '/dashboard';
     render(
       <AppLayout>
         <div>Dashboard body content</div>
@@ -52,5 +55,18 @@ describe('AppLayout', () => {
     expect(screen.getByRole('link', { name: 'Purchases' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Log out' })).toBeTruthy();
     expect(screen.getByText('Dashboard body content')).toBeTruthy();
+  });
+
+  test('sets prioritized catalog jump link tab order on catalog route', () => {
+    pathname = '/catalog';
+    render(
+      <AppLayout>
+        <div>Catalog content</div>
+      </AppLayout>
+    );
+
+    const jumpLink = screen.getByRole('link', { name: 'Jump to Catalog finder' });
+    expect(jumpLink.getAttribute('tabindex')).toBe('1');
+    expect(jumpLink.getAttribute('href')).toBe('#catalog-local-finder-input');
   });
 });

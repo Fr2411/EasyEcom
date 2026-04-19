@@ -251,6 +251,16 @@ export function TopHeader() {
   ]
     .filter(Boolean)
     .join(' ');
+  const focusCatalogFinder = () => {
+    if (typeof window === 'undefined') return;
+    window.requestAnimationFrame(() => {
+      const finder = document.getElementById('catalog-local-finder-input');
+      if (finder instanceof HTMLInputElement) {
+        finder.focus();
+        finder.select();
+      }
+    });
+  };
 
   useEffect(() => {
     setScope(pageContext.searchScope);
@@ -275,6 +285,11 @@ export function TopHeader() {
 
   return (
     <header className={headerClassName}>
+      {isCatalogRoute ? (
+        <a className="header-catalog-skip-link" href="#catalog-local-finder-input" onClick={focusCatalogFinder}>
+          Skip to Catalog finder
+        </a>
+      ) : null}
       <div className="header-copy">
         <p className="header-title">{pageContext.title ?? matchedRoute?.label ?? DEFAULT_TITLE}</p>
       </div>
