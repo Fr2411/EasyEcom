@@ -5,7 +5,7 @@ export default function CatalogPage() {
   return (
     <PageShell
       title="Catalog"
-      description="Advanced maintenance for parent products and saleable variants. Daily intake now starts in Receive Stock."
+      description="Manage product details and their sellable variants. Use Receive Stock for daily stock intake."
       hideHeader
     >
       <CatalogWorkspace />

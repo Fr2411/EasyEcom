@@ -15,7 +15,7 @@ const nextConfig = {
       },
       {
         source: '/inventory/products',
-        destination: '/inventory',
+        destination: '/inventory?tab=receive',
         permanent: false
       }
     ];

@@ -112,6 +112,46 @@ button:disabled {
   position: relative;
 }
 
+.shell-catalog-primary-link {
+  position: absolute;
+  left: 1rem;
+  top: 1rem;
+  z-index: 60;
+  border-radius: 999px;
+  border: 1px solid var(--primary);
+  background: var(--surface);
+  color: var(--primary-strong);
+  font-weight: 600;
+  padding: 0.5rem 0.75rem;
+  text-decoration: none;
+  transform: translateY(-160%);
+  transition: transform 120ms ease;
+}
+
+.shell-catalog-primary-link:focus-visible {
+  transform: translateY(0);
+}
+
+.shell-catalog-primary-link {
+  position: absolute;
+  left: 1rem;
+  top: 1rem;
+  z-index: 60;
+  border-radius: 999px;
+  border: 1px solid var(--primary);
+  background: var(--surface);
+  color: var(--primary-strong);
+  font-weight: 600;
+  padding: 0.5rem 0.75rem;
+  text-decoration: none;
+  transform: translateY(-160%);
+  transition: transform 120ms ease;
+}
+
+.shell-catalog-primary-link:focus-visible {
+  transform: translateY(0);
+}
+
 .shell.sidebar-collapsed {
   grid-template-columns: 96px 1fr;
 }
@@ -2335,6 +2375,19 @@ thead th { color: #43636a; font-size: 0.75rem; text-transform: uppercase; letter
   line-height: 1.35;
   color: var(--text-muted-readable);
   font-weight: 500;
+}
+
+.page-content[data-route-root='catalog'] .catalog-local-finder-panel.is-draft-create-mode .workspace-panel-header,
+.page-content[data-route-root='catalog'] .catalog-local-finder-panel.is-draft-create-mode .guided-intent,
+.page-content[data-route-root='catalog'] .catalog-local-finder-panel.is-draft-create-mode .guided-next-step {
+  opacity: 0.48;
+  filter: saturate(0.64);
+}
+
+.page-content[data-route-root='catalog'] .catalog-local-finder-panel.is-draft-create-mode .guided-intent input,
+.page-content[data-route-root='catalog'] .catalog-local-finder-panel.is-draft-create-mode .guided-intent button,
+.page-content[data-route-root='catalog'] .catalog-local-finder-panel.is-draft-create-mode .guided-next-step button {
+  opacity: 0.88;
 }
 
 .catalog-decision-details {
@@ -7476,14 +7529,14 @@ html[data-theme='dark'] .theme-toggle-applied {
 
   .page-content[data-route-root='catalog'] .catalog-local-finder-panel {
     scroll-margin-top: 6.8rem;
-    scroll-margin-bottom: calc(var(--mobile-bottom-nav-clearance) + 1.3rem);
-    padding-bottom: calc(var(--mobile-bottom-nav-clearance) * 0.9);
+    scroll-margin-bottom: calc(var(--mobile-bottom-nav-clearance) + 1.6rem);
+    padding-bottom: calc(var(--mobile-bottom-nav-clearance) + 1rem);
   }
 
   .page-content[data-route-root='catalog'] {
     scroll-padding-top: 6.8rem;
-    padding-bottom: calc(var(--mobile-bottom-nav-clearance) + 1.45rem);
-    scroll-padding-bottom: calc(var(--mobile-bottom-nav-clearance) + 1.45rem);
+    padding-bottom: calc(var(--mobile-bottom-nav-clearance) + 1.7rem);
+    scroll-padding-bottom: calc(var(--mobile-bottom-nav-clearance) + 1.7rem);
   }
 
   .page-content[data-route-root='catalog'] .workspace-panel,
@@ -7918,7 +7971,13 @@ html {
   .page-content[data-route-root='settings'] .mobile-action-safe-spacer,
   .page-content[data-route-root='purchases'] .mobile-action-safe-spacer {
     display: block;
-    height: calc(var(--mobile-bottom-nav-clearance) + 0.35rem);
+    height: calc(var(--mobile-bottom-nav-clearance) + 0.6rem);
+    pointer-events: none;
+  }
+
+  .page-content[data-route-root='catalog'] .mobile-action-safe-spacer {
+    display: block;
+    height: calc(var(--mobile-bottom-nav-clearance) + 1.5rem);
     pointer-events: none;
   }
 
@@ -7934,6 +7993,19 @@ html {
   .page-content[data-route-root='reports'] .reports-refresh-btn,
   .page-content[data-route-root='settings'] .settings-save-btn {
     scroll-margin-bottom: calc(var(--mobile-bottom-nav-clearance) + 1.3rem);
+  }
+
+  .page-content[data-route-root='sales'] .sales-post-start-action-region {
+    padding-bottom: calc(var(--mobile-bottom-nav-clearance) + 0.9rem);
+    scroll-margin-bottom: calc(var(--mobile-bottom-nav-clearance) + 1.2rem);
+  }
+
+  .page-content[data-route-root='sales'] .sales-post-start-action-region .guided-action-footer-actions {
+    position: sticky;
+    bottom: calc(var(--mobile-bottom-nav-clearance) + 0.35rem);
+    z-index: 8;
+    padding: 0.45rem 0;
+    background: var(--guided-card-bg);
   }
 
   .page-content[data-route-root='sales'] .sales-start-order-btn--mobile-gate,

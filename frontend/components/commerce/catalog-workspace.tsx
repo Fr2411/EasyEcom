@@ -39,6 +39,12 @@ const CREATE_STEP_LABELS: Record<CatalogCreationStep, string> = {
   first_variant: 'First Variant',
   confirm: 'Confirm',
 };
+
+function deriveCreateStepStateLabel(index: number, activeStepIndex: number) {
+  if (index < activeStepIndex) return 'Completed';
+  if (index === activeStepIndex) return 'Current';
+  return 'Locked';
+}
 type PostCreateSuccessState = {
   productId: string;
   productName: string;
@@ -496,6 +502,7 @@ export function CatalogWorkspace() {
   const [isPending, startTransition] = useTransition();
   const recommendation = deriveCatalogRecommendation(workspace);
   const recommendationPrimaryTone = 'primary';
+  const isDraftCreateMode = activeTab === 'edit' && !form.product_id;
   const requestedProductId = searchParams.get('product_id') ?? '';
   const shouldAutoOpenEdit = searchParams.get('edit') === '1';
 
@@ -787,22 +794,25 @@ export function CatalogWorkspace() {
         ]}
         activeTab={activeTab}
         onTabChange={setActiveTab}
+        tabButtonProps={(tab) => (tab.id === 'edit' ? { id: 'catalog-primary-action' } : {})}
       />
 
       <WorkspacePanel
-        className="catalog-local-finder-panel"
+        className={isDraftCreateMode ? 'catalog-local-finder-panel is-draft-create-mode' : 'catalog-local-finder-panel'}
         title={
           <div className="catalog-finder-title">
             <span className="workspace-heading">Catalog finder</span>
-            <span className="catalog-finder-scope-note">Step 1: search Catalog. Step 2: open the best match. Step 3: create new only when no match fits.</span>
+            <span className="catalog-finder-scope-note">Step 1: search products. Step 2: open the closest match. Step 3: start new only when no match fits.</span>
           </div>
         }
         actions={
           <IntentInput
             label="Find product"
-            hint="Search Catalog by product name, SKU, barcode, or variant."
+            hint="Search by product name, SKU, barcode, or variant details."
+            inputId="catalog-local-finder-input"
+            autoFocus
             value={queryInput}
-            placeholder="Search by product name, SKU root, barcode, or variant"
+            placeholder="Search product name, SKU, barcode, or variant"
             pending={isPending}
             submitLabel="Search catalog"
             submitTone="primary"
@@ -810,11 +820,11 @@ export function CatalogWorkspace() {
             onSubmit={() => void onWorkspaceIntent(queryInput)}
           >
             <p className="workspace-field-note catalog-decision-sentence">
-              Start with one clue, then open the closest match before starting a new draft.
+              Start with one clue, then open the closest match before creating a new product.
             </p>
             <details className="catalog-decision-details">
               <summary>Step 3 details</summary>
-              <p className="workspace-field-note">If a result is close, open and verify it first. Create only when no existing product fits.</p>
+              <p className="workspace-field-note">If a result looks close, open and verify it first. Create only when no product fits.</p>
             </details>
           </IntentInput>
         }
@@ -823,7 +833,8 @@ export function CatalogWorkspace() {
           <WorkspaceNotice tone="success">
             <div className="workspace-stack">
               <strong>Product created: {postCreateSuccess.productName}</strong>
-              <span>Choose the next step to continue with variant-level operations.</span>
+              <span>Create flow complete. Product parent and first saleable variant are saved.</span>
+              <span>Next: continue with variant-level operations.</span>
               <div className="workspace-actions">
                 <button
                   type="button"
@@ -952,7 +963,7 @@ export function CatalogWorkspace() {
           ) : (
             <WorkspaceEmpty
               title="No catalog items staged"
-              message="Search by one clue first. If nothing matches, use Start New Product."
+              message="Search with one clue first. If nothing matches, select Start New Product."
             />
           )
         ) : (
@@ -968,6 +979,12 @@ export function CatalogWorkspace() {
                 <div className="workspace-subsection-header">
                   <h4 className="workspace-heading">Create flow</h4>
                 </div>
+                <p className="workspace-field-note">
+                  Step {activeStepIndex + 1} of {CREATE_STEPS.length}. Complete Product, First Variant, then Confirm before final submit.
+                </p>
+                <p className="workspace-field-note">
+                  Current step: {activeStepIndex + 1}. {CREATE_STEP_LABELS[createStep]}. Completed = validated and unlocked, Current = work in progress, Locked = waiting for previous step validation.
+                </p>
                 <div className="workspace-inline-actions">
                   {CREATE_STEPS.map((step, index) => (
                     <button
@@ -978,7 +995,7 @@ export function CatalogWorkspace() {
                       }}
                       disabled={index > activeStepIndex}
                     >
-                      {index + 1}. {CREATE_STEP_LABELS[step]}{step === createStep ? ' (Current)' : ''}
+                      {index + 1}. {CREATE_STEP_LABELS[step]} ({deriveCreateStepStateLabel(index, activeStepIndex)})
                     </button>
                   ))}
                 </div>
@@ -1155,7 +1172,7 @@ export function CatalogWorkspace() {
                 </label>
               </div>
               <p className="workspace-field-note">
-                Product-level prices are templates for this catalog parent. Saleable stock and final sell behavior are defined per variant row.
+                  Product-level prices are shared defaults. Sellable stock and final sale pricing are controlled per variant row.
               </p>
             </div>
             ) : null}
@@ -1297,7 +1314,7 @@ export function CatalogWorkspace() {
 
               <div className="workspace-stack">
                 <p className="workspace-field-note">
-                  Product fields stay shared at parent level. Variant rows below represent the saleable SKUs and can override price and reorder values.
+                  Product fields stay shared at parent level. Variant rows are the sellable SKUs and can override pricing and reorder values.
                 </p>
                 {form.variants.map((variant, index) => {
                   const isSavedVariant = Boolean(variant.variant_id);
@@ -1485,7 +1502,10 @@ export function CatalogWorkspace() {
                   <span>Total variant rows: {form.variants.length}</span>
                 </div>
                 <p className="workspace-field-note">
-                  Final save will create the product parent and the first saleable variant together in one atomic request.
+                  Final confirm: select Create product to complete this flow. Save creates the product parent and first sellable variant together.
+                </p>
+                <p className="workspace-field-note">
+                  After save succeeds, this flow shows a success notice confirming both records were created.
                 </p>
               </div>
             ) : null}
@@ -1513,6 +1533,7 @@ export function CatalogWorkspace() {
               </button>
               <button type="button" onClick={() => setNewProductForm(workspace?.query)}>Discard draft</button>
             </div>
+            <div className="mobile-action-safe-spacer" aria-hidden="true" />
 
             <datalist id="catalog-suppliers">
               {workspace?.suppliers.map((supplier) => <option key={supplier.supplier_id} value={supplier.name} />)}
