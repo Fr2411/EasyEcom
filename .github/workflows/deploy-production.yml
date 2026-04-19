@@ -1,0 +1,122 @@
+name: Deploy Production Frontend
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: frontend-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build and deploy frontend to production
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION != '' && secrets.AWS_REGION || 'us-east-1' }}
+      AMPLIFY_APP_ID: ${{ secrets.AMPLIFY_APP_ID_PRODUCTION != '' && secrets.AMPLIFY_APP_ID_PRODUCTION || 'd13s9vhldop7er' }}
+      AMPLIFY_BRANCH: main
+      PRODUCTION_DOMAIN: easy-ecom.online
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend deps
+        run: npm ci
+        working-directory: frontend
+
+      - name: Build frontend
+        run: npm run build
+        working-directory: frontend
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify production domain association
+        run: |
+          set -euo pipefail
+          aws amplify get-domain-association \
+            --app-id "$AMPLIFY_APP_ID" \
+            --domain-name "$PRODUCTION_DOMAIN" \
+            --query 'domainAssociation.domainStatus' \
+            --output text
+
+      - name: Verify main branch auto build
+        run: |
+          set -euo pipefail
+          ENABLE_AUTO_BUILD=$(aws amplify get-branch \
+            --app-id "$AMPLIFY_APP_ID" \
+            --branch-name "$AMPLIFY_BRANCH" \
+            --query 'branch.enableAutoBuild' \
+            --output text)
+          echo "enableAutoBuild=$ENABLE_AUTO_BUILD"
+          if [ "$ENABLE_AUTO_BUILD" != "True" ] && [ "$ENABLE_AUTO_BUILD" != "true" ]; then
+            echo "Main branch auto-build is disabled in Amplify."
+            exit 1
+          fi
+
+      - name: Trigger Amplify production deploy
+        id: amplify_deploy
+        run: |
+          set -euo pipefail
+          JOB_ID=$(aws amplify start-job \
+            --app-id "$AMPLIFY_APP_ID" \
+            --branch-name "$AMPLIFY_BRANCH" \
+            --job-type RELEASE \
+            --query 'jobSummary.jobId' \
+            --output text)
+          echo "job_id=$JOB_ID" >> "$GITHUB_OUTPUT"
+          echo "Started Amplify job: $JOB_ID"
+
+      - name: Wait for Amplify deploy result
+        run: |
+          set -euo pipefail
+          JOB_ID='${{ steps.amplify_deploy.outputs.job_id }}'
+          for i in $(seq 1 40); do
+            STATUS=$(aws amplify get-job \
+              --app-id "$AMPLIFY_APP_ID" \
+              --branch-name "$AMPLIFY_BRANCH" \
+              --job-id "$JOB_ID" \
+              --query 'job.summary.status' \
+              --output text)
+            echo "poll=$i status=$STATUS"
+            case "$STATUS" in
+              SUCCEED)
+                exit 0
+                ;;
+              FAILED|CANCELLED)
+                echo "Amplify deploy ended with status=$STATUS"
+                exit 1
+                ;;
+            esac
+            sleep 15
+          done
+          echo "Amplify deploy polling timed out"
+          exit 1
+
+      - name: Deployment summary
+        run: |
+          {
+            echo "## Frontend production deployment"
+            echo ""
+            echo "- Branch trigger: \`main\` push"
+            echo "- Amplify app id: \`$AMPLIFY_APP_ID\`"
+            echo "- Production domain: \`https://$PRODUCTION_DOMAIN\`"
+            echo "- Amplify branch: \`$AMPLIFY_BRANCH\`"
+            echo "- Amplify job id: \`${{ steps.amplify_deploy.outputs.job_id }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

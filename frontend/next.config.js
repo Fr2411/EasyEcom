@@ -1,6 +1,15 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'standalone'
+  output: 'standalone',
+  async redirects() {
+    return [
+      {
+        source: '/home',
+        destination: '/dashboard',
+        permanent: false
+      }
+    ];
+  }
 };
 
 module.exports = nextConfig;
