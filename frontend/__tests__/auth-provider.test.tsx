@@ -28,7 +28,7 @@ describe('AuthProvider bootstrap states', () => {
       role: 'SUPER_ADMIN',
       client_id: 'client-1',
       roles: ['SUPER_ADMIN'],
-      allowed_pages: ['Home', 'Dashboard'],
+      allowed_pages: ['Dashboard'],
       is_authenticated: true,
     });
 
@@ -84,7 +84,7 @@ describe('AuthProvider bootstrap states', () => {
         role: 'SUPER_ADMIN',
         client_id: 'client-1',
         roles: ['SUPER_ADMIN'],
-        allowed_pages: ['Home', 'Dashboard'],
+        allowed_pages: ['Dashboard'],
         is_authenticated: true,
       })
       .mockRejectedValueOnce(new ApiNetworkError('network down'));

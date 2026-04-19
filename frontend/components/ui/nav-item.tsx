@@ -11,7 +11,6 @@ import {
   Gauge,
   HandCoins,
   Handshake,
-  Home,
   PackageSearch,
   Receipt,
   RefreshCw,
@@ -23,7 +22,6 @@ import {
 import { NavigationItem } from '@/types/navigation';
 
 const ICONS = {
-  home: Home,
   dashboard: Gauge,
   reports: BarChart3,
   package: Boxes,

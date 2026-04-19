@@ -1,8 +1,8 @@
 const ROLE_PAGE_ACCESS: Record<string, string[]> = {
-  SUPER_ADMIN: ['Home', 'Dashboard', 'Catalog', 'Inventory', 'Purchases', 'Sales', 'Sales Agent', 'AI Review', 'Automation', 'Customers', 'Finance', 'Returns', 'Billing', 'Reports', 'Integrations', 'Admin', 'Settings'],
-  CLIENT_OWNER: ['Home', 'Dashboard', 'Catalog', 'Inventory', 'Purchases', 'Sales', 'Sales Agent', 'AI Review', 'Automation', 'Finance', 'Returns', 'Billing', 'Reports', 'Settings'],
-  CLIENT_STAFF: ['Home', 'Dashboard', 'Catalog', 'Inventory', 'Purchases', 'Sales', 'Sales Agent', 'AI Review', 'Automation', 'Returns', 'Settings'],
-  FINANCE_STAFF: ['Home', 'Dashboard', 'Automation', 'Finance', 'Returns', 'Reports', 'Settings'],
+  SUPER_ADMIN: ['Dashboard', 'Catalog', 'Inventory', 'Purchases', 'Sales', 'Sales Agent', 'AI Review', 'Automation', 'Customers', 'Finance', 'Returns', 'Billing', 'Reports', 'Integrations', 'Admin', 'Settings'],
+  CLIENT_OWNER: ['Dashboard', 'Catalog', 'Inventory', 'Purchases', 'Sales', 'Sales Agent', 'AI Review', 'Automation', 'Finance', 'Returns', 'Billing', 'Reports', 'Settings'],
+  CLIENT_STAFF: ['Dashboard', 'Catalog', 'Inventory', 'Purchases', 'Sales', 'Sales Agent', 'AI Review', 'Automation', 'Returns', 'Settings'],
+  FINANCE_STAFF: ['Dashboard', 'Automation', 'Finance', 'Returns', 'Reports', 'Settings'],
 };
 
 const MANDATORY_ROLE_PAGE_ACCESS: Record<string, string[]> = {
