@@ -7457,6 +7457,23 @@ html[data-theme='dark'] .theme-toggle-applied {
     padding-bottom: calc(var(--mobile-bottom-nav-clearance) + 0.7rem);
   }
 
+  .page-content[data-route-root='inventory'] .receive-stock-sections {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding-bottom: calc(var(--mobile-bottom-nav-clearance) + 0.8rem);
+    scroll-padding-bottom: calc(var(--mobile-bottom-nav-clearance) + 0.8rem);
+  }
+
+  .page-content[data-route-root='inventory'] .receive-stock-sections .workspace-actions button,
+  .page-content[data-route-root='inventory'] .receive-stock-sections .workspace-inline-actions button {
+    scroll-margin-bottom: calc(var(--mobile-bottom-nav-clearance) + 1rem);
+  }
+
+  .page-content[data-route-root='inventory'] .receive-stock-sections .receive-manual-priority {
+    order: -1;
+  }
+
   .page-content[data-route-root='catalog'] .catalog-local-finder-panel {
     scroll-margin-top: 6.8rem;
     scroll-margin-bottom: calc(var(--mobile-bottom-nav-clearance) + 1.3rem);
