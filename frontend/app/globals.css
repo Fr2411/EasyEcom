@@ -8061,6 +8061,17 @@ html {
     opacity: 0.82;
   }
 
+  .page-content[data-route-root='settings'] .top-header .header-copy {
+    min-width: 0;
+  }
+
+  .page-content[data-route-root='settings'] .top-header .header-summary {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.4;
+    max-width: 100%;
+  }
+
   .page-content[data-route-root='reports'] .workspace-subsection-header,
   .page-content[data-route-root='settings'] .workspace-subsection-header {
     gap: 0.4rem;

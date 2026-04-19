@@ -292,6 +292,8 @@ export function TopHeader() {
       ) : null}
       <div className="header-copy">
         <p className="header-title">{pageContext.title ?? matchedRoute?.label ?? DEFAULT_TITLE}</p>
+        {pageContext.subtitle ? <p className="header-subtitle">{pageContext.subtitle}</p> : null}
+        {pageContext.summary ? <p className="header-summary">{pageContext.summary}</p> : null}
       </div>
       <form
         className={isCatalogRoute ? 'header-search header-search-secondary' : 'header-search'}
