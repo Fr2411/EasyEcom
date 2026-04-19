@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
 
 export default function InventoryProductsLegacyPage() {
-  redirect('/inventory');
+  redirect('/inventory?tab=receive');
 }

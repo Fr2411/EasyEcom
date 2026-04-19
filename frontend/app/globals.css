@@ -132,6 +132,26 @@ button:disabled {
   transform: translateY(0);
 }
 
+.shell-catalog-primary-link {
+  position: absolute;
+  left: 1rem;
+  top: 1rem;
+  z-index: 60;
+  border-radius: 999px;
+  border: 1px solid var(--primary);
+  background: var(--surface);
+  color: var(--primary-strong);
+  font-weight: 600;
+  padding: 0.5rem 0.75rem;
+  text-decoration: none;
+  transform: translateY(-160%);
+  transition: transform 120ms ease;
+}
+
+.shell-catalog-primary-link:focus-visible {
+  transform: translateY(0);
+}
+
 .shell.sidebar-collapsed {
   grid-template-columns: 96px 1fr;
 }

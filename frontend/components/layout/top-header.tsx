@@ -275,6 +275,11 @@ export function TopHeader() {
 
   return (
     <header className={headerClassName}>
+      {isCatalogRoute ? (
+        <a className="header-catalog-skip-link" href="#catalog-primary-action">
+          Skip to Start New Product
+        </a>
+      ) : null}
       <div className="header-copy">
         <p className="header-title">{pageContext.title ?? matchedRoute?.label ?? DEFAULT_TITLE}</p>
       </div>
