@@ -81,6 +81,41 @@ describe('CatalogWorkspace step errors', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /2\. First Variant \(Current\)/ })).toBeTruthy();
     });
+    expect(screen.getByRole('button', { name: '1. Product (Completed)' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '3. Confirm (Locked)' })).toBeTruthy();
+  });
+
+  test('shows explicit final confirm and completion-state messaging after create', async () => {
+    mockValidateCatalogCreationStep.mockResolvedValue({ ok: true });
+    mockSaveCatalogProduct.mockResolvedValue({
+      product: {
+        product_id: 'prod-1',
+        name: 'Runner Shoe',
+      },
+    });
+
+    render(<CatalogWorkspace />);
+
+    await waitFor(() => expect(screen.getByText('No catalog items staged')).toBeTruthy());
+    fireEvent.click(screen.getByRole('tab', { name: 'Start New Product' }));
+
+    const productNameInput = await screen.findByLabelText('Product name');
+    fireEvent.change(productNameInput, { target: { value: 'Runner Shoe' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next: First Variant' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: '2. First Variant (Current)' })).toBeTruthy());
+
+    fireEvent.change(screen.getByLabelText('Size'), { target: { value: '42' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Next: Confirm' }));
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '3. Confirm (Current)' })).toBeTruthy());
+    expect(screen.getByText(/Final confirm: select Create product to complete this flow\./)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create product' }));
+
+    await waitFor(() => expect(screen.getByText('Product created: Runner Shoe')).toBeTruthy());
+    expect(screen.getByText('Create flow complete. Product parent and first saleable variant are saved.')).toBeTruthy();
+    expect(screen.getByText('Next: continue with variant-level operations.')).toBeTruthy();
   });
 
   test('shows plain-language workspace fallback with retry and secondary recovery path', async () => {
@@ -100,5 +135,15 @@ describe('CatalogWorkspace step errors', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Go to Dashboard' }));
     expect(mockRouterPush).toHaveBeenCalledWith('/dashboard');
+  });
+
+  test('prioritizes catalog finder controls in keyboard tab sequence', async () => {
+    render(<CatalogWorkspace />);
+
+    const finderInput = await screen.findByPlaceholderText('Search product name, SKU, barcode, or variant');
+    const finderSubmit = screen.getByRole('button', { name: 'Search catalog' });
+
+    expect(finderInput.getAttribute('tabindex')).toBe('2');
+    expect(finderSubmit.getAttribute('tabindex')).toBe('3');
   });
 });
