@@ -127,6 +127,8 @@ export function WorkspaceEmpty({
 export function IntentInput({
   label,
   hint,
+  inputId,
+  autoFocus = false,
   value,
   placeholder,
   pending = false,
@@ -138,6 +140,8 @@ export function IntentInput({
 }: {
   label: string;
   hint?: string;
+  inputId?: string;
+  autoFocus?: boolean;
   value: string;
   placeholder: string;
   pending?: boolean;
@@ -163,9 +167,11 @@ export function IntentInput({
         }}
       >
         <input
+          id={inputId}
           type="search"
           value={value}
           placeholder={placeholder}
+          autoFocus={autoFocus}
           onChange={(event) => onChange(event.target.value)}
         />
         <button type="submit" className={submitTone === 'secondary' ? 'secondary' : 'btn-primary'} disabled={pending}>
