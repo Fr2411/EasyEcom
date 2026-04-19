@@ -621,7 +621,7 @@ export function DashboardAnalyticsWorkspace() {
     <div className="dashboard-analytics space-y-6">
       <section className="section-card dashboard-hero-card bg-glass p-6 rounded-lg shadow-glass transition-normal hover:shadow-glass-hover">
         <div className="foundation-hero">
-          <p className="eyebrow text-xs text-muted uppercase tracking-wider">Business Analytics Dashboard</p>
+          <p className="eyebrow text-xs text-muted uppercase tracking-wider">Business Analytics</p>
           <h3 className="workspace-heading text-lg font-semibold mt-2">
             What to do now
             <HoverHint
