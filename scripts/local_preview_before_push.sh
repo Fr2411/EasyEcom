@@ -12,11 +12,13 @@ fi
 cd "$ROOT_DIR"
 
 if [[ "$RUN_GATE" -eq 1 ]]; then
-  ./scripts/staging_quality_gate.sh
+  echo "[preview] Verifying backend importability"
+  python3 -m compileall -q easy_ecom
 fi
 
 echo "[preview] Building frontend"
 cd frontend
+npm run typecheck
 npm run build
 
 echo "[preview] Starting internal preview on http://127.0.0.1:${PORT}"

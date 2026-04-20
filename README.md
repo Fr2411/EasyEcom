@@ -63,7 +63,6 @@ If you want full local development, keep `.env.local` pointed at `http://localho
 - GitHub Actions can now trigger the backend EC2 deploy using `.github/workflows/deploy-backend.yml`
 
 ## Repo Guardrails
-- Run `./scripts/check_repo_surface.sh` to fail fast on tracked local venvs, IDE state, backup/debug copies, logs, build metadata, and other files that should not reach production
 - Keep runtime deploys focused on source, migrations, and server scripts only
 
 ## Super Admin Password Flow
@@ -101,7 +100,7 @@ GitHub-driven backend deploy:
 
 Direct-main workflow:
 - Implement locally on `main`.
-- Run checks before push: `./scripts/staging_quality_gate.sh`.
+- Run runtime checks before push: `python3 -m compileall -q easy_ecom` and `cd frontend && npm run typecheck && npm run build`.
 - Commit and push directly: `git push origin main`.
 - Frontend production deploy auto-triggers from `main` push.
 - Run backend deploy manually when backend changes are included.
