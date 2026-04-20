@@ -74,14 +74,27 @@ jobs:
         id: amplify_deploy
         run: |
           set -euo pipefail
-          JOB_ID=$(aws amplify start-job \
+          EXISTING_JOB_ID=$(aws amplify list-jobs \
             --app-id "$AMPLIFY_APP_ID" \
             --branch-name "$AMPLIFY_BRANCH" \
-            --job-type RELEASE \
-            --query 'jobSummary.jobId' \
+            --max-items 25 \
+            --query "jobSummaries[?status=='PENDING' || status=='PROVISIONING' || status=='RUNNING'] | [0].jobId" \
             --output text)
+
+          if [ -n "$EXISTING_JOB_ID" ] && [ "$EXISTING_JOB_ID" != "None" ]; then
+            JOB_ID="$EXISTING_JOB_ID"
+            echo "Reusing active Amplify job: $JOB_ID"
+          else
+            JOB_ID=$(aws amplify start-job \
+              --app-id "$AMPLIFY_APP_ID" \
+              --branch-name "$AMPLIFY_BRANCH" \
+              --job-type RELEASE \
+              --query 'jobSummary.jobId' \
+              --output text)
+            echo "Started Amplify job: $JOB_ID"
+          fi
+
           echo "job_id=$JOB_ID" >> "$GITHUB_OUTPUT"
-          echo "Started Amplify job: $JOB_ID"
 
       - name: Wait for Amplify deploy result
         run: |
