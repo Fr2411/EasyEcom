@@ -1182,8 +1182,8 @@ export function InventoryWorkspace() {
   const prioritizeManualReceiving = !loadingPurchaseOrders && !purchaseOrderLoadFailure && !hasOutstandingPurchaseOrders;
 
   return (
-    <div className=[ styles.workspaceStack, styles.inventoryCommandCenter ].join(' ')>
-      <nav className=[ styles.inventoryBreadcrumb ].join(' ') aria-label="Inventory breadcrumb">
+    <div className={[ styles.workspaceStack, styles.inventoryCommandCenter ].join(' ')}>
+      <nav className={[ styles.inventoryBreadcrumb ].join(' ')} aria-label="Inventory breadcrumb">
         <ol>
           <li>
             <Link href="/dashboard">Home</Link>
