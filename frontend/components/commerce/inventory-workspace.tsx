@@ -1211,7 +1211,7 @@ export function InventoryWorkspace() {
 
       <WorkspacePanel
         title={
-          <span className=[ styles.workspaceHeading ].join(' ')>
+          <span className={[ styles.workspaceHeading ].join(' ')}>
             Variant-level inventory control
             <WorkspaceHint
               label="Inventory workspace help"
