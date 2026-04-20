@@ -1,40 +1,52 @@
-# Easy_Ecom
+# EasyEcom
 
-EasyEcom is in the platform foundation phase: the shared tenant-safe core is live, the main business workspaces are mounted, and the remaining placeholder surface is isolated instead of mixed into the core engine.
+EasyEcom is a multi-tenant commerce operating system for growing businesses. It combines day-to-day operations (catalog, inventory, sales, finance, reporting) with tenant-scoped data foundations for AI-assisted sales workflows.
 
-## Current runtime scope
-- Frontend: Next.js in `frontend/`
-- Backend: FastAPI in `easy_ecom/api`
-- Database: PostgreSQL via `DATABASE_URL`
-- Active backend routes: `/health`, `/auth/*`, `/session/me`, plus mounted business routers for dashboard, catalog, inventory, purchases, customers, sales, returns, finance, reports, integrations, sales agent, AI review, admin, and settings
-- Active frontend routes: `Home`, `Dashboard`, `Catalog`, `Inventory`, `Purchases`, `Sales`, `Customers`, `Finance`, `Returns`, `Reports`, `Integrations & Channels`, `Sales Agent`, `AI Review Inbox`, `Admin`, and `Settings`
-- `Automation` remains the only intentionally blank workspace
+## Overview
+EasyEcom is designed for businesses that buy/import products, store inventory, sell through operational teams, and need accurate, auditable data for both human operations and AI-driven customer engagement.
 
-## What is rebuilt in this foundation pass
-- Versioned SQL migrations replace runtime-only schema drift for PostgreSQL
-- Typed core and business tables now exist in the SQLAlchemy model layer
-- Shared request ID middleware, structured API errors, and super-admin tenant onboarding are restored
-- Variant-first inventory, sales, returns, finance, reporting, integration, and AI review flows are wired through typed API clients and backend services
-- The legacy `/products-stock` route redirects to `/catalog`
+Core product outcomes:
+- Centralized commerce operations across catalog, stock, purchases, sales, returns, and finance.
+- Strict tenant isolation for all business data.
+- Variant-level inventory truth with ledger-based auditability.
+- Production-ready cloud deployment on AWS.
 
-## What remains on purpose
-- AWS connectivity contract for Amplify, EC2-based deployment flow, and RDS
-- Login/session flow and super-admin bootstrap
-- App shell, navigation, branding, and shared auth/UI utilities
-- The remaining placeholder route for `Automation`
+## Core Capabilities
+- Multi-tenant authentication and role-based access controls.
+- Catalog and variant management for saleable SKUs.
+- Inventory tracking through auditable transaction flows.
+- Purchase, sales, customer, and returns workflows.
+- Finance and reporting endpoints for operational visibility.
+- Integration surfaces for channels and AI sales-agent workflows.
+- Super-admin controls for tenant onboarding and governance.
 
-## Local setup
+## System Architecture
+- Frontend: Next.js (`frontend/`)
+- Backend API: FastAPI (`easy_ecom/api`)
+- Data layer: PostgreSQL + SQLAlchemy models
+- Migration system: versioned SQL migrations (`easy_ecom/migrations/versions/`)
+- Deployment targets: AWS Amplify (frontend) + AWS EC2 (backend) + AWS RDS (database)
+
+## Business-Critical Data Rules
+EasyEcom follows strict domain rules in implementation:
+- Tenant isolation is mandatory for all reads and writes.
+- Stock is tracked at `variant` level, not parent `product` level.
+- Inventory truth is ledger-driven and auditable.
+- Production changes prioritize correctness and safety over convenience.
+
+## Local Development
+### Backend
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e .[dev]
+pip install -e .
 cp .env.example .env
 python3 -m easy_ecom.scripts.migrate
 python3 -m easy_ecom.scripts.init_data
 python3 -m uvicorn easy_ecom.api.main:app --reload
 ```
 
-Frontend:
+### Frontend
 ```bash
 cd frontend
 npm install
@@ -42,115 +54,58 @@ cp .env.example .env.local
 npm run dev
 ```
 
-If you want the local frontend to use the live AWS backend instead of a local API, set:
+If using the live backend from local frontend:
 ```bash
 cd frontend
 echo 'NEXT_PUBLIC_API_BASE_URL=https://api.easy-ecom.online' > .env.local
 ```
 
-If you want full local development, keep `.env.local` pointed at `http://localhost:8000` and run the FastAPI server locally first.
-
-## Database foundation assets
-- Typed runtime models live in `easy_ecom/data/store/postgres_models.py`
-- Versioned SQL migrations live in `easy_ecom/migrations/versions/`
-- Migration runner lives in `easy_ecom/scripts/migrate.py`
-- Seed/bootstrap lives in `easy_ecom/scripts/init_data.py`
-
 ## Deployment
-- Frontend connectivity remains through Amplify config in `amplify.yml`
-- Backend connectivity remains through the existing startup entrypoint in `startup.sh`
-- Existing EC2 deployment helper is preserved in `scripts/deploy_prod.sh`
-- GitHub Actions can now trigger the backend EC2 deploy using `.github/workflows/deploy-backend.yml`
-
-## Repo Guardrails
-- Keep runtime deploys focused on source, migrations, and server scripts only
-
-## Super Admin Password Flow
-
-User setup and password recovery are handled directly by super admin from the admin panel.
-
-Behavior:
-- New client users are created with an admin-entered password
-- If a user forgets the password, super admin can set a new one from `/admin`
-- Passwords are stored only as hashes; admins never read them back from the system
-
-## AWS shortcuts
-
-Backend deploy to AWS EC2:
+### Backend (EC2)
 ```bash
 ./scripts/deploy_prod.sh
 ```
 
-What it does:
-- SSH into the EC2 app host
-- upload a backend release artifact for the selected Git ref/SHA
-- sync runtime files into the EC2 project directory
-- install Python dependencies
-- run database migrations
-- seed baseline data
-- restart the backend service
+This deployment flow:
+- builds a backend release artifact,
+- uploads to EC2,
+- installs dependencies,
+- applies migrations,
+- seeds baseline data,
+- restarts the API service.
 
-GitHub-driven backend deploy:
-- Production deploy is manual-only via `.github/workflows/deploy-backend.yml` (`workflow_dispatch`)
-- Required GitHub Secrets:
-  - `EC2_HOST`
-  - `EC2_USER`
-  - `EC2_SSH_PRIVATE_KEY`
-  - optional `API_BASE_URL` for post-deploy smoke checks
+### Frontend (Amplify)
+Production frontend deployment is triggered by pushes to `main` through:
+- `.github/workflows/deploy-production.yml`
 
-Direct-main workflow:
-- Implement locally on `main`.
-- Run runtime checks before push: `python3 -m compileall -q easy_ecom` and `cd frontend && npm run typecheck && npm run build`.
-- Commit and push directly: `git push origin main`.
-- Frontend production deploy auto-triggers from `main` push.
-- Run backend deploy manually when backend changes are included.
-
-Frontend deploy to AWS Amplify:
+Manual Amplify trigger helper (optional):
 ```bash
-AMPLIFY_APP_ID=<your-amplify-app-id> AMPLIFY_BRANCH=main ./scripts/trigger_amplify_deploy.sh
+AMPLIFY_APP_ID=<app-id> AMPLIFY_BRANCH=main ./scripts/trigger_amplify_deploy.sh
 ```
 
-If your Amplify app is already connected to Git, pushing `main` also works:
+### Post-Deploy Smoke Check
 ```bash
-git push origin main
+API_BASE_URL=https://api.easy-ecom.online ./scripts/auth_deploy_smoke.sh
 ```
 
-Optional backend smoke check after deploy:
-```bash
-API_BASE_URL=https://<your-backend-domain> ./scripts/auth_deploy_smoke.sh
-```
+## Operations Scripts
+- `scripts/deploy_prod.sh`: backend production deploy
+- `scripts/build_backend_release.sh`: backend release bundle
+- `scripts/auth_deploy_smoke.sh`: API smoke checks
+- `scripts/reset_rds_to_auth_core.sh`: auth/core reset (destructive)
+- `scripts/reset_rds_to_full_foundation.sh`: full reset (destructive)
 
-## Controlled reset scripts
-- Auth-only reset (legacy auth/core only):
-```bash
-./scripts/reset_rds_to_auth_core.sh
-```
-- Full foundation reset (destructive; drops all public tables, then re-runs migrations + seeds):
-```bash
-./scripts/reset_rds_to_full_foundation.sh
-```
+## Repository Structure
+- `easy_ecom/`: backend application, domain logic, data layer, migrations
+- `frontend/`: web app (Next.js)
+- `scripts/`: deployment and operational automation
+- `.github/workflows/`: CI/CD workflows
+- `docs/`: architecture and business documentation
 
-Destructive reset logic is intentionally kept outside versioned migrations.
+## Security and Access
+- Passwords are stored as hashes only.
+- Tenant boundaries are enforced across API and data access paths.
+- Super-admin capabilities are intentionally restricted to governance operations.
 
-## DBeaver gateway to RDS
-
-Start the SSH gateway from your laptop:
-```bash
-./scripts/dbeaver_gateway.sh
-```
-
-Then create a PostgreSQL connection in DBeaver with:
-- Host: `127.0.0.1`
-- Port: `5433`
-- Database: `easyecom`
-- User: `easyecom_admin`
-- Password: use the password from your AWS secret manager or EC2 environment
-- SSL: `require` or `preferred` without strict hostname verification
-
-Keep the gateway terminal open while DBeaver is connected.
-
-Optional local CLI check through the same tunnel:
-```bash
-./scripts/db_psql.sh
-```
-Update to trigger Amplify rebuild Fri Mar 27 17:23:03 +04 2026
+## License
+This project is licensed under the terms in [LICENSE](LICENSE).
