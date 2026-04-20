@@ -29,7 +29,7 @@ const BILLING_PRESENTATION: Record<BillingPlanCode, BillingPresentation> = {
     highlight: true,
     features: [
       'Reports, customers, and purchases',
-      'Integrations, AI review, and automation',
+      'Automation and advanced operations tools',
       'Owner-managed subscription controls',
       'Full paid workspace access',
     ],

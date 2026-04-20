@@ -12,8 +12,6 @@ PAGE_CODE_TO_NAME: dict[str, str] = {
     "FINANCE": "Finance",
     "RETURNS": "Returns",
     "REPORTS": "Reports",
-    "SALES_AGENT": "Sales Agent",
-    "AI_REVIEW": "AI Review",
     "AUTOMATION": "Automation",
     "BILLING": "Billing",
     "SETTINGS": "Settings",
@@ -31,8 +29,6 @@ ALL_PAGE_NAMES: tuple[str, ...] = (
     "Finance",
     "Returns",
     "Reports",
-    "Sales Agent",
-    "AI Review",
     "Automation",
     "Billing",
     "Admin",
@@ -48,8 +44,6 @@ ROLE_PAGE_ACCESS: dict[str, tuple[str, ...]] = {
         "Inventory",
         "Purchases",
         "Sales",
-        "Sales Agent",
-        "AI Review",
         "Automation",
         "Billing",
         "Finance",
@@ -64,8 +58,6 @@ ROLE_PAGE_ACCESS: dict[str, tuple[str, ...]] = {
         "Inventory",
         "Purchases",
         "Sales",
-        "Sales Agent",
-        "AI Review",
         "Automation",
         "Returns",
         "Settings",
@@ -81,9 +73,7 @@ ROLE_PAGE_ACCESS: dict[str, tuple[str, ...]] = {
     ),
 }
 
-MANDATORY_ROLE_PAGE_ACCESS: dict[str, tuple[str, ...]] = {
-    "CLIENT_OWNER": ("Sales Agent", "AI Review"),
-}
+MANDATORY_ROLE_PAGE_ACCESS: dict[str, tuple[str, ...]] = {}
 
 PAGE_PERMISSIONS: dict[str, set[str]] = {}
 for role_code, pages in ROLE_PAGE_ACCESS.items():

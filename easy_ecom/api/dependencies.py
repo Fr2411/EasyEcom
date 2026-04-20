@@ -29,7 +29,6 @@ from easy_ecom.domain.services.commerce_service import (
 from easy_ecom.domain.services.dashboard_service import DashboardAnalyticsService
 from easy_ecom.domain.services.finance_posting_service import FinancePostingService
 from easy_ecom.domain.services.overview_service import OverviewService
-from easy_ecom.domain.services.sales_agent_service import SalesAgentService
 from easy_ecom.domain.services.settings_service import SettingsService
 from easy_ecom.domain.services.transaction_service import TransactionService
 
@@ -76,7 +75,6 @@ class ServiceContainer:
         self.inventory = InventoryService(session_factory)
         self.sales = SalesService(session_factory)
         self.returns = ReturnsService(session_factory)
-        self.sales_agent = SalesAgentService(session_factory)
 
     @property
     def reports(self):

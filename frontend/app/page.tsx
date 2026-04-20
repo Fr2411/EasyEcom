@@ -1,5 +1,4 @@
-import Link from 'next/link';
-import { ArrowRight, Bot, Boxes, ChartColumnIncreasing, MessageSquareText, PackageCheck, ShoppingCart, Sparkles } from 'lucide-react';
+import { ArrowRight, Boxes, ChartColumnIncreasing, MessageSquareText, PackageCheck, ShoppingCart, Sparkles } from 'lucide-react';
 import type { Metadata } from 'next';
 import { CTASection } from '@/components/marketing/cta-section';
 import { FeatureGrid } from '@/components/marketing/feature-grid';
@@ -11,11 +10,11 @@ import { PrimaryButton } from '@/components/ui/primary-button';
 import { SecondaryButton } from '@/components/ui/secondary-button';
 
 export const metadata: Metadata = {
-  title: 'EasyEcom | Turn customer chats into sales automatically',
-  description: 'EasyEcom is your AI-powered sales and operations platform for replying faster, managing inventory, and running your business from one place.',
+  title: 'EasyEcom | Run Commerce Operations In One Place',
+  description: 'EasyEcom is your sales and operations platform for managing inventory, orders, returns, and reporting in one place.',
   openGraph: {
-    title: 'EasyEcom | Turn customer chats into sales automatically',
-    description: 'Reply instantly, manage inventory, and run your business from one platform.',
+    title: 'EasyEcom | Run Commerce Operations In One Place',
+    description: 'Manage inventory, orders, and business operations from one platform.',
   },
 };
 
@@ -40,9 +39,9 @@ const problems = [
 
 const solutions = [
   {
-    title: 'AI Sales Assistant',
-    body: 'Reply instantly to customer messages and handle conversations 24/7 — without hiring extra staff.',
-    icon: Bot,
+    title: 'Customer Management',
+    body: 'Track customer history and keep service decisions tied to real order activity.',
+    icon: MessageSquareText,
   },
   {
     title: 'Inventory Management',
@@ -61,11 +60,11 @@ const solutions = [
   },
 ];
 
-const aiSellingPoints = [
-  'Instantly replies to customer inquiries',
-  'Suggests products based on customer needs',
-  'Handles repetitive questions automatically',
-  'Helps convert conversations into real orders',
+const operationsPoints = [
+  'Track catalog, stock, and warehouses in one place',
+  'Create and manage sales, purchases, and returns',
+  'Review finance and reports with tenant-safe access',
+  'Keep daily operations auditable and consistent',
 ];
 
 const setupSteps = [
@@ -95,12 +94,12 @@ const pricingPreview = [
   {
     title: 'Free Plan',
     body: 'Start small and explore the platform',
-    points: ['Limited products', 'Limited AI conversations'],
+    points: ['Limited products', 'Core commerce workspace'],
   },
   {
     title: 'Growth Plan',
     body: 'For growing businesses',
-    points: ['More products', 'AI-powered automation', 'Full access to core features'],
+    points: ['More products', 'Automation', 'Full access to core features'],
   },
   {
     title: 'Scale Plan',
@@ -119,12 +118,12 @@ function HeroMockup() {
           <span />
         </div>
         <div className="hero-panel-head">
-          <span className="hero-panel-kicker">Customer chat</span>
-          <strong>WhatsApp inquiry</strong>
+          <span className="hero-panel-kicker">Sales desk</span>
+          <strong>New order request</strong>
         </div>
         <div className="hero-code-chip-row" aria-label="Workflow state">
-          <span>[ incoming ]</span>
-          <span>[ ai reply ]</span>
+          <span>[ inquiry ]</span>
+          <span>[ order draft ]</span>
           <span>[ draft order ]</span>
         </div>
         <div className="hero-chat-thread">
@@ -133,7 +132,7 @@ function HeroMockup() {
             <p>Do you have the black travel bag in stock?</p>
           </article>
           <article className="hero-bubble ai">
-            <span className="hero-bubble-label">EasyEcom AI</span>
+            <span className="hero-bubble-label">Sales team</span>
             <p>Yes — the black travel bag is available. I can place your order now for 2 pieces.</p>
           </article>
           <article className="hero-bubble system">
@@ -196,8 +195,8 @@ function HeroMockup() {
           <article className="hero-mini-stat">
             <MessageSquareText size={18} aria-hidden="true" />
             <div>
-              <span>Reply speed</span>
-              <strong>Instant AI response</strong>
+              <span>Order cycle</span>
+              <strong>Fast team workflow</strong>
             </div>
           </article>
         </div>
@@ -224,8 +223,8 @@ export default function PublicLandingPage() {
   return (
     <PublicLayout ctaLabel="Start Free" ctaHref="/signup">
       <HeroSection
-        title="Turn customer chats into sales — automatically"
-        description="EasyEcom is your AI-powered sales and operations system. Reply instantly, manage inventory, and run your business — all from one platform."
+        title="Run your sales and operations in one workspace"
+        description="EasyEcom helps you manage catalog, inventory, sales, purchases, returns, and reporting from one platform."
         trustLine="Used by growing businesses to handle sales, inventory, and operations in one place."
         actions={
           <>
@@ -249,7 +248,7 @@ export default function PublicLandingPage() {
         <div className="landing-section-heading">
           <p className="marketing-kicker">The solution</p>
           <h2>EasyEcom fixes this — automatically</h2>
-          <p>One system to manage your entire business, powered by AI.</p>
+          <p>One system to manage your entire business operations.</p>
         </div>
         <FeatureGrid items={solutions} />
       </section>
@@ -257,11 +256,11 @@ export default function PublicLandingPage() {
       <section className="marketing-section landing-section">
         <div className="landing-ai-grid">
           <div className="landing-section-heading">
-            <p className="marketing-kicker">AI selling</p>
-            <h2>Your AI sales employee — working 24/7</h2>
-            <p>Let AI handle conversations while you focus on growing your business.</p>
+            <p className="marketing-kicker">Operations</p>
+            <h2>Keep the core business running cleanly</h2>
+            <p>Use one workspace to execute day-to-day commerce workflows without disconnected tools.</p>
             <ul className="landing-check-list">
-              {aiSellingPoints.map((point) => (
+              {operationsPoints.map((point) => (
                 <li key={point}>
                   <Sparkles size={16} aria-hidden="true" />
                   <span>{point}</span>

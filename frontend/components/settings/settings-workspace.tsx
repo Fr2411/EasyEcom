@@ -1,31 +1,16 @@
 'use client';
 
-import Link from 'next/link';
 import { FormEvent, useEffect, useState } from 'react';
 import { WorkspaceNotice, WorkspacePanel } from '@/components/commerce/workspace-primitives';
-import { getChannelIntegrations, getChannelLocations, saveWhatsAppMetaIntegration } from '@/lib/api/integrations';
 import { getSettingsWorkspace, updateSettingsWorkspace } from '@/lib/api/settings';
-import type { ChannelIntegration, ChannelLocation } from '@/types/integrations';
 import type { SettingsWorkspace as SettingsWorkspacePayload } from '@/types/settings';
-
-type ChannelDraft = {
-  display_name: string;
-  external_account_id: string;
-  phone_number_id: string;
-  phone_number: string;
-  default_location_id: string;
-  auto_send_enabled: boolean;
-  agent_enabled: boolean;
-  model_name: string;
-  persona_prompt: string;
-};
 
 function SettingsLoadingState() {
   return (
     <div className="settings-layout settings-loading-layout" role="status" aria-live="polite">
       <WorkspacePanel
         title="Tenant settings"
-        description="Loading tenant identity, profile defaults, and channel preferences for this workspace."
+        description="Loading tenant identity and profile defaults for this workspace."
       >
         <div className="settings-loading-copy">
           <strong>Loading tenant settings…</strong>
@@ -52,20 +37,6 @@ function SettingsLoadingState() {
   );
 }
 
-function channelDraftFromIntegration(channel: ChannelIntegration): ChannelDraft {
-  return {
-    display_name: channel.display_name,
-    external_account_id: channel.external_account_id,
-    phone_number_id: channel.phone_number_id,
-    phone_number: channel.phone_number,
-    default_location_id: channel.default_location_id ?? '',
-    auto_send_enabled: channel.auto_send_enabled,
-    agent_enabled: channel.agent_enabled,
-    model_name: channel.model_name,
-    persona_prompt: channel.persona_prompt,
-  };
-}
-
 function sectionStatus(completed: number, total: number) {
   if (completed === total) return { label: 'Ready', tone: 'is-ready' as const };
   if (completed > 0) return { label: `${completed}/${total} complete`, tone: 'is-in-progress' as const };
@@ -75,27 +46,19 @@ function sectionStatus(completed: number, total: number) {
 export function SettingsWorkspace() {
   const [workspace, setWorkspace] = useState<SettingsWorkspacePayload | null>(null);
   const [form, setForm] = useState<SettingsWorkspacePayload | null>(null);
-  const [channel, setChannel] = useState<ChannelIntegration | null>(null);
-  const [channelDraft, setChannelDraft] = useState<ChannelDraft | null>(null);
-  const [locations, setLocations] = useState<ChannelLocation[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingSettings, setSavingSettings] = useState(false);
-  const [savingChannel, setSavingChannel] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
 
   useEffect(() => {
     let active = true;
     setLoading(true);
-    void Promise.all([getSettingsWorkspace(), getChannelIntegrations(), getChannelLocations()])
-      .then(([settingsPayload, channelsPayload, locationsPayload]) => {
+    void getSettingsWorkspace()
+      .then((settingsPayload) => {
         if (!active) return;
-        const whatsapp = channelsPayload.items.find((item) => item.provider === 'whatsapp') ?? null;
         setWorkspace(settingsPayload);
         setForm(settingsPayload);
-        setChannel(whatsapp);
-        setChannelDraft(whatsapp ? channelDraftFromIntegration(whatsapp) : null);
-        setLocations(locationsPayload.items);
         setError('');
       })
       .catch((loadError) => {
@@ -128,28 +91,6 @@ export function SettingsWorkspace() {
       setError(saveError instanceof Error ? saveError.message : 'Unable to save tenant settings.');
     } finally {
       setSavingSettings(false);
-    }
-  };
-
-  const saveChannelPreferences = async () => {
-    if (!channelDraft) return;
-    setSavingChannel(true);
-    try {
-      const payload = await saveWhatsAppMetaIntegration({
-        ...channelDraft,
-        verify_token: '',
-        access_token: '',
-        app_secret: '',
-        default_location_id: channelDraft.default_location_id || null,
-      });
-      setChannel(payload.channel);
-      setChannelDraft(channelDraftFromIntegration(payload.channel));
-      setNotice('Channel preferences saved.');
-      setError('');
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Unable to save channel preferences.');
-    } finally {
-      setSavingChannel(false);
     }
   };
 
@@ -259,7 +200,7 @@ export function SettingsWorkspace() {
                 />
               </label>
               <label>
-                WhatsApp number
+                Secondary phone
                 <input
                   value={form.profile.whatsapp_number}
                   onChange={(event) => setForm({ ...form, profile: { ...form.profile, whatsapp_number: event.target.value } })}
@@ -398,88 +339,6 @@ export function SettingsWorkspace() {
         </WorkspacePanel>
       </form>
 
-      <WorkspacePanel
-        title="Channel preferences"
-        description="Tenant-level AI selling behavior stays channel-scoped so it remains aligned with the live WhatsApp integration."
-        actions={
-          channelDraft ? (
-            <button type="button" className="btn-primary settings-save-btn" onClick={saveChannelPreferences} disabled={savingChannel}>
-              {savingChannel ? 'Saving…' : 'Save channel preferences'}
-            </button>
-          ) : null
-        }
-      >
-        {channel && channelDraft ? (
-          <div className="settings-grid">
-            <label>
-              Display name
-              <input
-                value={channelDraft.display_name}
-                onChange={(event) => setChannelDraft({ ...channelDraft, display_name: event.target.value })}
-              />
-            </label>
-            <label>
-              Phone number
-              <input
-                value={channelDraft.phone_number}
-                onChange={(event) => setChannelDraft({ ...channelDraft, phone_number: event.target.value })}
-              />
-            </label>
-            <label>
-              Meta phone number ID
-              <input value={channelDraft.phone_number_id} disabled />
-            </label>
-            <label>
-              Default location
-              <select
-                value={channelDraft.default_location_id}
-                onChange={(event) => setChannelDraft({ ...channelDraft, default_location_id: event.target.value })}
-              >
-                <option value="">Use tenant default</option>
-                {locations.map((location) => (
-                  <option key={location.location_id} value={location.location_id}>
-                    {location.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Model name
-              <input
-                value={channelDraft.model_name}
-                onChange={(event) => setChannelDraft({ ...channelDraft, model_name: event.target.value })}
-              />
-            </label>
-            <label className="admin-checkbox">
-              <input
-                type="checkbox"
-                checked={channelDraft.auto_send_enabled}
-                onChange={(event) => setChannelDraft({ ...channelDraft, auto_send_enabled: event.target.checked })}
-              />
-              Auto-send approved replies
-            </label>
-            <label className="admin-checkbox">
-              <input
-                type="checkbox"
-                checked={channelDraft.agent_enabled}
-                onChange={(event) => setChannelDraft({ ...channelDraft, agent_enabled: event.target.checked })}
-              />
-              AI agent enabled
-            </label>
-            <label className="field-span-2">
-              Persona prompt
-              <textarea
-                value={channelDraft.persona_prompt}
-                onChange={(event) => setChannelDraft({ ...channelDraft, persona_prompt: event.target.value })}
-              />
-            </label>
-          </div>
-        ) : (
-          <WorkspaceNotice tone="info">
-            No WhatsApp channel is configured for this tenant yet. Configure the live channel in <Link href="/integrations">Integrations</Link>, then return here to manage tenant-level channel preferences.
-          </WorkspaceNotice>
-        )}
-      </WorkspacePanel>
       <div className="mobile-action-safe-spacer" aria-hidden="true" />
     </div>
   );

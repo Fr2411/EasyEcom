@@ -53,9 +53,6 @@ export type SalesOrder = {
   total_amount: string;
   paid_amount: string;
   source_type: string;
-  source_channel_id: string | null;
-  source_conversation_id: string | null;
-  source_agent_draft_id: string | null;
   finance_status?: 'not_posted' | 'posted' | 'reversed' | null;
   finance_posted_at?: string | null;
   finance_summary?: {

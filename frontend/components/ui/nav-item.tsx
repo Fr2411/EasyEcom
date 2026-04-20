@@ -4,13 +4,11 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   BarChart3,
-  Bot,
   Boxes,
   ClipboardList,
   BadgeDollarSign,
   Gauge,
   HandCoins,
-  Handshake,
   PackageSearch,
   Receipt,
   RefreshCw,
@@ -32,8 +30,6 @@ const ICONS = {
   finance: HandCoins,
   returns: RefreshCw,
   admin: Sparkles,
-  integrations: Handshake,
-  ai: Bot,
   automation: ClipboardList,
   purchases: Receipt,
   billing: BadgeDollarSign,

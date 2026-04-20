@@ -635,9 +635,6 @@ class CommerceBaseService:
             "total_amount": as_decimal(order.total_amount),
             "paid_amount": as_decimal(order.paid_amount),
             "source_type": order.source_type,
-            "source_channel_id": str(order.source_channel_id) if order.source_channel_id else None,
-            "source_conversation_id": str(order.source_conversation_id) if order.source_conversation_id else None,
-            "source_agent_draft_id": str(order.source_agent_draft_id) if order.source_agent_draft_id else None,
             "finance_status": "posted" if finance_transaction else "not_posted",
             "finance_summary": (
                 {

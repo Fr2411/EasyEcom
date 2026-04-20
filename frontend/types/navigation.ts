@@ -1,4 +1,4 @@
-export type NavigationGroup = 'Today' | 'Commerce' | 'Channels' | 'Operations' | 'System';
+export type NavigationGroup = 'Today' | 'Commerce' | 'Operations' | 'System';
 
 export type NavigationItem = {
   href: string;
@@ -17,16 +17,13 @@ export type NavigationItem = {
   | 'returns'
   | 'billing'
   | 'admin'
-  | 'integrations'
-  | 'ai'
-    | 'automation'
+  | 'automation'
     | 'settings';
 };
 
 export const NAV_GROUP_ORDER: NavigationGroup[] = [
   'Today',
   'Commerce',
-  'Channels',
   'Operations',
   'System',
 ];
@@ -39,9 +36,6 @@ export const NAV_ITEMS: NavigationItem[] = [
   { href: '/sales', label: 'Sales', group: 'Commerce', icon: 'sales' },
   { href: '/customers', label: 'Customers', group: 'Commerce', icon: 'customers' },
   { href: '/purchases', label: 'Purchases', group: 'Commerce', icon: 'purchases' },
-  { href: '/sales-agent', label: 'Sales Agent', group: 'Commerce', icon: 'ai' },
-  { href: '/ai-review', label: 'AI Review', group: 'Commerce', icon: 'ai' },
-  { href: '/integrations', label: 'Integrations', group: 'Channels', icon: 'integrations' },
   { href: '/automation', label: 'Automation', group: 'System', icon: 'automation' },
   { href: '/finance', label: 'Finance', group: 'Operations', icon: 'finance' },
   { href: '/returns', label: 'Returns', group: 'Operations', icon: 'returns' },

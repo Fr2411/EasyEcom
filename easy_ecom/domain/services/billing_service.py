@@ -29,9 +29,6 @@ PAID_ONLY_PAGES: tuple[str, ...] = (
     "Purchases",
     "Customers",
     "Reports",
-    "Integrations",
-    "Sales Agent",
-    "AI Review",
     "Automation",
 )
 FREE_ALLOWED_PAGES: tuple[str, ...] = (

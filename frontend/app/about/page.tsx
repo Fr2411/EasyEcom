@@ -22,11 +22,11 @@ export default function AboutPage() {
         <div className="marketing-copy-card">
           <p>
             EasyEcom is designed for businesses that want to reply faster, keep stock accurate, and run their operations from
-            one clear platform. The product combines AI-assisted selling with practical operational control so growth does not
-            create more confusion.
+            one clear platform. The product combines practical operational control with clean workflows so growth does not create
+            more confusion.
           </p>
           <p>
-            Our focus is simple: help businesses turn customer chats into sales while keeping inventory, orders, and decision
+            Our focus is simple: help businesses convert opportunities into sales while keeping inventory, orders, and decision
             making organized.
           </p>
           <p>

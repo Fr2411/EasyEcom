@@ -51,7 +51,6 @@ const ACCESS_PAGE_OPTIONS = [
   { code: 'INVENTORY', label: 'Inventory' },
   { code: 'PURCHASES', label: 'Purchases' },
   { code: 'SALES', label: 'Sales' },
-  { code: 'SALES_AGENT', label: 'Sales Agent' },
   { code: 'CUSTOMERS', label: 'Customers' },
   { code: 'FINANCE', label: 'Finance' },
   { code: 'RETURNS', label: 'Returns' },
@@ -852,7 +851,7 @@ export function AdminWorkspace() {
                   />
                 </label>
                 <label>
-                  WhatsApp
+                  Secondary phone
                   <input
                     value={onboardForm.whatsapp_number}
                     onChange={(event) => setOnboardForm({ ...onboardForm, whatsapp_number: event.target.value })}
@@ -1108,7 +1107,7 @@ export function AdminWorkspace() {
                   />
                 </label>
                 <label>
-                  WhatsApp
+                  Secondary phone
                   <input
                     value={clientDraft.whatsapp_number}
                     onChange={(event) => setClientDraft({ ...clientDraft, whatsapp_number: event.target.value })}

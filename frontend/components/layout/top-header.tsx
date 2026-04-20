@@ -112,36 +112,6 @@ function getHeaderContext(pathname: string): HeaderContext {
         actionLabel: 'Open inventory',
         actionHref: '/inventory',
       };
-    case '/sales-agent':
-      return {
-        section: 'Channels',
-        title: 'Sales Agent',
-        subtitle: 'Conversation desk',
-        summary: 'Support customer conversations with tenant-safe product and stock context.',
-        searchScope: 'sales',
-        actionLabel: 'Open AI review',
-        actionHref: '/ai-review',
-      };
-    case '/ai-review':
-      return {
-        section: 'Channels',
-        title: 'AI Review',
-        subtitle: 'Approval queue',
-        summary: 'Review and control outbound AI actions before they reach customers.',
-        searchScope: 'sales',
-        actionLabel: 'Open sales agent',
-        actionHref: '/sales-agent',
-      };
-    case '/integrations':
-      return {
-        section: 'Channels',
-        title: 'Integrations',
-        subtitle: 'Channel health',
-        summary: 'Keep channels and external connections visible from one operational page.',
-        searchScope: 'sales',
-        actionLabel: 'Open automation',
-        actionHref: '/automation',
-      };
     case '/automation':
       return {
         section: 'Operations',
@@ -149,8 +119,8 @@ function getHeaderContext(pathname: string): HeaderContext {
         subtitle: 'Rules and jobs',
         summary: 'Control business automation from a single tenant-safe operational layer.',
         searchScope: 'inventory',
-        actionLabel: 'Open integrations',
-        actionHref: '/integrations',
+        actionLabel: 'Open reports',
+        actionHref: '/reports',
       };
     case '/finance':
       return {

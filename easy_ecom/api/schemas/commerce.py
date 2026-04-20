@@ -407,9 +407,6 @@ class SalesOrderResponse(BaseModel):
     total_amount: Decimal
     paid_amount: Decimal
     source_type: str
-    source_channel_id: str | None
-    source_conversation_id: str | None
-    source_agent_draft_id: str | None
     finance_status: Literal["not_posted", "posted", "reversed"]
     finance_summary: dict | None = None
     lines: list[SalesOrderLineResponse]

@@ -1,26 +1,17 @@
 const ROLE_PAGE_ACCESS: Record<string, string[]> = {
-  SUPER_ADMIN: ['Dashboard', 'Catalog', 'Inventory', 'Purchases', 'Sales', 'Sales Agent', 'AI Review', 'Automation', 'Customers', 'Finance', 'Returns', 'Billing', 'Reports', 'Integrations', 'Admin', 'Settings'],
-  CLIENT_OWNER: ['Dashboard', 'Catalog', 'Inventory', 'Purchases', 'Sales', 'Sales Agent', 'AI Review', 'Automation', 'Finance', 'Returns', 'Billing', 'Reports', 'Settings'],
-  CLIENT_STAFF: ['Dashboard', 'Catalog', 'Inventory', 'Purchases', 'Sales', 'Sales Agent', 'AI Review', 'Automation', 'Returns', 'Settings'],
+  SUPER_ADMIN: ['Dashboard', 'Catalog', 'Inventory', 'Purchases', 'Sales', 'Automation', 'Customers', 'Finance', 'Returns', 'Billing', 'Reports', 'Admin', 'Settings'],
+  CLIENT_OWNER: ['Dashboard', 'Catalog', 'Inventory', 'Purchases', 'Sales', 'Automation', 'Finance', 'Returns', 'Billing', 'Reports', 'Settings'],
+  CLIENT_STAFF: ['Dashboard', 'Catalog', 'Inventory', 'Purchases', 'Sales', 'Automation', 'Returns', 'Settings'],
   FINANCE_STAFF: ['Dashboard', 'Automation', 'Finance', 'Returns', 'Reports', 'Settings'],
 };
 
-const MANDATORY_ROLE_PAGE_ACCESS: Record<string, string[]> = {
-  CLIENT_OWNER: ['Sales Agent', 'AI Review'],
-};
+const MANDATORY_ROLE_PAGE_ACCESS: Record<string, string[]> = {};
 
 export function canAccessPage(
   userRoles: string[] | undefined,
   pageLabel: string,
   allowedPages?: string[] | undefined,
 ) {
-  if (pageLabel === 'AI Review') {
-    if (allowedPages?.includes('AI Review') || allowedPages?.includes('Sales Agent')) {
-      return true;
-    }
-    return userRoles?.some((role) => ROLE_PAGE_ACCESS[role]?.includes('AI Review') || ROLE_PAGE_ACCESS[role]?.includes('Sales Agent')) ?? false;
-  }
-
   const mandatoryPages = userRoles?.flatMap((role) => MANDATORY_ROLE_PAGE_ACCESS[role] ?? []) ?? [];
   if (mandatoryPages.includes(pageLabel)) {
     return true;
@@ -41,10 +32,6 @@ export function canSeePageInNavigation(
   userRoles: string[] | undefined,
   pageLabel: string,
 ) {
-  if (pageLabel === 'AI Review') {
-    return userRoles?.some((role) => ROLE_PAGE_ACCESS[role]?.includes('AI Review') || ROLE_PAGE_ACCESS[role]?.includes('Sales Agent')) ?? false;
-  }
-
   const mandatoryPages = userRoles?.flatMap((role) => MANDATORY_ROLE_PAGE_ACCESS[role] ?? []) ?? [];
   if (mandatoryPages.includes(pageLabel)) {
     return true;
