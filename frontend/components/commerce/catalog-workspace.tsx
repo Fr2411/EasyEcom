@@ -31,6 +31,7 @@ import {
 import { formatMoney, formatPercent, formatQuantity, numberFromString } from '@/lib/commerce-format';
 import { ProductPhotoField } from '@/components/commerce/product-photo-field';
 
+import styles from './catalog-workspace.module.css';
 
 type CatalogTab = 'products' | 'edit';
 const CREATE_STEPS: CatalogCreationStep[] = ['product', 'first_variant', 'confirm'];
@@ -785,7 +786,7 @@ export function CatalogWorkspace() {
   };
 
   return (
-    <div className="workspace-stack">
+    <div className={styles.workspaceStack}>
       {saveToast ? <WorkspaceToast message={saveToast} onClose={() => setSaveToast('')} /> : null}
       <WorkspaceTabs
         tabs={[
@@ -798,11 +799,11 @@ export function CatalogWorkspace() {
       />
 
       <WorkspacePanel
-        className={isDraftCreateMode ? 'catalog-local-finder-panel is-draft-create-mode' : 'catalog-local-finder-panel'}
+        className={isDraftCreateMode ? `${styles.catalogLocalFinderPanel} ${styles.isDraftCreateMode}` : styles.catalogLocalFinderPanel}
         title={
-          <div className="catalog-finder-title">
-            <span className="workspace-heading">Catalog finder</span>
-            <span className="catalog-finder-scope-note">Search first. Open the closest match. Start new only when nothing fits.</span>
+          <div className={styles.catalogFinderTitle}>
+            <span className={styles.workspaceHeading}>Catalog finder</span>
+            <span className={styles.catalogFinderScopeNote}>Search first. Open the closest match. Start new only when nothing fits.</span>
           </div>
         }
         actions={
@@ -821,23 +822,23 @@ export function CatalogWorkspace() {
             onChange={setQueryInput}
             onSubmit={() => void onWorkspaceIntent(queryInput)}
           >
-            <p className="workspace-field-note catalog-decision-sentence">
+            <p className={styles.workspaceFieldNote catalogDecisionSentence}>
               Use one clue first, then open the closest product.
             </p>
-            <details className="catalog-decision-details">
+            <details className={styles.catalogDecisionDetails}>
               <summary>When to start new</summary>
-              <p className="workspace-field-note">Start a new draft only after you check likely matches.</p>
+              <p className={styles.workspaceFieldNote}>Start a new draft only after you check likely matches.</p>
             </details>
           </IntentInput>
         }
       >
         {postCreateSuccess ? (
           <WorkspaceNotice tone="success">
-            <div className="workspace-stack">
+            <div className={styles.workspaceStack}>
               <strong>Product created: {postCreateSuccess.productName}</strong>
               <span>Create flow complete. Product parent and first saleable variant are saved.</span>
               <span>Next: continue with variant-level operations.</span>
-              <div className="workspace-actions">
+              <div className={styles.workspaceActions}>
                 <button
                   type="button"
                   onClick={() => {
@@ -864,23 +865,23 @@ export function CatalogWorkspace() {
         {error ? <WorkspaceNotice tone="error">{error}</WorkspaceNotice> : null}
         {workspaceLoadFallback ? (
           <WorkspaceNotice tone="error">
-            <div className="workspace-stack catalog-fallback-notice">
+            <div className={styles.workspaceStack catalogFallbackNotice}>
               <strong>{workspaceLoadFallback.title}</strong>
-              <p className="catalog-fallback-primary-guidance">
+              <p className={styles.catalogFallbackPrimaryGuidance}>
                 Retry catalog load first. If it still fails, use Go to Dashboard to refresh your session.
               </p>
               <span>{workspaceLoadFallback.detail}</span>
-              <span className="workspace-field-note catalog-fallback-context">{workspaceLoadFallback.context}</span>
+              <span className={styles.workspaceFieldNote catalogFallbackContext}>{workspaceLoadFallback.context}</span>
               {workspaceLoadFailureCount >= 2 ? (
-                <strong className="catalog-fallback-retry-warning">
+                <strong className={styles.catalogFallbackRetryWarning}>
                   Repeated failures: open Dashboard to refresh your session, wait a moment, then return to Catalog.
                 </strong>
               ) : null}
-              <div className="workspace-actions">
+              <div className={styles.workspaceActions}>
                 <button type="button" onClick={() => loadWorkspace(queryInput)}>
                   Retry catalog load
                 </button>
-                <button type="button" className="secondary" onClick={() => router.push('/dashboard')}>
+                <button type="button" className={styles.secondary} onClick={() => router.push('/dashboard')}>
                   Go to Dashboard
                 </button>
               </div>
@@ -905,14 +906,14 @@ export function CatalogWorkspace() {
               description="Open the best match first. Product rows hold shared details; variants are the saleable SKUs."
               items={workspace.items}
               renderItem={(product) => (
-                <article key={product.product_id} className="guided-match-item catalog-parent-card">
-                  <div className="guided-match-item-header">
-                    <div className="guided-match-item-identity">
+                <article key={product.product_id} className={styles.guidedMatchItem catalogParentCard}>
+                  <div className={styles.guidedMatchItemHeader}>
+                    <div className={styles.guidedMatchItemIdentity}>
                       {product.image?.thumbnail_url ? (
-                        <img className="guided-match-item-thumb" src={product.image.thumbnail_url} alt={product.name} />
+                        <img className={styles.guidedMatchItemThumb} src={product.image.thumbnail_url} alt={product.name} />
                       ) : null}
-                      <div className="catalog-parent-card-identity-copy">
-                        <div className="catalog-parent-card-primary-line">
+                      <div className={styles.catalogParentCardIdentityCopy}>
+                        <div className={styles.catalogParentCardPrimaryLine}>
                           <h5>{product.name}</h5>
                           <span className={`catalog-parent-card-status ${product.status === 'active' ? 'is-active' : 'is-archived'}`}>
                             {product.status === 'active' ? 'Active' : 'Archived'}
@@ -921,25 +922,25 @@ export function CatalogWorkspace() {
                         <p>{product.brand || 'No brand'} · {product.category || 'Uncategorized'} · {product.supplier || 'No supplier'}</p>
                       </div>
                     </div>
-                    <button type="button" className="catalog-parent-card-open-btn" onClick={() => onProductEdit(product)}>
+                    <button type="button" className={styles.catalogParentCardOpenBtn} onClick={() => onProductEdit(product)}>
                       Open product
                     </button>
                   </div>
-                  <div className="guided-match-variant-scan" aria-label={`Variant scan summary for ${product.name}`}>
-                    <p className="workspace-field-note">
+                  <div className={styles.guidedMatchVariantScan} aria-label={`Variant scan summary for ${product.name}`}>
+                    <p className={styles.workspaceFieldNote}>
                       Quick variant scan
                     </p>
                     {product.variants.length ? (
-                      <ul className="guided-match-variant-list">
+                      <ul className={styles.guidedMatchVariantList}>
                         {deriveCatalogVariantOperationalScan(product.variants).map((variant) => (
                           <li key={variant.variant_id}>
-                            <div className="guided-match-variant-row-main">
+                            <div className={styles.guidedMatchVariantRowMain}>
                               <strong>{variant.label}</strong>
-                              <span className="guided-match-variant-primary-metric">
+                              <span className={styles.guidedMatchVariantPrimaryMetric}>
                                 Available {formatQuantity(variant.available_to_sell)}
                               </span>
                             </div>
-                            <details className="guided-match-variant-row-details">
+                            <details className={styles.guidedMatchVariantRowDetails}>
                               <summary>More details</summary>
                               <span>SKU {variant.sku || 'Not set'}</span>
                               <span>Reorder {formatQuantity(variant.reorder_level)}</span>
@@ -949,15 +950,15 @@ export function CatalogWorkspace() {
                         ))}
                       </ul>
                     ) : (
-                      <p className="workspace-field-note">No variants added yet.</p>
+                      <p className={styles.workspaceFieldNote}>No variants added yet.</p>
                     )}
                   </div>
-                  <div className="guided-match-item-meta">
-                    <span className="catalog-meta-chip is-critical">Variants: {product.variants.length}</span>
-                    <span className="catalog-meta-chip is-critical">Product Min Selling Price (Template): {formatMoney(product.min_price)}</span>
-                    <span className="catalog-meta-chip">Product Default Selling Price (Template): {formatMoney(product.default_price)}</span>
-                    <span className="catalog-meta-chip">SKU Base: {product.sku_root || 'Generated from product name'}</span>
-                    <span className="catalog-meta-chip">Equivalent Max Discount: {formatPercent(product.max_discount_percent)}</span>
+                  <div className={styles.guidedMatchItemMeta}>
+                    <span className={styles.catalogMetaChip isCritical}>Variants: {product.variants.length}</span>
+                    <span className={styles.catalogMetaChip isCritical}>Product Min Selling Price (Template): {formatMoney(product.min_price)}</span>
+                    <span className={styles.catalogMetaChip}>Product Default Selling Price (Template): {formatMoney(product.default_price)}</span>
+                    <span className={styles.catalogMetaChip}>SKU Base: {product.sku_root || 'Generated from product name'}</span>
+                    <span className={styles.catalogMetaChip}>Equivalent Max Discount: {formatPercent(product.max_discount_percent)}</span>
                   </div>
                 </article>
               )}
@@ -975,19 +976,19 @@ export function CatalogWorkspace() {
               ? 'Update the parent product and variant rows, then save once.'
               : 'Complete Product, First Variant, and Confirm. Save happens only on the final step.'}
           >
-          <form id="catalog-product-form" className="workspace-form" onSubmit={onSave}>
+          <form id="catalog-product-form" className={styles.workspaceForm} onSubmit={onSave}>
             {isCreateFlow ? (
-              <div className="workspace-subsection">
-                <div className="workspace-subsection-header">
-                  <h4 className="workspace-heading">Create flow</h4>
+              <div className={styles.workspaceSubsection}>
+                <div className={styles.workspaceSubsectionHeader}>
+                  <h4 className={styles.workspaceHeading}>Create flow</h4>
                 </div>
-                <p className="workspace-field-note">
+                <p className={styles.workspaceFieldNote}>
                   Step {activeStepIndex + 1} of {CREATE_STEPS.length}. Complete Product, First Variant, then Confirm.
                 </p>
-                <p className="workspace-field-note">
+                <p className={styles.workspaceFieldNote}>
                   Current: {CREATE_STEP_LABELS[createStep]}. Completed = ready, Current = in progress, Locked = finish the previous step first.
                 </p>
-                <div className="workspace-inline-actions">
+                <div className={styles.workspaceInlineActions}>
                   {CREATE_STEPS.map((step, index) => (
                     <button
                       key={step}
@@ -1005,9 +1006,9 @@ export function CatalogWorkspace() {
             ) : null}
 
             {(!isCreateFlow || createStep === 'product' || createStep === 'confirm') ? (
-            <div className="workspace-subsection">
-              <div className="workspace-subsection-header">
-                <h4 className="workspace-heading">
+            <div className={styles.workspaceSubsection}>
+              <div className={styles.workspaceSubsectionHeader}>
+                <h4 className={styles.workspaceHeading}>
                   Basic Info
                   <WorkspaceHint
                     label="Basic info help"
@@ -1015,7 +1016,7 @@ export function CatalogWorkspace() {
                   />
                 </h4>
               </div>
-              <div className="workspace-form-grid">
+              <div className={styles.workspaceFormGrid}>
                 <label>
                   Product name
                   <input
@@ -1028,7 +1029,7 @@ export function CatalogWorkspace() {
                     }
                     required
                   />
-                  {inlineErrors.product_name ? <p className="validation-message">{inlineErrors.product_name}</p> : null}
+                  {inlineErrors.product_name ? <p className={styles.validationMessage}>{inlineErrors.product_name}</p> : null}
                 </label>
                 <label>
                   Supplier
@@ -1068,7 +1069,7 @@ export function CatalogWorkspace() {
                     }
                   />
                 </label>
-                <label className="field-span-2">
+                <label className={styles.fieldSpan2}>
                   SKU Base
                   <input
                     value={form.identity.sku_root}
@@ -1095,7 +1096,7 @@ export function CatalogWorkspace() {
                   }
                 />
               </label>
-              <div className="field-span-2">
+              <div className={styles.fieldSpan2}>
                 <label>Product photo</label>
                 <ProductPhotoField
                   image={productImage}
@@ -1129,9 +1130,9 @@ export function CatalogWorkspace() {
             ) : null}
 
             {(!isCreateFlow || createStep === 'product' || createStep === 'confirm') ? (
-            <div className="workspace-subsection">
-              <div className="workspace-subsection-header">
-                <h4 className="workspace-heading">
+            <div className={styles.workspaceSubsection}>
+              <div className={styles.workspaceSubsectionHeader}>
+                <h4 className={styles.workspaceHeading}>
                   Pricing Rules
                   <WorkspaceHint
                     label="Pricing rules help"
@@ -1139,7 +1140,7 @@ export function CatalogWorkspace() {
                   />
                 </h4>
               </div>
-              <div className="workspace-form-grid compact">
+              <div className={styles.workspaceFormGrid compact}>
                 <label>
                   Default selling price
                   <input
@@ -1173,33 +1174,33 @@ export function CatalogWorkspace() {
                   <input value={derivedDiscount ? `${derivedDiscount}%` : 'Not set'} readOnly />
                 </label>
               </div>
-              <p className="workspace-field-note">
+              <p className={styles.workspaceFieldNote}>
                   Product-level prices are shared defaults. Sellable stock and final sale pricing are controlled per variant row.
               </p>
             </div>
             ) : null}
 
             {(!isCreateFlow || createStep === 'first_variant' || createStep === 'confirm') ? (
-            <details className="workspace-subsection" open={!collapseVariantControlsByDefault}>
-              <summary className="workspace-field-note">
+            <details className={styles.workspaceSubsection} open={!collapseVariantControlsByDefault}>
+              <summary className={styles.workspaceFieldNote}>
                 Variant controls (optional): configure only when this product needs multiple variant combinations.
               </summary>
-              <div className="workspace-stack">
-                <div className="workspace-subsection">
-                  <div className="workspace-subsection-header">
-                    <h4 className="workspace-heading">
+              <div className={styles.workspaceStack}>
+                <div className={styles.workspaceSubsection}>
+                  <div className={styles.workspaceSubsectionHeader}>
+                    <h4 className={styles.workspaceHeading}>
                       Variant Generator
                       <WorkspaceHint
                         label="Catalog variant generator help"
                         text="Enter comma-separated option values to generate combinations, then review and edit the rows below before saving."
                       />
                     </h4>
-                    <div className="workspace-inline-actions">
+                    <div className={styles.workspaceInlineActions}>
                       <button type="button" onClick={() => applyGenerator('merge')}>Generate / Regenerate</button>
                       <button type="button" onClick={() => applyGenerator('reset')}>Reset from generator</button>
                     </div>
                   </div>
-                  <div className="workspace-form-grid">
+                  <div className={styles.workspaceFormGrid}>
                     <label>
                       Sizes
                       <input
@@ -1225,28 +1226,28 @@ export function CatalogWorkspace() {
                       />
                     </label>
                   </div>
-                  <div className="commerce-card-meta">
+                  <div className={styles.commerceCardMeta}>
                     <span>Preview combinations: {generatedCombos.length}</span>
                     <span>Saved variants: {savedVariants.length}</span>
                     <span>Rows in editor: {form.variants.length}</span>
                   </div>
                 </div>
 
-                <div className="workspace-subsection">
-                  <div className="workspace-subsection-header">
-                    <h4 className="workspace-heading">
+                <div className={styles.workspaceSubsection}>
+                  <div className={styles.workspaceSubsectionHeader}>
+                    <h4 className={styles.workspaceHeading}>
                       Variant Defaults
                       <WorkspaceHint
                         label="Variant defaults help"
                         text="Use these shared defaults when many variants should start with the same cost, price, minimum price, or reorder level."
                       />
                     </h4>
-                    <div className="workspace-inline-actions">
+                    <div className={styles.workspaceInlineActions}>
                       <button type="button" onClick={() => applyDefaultsToVariants('empty')}>Apply to empty rows</button>
                       <button type="button" onClick={() => applyDefaultsToVariants('all')}>Apply to all rows</button>
                     </div>
                   </div>
-                  <div className="workspace-form-grid compact">
+                  <div className={styles.workspaceFormGrid compact}>
                     <label>
                       Default purchase cost
                       <input
@@ -1292,9 +1293,9 @@ export function CatalogWorkspace() {
             ) : null}
 
             {(!isCreateFlow || createStep === 'first_variant' || createStep === 'confirm') ? (
-            <div className="workspace-subsection">
-              <div className="workspace-subsection-header">
-                <h4 className="workspace-heading">
+            <div className={styles.workspaceSubsection}>
+              <div className={styles.workspaceSubsectionHeader}>
+                <h4 className={styles.workspaceHeading}>
                   Variants
                   <WorkspaceHint
                     label="Variants section help"
@@ -1314,8 +1315,8 @@ export function CatalogWorkspace() {
                 </button>
               </div>
 
-              <div className="workspace-stack">
-                <p className="workspace-field-note">
+              <div className={styles.workspaceStack}>
+                <p className={styles.workspaceFieldNote}>
                   Product fields stay shared at parent level. Variant rows are the sellable SKUs and can override pricing and reorder values.
                 </p>
                 {form.variants.map((variant, index) => {
@@ -1323,14 +1324,14 @@ export function CatalogWorkspace() {
                   const skuPreview = buildSkuPreview(form.identity.product_name, form.identity.sku_root, variant);
                   return (
                     <div key={`${variant.variant_id ?? 'new'}-${index}`} className={`variant-editor ${variant.status === 'archived' ? 'is-archived' : ''}`}>
-                      <div className="variant-editor-header">
+                      <div className={styles.variantEditorHeader}>
                         <div>
                           <strong>{variant.size || variant.color || variant.other ? [variant.size, variant.color, variant.other].filter(Boolean).join(' / ') : 'Default variant'}</strong>
-                          <p className="workspace-field-note">
+                          <p className={styles.workspaceFieldNote}>
                             {isSavedVariant ? 'Saved variant' : 'New variant'} · {variant.status === 'archived' ? 'Archived' : 'Active'}
                           </p>
                         </div>
-                        <div className="workspace-inline-actions">
+                        <div className={styles.workspaceInlineActions}>
                           {isSavedVariant ? (
                             <button
                               type="button"
@@ -1363,7 +1364,7 @@ export function CatalogWorkspace() {
                         </div>
                       </div>
 
-                      <div className="workspace-form-grid compact">
+                      <div className={styles.workspaceFormGrid compact}>
                         <label>
                           Size
                           <input
@@ -1424,7 +1425,7 @@ export function CatalogWorkspace() {
                             }
                           />
                         </label>
-                        {index === 0 && inlineErrors.first_variant ? <p className="validation-message">{inlineErrors.first_variant}</p> : null}
+                        {index === 0 && inlineErrors.first_variant ? <p className={styles.validationMessage}>{inlineErrors.first_variant}</p> : null}
                         <label>
                           Cost
                           <input
@@ -1496,25 +1497,25 @@ export function CatalogWorkspace() {
             ) : null}
 
             {isCreateFlow && createStep === 'confirm' ? (
-              <div className="workspace-subsection">
-                <h4 className="workspace-heading">Confirm before save</h4>
-                <div className="commerce-card-meta">
+              <div className={styles.workspaceSubsection}>
+                <h4 className={styles.workspaceHeading}>Confirm before save</h4>
+                <div className={styles.commerceCardMeta}>
                   <span>Product: {form.identity.product_name || 'Not set'}</span>
                   <span>First variant: {form.variants[0] ? [form.variants[0].size, form.variants[0].color, form.variants[0].other].filter(Boolean).join(' / ') || 'Default' : 'Missing'}</span>
                   <span>Total variant rows: {form.variants.length}</span>
                 </div>
-                <p className="workspace-field-note">
+                <p className={styles.workspaceFieldNote}>
                   Final confirm: select Create product to complete this flow. Save creates the product parent and first sellable variant together.
                 </p>
-                <p className="workspace-field-note">
+                <p className={styles.workspaceFieldNote}>
                   After save succeeds, this flow shows a success notice confirming both records were created.
                 </p>
               </div>
             ) : null}
 
-            <div className="workspace-actions">
+            <div className={styles.workspaceActions}>
               {isCreateFlow && stepTransitionErrorSummary ? (
-                <p className="validation-message" role="alert">
+                <p className={styles.validationMessage} role="alert">
                   {stepTransitionErrorSummary}
                 </p>
               ) : null}
@@ -1535,7 +1536,7 @@ export function CatalogWorkspace() {
               </button>
               <button type="button" onClick={() => setNewProductForm(workspace?.query)}>Discard draft</button>
             </div>
-            <div className="mobile-action-safe-spacer" aria-hidden="true" />
+            <div className={styles.mobileActionSafeSpacer} aria-hidden="true" />
 
             <datalist id="catalog-suppliers">
               {workspace?.suppliers.map((supplier) => <option key={supplier.supplier_id} value={supplier.name} />)}

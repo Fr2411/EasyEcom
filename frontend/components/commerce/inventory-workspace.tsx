@@ -32,6 +32,7 @@ import {
 import { formatMoney, formatQuantity } from '@/lib/commerce-format';
 import { buildSkuPreview, buildVariantCombinations, signatureForVariant } from '@/lib/variant-generator';
 import { ProductPhotoField } from '@/components/commerce/product-photo-field';
+import styles from './catalog-workspace.module.css';
 import { getPurchaseOrder, listPurchaseOrders } from '@/lib/api/purchases';
 import type { PurchaseDetail } from '@/types/purchases';
 import { ApiError, ApiNetworkError } from '@/lib/api/client';
@@ -1181,8 +1182,8 @@ export function InventoryWorkspace() {
   const prioritizeManualReceiving = !loadingPurchaseOrders && !purchaseOrderLoadFailure && !hasOutstandingPurchaseOrders;
 
   return (
-    <div className="workspace-stack inventory-command-center">
-      <nav className="inventory-breadcrumb" aria-label="Inventory breadcrumb">
+    <div className=[ styles.workspaceStack, styles.inventoryCommandCenter ].join(' ')>
+      <nav className=[ styles.inventoryBreadcrumb ].join(' ') aria-label="Inventory breadcrumb">
         <ol>
           <li>
             <Link href="/dashboard">Home</Link>
@@ -1210,7 +1211,7 @@ export function InventoryWorkspace() {
 
       <WorkspacePanel
         title={
-          <span className="workspace-heading">
+          <span className=[ styles.workspaceHeading ].join(' ')>
             Variant-level inventory control
             <WorkspaceHint
               label="Inventory workspace help"
@@ -1219,9 +1220,9 @@ export function InventoryWorkspace() {
           </span>
         }
         actions={
-          <div className="inventory-panel-actions">
-            <form className="workspace-search" onSubmit={onSearch}>
-              <div className="inventory-search-combobox">
+          <div className=[ styles.inventoryPanelActions ].join(' ')>
+            <form className=[ styles.workspaceSearch ].join(' ') onSubmit={onSearch}>
+              <div className=[ styles.inventorySearchCombobox ].join(' ')>
                 <input
                   type="search"
                   value={queryInput}
@@ -1246,7 +1247,7 @@ export function InventoryWorkspace() {
                   }}
                 />
                 {searchSuggestionsOpen && visibleSearchSuggestions.length ? (
-                  <ul className="inventory-search-suggestions" role="listbox" aria-label="Inventory search suggestions">
+                  <ul className=[ styles.inventorySearchSuggestions ].join(' ') role="listbox" aria-label="Inventory search suggestions">
                     {visibleSearchSuggestions.map((suggestion) => (
                       <li key={suggestion}>
                         <button
@@ -1272,7 +1273,7 @@ export function InventoryWorkspace() {
             </datalist>
             <button
               type="button"
-              className="btn-secondary"
+              className=[ styles.btnSecondary ].join(' ')
               aria-expanded={filtersOpen}
               onClick={() => setFiltersOpen((current) => !current)}
             >
@@ -1280,7 +1281,7 @@ export function InventoryWorkspace() {
             </button>
             <button
               type="button"
-              className="btn-secondary"
+              className=[ styles.btnSecondary ].join(' ')
               aria-expanded={columnSelectorOpen}
               onClick={() => setColumnSelectorOpen((current) => !current)}
             >
@@ -1288,7 +1289,7 @@ export function InventoryWorkspace() {
             </button>
             <button
               type="button"
-              className="btn-primary"
+              className=[ styles.btnPrimary ].join(' ')
               onClick={() => {
                 beginNewProduct(null);
                 setActiveTab('receive');
@@ -1304,7 +1305,7 @@ export function InventoryWorkspace() {
         {notice ? <WorkspaceNotice tone="success">{notice}</WorkspaceNotice> : null}
         {error ? <WorkspaceNotice tone="error">{error}</WorkspaceNotice> : null}
         {isPending && !workspace ? <WorkspaceNotice>Loading inventory…</WorkspaceNotice> : null}
-        <section className="inventory-status-segments" aria-label="Stock status segmentation">
+        <section className=[ styles.inventoryStatusSegments ].join(' ') aria-label="Stock status segmentation">
           <button
             type="button"
             className={stockFilter === 'all' ? 'active' : ''}
@@ -1339,7 +1340,7 @@ export function InventoryWorkspace() {
           </button>
         </section>
         {filtersOpen ? (
-          <section className="inventory-filters" aria-label="Inventory filters">
+          <section className=[ styles.inventoryFilters ].join(' ') aria-label="Inventory filters">
             <label>
               Supplier
               <input
@@ -1377,7 +1378,7 @@ export function InventoryWorkspace() {
             </label>
             <button
               type="button"
-              className="btn-secondary inventory-filter-reset"
+              className=[ styles.btnSecondary, styles.inventoryFilterReset ].join(' ')
               onClick={() => {
                 setSupplierFilter('');
                 setCategoryFilter('');
@@ -1396,7 +1397,7 @@ export function InventoryWorkspace() {
           </section>
         ) : null}
         {columnSelectorOpen ? (
-          <section className="inventory-filters" aria-label="Inventory column visibility">
+          <section className=[ styles.inventoryFilters ].join(' ') aria-label="Inventory column visibility">
             {INVENTORY_COLUMN_CONFIG.map((column) => (
               <label key={column.key}>
                 <input
@@ -1412,8 +1413,8 @@ export function InventoryWorkspace() {
 
         {activeTab === 'stock' ? (
           filteredProductGroups.length ? (
-            <div className="table-scroll inventory-stock-table-scroll">
-              <table className="workspace-table workspace-table-sticky inventory-grouped-table">
+            <div className=[ styles.tableScroll, styles.inventoryStockTableScroll ].join(' ')>
+              <table className=[ styles.workspaceTable, styles.workspaceTableSticky, styles.inventoryGroupedTable ].join(' ')>
                 <thead>
                   <tr>
                     <th>Product</th>
@@ -1434,10 +1435,10 @@ export function InventoryWorkspace() {
                       <Fragment key={group.product_id}>
                         <tr className={`inventory-product-row${isMenuOpen ? ' menu-open' : ''}`}>
                           <td>
-                            <div className="inventory-product-cell">
+                            <div className=[ styles.inventoryProductCell ].join(' ')>
                               <button
                                 type="button"
-                                className="inventory-expand-button"
+                                className=[ styles.inventoryExpandButton ].join(' ')
                                 onClick={() =>
                                   setExpandedProducts((current) => ({
                                     ...current,
@@ -1450,12 +1451,12 @@ export function InventoryWorkspace() {
                               </button>
                               {group.image?.thumbnail_url ? (
                                 <img
-                                  className="inventory-product-thumb"
+                                  className=[ styles.inventoryProductThumb ].join(' ')
                                   src={group.image.thumbnail_url}
                                   alt={group.product_name}
                                 />
                               ) : (
-                                <div className="inventory-product-thumb placeholder" aria-hidden="true">
+                                <div className=[ styles.inventoryProductThumb, styles.placeholder ].join(' ') aria-hidden="true">
                                   {group.product_name.charAt(0).toUpperCase()}
                                 </div>
                               )}
@@ -1467,7 +1468,7 @@ export function InventoryWorkspace() {
                           </td>
                           {visibleColumns.supplier ? (
                             <td>
-                              <div className="workspace-inline-actions">
+                              <div className=[ styles.workspaceInlineActions ].join(' ')>
                                 <input
                                   value={supplierDrafts[group.product_id] ?? group.supplier ?? ''}
                                   onChange={(event) =>
@@ -1495,16 +1496,16 @@ export function InventoryWorkspace() {
                           {visibleColumns.alerts ? (
                             <td>
                               {group.available_to_sell <= 0 ? (
-                                <span className="inventory-status-badge out">Out</span>
+                                <span className=[ styles.inventoryStatusBadge, styles.out ].join(' ')>Out</span>
                               ) : group.low_stock_count ? (
-                                <span className="inventory-status-badge low">{group.low_stock_count} low</span>
+                                <span className=[ styles.inventoryStatusBadge, styles.low ].join(' ')>{group.low_stock_count} low</span>
                               ) : (
-                                <span className="inventory-status-badge healthy">Healthy</span>
+                                <span className=[ styles.inventoryStatusBadge, styles.healthy ].join(' ')>Healthy</span>
                               )}
                             </td>
                           ) : null}
                           <td>
-                            <div className="quick-actions-menu">
+                            <div className=[ styles.quickActionsMenu ].join(' ')>
                               <button
                                 type="button"
                                 ref={(node) => {
@@ -1520,10 +1521,10 @@ export function InventoryWorkspace() {
                           </td>
                         </tr>
                         {isExpanded ? (
-                          <tr className="inventory-variant-container-row">
+                          <tr className=[ styles.inventoryVariantContainerRow ].join(' ')>
                             <td colSpan={2 + INVENTORY_COLUMN_CONFIG.filter((column) => visibleColumns[column.key]).length}>
-                              <div className="inventory-variant-table-wrap">
-                                <table className="workspace-table workspace-table-sticky inventory-variant-table">
+                              <div className=[ styles.inventoryVariantTableWrap ].join(' ')>
+                                <table className=[ styles.workspaceTable, styles.workspaceTableSticky, styles.inventoryVariantTable ].join(' ')>
                                   <thead>
                                     <tr>
                                       <th>Variant</th>
@@ -1540,17 +1541,17 @@ export function InventoryWorkspace() {
                                   </thead>
                                   <tbody>
                                     {group.variants.map((variant) => (
-                                      <tr key={variant.variant_id} className="inventory-variant-row">
+                                      <tr key={variant.variant_id} className=[ styles.inventoryVariantRow ].join(' ')>
                                         <td>
-                                          <div className="inventory-variant-identity">
+                                          <div className=[ styles.inventoryVariantIdentity ].join(' ')>
                                             {group.image?.thumbnail_url ? (
                                               <img
-                                                className="inventory-variant-thumb"
+                                                className=[ styles.inventoryVariantThumb ].join(' ')
                                                 src={group.image.thumbnail_url}
                                                 alt={group.product_name}
                                               />
                                             ) : (
-                                              <div className="inventory-variant-thumb placeholder" aria-hidden="true">
+                                              <div className=[ styles.inventoryVariantThumb, styles.placeholder ].join(' ') aria-hidden="true">
                                                 {group.product_name.charAt(0).toUpperCase()}
                                               </div>
                                             )}
@@ -1566,7 +1567,7 @@ export function InventoryWorkspace() {
                                         <td>{formatQuantity(variant.reserved)}</td>
                                         <td>{formatQuantity(variant.available_to_sell)}</td>
                                         <td>
-                                          <div className="workspace-inline-actions">
+                                          <div className=[ styles.workspaceInlineActions ].join(' ')>
                                             <input
                                               value={reorderDrafts[variant.variant_id] ?? variant.reorder_level}
                                               onChange={(event) =>
@@ -1590,11 +1591,11 @@ export function InventoryWorkspace() {
                                         <td>{formatMoney(variant.unit_price)}</td>
                                         <td>
                                           {toNumber(variant.available_to_sell) <= 0 ? (
-                                            <span className="inventory-status-badge out">Out</span>
+                                            <span className=[ styles.inventoryStatusBadge, styles.out ].join(' ')>Out</span>
                                           ) : variant.low_stock ? (
-                                            <span className="inventory-status-badge low">Low</span>
+                                            <span className=[ styles.inventoryStatusBadge, styles.low ].join(' ')>Low</span>
                                           ) : (
-                                            <span className="inventory-status-badge healthy">Normal</span>
+                                            <span className=[ styles.inventoryStatusBadge, styles.healthy ].join(' ')>Normal</span>
                                           )}
                                         </td>
                                       </tr>
@@ -1633,7 +1634,7 @@ export function InventoryWorkspace() {
           ? createPortal(
               <div
                 ref={quickActionsMenuRef}
-                className="quick-actions-popover quick-actions-popover-floating"
+                className=[ styles.quickActionsPopover, styles.quickActionsPopoverFloating ].join(' ')
                 style={{ top: quickActionsPosition.top, left: quickActionsPosition.left }}
                 role="menu"
               >
@@ -1646,11 +1647,11 @@ export function InventoryWorkspace() {
           : null}
 
         {activeTab === 'receive' ? (
-          <div ref={receiveSectionsRef} className="workspace-stack receive-stock-sections">
+          <div ref={receiveSectionsRef} className=[ styles.workspaceStack, styles.receiveStockSections ].join(' ')>
             {!prioritizeManualReceiving ? (
-            <section className="workspace-subsection">
-              <div className="workspace-subsection-header">
-                <h4 className="workspace-heading">
+            <section className=[ styles.workspaceSubsection ].join(' ')>
+              <div className=[ styles.workspaceSubsectionHeader ].join(' ')>
+                <h4 className=[ styles.workspaceHeading ].join(' ')>
                   Outstanding Purchase Orders
                   <WorkspaceHint
                     label="Outstanding purchase orders help"
@@ -1659,23 +1660,23 @@ export function InventoryWorkspace() {
                 </h4>
               </div>
               {purchaseOrderLoadFailure ? (
-                <div className="receive-po-error-state" role="alert" aria-live="assertive">
-                  <p className="receive-po-error-eyebrow">Outstanding orders unavailable</p>
-                  <p className="receive-po-error-title">Purchase order prefill is currently unavailable</p>
-                  <p className="receive-po-error-copy">{purchaseOrderLoadFailure.message}</p>
-                  <p className="receive-po-error-copy receive-po-error-recovery">{purchaseOrderLoadFailure.recoveryTip}</p>
-                  <div className="receive-po-error-actions">
-                    <button type="button" className="btn-primary" onClick={() => void loadOutstandingPurchaseOrders()} disabled={loadingPurchaseOrders}>
+                <div className=[ styles.receivePoErrorState ].join(' ') role="alert" aria-live="assertive">
+                  <p className=[ styles.receivePoErrorEyebrow ].join(' ')>Outstanding orders unavailable</p>
+                  <p className=[ styles.receivePoErrorTitle ].join(' ')>Purchase order prefill is currently unavailable</p>
+                  <p className=[ styles.receivePoErrorCopy ].join(' ')>{purchaseOrderLoadFailure.message}</p>
+                  <p className=[ styles.receivePoErrorCopy, styles.receivePoErrorRecovery ].join(' ')>{purchaseOrderLoadFailure.recoveryTip}</p>
+                  <div className=[ styles.receivePoErrorActions ].join(' ')>
+                    <button type="button" className=[ styles.btnPrimary ].join(' ') onClick={() => void loadOutstandingPurchaseOrders()} disabled={loadingPurchaseOrders}>
                       {loadingPurchaseOrders ? 'Retrying…' : purchaseOrderLoadFailure.actionLabel}
                     </button>
-                    <button type="button" className="btn-secondary" onClick={() => setPurchaseOrderLoadError(null)}>
+                    <button type="button" className=[ styles.btnSecondary ].join(' ') onClick={() => setPurchaseOrderLoadError(null)}>
                       Continue with manual receiving
                     </button>
                   </div>
                 </div>
               ) : null}
               {hasOutstandingPurchaseOrders ? (
-                <div className="workspace-inline-actions">
+                <div className=[ styles.workspaceInlineActions ].join(' ')>
                   <label>
                     Draft purchase order
                     <select
@@ -1694,19 +1695,19 @@ export function InventoryWorkspace() {
                   <button type="button" onClick={() => void applyPurchaseOrderToReceive()} disabled={!selectedPurchaseOrderId || lookupPending}>
                     {lookupPending ? 'Loading…' : 'Load PO lines'}
                   </button>
-                  <button type="button" className="btn-secondary" onClick={() => void loadOutstandingPurchaseOrders()}>
+                  <button type="button" className=[ styles.btnSecondary ].join(' ') onClick={() => void loadOutstandingPurchaseOrders()}>
                     Refresh POs
                   </button>
                   <span>{loadingPurchaseOrders ? 'Refreshing outstanding orders…' : `${outstandingPurchaseOrders.length} draft PO(s) available`}</span>
                 </div>
               ) : (
                 <WorkspaceNotice tone="info">
-                  <div className="workspace-stack">
+                  <div className=[ styles.workspaceStack ].join(' ')>
                     <strong>No outstanding draft POs</strong>
                     <span>Receiving can continue manually. Refresh orders once procurement creates the next draft PO.</span>
                   </div>
-                  <div className="workspace-inline-actions">
-                    <button type="button" className="btn-secondary" onClick={() => void loadOutstandingPurchaseOrders()}>
+                  <div className=[ styles.workspaceInlineActions ].join(' ')>
+                    <button type="button" className=[ styles.btnSecondary ].join(' ') onClick={() => void loadOutstandingPurchaseOrders()}>
                       {loadingPurchaseOrders ? 'Refreshing…' : 'Refresh POs'}
                     </button>
                   </div>
@@ -1716,8 +1717,8 @@ export function InventoryWorkspace() {
             ) : null}
 
             <section className={prioritizeManualReceiving ? 'workspace-subsection receive-manual-priority' : 'workspace-subsection'}>
-              <div className="workspace-subsection-header">
-                <h4 className="workspace-heading">
+              <div className=[ styles.workspaceSubsectionHeader ].join(' ')>
+                <h4 className=[ styles.workspaceHeading ].join(' ')>
                   What are you receiving?
                   <WorkspaceHint
                     label="Inventory intake help"
@@ -1725,21 +1726,21 @@ export function InventoryWorkspace() {
                   />
                 </h4>
                 {showAdvancedCatalog ? (
-                  <Link href="/catalog" className="nav-link">
+                  <Link href="/catalog" className=[ styles.navLink ].join(' ')>
                     Open Catalog Maintenance
                   </Link>
                 ) : null}
               </div>
               {prioritizeManualReceiving ? (
                 <WorkspaceNotice tone="info">
-                  <div className="workspace-stack">
+                  <div className=[ styles.workspaceStack ].join(' ')>
                     <strong>Manual receiving is ready now</strong>
                     <span>No outstanding draft POs. Continue with manual receiving below and add PO prefill later when available.</span>
                   </div>
                 </WorkspaceNotice>
               ) : null}
 
-              <form className="workspace-inline-actions" onSubmit={onIntakeSearch}>
+              <form className=[ styles.workspaceInlineActions ].join(' ') onSubmit={onIntakeSearch}>
                 <input
                   type="search"
                   value={intakeQuery}
@@ -1753,14 +1754,14 @@ export function InventoryWorkspace() {
 
               {intakeResults ? (
                 <WorkspaceNotice tone={intakeRecommendation.kind === 'new' ? 'info' : 'success'}>
-                  <div className="workspace-stack">
+                  <div className=[ styles.workspaceStack ].join(' ')>
                     <strong>{intakeRecommendation.title}</strong>
                     <span>{intakeRecommendation.summary}</span>
                   </div>
                 </WorkspaceNotice>
               ) : (
                 <WorkspaceNotice>
-                  <div className="workspace-stack">
+                  <div className=[ styles.workspaceStack ].join(' ')>
                     <strong>{intakeRecommendation.title}</strong>
                     <span>{intakeRecommendation.summary}</span>
                   </div>
@@ -1768,15 +1769,15 @@ export function InventoryWorkspace() {
               )}
 
               {exactVariantMatches.length ? (
-                <div className="workspace-stack">
-                  <p className="eyebrow">Exact Variant Matches</p>
-                  <div className="workspace-card-grid compact">
+                <div className=[ styles.workspaceStack ].join(' ')>
+                  <p className=[ styles.eyebrow ].join(' ')>Exact Variant Matches</p>
+                  <div className=[ styles.workspaceCardGrid, styles.compact ].join(' ')>
                     {exactVariantMatches.map((match) => (
-                      <article key={`${match.variant.variant_id}-${match.match_reason}`} className="commerce-card compact">
-                        <div className="commerce-card-header">
-                          <div className="guided-match-item-identity">
+                      <article key={`${match.variant.variant_id}-${match.match_reason}`} className=[ styles.commerceCard, styles.compact ].join(' ')>
+                        <div className=[ styles.commerceCardHeader ].join(' ')>
+                          <div className=[ styles.guidedMatchItemIdentity ].join(' ')>
                             {match.product.image?.thumbnail_url ? (
-                              <img className="guided-match-item-thumb" src={match.product.image.thumbnail_url} alt={match.product.name} />
+                              <img className=[ styles.guidedMatchItemThumb ].join(' ') src={match.product.image.thumbnail_url} alt={match.product.name} />
                             ) : null}
                             <div>
                             <h4>{match.variant.label}</h4>
@@ -1796,15 +1797,15 @@ export function InventoryWorkspace() {
               ) : null}
 
               {visibleProductMatches.length ? (
-                <div className="workspace-stack">
-                  <p className="eyebrow">Existing Products</p>
-                  <div className="workspace-card-grid compact">
+                <div className=[ styles.workspaceStack ].join(' ')>
+                  <p className=[ styles.eyebrow ].join(' ')>Existing Products</p>
+                  <div className=[ styles.workspaceCardGrid, styles.compact ].join(' ')>
                     {visibleProductMatches.map((product) => (
-                      <article key={product.product_id} className="commerce-card compact">
-                        <div className="commerce-card-header">
-                          <div className="guided-match-item-identity">
+                      <article key={product.product_id} className=[ styles.commerceCard, styles.compact ].join(' ')>
+                        <div className=[ styles.commerceCardHeader ].join(' ')>
+                          <div className=[ styles.guidedMatchItemIdentity ].join(' ')>
                             {product.image?.thumbnail_url ? (
-                              <img className="guided-match-item-thumb" src={product.image.thumbnail_url} alt={product.name} />
+                              <img className=[ styles.guidedMatchItemThumb ].join(' ') src={product.image.thumbnail_url} alt={product.name} />
                             ) : null}
                             <div>
                             <h4>{product.name}</h4>
@@ -1832,10 +1833,10 @@ export function InventoryWorkspace() {
               ) : null}
 
               {newProductSuggestion ? (
-                <article className="commerce-card compact">
-                  <div className="commerce-card-header">
+                <article className=[ styles.commerceCard, styles.compact ].join(' ')>
+                  <div className=[ styles.commerceCardHeader ].join(' ')>
                     <div>
-                      <p className="eyebrow">Create New Product</p>
+                      <p className=[ styles.eyebrow ].join(' ')>Create New Product</p>
                       <h4>{newProductSuggestion.product_name}</h4>
                       <p>We did not attach this automatically. Start a new item only if the existing matches above are not correct.</p>
                     </div>
@@ -1848,9 +1849,9 @@ export function InventoryWorkspace() {
             </section>
 
             {receiveForm.identity.product_name ? (
-              <section className="workspace-subsection">
-                <div className="workspace-subsection-header">
-                  <h4 className="workspace-heading">
+              <section className=[ styles.workspaceSubsection ].join(' ')>
+                <div className=[ styles.workspaceSubsectionHeader ].join(' ')>
+                  <h4 className=[ styles.workspaceHeading ].join(' ')>
                     Review Variants and Receive
                     <WorkspaceHint
                       label="Review and receive help"
@@ -1860,7 +1861,7 @@ export function InventoryWorkspace() {
                 </div>
 
                 {selectedProduct ? (
-                  <label className="workspace-toggle">
+                  <label className=[ styles.workspaceToggle ].join(' ')>
                     <input
                       type="checkbox"
                       checked={receiveForm.update_matched_product_details}
@@ -1871,7 +1872,7 @@ export function InventoryWorkspace() {
                         }))
                       }
                     />
-                    <span className="workspace-heading">
+                    <span className=[ styles.workspaceHeading ].join(' ')>
                       Edit saved product details
                       <WorkspaceHint
                         label="Edit saved product details help"
@@ -1882,10 +1883,10 @@ export function InventoryWorkspace() {
                 ) : null}
 
                 {selectedProduct?.variants.length ? (
-                  <div className="workspace-stack">
-                    <p className="eyebrow">Saved Variants</p>
-                    <div className="table-scroll">
-                      <table className="workspace-table workspace-table-sticky">
+                  <div className=[ styles.workspaceStack ].join(' ')>
+                    <p className=[ styles.eyebrow ].join(' ')>Saved Variants</p>
+                    <div className=[ styles.tableScroll ].join(' ')>
+                      <table className=[ styles.workspaceTable, styles.workspaceTableSticky ].join(' ')>
                         <thead>
                           <tr>
                             <th>Variant</th>
@@ -1918,15 +1919,15 @@ export function InventoryWorkspace() {
                 ) : null}
 
                 <form
-                  className="workspace-form"
+                  className=[ styles.workspaceForm ].join(' ')
                   onSubmit={(event) => {
                     event.preventDefault();
                     void submitReceive('receive_stock');
                   }}
                 >
-                  <div className="workspace-subsection">
-                    <div className="workspace-subsection-header">
-                      <h4 className="workspace-heading">
+                  <div className=[ styles.workspaceSubsection ].join(' ')>
+                    <div className=[ styles.workspaceSubsectionHeader ].join(' ')>
+                      <h4 className=[ styles.workspaceHeading ].join(' ')>
                         Product Details
                         <WorkspaceHint
                           label="Product details help"
@@ -1934,7 +1935,7 @@ export function InventoryWorkspace() {
                         />
                       </h4>
                     </div>
-                    <div className="workspace-form-grid">
+                    <div className=[ styles.workspaceFormGrid ].join(' ')>
                       <label>
                         Product name
                         <input
@@ -2027,7 +2028,7 @@ export function InventoryWorkspace() {
                           disabled={!canEditSavedDetails}
                         />
                       </label>
-                      <div className="field-span-2">
+                      <div className=[ styles.fieldSpan-2 ].join(' ')>
                         <label>Product photo</label>
                         <ProductPhotoField
                           image={productImage}
@@ -2060,9 +2061,9 @@ export function InventoryWorkspace() {
                     </div>
                   </div>
 
-                  <div className="workspace-subsection">
-                    <div className="workspace-subsection-header">
-                      <h4 className="workspace-heading">
+                  <div className=[ styles.workspaceSubsection ].join(' ')>
+                    <div className=[ styles.workspaceSubsectionHeader ].join(' ')>
+                      <h4 className=[ styles.workspaceHeading ].join(' ')>
                         Variant Generator
                         <WorkspaceHint
                           label="Variant generator help"
@@ -2070,7 +2071,7 @@ export function InventoryWorkspace() {
                         />
                       </h4>
                     </div>
-                    <div className="workspace-form-grid">
+                    <div className=[ styles.workspaceFormGrid ].join(' ')>
                       <label>
                         Sizes
                         <input
@@ -2096,7 +2097,7 @@ export function InventoryWorkspace() {
                         />
                       </label>
                       <label>
-                        <span className="workspace-heading">
+                        <span className=[ styles.workspaceHeading ].join(' ')>
                           Default Qty Each Variant
                           <WorkspaceHint
                             label="Default quantity for each variant help"
@@ -2144,16 +2145,16 @@ export function InventoryWorkspace() {
                         />
                       </label>
                     </div>
-                    <div className="workspace-actions">
+                    <div className=[ styles.workspaceActions ].join(' ')>
                       <button type="button" onClick={applyGenerator}>Generate variants</button>
                       <button type="button" onClick={() => applyDefaultsToLines('empty')}>Fill empty line fields</button>
                       <button type="button" onClick={() => applyDefaultsToLines('all')}>Overwrite all line defaults</button>
                     </div>
                   </div>
 
-                  <div className="workspace-subsection">
-                    <div className="workspace-subsection-header">
-                      <h4 className="workspace-heading">
+                  <div className=[ styles.workspaceSubsection ].join(' ')>
+                    <div className=[ styles.workspaceSubsectionHeader ].join(' ')>
+                      <h4 className=[ styles.workspaceHeading ].join(' ')>
                         Receipt Lines
                         <WorkspaceHint
                           label="Receipt lines help"
@@ -2163,15 +2164,15 @@ export function InventoryWorkspace() {
                     </div>
 
                     {receiveForm.lines.length ? (
-                      <div className="workspace-card-grid">
+                      <div className=[ styles.workspaceCardGrid ].join(' ')>
                         {receiveForm.lines.map((line, index) => {
                           const isExisting = Boolean(line.variant_id);
                           const previewSku = buildSkuPreview(receiveForm.identity.product_name, receiveForm.identity.sku_root, line);
                           return (
-                            <article key={lineKey(line)} className="commerce-card">
-                              <div className="commerce-card-header">
+                            <article key={lineKey(line)} className=[ styles.commerceCard ].join(' ')>
+                              <div className=[ styles.commerceCardHeader ].join(' ')>
                                 <div>
-                                  <p className="eyebrow">{isExisting ? 'Existing variant' : 'New variant'}</p>
+                                  <p className=[ styles.eyebrow ].join(' ')>{isExisting ? 'Existing variant' : 'New variant'}</p>
                                   <h4>{variantTitle(line)}</h4>
                                   <p>{previewSku}</p>
                                 </div>
@@ -2188,7 +2189,7 @@ export function InventoryWorkspace() {
                                 </button>
                               </div>
 
-                              <div className="workspace-form-grid">
+                              <div className=[ styles.workspaceFormGrid ].join(' ')>
                                 <label>
                                   Quantity
                                   <input
@@ -2356,7 +2357,7 @@ export function InventoryWorkspace() {
                     />
                   </label>
 
-                  <div className="workspace-actions">
+                  <div className=[ styles.workspaceActions ].join(' ')>
                     <button type="submit" disabled={submitPending}>
                       {submitPending ? 'Saving…' : 'Receive stock'}
                     </button>
@@ -2389,8 +2390,8 @@ export function InventoryWorkspace() {
         ) : null}
 
         {activeTab === 'adjust' ? (
-          <form className="workspace-form" onSubmit={submitAdjustment}>
-            <div className="workspace-form-grid">
+          <form className=[ styles.workspaceForm ].join(' ') onSubmit={submitAdjustment}>
+            <div className=[ styles.workspaceFormGrid ].join(' ')>
               <label>
                 Variant
                 <select
@@ -2434,7 +2435,7 @@ export function InventoryWorkspace() {
                 onChange={(event) => setAdjustmentForm((current) => ({ ...current, notes: event.target.value }))}
               />
             </label>
-            <div className="workspace-actions">
+            <div className=[ styles.workspaceActions ].join(' ')>
               <button type="submit">Record adjustment</button>
             </div>
           </form>
@@ -2442,8 +2443,8 @@ export function InventoryWorkspace() {
 
         {activeTab === 'low-stock' ? (
           workspace?.low_stock_items.length ? (
-            <div className="table-scroll">
-              <table className="workspace-table workspace-table-sticky">
+            <div className=[ styles.tableScroll ].join(' ')>
+              <table className=[ styles.workspaceTable, styles.workspaceTableSticky ].join(' ')>
                 <thead>
                   <tr>
                     <th>Variant</th>
@@ -2472,7 +2473,7 @@ export function InventoryWorkspace() {
           )
         ) : null}
       </WorkspacePanel>
-      <div className="mobile-action-safe-spacer" aria-hidden="true" />
+      <div className=[ styles.mobileActionSafeSpacer ].join(' ') aria-hidden="true" />
     </div>
   );
 }

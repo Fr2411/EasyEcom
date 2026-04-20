@@ -1,0 +1,220 @@
+/* Design Tokens: Stripe-inspired */
+/* Source: popular-web-designs skill, stripe.md */
+
+/* Color Palette */
+:root {
+  /* Primary */
+  --color-stripe-purple: #533afd;
+  --color-deep-navy: #061b31;
+  --color-pure-white: #ffffff;
+
+  /* Brand & Dark */
+  --color-brand-dark: #1c1e54;
+  --color-dark-navy: #0d253d;
+
+  /* Accent Colors */
+  --color-ruby: #ea2261;
+  --color-magenta: #f96bee;
+  --color-magenta-light: #ffd7ef;
+
+  /* Interactive */
+  --color-primary-purple: #533afd;
+  --color-purple-hover: #4434d4;
+  --color-purple-deep: #2e2b8c;
+  --color-purple-light: #b9b9f9;
+  --color-purple-mid: #665efd;
+
+  /* Neutral Scale */
+  --color-heading: #061b31;
+  --color-label: #273951;
+  --color-body: #64748d;
+  --color-success-green: #15be53;
+  --color-success-text: #108c3d;
+  --color-lemon: #9b6829;
+
+  /* Surface & Borders */
+  --color-border-default: #e5edf5;
+  --color-border-purple: #b9b9f9;
+  --color-border-soft-purple: #d6d9fc;
+  --color-border-magenta: #ffd7ef;
+  --color-border-dashed: #362baa;
+
+  /* Shadow Colors */
+  --color-shadow-blue: rgba(50,50,93,0.25);
+  --color-shadow-dark-blue: rgba(3,3,39,0.25);
+  --color-shadow-black: rgba(0,0,0,0.1);
+  --color-shadow-ambient: rgba(23,23,23,0.08);
+  --color-shadow-soft: rgba(23,23,23,0.06);
+}
+
+/* Typography Rules (Font Families & Weights) */
+:root {
+  /* Font families - using CDN substitutes as per skill */
+  --font-sans: 'Source Sans 3', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'Source Code Pro', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+
+  /* Weights */
+  --weight-light: 300;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-bold: 600;
+  --weight-black: 700;
+}
+
+/* Typography Sizes */
+:root {
+  /* Display */
+  --size-display-hero: 56px;
+  --size-display-large: 48px;
+  --size-section-heading: 32px;
+  --size-subheading-large: 26px;
+  --size-subheading: 22px;
+  /* Body */
+  --size-body-large: 18px;
+  --size-body: 16px;
+  --size-button: 16px;
+  --size-button-small: 14px;
+  --size-link: 14px;
+  --size-caption: 13px;
+  --size-caption-small: 12px;
+  --size-caption-tabular: 12px;
+  --size-micro: 10px;
+  --size-micro-tabular: 10px;
+  --size-nano: 8px;
+  /* Code */
+  --size-code-body: 12px;
+  --size-code-bold: 12px;
+  --size-code-label: 12px;
+  --size-code-micro: 9px;
+}
+
+/* Line Heights */
+:root {
+  --lh-display-hero: 1.03;
+  --lh-display-large: 1.15;
+  --lh-section-heading: 1.10;
+  --lh-subheading-large: 1.12;
+  --lh-subheading: 1.10;
+  --lh-body-large: 1.40;
+  --lh-body: 1.40;
+  --lh-button: 1.00;
+  --lh-button-small: 1.00;
+  --lh-link: 1.00;
+  --lh-caption: normal;
+  --lh-caption-small: 1.33-1.45;
+  --lh-caption-tabular: 1.33;
+  --lh-micro: 1.15;
+  --lh-micro-tabular: 1.15;
+  --lh-nano: 1.07;
+  --lh-code-body: 2.00;
+  --lh-code-bold: 2.00;
+  --lh-code-label: 2.00;
+  --lh-code-micro: 1.00;
+}
+
+/* Letter Spacing */
+:root {
+  --ls-display-hero: -1.4px;
+  --ls-display-large: -0.96px;
+  --ls-section-heading: -0.64px;
+  --ls-subheading-large: -0.26px;
+  --ls-subheading: -0.22px;
+  --ls-body-large: normal;
+  --ls-body: normal;
+  --ls-button: normal;
+  --ls-button-small: normal;
+  --ls-link: normal;
+  --ls-caption: normal;
+  --ls-caption-small: normal;
+  --ls-caption-tabular: -0.36px;
+  --ls-micro: 0.1px;
+  --ls-micro-tabular: -0.3px;
+  --ls-nano: normal;
+  --ls-code-body: normal;
+  --ls-code-bold: normal;
+  --ls-code-label: normal;
+  --ls-code-micro: normal;
+}
+
+/* Spacing System (8px base) */
+:root {
+  --space-0: 0px;
+  --space-0-5: 2px;
+  --space-1: 4px;
+  --space-1-5: 6px;
+  --space-2: 8px;
+  --space-2-5: 10px;
+  --space-3: 11px;
+  --space-3-5: 12px;
+  --space-4: 14px;
+  --space-4-5: 16px;
+  --space-5: 18px;
+  --space-5-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --space-8: 32px;
+  --space-9: 36px;
+  --space-10: 40px;
+}
+
+/* Border Radius */
+:root {
+  --radius-micro: 1px;
+  --radius-standard: 4px;
+  --radius-comfortable: 5px;
+  --radius-relaxed: 6px;
+  --radius-large: 8px;
+}
+
+/* Shadow Tokens */
+:root {
+  --shadow-flat: none;
+  --shadow-ambient: var(--color-shadow-soft) 0px 3px 6px;
+  --shadow-standard: var(--color-shadow-ambient) 0px 15px 35px;
+  --shadow-elevated: var(--color-shadow-blue) 0px 30px 45px -30px, var(--color-shadow-black) 0px 18px 36px -18px;
+  --shadow-deep: var(--color-shadow-dark-blue) 0px 14px 21px -14px, var(--color-shadow-black) 0px 8px 17px -8px;
+  --shadow-ring: 2px solid var(--color-primary-purple);
+}
+
+/* Component-specific tokens (can be overridden) */
+:root {
+  /* Button */
+  --button-padding-y: 8px;
+  --button-padding-x: 16px;
+  --button-border-radius: var(--radius-standard);
+  --button-font-weight: var(--weight-regular);
+  --button-font-size: var(--size-button);
+  --button-bg-primary: var(--color-primary-purple);
+  --button-bg-primary-hover: var(--color-purple-hover);
+  --button-color-primary: var(--color-pure-white);
+
+  /* Input */
+  --input-border-radius: var(--radius-standard);
+  --input-border-width: 1px;
+  --input-border-color: var(--color-border-default);
+  --input-border-color-focus: var(--color-primary-purple);
+  --input-label-color: var(--color-label);
+  --input-text-color: var(--color-heading);
+  --input-placeholder-color: var(--color-body);
+
+  /* Card */
+  --card-bg: var(--color-pure-white);
+  --card-border-width: 1px;
+  --card-border-color: var(--color-border-default);
+  --card-border-radius: var(--radius-standard);
+  --card-shadow: var(--shadow-standard);
+}
+
+/* Dark mode preferences (if needed) */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: var(--color-brand-dark);
+    --color-text: var(--color-pure-white);
+    --color-heading: var(--color-pure-white);
+    --color-body: rgba(255,255,255,0.7);
+    --color-label: rgba(255,255,255,0.8);
+    --color-border-default: rgba(255,255,255,0.1);
+    --color-border-purple: rgba(185,185,249,0.2);
+    --color-shadow-black: rgba(0,0,0,0.2);
+  }
+}
