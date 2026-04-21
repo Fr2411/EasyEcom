@@ -20,6 +20,7 @@ import {
   ScatterChart,
   Tooltip,
   Treemap,
+  type TreemapNode,
   XAxis,
   YAxis,
   ZAxis,
@@ -107,43 +108,53 @@ const WIDGET_IDS: WidgetId[] = [
 const WIDGET_META: Record<WidgetId, { title: string; subtitle: string }> = {
   revenue_orders_aov: {
     title: 'Revenue + Orders + AOV Trend',
-    subtitle: 'How to read: compare revenue, order count, and average order value by period.',
+    subtitle:
+      'How to read: use Revenue to see total sales, Orders to see transaction count, and AOV to see basket quality. Rising revenue with flat orders means bigger baskets; rising orders with flat AOV means traffic growth. Watch sudden dips to identify broken campaigns, stockouts, or checkout friction.',
   },
   gross_profit_margin: {
     title: 'Gross Profit & Margin Trend',
-    subtitle: 'How to read: bars are revenue, line is gross profit, area is margin percent.',
+    subtitle:
+      'How to read: bars show Revenue, line shows Estimated Gross Profit, and area shows Margin %. Healthy growth means revenue and profit rise together while margin stays stable. If revenue rises but margin falls for several periods, discounting or cost pressure is likely reducing real profitability.',
   },
   conversion_funnel: {
     title: 'Conversion Funnel',
-    subtitle: 'How to read: each stage bar shows volume; lower bars reveal drop-off points.',
+    subtitle:
+      'How to read: each stage shows order count from Inquiry to Completed. Compare each step’s conversion % from the previous stage to find leakage. Large drop from Draft to Reserved usually means pricing, stock confidence, or follow-up issues; low Reserved to Completed indicates fulfillment or payment friction.',
   },
   product_performance_quadrant: {
     title: 'Product Performance Quadrant',
-    subtitle: 'How to read: farther right means faster sales, higher means better margin, bigger bubbles mean higher revenue.',
+    subtitle:
+      'How to read: X-axis is sales velocity, Y-axis is margin %, and bubble size is revenue impact. Top-right products are scaling winners; bottom-right are high-volume margin risks; top-left are profitable but under-promoted; bottom-left are low-priority cleanup candidates.',
   },
   category_brand_profit_mix: {
     title: 'Category/Brand Profit Mix',
-    subtitle: 'How to read: larger boxes contribute more revenue within each category and brand.',
+    subtitle:
+      'How to read: larger blocks contribute more revenue, while deeper orange indicates higher contribution intensity versus peers in this view. Use it to quickly spot which category-brand combinations deserve more budget, shelf space, and reorder priority, and which ones are low-impact and can be deprioritized.',
   },
   returns_intelligence: {
     title: 'Returns Intelligence',
-    subtitle: 'How to read: chart tracks return trend; heatmap highlights top return reasons by product.',
+    subtitle:
+      'How to read: trend shows return count and return rate over time, while the heatmap links products to return reasons. Focus first on products with both high return volume and high return rate, then check reason concentration (for example wrong size or damaged) to decide whether to fix listings, quality checks, or packaging.',
   },
   inventory_aging_waterfall: {
     title: 'Inventory Aging & Dead Stock',
-    subtitle: 'How to read: bucket bars show stock concentration by age and line shows net change.',
+    subtitle:
+      'How to read: buckets split stock into age bands (0-30, 31-60, 61-90, 90+). Rising value in older buckets means capital is getting trapped; positive net change in 90+ indicates dead stock is increasing. Prioritize markdown, bundling, or purchase slowdown before aging stock expands.',
   },
   sell_through_cover_matrix: {
     title: 'Sell-through vs Days of Cover',
-    subtitle: 'How to read: left side means low cover, higher points mean better sell-through.',
+    subtitle:
+      'How to read: X-axis indicates days of cover, Y-axis indicates sell-through %, and bubble size reflects revenue impact. Left/high points are stockout risks that need fast replenishment; right/low points are overstock risk. Use this chart to balance service level and cash tied in inventory.',
   },
   reorder_priority_scoreboard: {
     title: 'Reorder Priority Scoreboard',
-    subtitle: 'How to read: longer bars and higher scores indicate stronger reorder urgency.',
+    subtitle:
+      'How to read: score combines sales velocity, stockout risk, and margin impact. Higher bars should be actioned first because they protect both revenue continuity and profit. Compare the top 5 weekly to keep purchasing focused on business-critical SKUs.',
   },
   price_discount_impact: {
     title: 'Price/Discount Impact Analysis',
-    subtitle: 'How to read: scatter shows discount vs lift impact; bars summarize lift by recommendation.',
+    subtitle:
+      'How to read: scatter compares discount depth versus unit lift and revenue effect by product, while bars summarize lift by recommendation (raise, keep, discount). If high discounts produce weak lift and low margin, increase price or reduce discounting; keep discounts where lift and margin both remain healthy.',
   },
 };
 
@@ -327,14 +338,6 @@ type ProfitMixTile = {
   textColor: string;
 };
 
-type TreemapTileProps = {
-  x?: number;
-  y?: number;
-  width?: number;
-  height?: number;
-  payload?: ProfitMixTile;
-};
-
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
@@ -348,10 +351,16 @@ function profitMixFill(value: number, minValue: number, maxValue: number) {
   return { fill, textColor };
 }
 
-function renderProfitMixTile({ x = 0, y = 0, width = 0, height = 0, payload }: TreemapTileProps) {
-  if (!payload || width <= 0 || height <= 0) return <g />;
+function renderProfitMixTile(node: TreemapNode) {
+  const { x = 0, y = 0, width = 0, height = 0, name = '', value = 0 } = node;
+  if (width <= 0 || height <= 0) return <g />;
+  const tile = node as TreemapNode & Partial<ProfitMixTile> & { size?: number };
+  const fill = tile.fill ?? CHART_COLORS.primary;
+  const textColor = tile.textColor ?? '#fff6ef';
   const showLabel = width >= 120 && height >= 36;
-  const label = shortName(payload.name, Math.max(16, Math.floor(width / 10)));
+  const showValue = width >= 150 && height >= 58;
+  const label = shortName(name, Math.max(16, Math.floor(width / 10)));
+  const rawValue = typeof tile.size === 'number' ? tile.size : value;
   return (
     <g>
       <rect
@@ -359,7 +368,7 @@ function renderProfitMixTile({ x = 0, y = 0, width = 0, height = 0, payload }: T
         y={y}
         width={width}
         height={height}
-        fill={payload.fill}
+        fill={fill}
         stroke="rgba(255, 255, 255, 0.2)"
         strokeWidth={1}
       />
@@ -367,12 +376,25 @@ function renderProfitMixTile({ x = 0, y = 0, width = 0, height = 0, payload }: T
         <text
           x={x + 10}
           y={y + 22}
-          fill={payload.textColor}
+          fill={textColor}
           fontSize={12}
           fontWeight={600}
           pointerEvents="none"
         >
           {label}
+        </text>
+      ) : null}
+      {showValue ? (
+        <text
+          x={x + 10}
+          y={y + 40}
+          fill={textColor}
+          fontSize={11}
+          fontWeight={500}
+          pointerEvents="none"
+          opacity={0.92}
+        >
+          {moneyCompact(rawValue)}
         </text>
       ) : null}
     </g>
