@@ -8412,3 +8412,35 @@ html[data-theme='dark'] .reports-start-here-details summary,
 html[data-theme='dark'] .reports-start-here-details ol {
   color: var(--ui-muted-text);
 }
+
+.workspace-empty,
+.customers-empty,
+.sales-empty,
+.reports-deferred,
+.placeholder-card {
+  background: var(--ui-card-bg-soft);
+  border-color: var(--ui-control-border);
+  color: var(--text);
+}
+
+.workspace-empty h4,
+.customers-empty h4,
+.sales-empty h4,
+.reports-deferred h4 {
+  color: var(--text);
+}
+
+.workspace-empty p,
+.customers-empty p,
+.sales-empty p,
+.reports-deferred p {
+  color: var(--ui-muted-text);
+}
+
+html[data-theme='dark'] .workspace-empty,
+html[data-theme='dark'] .customers-empty,
+html[data-theme='dark'] .sales-empty,
+html[data-theme='dark'] .reports-deferred {
+  border-style: dashed;
+  background: var(--ui-card-bg-soft);
+}
