@@ -181,16 +181,6 @@
   background: color-mix(in oklab, var(--surface) 92%, transparent);
 }
 
-.dropZone {
-  border: 1px dashed color-mix(in oklab, var(--primary) 30%, var(--border));
-  border-radius: 10px;
-  padding: 0.32rem 0.5rem;
-  color: var(--text-muted);
-  font-size: 0.72rem;
-  text-align: center;
-  background: color-mix(in oklab, var(--surface) 85%, transparent);
-}
-
 .widgetCard {
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -209,7 +199,11 @@
   display: flex;
   justify-content: space-between;
   gap: 0.75rem;
-  align-items: flex-start;
+  align-items: center;
+}
+
+.widgetHeaderMain {
+  min-width: 0;
 }
 
 .widgetHeader h4 {
@@ -225,23 +219,53 @@
   line-height: 1.35;
 }
 
-.widgetActions {
-  display: inline-flex;
-  gap: 0.4rem;
-  align-items: center;
-}
-
 .dragHandle {
+  width: 1.7rem;
+  height: 1.7rem;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: color-mix(in oklab, var(--surface) 90%, transparent);
+  color: var(--text-muted);
   cursor: grab;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
-.hideBtn {
-  color: var(--text-muted);
+.dragHandle:hover {
+  border-color: color-mix(in oklab, var(--primary) 40%, var(--border));
+  color: var(--text);
+}
+
+.dragHandle span {
+  font-size: 0.86rem;
+  letter-spacing: -0.16em;
+  line-height: 1;
 }
 
 .chartWrap {
+  display: grid;
+  gap: 0.45rem;
   width: 100%;
   min-height: 180px;
+}
+
+.chartLegendRight {
+  display: inline-flex;
+  gap: 0.45rem;
+  justify-self: end;
+  flex-wrap: wrap;
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+.chartLegendRight span {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.14rem 0.5rem;
+  background: color-mix(in oklab, var(--surface) 90%, transparent);
 }
 
 .chartNote {
@@ -340,27 +364,6 @@
 .actionNeutral {
   color: var(--text-muted);
   background: color-mix(in oklab, var(--surface) 80%, var(--border));
-}
-
-.footerLinks {
-  display: inline-flex;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-  font-size: 0.82rem;
-  color: var(--text-muted);
-}
-
-.footerLinks a {
-  text-decoration: none;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 0.32rem 0.62rem;
-  background: var(--surface);
-}
-
-.footerLinks a:hover {
-  border-color: color-mix(in oklab, var(--primary) 46%, var(--border));
-  color: var(--text);
 }
 
 @media (max-width: 1200px) {
