@@ -11,7 +11,6 @@ export type SaleLookupVariant = {
   product_name: string;
   label: string;
   sku: string;
-  barcode: string;
   available_to_sell: string;
   unit_price: string;
   min_price: string | null;

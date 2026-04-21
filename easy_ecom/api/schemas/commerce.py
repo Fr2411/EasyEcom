@@ -35,7 +35,6 @@ class CatalogVariantResponse(BaseModel):
     title: str
     label: str
     sku: str
-    barcode: str
     status: str
     options: VariantDescriptorResponse
     unit_cost: Decimal | None
@@ -118,7 +117,6 @@ class InventoryIntakeIdentityInput(ProductIdentityInput):
 class CatalogVariantInput(BaseModel):
     variant_id: str | None = None
     sku: str | None = Field(default=None, max_length=128)
-    barcode: str = ""
     size: str = ""
     color: str = ""
     other: str = ""
@@ -201,7 +199,6 @@ class InventoryStockRowResponse(BaseModel):
     image: ProductImageResponse | None = None
     label: str
     sku: str
-    barcode: str
     supplier: str
     category: str
     location_id: str
@@ -312,20 +309,10 @@ class InventoryInlineUpdateRequest(BaseModel):
     variant_id: str
     supplier: str | None = None
     reorder_level: Decimal | None = None
-    barcode: str | None = None
 
     @field_validator("supplier", mode="before")
     @classmethod
     def normalize_supplier(cls, value: object) -> object:
-        if value is None:
-            return None
-        if isinstance(value, str):
-            return value.strip()
-        return value
-
-    @field_validator("barcode", mode="before")
-    @classmethod
-    def normalize_barcode(cls, value: object) -> object:
         if value is None:
             return None
         if isinstance(value, str):
@@ -357,7 +344,6 @@ class SaleLookupVariantResponse(BaseModel):
     product_name: str
     label: str
     sku: str
-    barcode: str
     available_to_sell: Decimal
     unit_price: Decimal
     min_price: Decimal | None
@@ -641,7 +627,6 @@ class PurchaseLookupProductResponse(BaseModel):
     current_stock: Decimal
     default_purchase_price: Decimal | None
     sku: str
-    barcode: str
 
 
 class PurchaseLookupSupplierResponse(BaseModel):

@@ -192,7 +192,6 @@ CREATE TABLE product_variants (
     product_id UUID NOT NULL REFERENCES products (product_id) ON DELETE CASCADE,
     title VARCHAR(255) NOT NULL,
     sku VARCHAR(128) NOT NULL,
-    barcode VARCHAR(128) NOT NULL DEFAULT '',
     option_values_json JSONB,
     status VARCHAR(32) NOT NULL DEFAULT 'active',
     cost_amount NUMERIC(12, 2) NOT NULL DEFAULT 0,

@@ -54,16 +54,6 @@
   flex-wrap: wrap;
 }
 
-.inlineEdit {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
-
-.inlineEdit input {
-  min-width: 88px;
-}
-
 .drawerBackdrop {
   position: fixed;
   inset: 0;

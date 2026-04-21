@@ -99,7 +99,6 @@ function variantAsLegacyUpsertInput(variant: CatalogVariant): CatalogVariantInpu
   return {
     variant_id: variant.variant_id,
     sku: variant.sku,
-    barcode: variant.barcode,
     size: variant.options.size,
     color: variant.options.color,
     other: variant.options.other,

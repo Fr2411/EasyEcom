@@ -108,7 +108,7 @@ export function deriveSalesIntentSuggestion(
     return {
       kind: 'manual',
       title: 'Start with one customer, order, or product clue',
-      detail: 'Type a phone number, email, SKU, barcode, or product name. The workspace will stage likely matches and suggest the next step.',
+      detail: 'Type a phone number, email, SKU, or product name. The workspace will stage likely matches and suggest the next step.',
       actionLabel: 'Stage manual customer',
       tone: 'info',
     };
@@ -311,8 +311,7 @@ export function SalesWorkspace() {
 
         const seededVariant =
           payload.items.find((item) => seedVariantId && item.variant_id === seedVariantId)
-          ?? payload.items.find((item) => seedSku && item.sku.toLowerCase() === seedSku.toLowerCase())
-          ?? payload.items.find((item) => seedSku && item.barcode.toLowerCase() === seedSku.toLowerCase());
+          ?? payload.items.find((item) => seedSku && item.sku.toLowerCase() === seedSku.toLowerCase());
 
         if (!seededVariant) {
           setNotice('Inventory prefill could not resolve the selected variant. Continue with the normal sales flow.');
@@ -351,7 +350,7 @@ export function SalesWorkspace() {
 
       const exactVariants = variantsPayload.items.filter((item) => {
         const lower = trimmed.toLowerCase();
-        return item.sku.toLowerCase() === lower || item.barcode.toLowerCase() === lower;
+        return item.sku.toLowerCase() === lower;
       });
 
       const likely = [
@@ -584,7 +583,7 @@ export function SalesWorkspace() {
                 label="Who is buying or what do they want?"
                 hint="Use one clue to stage the fastest path to a completed order and avoid back-and-forth lookup work."
                 value={intentQuery}
-                placeholder="Phone, email, order clue, SKU, barcode, or product"
+                placeholder="Phone, email, order clue, SKU, or product"
                 pending={lookupPending}
                 submitLabel="Find customer or item"
                 onChange={setIntentQuery}

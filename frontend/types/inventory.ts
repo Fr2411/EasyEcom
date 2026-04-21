@@ -15,7 +15,6 @@ export type InventoryStockRow = {
   image: ProductMedia | null;
   label: string;
   sku: string;
-  barcode: string;
   supplier: string;
   category: string;
   location_id: string;
@@ -95,5 +94,4 @@ export type InventoryInlineUpdatePayload = {
   variant_id: string;
   supplier?: string;
   reorder_level?: string;
-  barcode?: string;
 };

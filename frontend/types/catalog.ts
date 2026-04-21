@@ -23,7 +23,6 @@ export type CatalogVariant = {
   title: string;
   label: string;
   sku: string;
-  barcode: string;
   status: string;
   options: VariantOptions;
   unit_cost: string | null;
@@ -97,7 +96,6 @@ export type ProductIdentityInput = {
 export type CatalogVariantInput = {
   variant_id?: string | null;
   sku: string;
-  barcode: string;
   size: string;
   color: string;
   other: string;

@@ -33,7 +33,6 @@ export type PurchaseLookupProduct = {
   current_stock: number;
   default_purchase_price: number;
   sku: string;
-  barcode: string;
 };
 
 export type PurchaseLookupSupplier = {

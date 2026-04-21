@@ -131,7 +131,6 @@ def _seed_sample_business_data(
                 product_id=product.product_id,
                 title=title,
                 sku=sku,
-                barcode=f"BAR-{sku}",
                 option_values_json={"title": title},
                 status="active",
                 cost_amount=cost,

@@ -35,18 +35,12 @@ type ReceiveLineDraft = {
   variant_id?: string;
   label: string;
   sku: string;
-  barcode: string;
   size: string;
   color: string;
   other: string;
   reorder_level: string;
   quantity: string;
   unit_cost: string;
-};
-
-type InlineVariantDraft = {
-  barcode: string;
-  reorder_level: string;
 };
 
 function rowId(prefix: string) {
@@ -64,7 +58,6 @@ function existingVariantLine(variant: CatalogVariant): ReceiveLineDraft {
     variant_id: variant.variant_id,
     label: variant.label,
     sku: variant.sku,
-    barcode: variant.barcode,
     size: variant.options.size,
     color: variant.options.color,
     other: variant.options.other,
@@ -80,7 +73,6 @@ function newVariantLine(): ReceiveLineDraft {
     is_new: true,
     label: 'New variant',
     sku: '',
-    barcode: '',
     size: '',
     color: '',
     other: '',
@@ -146,9 +138,6 @@ export function InventoryOpsWorkspace() {
   const [toast, setToast] = useState('');
   const [isPending, startTransition] = useTransition();
 
-  const [inlineDrafts, setInlineDrafts] = useState<Record<string, InlineVariantDraft>>({});
-  const [inlineSavingVariantId, setInlineSavingVariantId] = useState('');
-
   const [receiveOpen, setReceiveOpen] = useState(false);
   const [receiveLookupQuery, setReceiveLookupQuery] = useState('');
   const [receiveLookupPending, setReceiveLookupPending] = useState(false);
@@ -161,6 +150,11 @@ export function InventoryOpsWorkspace() {
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [adjustPending, setAdjustPending] = useState(false);
   const [adjustmentForm, setAdjustmentForm] = useState<InventoryAdjustmentPayload>({ ...EMPTY_ADJUSTMENT });
+  const [reorderOpen, setReorderOpen] = useState(false);
+  const [reorderPending, setReorderPending] = useState(false);
+  const [reorderVariantId, setReorderVariantId] = useState('');
+  const [reorderVariantLabel, setReorderVariantLabel] = useState('');
+  const [reorderLevelValue, setReorderLevelValue] = useState('');
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -187,22 +181,6 @@ export function InventoryOpsWorkspace() {
     setQueryInput(query);
     loadWorkspace(query);
   }, [searchKey]);
-
-  useEffect(() => {
-    if (!workspace) return;
-    setInlineDrafts((current) => {
-      const next = { ...current };
-      workspace.stock_items.forEach((row) => {
-        if (!next[row.variant_id]) {
-          next[row.variant_id] = {
-            barcode: row.barcode,
-            reorder_level: row.reorder_level,
-          };
-        }
-      });
-      return next;
-    });
-  }, [workspace]);
 
   const searchReceiveProducts = async (
     rawQuery: string,
@@ -323,7 +301,6 @@ export function InventoryOpsWorkspace() {
         lines.push({
           variant_id: variant.variant_id,
           sku: variant.sku,
-          barcode: line.barcode.trim() || variant.barcode,
           size: variant.options.size,
           color: variant.options.color,
           other: variant.options.other,
@@ -339,7 +316,6 @@ export function InventoryOpsWorkspace() {
 
       lines.push({
         sku: '',
-        barcode: line.barcode.trim(),
         size: line.size.trim(),
         color: line.color.trim(),
         other: line.other.trim(),
@@ -409,41 +385,44 @@ export function InventoryOpsWorkspace() {
     }
   };
 
-  const saveInlineVariantFields = async (row: InventoryStockRow) => {
-    const draft = inlineDrafts[row.variant_id];
-    if (!draft) return;
-    const nextBarcode = draft.barcode.trim();
-    const nextReorder = draft.reorder_level.trim();
+  const openReorderDrawer = (row: InventoryStockRow) => {
+    setReorderVariantId(row.variant_id);
+    setReorderVariantLabel(row.label);
+    setReorderLevelValue(row.reorder_level);
+    setReorderOpen(true);
+    setError('');
+    setNotice('');
+  };
+
+  const submitReorderLevel = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const nextReorder = reorderLevelValue.trim();
     if (!nextReorder) {
       setError('Reorder level is required.');
       return;
     }
-    if (nextBarcode === row.barcode && nextReorder === row.reorder_level) {
-      return;
-    }
-
-    setInlineSavingVariantId(row.variant_id);
+    setReorderPending(true);
     setError('');
     setNotice('');
     try {
       await updateInventoryInlineFields({
-        variant_id: row.variant_id,
-        barcode: nextBarcode,
+        variant_id: reorderVariantId,
         reorder_level: nextReorder,
       });
-      setNotice(`Updated variant ops fields for ${row.label}.`);
-      setToast('Variant fields updated.');
+      setReorderOpen(false);
+      setNotice(`Updated reorder level for ${reorderVariantLabel}.`);
+      setToast('Reorder level updated.');
       loadWorkspace(queryInput);
-    } catch (inlineError) {
-      setError(inlineError instanceof Error ? inlineError.message : 'Unable to save variant fields.');
+    } catch (reorderError) {
+      setError(reorderError instanceof Error ? reorderError.message : 'Unable to update reorder level.');
     } finally {
-      setInlineSavingVariantId('');
+      setReorderPending(false);
     }
   };
 
   const rows = workspace?.stock_items ?? [];
   const activeReceiveProductVariants = useMemo(() => receiveProduct?.variants ?? [], [receiveProduct]);
-  const drawerOpen = receiveOpen || adjustOpen;
+  const drawerOpen = receiveOpen || adjustOpen || reorderOpen;
 
   return (
     <div
@@ -502,7 +481,7 @@ export function InventoryOpsWorkspace() {
                   <th>Product</th>
                   <th>Variant</th>
                   <th>SKU</th>
-                  <th>Barcode / Reorder</th>
+                  <th>Reorder Level</th>
                   <th>On Hand</th>
                   <th>Reserved</th>
                   <th>Available</th>
@@ -517,45 +496,7 @@ export function InventoryOpsWorkspace() {
                     <td>{row.product_name}</td>
                     <td>{row.label}</td>
                     <td>{row.sku}</td>
-                    <td>
-                      <div className={styles.inlineEdit}>
-                        <input
-                          value={inlineDrafts[row.variant_id]?.barcode ?? row.barcode}
-                          onChange={(event) =>
-                            setInlineDrafts((current) => ({
-                              ...current,
-                              [row.variant_id]: {
-                                barcode: event.target.value,
-                                reorder_level: current[row.variant_id]?.reorder_level ?? row.reorder_level,
-                              },
-                            }))
-                          }
-                          placeholder="Barcode"
-                        />
-                        <input
-                          value={inlineDrafts[row.variant_id]?.reorder_level ?? row.reorder_level}
-                          onChange={(event) =>
-                            setInlineDrafts((current) => ({
-                              ...current,
-                              [row.variant_id]: {
-                                barcode: current[row.variant_id]?.barcode ?? row.barcode,
-                                reorder_level: event.target.value,
-                              },
-                            }))
-                          }
-                          inputMode="decimal"
-                          placeholder="Reorder"
-                        />
-                        <button
-                          type="button"
-                          className="secondary"
-                          disabled={inlineSavingVariantId === row.variant_id}
-                          onClick={() => void saveInlineVariantFields(row)}
-                        >
-                          {inlineSavingVariantId === row.variant_id ? 'Saving…' : 'Save'}
-                        </button>
-                      </div>
-                    </td>
+                    <td>{formatQuantity(row.reorder_level)}</td>
                     <td>{formatQuantity(row.on_hand)}</td>
                     <td>{formatQuantity(row.reserved)}</td>
                     <td>{formatQuantity(row.available_to_sell)}</td>
@@ -570,6 +511,13 @@ export function InventoryOpsWorkspace() {
                         </button>
                         <button type="button" onClick={() => openAdjustDrawer(row)}>
                           Adjust Stock
+                        </button>
+                        <button
+                          type="button"
+                          className="secondary"
+                          onClick={() => openReorderDrawer(row)}
+                        >
+                          Reorder Level
                         </button>
                         <button
                           type="button"
@@ -768,14 +716,6 @@ export function InventoryOpsWorkspace() {
                               />
                             </label>
                             <label>
-                              Barcode
-                              <input
-                                value={line.barcode}
-                                onChange={(event) => updateReceiveLine(line.line_id, { barcode: event.target.value })}
-                                disabled={!line.is_new}
-                              />
-                            </label>
-                            <label>
                               Reorder
                               <input
                                 value={line.reorder_level}
@@ -912,6 +852,52 @@ export function InventoryOpsWorkspace() {
                   {adjustPending ? 'Saving…' : 'Adjust Stock'}
                 </button>
                 <button type="button" className="secondary" onClick={() => setAdjustOpen(false)}>
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </aside>
+        </>
+      ) : null}
+
+      {reorderOpen ? (
+        <>
+          <button
+            type="button"
+            className={styles.drawerBackdrop}
+            aria-label="Close reorder drawer"
+            onClick={() => setReorderOpen(false)}
+          />
+          <aside className={styles.drawer} aria-label="Reorder level drawer">
+            <div className={styles.drawerHeader}>
+              <h3 className="workspace-heading">Reorder Level</h3>
+              <button type="button" className="secondary" onClick={() => setReorderOpen(false)}>
+                Close
+              </button>
+            </div>
+
+            <form className="workspace-form" onSubmit={submitReorderLevel}>
+              <div className="workspace-form-grid compact">
+                <label>
+                  Variant
+                  <input value={reorderVariantLabel} readOnly />
+                </label>
+                <label>
+                  Reorder level
+                  <input
+                    value={reorderLevelValue}
+                    onChange={(event) => setReorderLevelValue(event.target.value)}
+                    inputMode="decimal"
+                    required
+                  />
+                </label>
+              </div>
+
+              <div className={styles.receiveActions}>
+                <button type="submit" disabled={reorderPending}>
+                  {reorderPending ? 'Saving…' : 'Save Reorder Level'}
+                </button>
+                <button type="button" className="secondary" onClick={() => setReorderOpen(false)}>
                   Cancel
                 </button>
               </div>

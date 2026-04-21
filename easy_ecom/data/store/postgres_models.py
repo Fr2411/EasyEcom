@@ -299,7 +299,6 @@ class ProductVariantModel(TenantMixin, TimestampMixin, Base):
     __table_args__ = (
         UniqueConstraint("client_id", "sku", name="uq_product_variants_client_sku"),
         Index("ix_product_variants_client_title", "client_id", "title"),
-        Index("ix_product_variants_client_barcode", "client_id", "barcode"),
         CheckConstraint(
             "(cost_amount IS NULL OR cost_amount >= 0)",
             name="ck_product_variants_cost_non_negative",
@@ -326,7 +325,6 @@ class ProductVariantModel(TenantMixin, TimestampMixin, Base):
     product_id: Mapped[str] = mapped_column(GUID(), ForeignKey("products.product_id", ondelete="CASCADE"), nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     sku: Mapped[str] = mapped_column(String(128), nullable=False)
-    barcode: Mapped[str] = mapped_column(String(128), nullable=False, default="")
     option_values_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="active", index=True)
     cost_amount: Mapped[Decimal | None] = mapped_column(Amount)

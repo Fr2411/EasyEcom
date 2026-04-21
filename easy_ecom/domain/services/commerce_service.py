@@ -271,7 +271,6 @@ class CommerceBaseService:
                 func.lower(ProductModel.name).like(pattern),
                 func.lower(ProductVariantModel.title).like(pattern),
                 func.lower(ProductVariantModel.sku).like(pattern),
-                func.lower(ProductVariantModel.barcode).like(pattern),
             )
         )
 
@@ -454,7 +453,6 @@ class CommerceBaseService:
             "title": variant.title,
             "label": build_variant_label(product.name, variant.title),
             "sku": variant.sku,
-            "barcode": variant.barcode,
             "status": variant.status,
             "options": {
                 "size": size,
@@ -846,11 +844,10 @@ class CatalogService(CommerceBaseService):
             size = str(first_variant.get("size", "")).strip()
             color = str(first_variant.get("color", "")).strip()
             other = str(first_variant.get("other", "")).strip()
-            barcode = str(first_variant.get("barcode", "")).strip()
-            has_option_or_barcode = bool(size or color or other or barcode)
+            has_options = bool(size or color or other)
             _require(
-                has_option_or_barcode,
-                message="First variant details are required (add at least one option or barcode)",
+                has_options,
+                message="First variant details are required (add at least one option)",
             )
 
         return {"step": step_value, "valid": True}
@@ -1090,7 +1087,6 @@ class CatalogService(CommerceBaseService):
                         exclude_variant_id=str(variant.variant_id),
                     )
                 variant.sku = final_sku
-                variant.barcode = str(variant_payload.get("barcode", "")).strip()
                 variant.option_values_json = {"size": size, "color": color, "other": other}
                 variant.status = current_status
                 variant.cost_amount = cost_amount
@@ -1143,7 +1139,6 @@ class InventoryService(CommerceBaseService):
                     "image": image_payload,
                     "label": build_variant_label(product.name, variant.title),
                     "sku": variant.sku,
-                    "barcode": variant.barcode,
                     "supplier": supplier.name if supplier else "",
                     "category": category.name if category else "",
                     "location_id": location_context.active_location_id,
@@ -1207,8 +1202,6 @@ class InventoryService(CommerceBaseService):
                 match_reason = None
                 if variant.sku.lower() == raw_query:
                     match_reason = "sku"
-                elif variant.barcode and variant.barcode.lower() == raw_query:
-                    match_reason = "barcode"
                 elif normalize_lookup_text(build_variant_label(product.name, variant.title)) == normalized_query:
                     match_reason = "product_variant"
                 if match_reason is None:
@@ -1273,7 +1266,7 @@ class InventoryService(CommerceBaseService):
                 )
                 exact_product_ids.add(ref["product_id"])
 
-            reason_priority = {"barcode": 0, "sku": 1, "product_variant": 2}
+            reason_priority = {"sku": 0, "product_variant": 1}
             exact_variants.sort(
                 key=lambda item: (
                     reason_priority.get(str(item["match_reason"]), 99),
@@ -1453,7 +1446,6 @@ class InventoryService(CommerceBaseService):
         if requested_sku and requested_sku in variants_by_sku:
             raise ApiException(status_code=400, code="DUPLICATE_SKU", message="Variant SKU already exists")
         variant.sku = final_sku
-        variant.barcode = str(line.get("barcode", "")).strip()
         variant.option_values_json = {"size": size, "color": color, "other": other}
         variant.status = "active"
         variant.cost_amount = cost_amount
@@ -1733,7 +1725,6 @@ class InventoryService(CommerceBaseService):
                 "product_name": product.name,
                 "label": build_variant_label(product.name, variant.title),
                 "sku": variant.sku,
-                "barcode": variant.barcode,
                 "supplier": supplier.name if supplier else "",
                 "category": category.name if category else "",
                 "location_id": location_context.active_location_id,
@@ -1754,11 +1745,10 @@ class InventoryService(CommerceBaseService):
         variant_id: str,
         supplier: str | None,
         reorder_level: Decimal | None,
-        barcode: str | None,
     ) -> dict[str, Any]:
         _require_page(user, "Inventory")
         _require(
-            supplier is not None or reorder_level is not None or barcode is not None,
+            supplier is not None or reorder_level is not None,
             message="At least one field must be provided for inline update",
         )
         if reorder_level is not None:
@@ -1776,8 +1766,6 @@ class InventoryService(CommerceBaseService):
                 product.supplier_id = self._ensure_supplier(session, user.client_id, supplier)
             if reorder_level is not None:
                 variant.reorder_level = reorder_level
-            if barcode is not None:
-                variant.barcode = barcode
             session.commit()
 
             on_hand_map, reserved_map = self._stock_maps(session, user.client_id, location_context.active_location_id)
@@ -1797,7 +1785,6 @@ class InventoryService(CommerceBaseService):
                 "product_name": refreshed_product.name,
                 "label": build_variant_label(refreshed_product.name, refreshed_variant.title),
                 "sku": refreshed_variant.sku,
-                "barcode": refreshed_variant.barcode,
                 "supplier": refreshed_supplier.name if refreshed_supplier else "",
                 "category": refreshed_category.name if refreshed_category else "",
                 "location_id": location_context.active_location_id,
@@ -1913,7 +1900,6 @@ class InventoryService(CommerceBaseService):
                         "current_stock": available,
                         "default_purchase_price": as_optional_decimal(variant.cost_amount),
                         "sku": variant.sku,
-                        "barcode": variant.barcode,
                     }
                 )
             return results
@@ -2300,7 +2286,6 @@ class SalesService(CommerceBaseService):
                         "product_name": product.name,
                         "label": build_variant_label(product.name, variant.title),
                         "sku": variant.sku,
-                        "barcode": variant.barcode,
                         "available_to_sell": available,
                         "unit_price": effective_price,
                         "min_price": self._effective_variant_min_price(product, variant),
