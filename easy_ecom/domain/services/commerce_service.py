@@ -1593,7 +1593,6 @@ class InventoryService(CommerceBaseService):
                 status="received",
                 ordered_at=now_utc(),
                 received_at=now_utc(),
-                reference_no=(source_purchase.purchase_number if source_purchase else ""),
                 notes=notes.strip(),
                 created_by_user_id=user.user_id,
                 subtotal_amount=subtotal,

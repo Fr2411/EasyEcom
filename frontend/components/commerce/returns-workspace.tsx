@@ -201,6 +201,51 @@ export function ReturnsWorkspace() {
     }
   };
 
+  const updateReturnLineQuantity = (lineIndex: number, quantityValue: string) => {
+    setDraft((current) => ({
+      ...current,
+      lines: current.lines.map((item, itemIndex) => {
+        if (itemIndex !== lineIndex) {
+          return item;
+        }
+        const nextQuantity = quantityValue;
+        const quantityNumber = Number(nextQuantity);
+        const restockNumber = Number(item.restock_quantity);
+        if (
+          Number.isFinite(quantityNumber)
+          && quantityNumber >= 0
+          && Number.isFinite(restockNumber)
+          && restockNumber > quantityNumber
+        ) {
+          return { ...item, quantity: nextQuantity, restock_quantity: nextQuantity };
+        }
+        return { ...item, quantity: nextQuantity };
+      }),
+    }));
+  };
+
+  const updateReturnLineRestock = (lineIndex: number, restockValue: string) => {
+    setDraft((current) => ({
+      ...current,
+      lines: current.lines.map((item, itemIndex) => {
+        if (itemIndex !== lineIndex) {
+          return item;
+        }
+        const quantityNumber = Number(item.quantity);
+        const requestedRestock = Number(restockValue);
+        if (
+          Number.isFinite(quantityNumber)
+          && quantityNumber >= 0
+          && Number.isFinite(requestedRestock)
+          && requestedRestock > quantityNumber
+        ) {
+          return { ...item, restock_quantity: item.quantity };
+        }
+        return { ...item, restock_quantity: restockValue };
+      }),
+    }));
+  };
+
   const submitReturn = async () => {
     if (!eligible) {
       setError('Open a completed order before creating a return.');
@@ -349,7 +394,7 @@ export function ReturnsWorkspace() {
                             <th>Item</th>
                             <th>Eligible</th>
                             <th>Return qty</th>
-                            <th>Restock qty</th>
+                            <th>Restock qty (max return)</th>
                             <th>Refund / unit</th>
                             <th>Reason</th>
                           </tr>
@@ -362,23 +407,13 @@ export function ReturnsWorkspace() {
                               <td>
                                 <input
                                   value={draft.lines[index]?.quantity ?? '0'}
-                                  onChange={(event) =>
-                                    setDraft((current) => ({
-                                      ...current,
-                                      lines: current.lines.map((item, itemIndex) => itemIndex === index ? { ...item, quantity: event.target.value } : item),
-                                    }))
-                                  }
+                                  onChange={(event) => updateReturnLineQuantity(index, event.target.value)}
                                 />
                               </td>
                               <td>
                                 <input
                                   value={draft.lines[index]?.restock_quantity ?? '0'}
-                                  onChange={(event) =>
-                                    setDraft((current) => ({
-                                      ...current,
-                                      lines: current.lines.map((item, itemIndex) => itemIndex === index ? { ...item, restock_quantity: event.target.value } : item),
-                                    }))
-                                  }
+                                  onChange={(event) => updateReturnLineRestock(index, event.target.value)}
                                 />
                               </td>
                               <td>
