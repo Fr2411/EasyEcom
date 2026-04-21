@@ -1,21 +1,14 @@
-import { redirect } from 'next/navigation';
+import { InventoryOpsWorkspace } from '@/components/commerce/inventory-ops-workspace';
+import { PageShell } from '@/components/ui/page-shell';
 
-function firstParam(value: string | string[] | undefined) {
-  if (Array.isArray(value)) return value[0] ?? '';
-  return value ?? '';
-}
-
-export default function InventoryPage({
-  searchParams,
-}: {
-  searchParams: Record<string, string | string[] | undefined>;
-}) {
-  const query = firstParam(searchParams.q).trim();
-  const params = new URLSearchParams();
-  if (query) {
-    params.set('q', query);
-  }
-  params.set('mode', 'inventory');
-  const suffix = params.toString() ? `?${params.toString()}` : '';
-  redirect(`/products-stock${suffix}`);
+export default function InventoryPage() {
+  return (
+    <PageShell
+      title="Inventory"
+      description="Track available variant stock and run fast stock operations: receive, adjust, sell, or open catalog context."
+      hideHeader
+    >
+      <InventoryOpsWorkspace />
+    </PageShell>
+  );
 }

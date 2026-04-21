@@ -312,10 +312,20 @@ class InventoryInlineUpdateRequest(BaseModel):
     variant_id: str
     supplier: str | None = None
     reorder_level: Decimal | None = None
+    barcode: str | None = None
 
     @field_validator("supplier", mode="before")
     @classmethod
     def normalize_supplier(cls, value: object) -> object:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return value.strip()
+        return value
+
+    @field_validator("barcode", mode="before")
+    @classmethod
+    def normalize_barcode(cls, value: object) -> object:
         if value is None:
             return None
         if isinstance(value, str):

@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useState, useTransition } from 'react';
+import { FormEvent, useEffect, useRef, useState, useTransition } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   cancelSalesOrder,
@@ -179,6 +179,7 @@ function buildOrderPayload(
 export function SalesWorkspace() {
   const searchParams = useSearchParams();
   const searchKey = searchParams.toString();
+  const handledSeedKeyRef = useRef('');
   const [activeTab, setActiveTab] = useState<SalesTab>('new');
   const [isCompactViewport, setIsCompactViewport] = useState(false);
   const [orderStarted, setOrderStarted] = useState(false);
@@ -281,6 +282,53 @@ export function SalesWorkspace() {
       ];
     });
   };
+
+  useEffect(() => {
+    const seedVariantId = (searchParams.get('seed_variant_id') ?? '').trim();
+    const seedSku = (searchParams.get('seed_sku') ?? '').trim();
+    if (!seedVariantId && !seedSku) {
+      handledSeedKeyRef.current = '';
+      return;
+    }
+
+    const seedKey = `${seedVariantId}|${seedSku}`;
+    if (handledSeedKeyRef.current === seedKey) {
+      return;
+    }
+    handledSeedKeyRef.current = seedKey;
+
+    const seedLookup = seedSku || seedVariantId;
+    setOrderStarted(true);
+    setActiveTab('new');
+    setNotice('');
+    setError('');
+    setLookupPending(true);
+
+    void (async () => {
+      try {
+        const payload = await searchSaleVariants({ q: seedLookup });
+        setVariantResults(payload.items);
+
+        const seededVariant =
+          payload.items.find((item) => seedVariantId && item.variant_id === seedVariantId)
+          ?? payload.items.find((item) => seedSku && item.sku.toLowerCase() === seedSku.toLowerCase())
+          ?? payload.items.find((item) => seedSku && item.barcode.toLowerCase() === seedSku.toLowerCase());
+
+        if (!seededVariant) {
+          setNotice('Inventory prefill could not resolve the selected variant. Continue with the normal sales flow.');
+          return;
+        }
+
+        addVariantToDraft(seededVariant);
+        setNotice(`Seeded ${seededVariant.label} from Inventory.`);
+        setError('');
+      } catch (seedError) {
+        setError(safeSalesWorkspaceErrorMessage(seedError, 'Unable to prefill the selected inventory variant. Continue with normal sales flow.'));
+      } finally {
+        setLookupPending(false);
+      }
+    })();
+  }, [searchKey]);
 
   const runIntentLookup = async (query: string) => {
     const trimmed = query.trim();

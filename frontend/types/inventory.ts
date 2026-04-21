@@ -95,4 +95,5 @@ export type InventoryInlineUpdatePayload = {
   variant_id: string;
   supplier?: string;
   reorder_level?: string;
+  barcode?: string;
 };

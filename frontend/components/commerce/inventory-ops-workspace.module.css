@@ -1,0 +1,130 @@
+.toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.searchForm {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex: 1;
+  min-width: 260px;
+}
+
+.searchForm input {
+  min-width: 220px;
+  flex: 1;
+}
+
+.tableWrap {
+  overflow: auto;
+}
+
+.statusCell {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.statusNormal {
+  color: var(--emerald-700);
+}
+
+.statusLow {
+  color: var(--amber-700);
+}
+
+.statusOut {
+  color: var(--red-700);
+}
+
+.rowActions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.inlineEdit {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.inlineEdit input {
+  min-width: 88px;
+}
+
+.drawerBackdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 12, 20, 0.42);
+  z-index: 70;
+}
+
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100dvh;
+  width: min(680px, 97vw);
+  background: var(--surface-base);
+  border-left: 1px solid var(--border-subtle);
+  padding: 16px;
+  z-index: 71;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.drawerHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.receiveMatchList {
+  display: grid;
+  gap: 8px;
+}
+
+.receiveMatchCard {
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.receiveLineCard {
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.receiveLineHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.receiveLineGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.receiveActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}

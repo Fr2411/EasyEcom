@@ -11,12 +11,7 @@ export function redirectToExternalUrl(url: string) {
 }
 
 export function getVisibleNavigationItems(user: SessionUser | null | undefined) {
-  return NAV_ITEMS.filter((item) => {
-    if (item.label === 'Catalog' && !user?.roles?.includes('SUPER_ADMIN')) {
-      return false;
-    }
-    return canSeePageInNavigation(user?.roles, item.label);
-  });
+  return NAV_ITEMS.filter((item) => canSeePageInNavigation(user?.roles, item.label));
 }
 
 export function getMobilePrimaryItems(user: SessionUser | null | undefined) {

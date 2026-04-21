@@ -1,21 +1,14 @@
-import { redirect } from 'next/navigation';
+import { CatalogLibraryWorkspace } from '@/components/commerce/catalog-library-workspace';
+import { PageShell } from '@/components/ui/page-shell';
 
-function firstParam(value: string | string[] | undefined) {
-  if (Array.isArray(value)) return value[0] ?? '';
-  return value ?? '';
-}
-
-export default function CatalogPage({
-  searchParams,
-}: {
-  searchParams: Record<string, string | string[] | undefined>;
-}) {
-  const query = firstParam(searchParams.q).trim();
-  const params = new URLSearchParams();
-  if (query) {
-    params.set('q', query);
-  }
-  params.set('mode', 'catalog');
-  const suffix = params.toString() ? `?${params.toString()}` : '';
-  redirect(`/products-stock${suffix}`);
+export default function CatalogPage() {
+  return (
+    <PageShell
+      title="Catalog"
+      description="Manage product identity in one place. Add or edit product cards, then handle stock operations from Inventory."
+      hideHeader
+    >
+      <CatalogLibraryWorkspace />
+    </PageShell>
+  );
 }

@@ -252,6 +252,15 @@ class CommerceBaseService:
             .order_by(ProductModel.name.asc(), ProductVariantModel.title.asc())
         )
 
+    def _base_product_stmt(self, client_id: str) -> Select[tuple[ProductModel, SupplierModel | None, CategoryModel | None]]:
+        return (
+            select(ProductModel, SupplierModel, CategoryModel)
+            .outerjoin(SupplierModel, SupplierModel.supplier_id == ProductModel.supplier_id)
+            .outerjoin(CategoryModel, CategoryModel.category_id == ProductModel.category_id)
+            .where(ProductModel.client_id == client_id)
+            .order_by(ProductModel.name.asc())
+        )
+
     def _apply_variant_search(self, stmt: Select[Any], query: str) -> Select[Any]:
         trimmed = query.strip().lower()
         if not trimmed:
@@ -491,7 +500,26 @@ class CommerceBaseService:
         image_payload = None
         if product.primary_media_id and media_payload_map:
             image_payload = media_payload_map.get(str(product.primary_media_id))
-        payload = {
+        payload = self._base_product_payload(product, supplier, category, image_payload)
+        for current_product, variant, _supplier, _category in rows:
+            payload["variants"].append(
+                self._variant_payload(
+                    current_product,
+                    variant,
+                    on_hand_map.get(str(variant.variant_id), ZERO),
+                    reserved_map.get(str(variant.variant_id), ZERO),
+                )
+            )
+        return payload
+
+    def _base_product_payload(
+        self,
+        product: ProductModel,
+        supplier: SupplierModel | None,
+        category: CategoryModel | None,
+        image_payload: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        return {
             "product_id": str(product.product_id),
             "name": product.name,
             "brand": product.brand,
@@ -510,16 +538,54 @@ class CommerceBaseService:
             "image": image_payload,
             "variants": [],
         }
-        for current_product, variant, _supplier, _category in rows:
-            payload["variants"].append(
-                self._variant_payload(
-                    current_product,
-                    variant,
-                    on_hand_map.get(str(variant.variant_id), ZERO),
-                    reserved_map.get(str(variant.variant_id), ZERO),
-                )
-            )
-        return payload
+
+    def _products_payload_map(
+        self,
+        session: Session,
+        *,
+        client_id: str,
+        product_ids: list[str],
+        on_hand_map: dict[str, Decimal],
+        reserved_map: dict[str, Decimal],
+        include_oos_variants: bool,
+        active_only: bool = True,
+    ) -> dict[str, dict[str, Any]]:
+        if not product_ids:
+            return {}
+
+        product_rows = session.execute(
+            self._base_product_stmt(client_id).where(ProductModel.product_id.in_(product_ids))
+        ).all()
+        products = [row[0] for row in product_rows]
+        media_payload_map = self._product_media_payload_map(session, client_id, products)
+
+        payloads: dict[str, dict[str, Any]] = {}
+        for product, supplier, category in product_rows:
+            if active_only and product.status != "active":
+                continue
+            image_payload = media_payload_map.get(str(product.primary_media_id)) if product.primary_media_id else None
+            payloads[str(product.product_id)] = self._base_product_payload(product, supplier, category, image_payload)
+
+        if not payloads:
+            return {}
+
+        variant_rows = session.execute(
+            self._base_variant_stmt(client_id).where(ProductModel.product_id.in_(list(payloads.keys())))
+        ).all()
+        for product, variant, _supplier, _category in variant_rows:
+            if active_only and (product.status != "active" or variant.status != "active"):
+                continue
+            on_hand = on_hand_map.get(str(variant.variant_id), ZERO)
+            reserved = reserved_map.get(str(variant.variant_id), ZERO)
+            available = on_hand - reserved
+            if not include_oos_variants and available <= ZERO:
+                continue
+            payload = payloads.get(str(product.product_id))
+            if payload is None:
+                continue
+            payload["variants"].append(self._variant_payload(product, variant, on_hand, reserved))
+
+        return payloads
 
     def _product_payload(
         self,
@@ -529,12 +595,18 @@ class CommerceBaseService:
         location_id: str,
     ) -> dict[str, Any]:
         on_hand_map, reserved_map = self._stock_maps(session, client_id, location_id)
-        rows = session.execute(
-            self._base_variant_stmt(client_id).where(ProductModel.product_id == product_id)
-        ).all()
-        products = [row[0] for row in rows]
-        media_payload_map = self._product_media_payload_map(session, client_id, products)
-        return self._product_payload_from_rows(client_id, rows, on_hand_map, reserved_map, media_payload_map)
+        payloads = self._products_payload_map(
+            session,
+            client_id=client_id,
+            product_ids=[product_id],
+            on_hand_map=on_hand_map,
+            reserved_map=reserved_map,
+            include_oos_variants=True,
+            active_only=False,
+        )
+        payload = payloads.get(product_id)
+        _require(payload is not None, message="Product not found", code="PRODUCT_NOT_FOUND", status_code=404)
+        return payload
 
     def _apply_product_media_instructions(
         self,
@@ -827,48 +899,47 @@ class CatalogService(CommerceBaseService):
         with self._session_factory() as session:
             location_context = self._location_context(session, user.client_id, location_id)
             on_hand_map, reserved_map = self._stock_maps(session, user.client_id, location_context.active_location_id)
-            stmt = self._apply_variant_search(self._base_variant_stmt(user.client_id), query)
-            rows = session.execute(stmt).all()
-            media_payload_map = self._product_media_payload_map(
-                session,
-                user.client_id,
-                [row[0] for row in rows],
-            )
-
-            products: dict[str, dict[str, Any]] = {}
-            for product, variant, supplier, category in rows:
-                on_hand = on_hand_map.get(str(variant.variant_id), ZERO)
-                reserved = reserved_map.get(str(variant.variant_id), ZERO)
-                available = on_hand - reserved
-                if product.status != "active" or variant.status != "active":
-                    continue
-                if not include_oos and available <= ZERO:
-                    continue
-                product_key = str(product.product_id)
-                if product_key not in products:
-                    image_payload = media_payload_map.get(str(product.primary_media_id)) if product.primary_media_id else None
-                    products[product_key] = {
-                        "product_id": product_key,
-                        "name": product.name,
-                        "brand": product.brand,
-                        "status": product.status,
-                        "supplier": supplier.name if supplier else "",
-                        "category": category.name if category else "",
-                        "description": product.description,
-                        "sku_root": product.sku_root,
-                        "default_price": as_optional_decimal(product.default_price_amount),
-                        "min_price": as_optional_decimal(product.min_price_amount),
-                        "max_discount_percent": derive_discount_percent(
-                            as_optional_decimal(product.default_price_amount),
-                            as_optional_decimal(product.min_price_amount),
-                        ),
-                        "image_url": image_payload["large_url"] if image_payload else product.image_url,
-                        "image": image_payload,
-                        "variants": [],
-                    }
-                products[product_key]["variants"].append(
-                    self._variant_payload(product, variant, on_hand, reserved)
+            trimmed = query.strip().lower()
+            product_stmt = self._base_product_stmt(user.client_id).where(ProductModel.status == "active")
+            if trimmed:
+                pattern = f"%{trimmed}%"
+                variant_match_ids = {
+                    str(product_id)
+                    for product_id, in session.execute(
+                        self._apply_variant_search(
+                            select(ProductModel.product_id)
+                            .join(ProductVariantModel, ProductVariantModel.product_id == ProductModel.product_id)
+                            .where(
+                                ProductModel.client_id == user.client_id,
+                                ProductVariantModel.client_id == user.client_id,
+                            ),
+                            query,
+                        ).distinct()
+                    ).all()
+                }
+                product_stmt = product_stmt.where(
+                    or_(
+                        func.lower(ProductModel.name).like(pattern),
+                        func.lower(ProductModel.brand).like(pattern),
+                        func.lower(ProductModel.sku_root).like(pattern),
+                        func.lower(SupplierModel.name).like(pattern),
+                        func.lower(CategoryModel.name).like(pattern),
+                        ProductModel.product_id.in_(variant_match_ids) if variant_match_ids else False,
+                    )
                 )
+
+            product_rows = session.execute(product_stmt).all()
+            ordered_product_ids = [str(product.product_id) for product, _supplier, _category in product_rows]
+            payload_map = self._products_payload_map(
+                session,
+                client_id=user.client_id,
+                product_ids=ordered_product_ids,
+                on_hand_map=on_hand_map,
+                reserved_map=reserved_map,
+                include_oos_variants=include_oos,
+                active_only=True,
+            )
+            items = [payload_map[product_id] for product_id in ordered_product_ids if product_id in payload_map]
 
             categories = [
                 {"category_id": str(record.category_id), "name": record.name}
@@ -894,7 +965,7 @@ class CatalogService(CommerceBaseService):
                 "locations": locations,
                 "categories": categories,
                 "suppliers": suppliers,
-                "items": list(products.values()),
+                "items": items,
             }
 
     def upsert_product(
@@ -906,7 +977,6 @@ class CatalogService(CommerceBaseService):
         variants: list[dict[str, Any]],
     ) -> dict[str, Any]:
         _require_page(user, "Catalog")
-        _require(bool(variants), message="At least one variant is required")
         with self._session_factory() as session:
             default_price, min_price, derived_discount = self._normalize_product_pricing(identity)
             supplier_id = self._ensure_supplier(session, user.client_id, str(identity.get("supplier", "")))
@@ -1120,34 +1190,16 @@ class InventoryService(CommerceBaseService):
             location_context = self._location_context(session, user.client_id, location_id)
             rows = session.execute(self._apply_variant_search(self._base_variant_stmt(user.client_id), trimmed)).all()
             on_hand_map, reserved_map = self._stock_maps(session, user.client_id, location_context.active_location_id)
-            media_payload_map = self._product_media_payload_map(
-                session,
-                user.client_id,
-                [row[0] for row in rows],
-            )
-            product_payloads: dict[str, dict[str, Any]] = {}
-            exact_variants: list[dict[str, Any]] = []
-            exact_product_ids: set[str] = set()
-            broad_product_ids: list[str] = []
-            broad_product_seen: set[str] = set()
             normalized_query = normalize_lookup_text(trimmed)
             raw_query = trimmed.lower()
+            exact_variant_refs: list[dict[str, str]] = []
+            broad_product_ids: list[str] = []
+            broad_product_seen: set[str] = set()
 
             for product, variant, supplier, category in rows:
                 if product.status != "active" or variant.status != "active":
                     continue
                 product_id = str(product.product_id)
-                if product_id not in product_payloads:
-                    product_rows = session.execute(
-                        self._base_variant_stmt(user.client_id).where(ProductModel.product_id == product.product_id)
-                    ).all()
-                    product_payloads[product_id] = self._product_payload_from_rows(
-                        user.client_id,
-                        product_rows,
-                        on_hand_map,
-                        reserved_map,
-                        media_payload_map,
-                    )
                 if product_id not in broad_product_seen:
                     broad_product_ids.append(product_id)
                     broad_product_seen.add(product_id)
@@ -1162,18 +1214,64 @@ class InventoryService(CommerceBaseService):
                 if match_reason is None:
                     continue
 
-                payload = product_payloads[product_id]
-                matched_variant = next(
-                    item for item in payload["variants"] if item["variant_id"] == str(variant.variant_id)
-                )
-                exact_variants.append(
+                exact_variant_refs.append(
                     {
                         "match_reason": match_reason,
+                        "product_id": product_id,
+                        "variant_id": str(variant.variant_id),
+                    }
+                )
+
+            pattern = f"%{trimmed.lower()}%"
+            product_rows = session.execute(
+                self._base_product_stmt(user.client_id)
+                .where(ProductModel.status == "active")
+                .where(
+                    or_(
+                        func.lower(ProductModel.name).like(pattern),
+                        func.lower(ProductModel.brand).like(pattern),
+                        func.lower(ProductModel.sku_root).like(pattern),
+                        func.lower(SupplierModel.name).like(pattern),
+                        func.lower(CategoryModel.name).like(pattern),
+                    )
+                )
+            ).all()
+            for product, _supplier, _category in product_rows:
+                product_id = str(product.product_id)
+                if product_id in broad_product_seen:
+                    continue
+                broad_product_ids.append(product_id)
+                broad_product_seen.add(product_id)
+
+            product_payloads = self._products_payload_map(
+                session,
+                client_id=user.client_id,
+                product_ids=broad_product_ids,
+                on_hand_map=on_hand_map,
+                reserved_map=reserved_map,
+                include_oos_variants=True,
+                active_only=True,
+            )
+            exact_variants: list[dict[str, Any]] = []
+            exact_product_ids: set[str] = set()
+            for ref in exact_variant_refs:
+                payload = product_payloads.get(ref["product_id"])
+                if payload is None:
+                    continue
+                matched_variant = next(
+                    (item for item in payload["variants"] if item["variant_id"] == ref["variant_id"]),
+                    None,
+                )
+                if matched_variant is None:
+                    continue
+                exact_variants.append(
+                    {
+                        "match_reason": ref["match_reason"],
                         "product": payload,
                         "variant": matched_variant,
                     }
                 )
-                exact_product_ids.add(product_id)
+                exact_product_ids.add(ref["product_id"])
 
             reason_priority = {"barcode": 0, "sku": 1, "product_variant": 2}
             exact_variants.sort(
@@ -1190,7 +1288,7 @@ class InventoryService(CommerceBaseService):
                 "product_matches": [
                     product_payloads[product_id]
                     for product_id in broad_product_ids
-                    if product_id not in exact_product_ids
+                    if product_id not in exact_product_ids and product_id in product_payloads
                 ],
                 "suggested_new_product": {
                     "product_name": trimmed,
@@ -1656,10 +1754,11 @@ class InventoryService(CommerceBaseService):
         variant_id: str,
         supplier: str | None,
         reorder_level: Decimal | None,
+        barcode: str | None,
     ) -> dict[str, Any]:
         _require_page(user, "Inventory")
         _require(
-            supplier is not None or reorder_level is not None,
+            supplier is not None or reorder_level is not None or barcode is not None,
             message="At least one field must be provided for inline update",
         )
         if reorder_level is not None:
@@ -1677,6 +1776,8 @@ class InventoryService(CommerceBaseService):
                 product.supplier_id = self._ensure_supplier(session, user.client_id, supplier)
             if reorder_level is not None:
                 variant.reorder_level = reorder_level
+            if barcode is not None:
+                variant.barcode = barcode
             session.commit()
 
             on_hand_map, reserved_map = self._stock_maps(session, user.client_id, location_context.active_location_id)

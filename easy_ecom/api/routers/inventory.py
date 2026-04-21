@@ -112,5 +112,6 @@ def inline_update_stock_row(
             variant_id=payload.variant_id,
             supplier=payload.supplier,
             reorder_level=payload.reorder_level,
+            barcode=payload.barcode,
         )
     )
