@@ -4,6 +4,7 @@ import type { FormEvent } from 'react';
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
+  attachCatalogProductMedia,
   getCatalogWorkspace,
   saveCatalogProduct,
 } from '@/lib/api/commerce';
@@ -15,7 +16,7 @@ import {
   WorkspaceToast,
 } from '@/components/commerce/workspace-primitives';
 import { ProductPhotoField } from '@/components/commerce/product-photo-field';
-import type { CatalogProduct, ProductIdentityInput, ProductMedia } from '@/types/catalog';
+import type { CatalogProduct, CatalogVariant, CatalogVariantInput, ProductIdentityInput, ProductMedia } from '@/types/catalog';
 import { formatQuantity, numberFromString } from '@/lib/commerce-format';
 import styles from '@/components/commerce/catalog-library-workspace.module.css';
 
@@ -84,6 +85,32 @@ function availableStockTotal(product: CatalogProduct) {
   return product.variants.reduce((sum, variant) => sum + numberFromString(variant.available_to_sell), 0);
 }
 
+function cleanWorkspaceErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error) {
+    const cleaned = error.message.replace(/\s*\(https?:\/\/[^)]+\)\s*$/i, '').trim();
+    if (cleaned) {
+      return cleaned;
+    }
+  }
+  return fallback;
+}
+
+function variantAsLegacyUpsertInput(variant: CatalogVariant): CatalogVariantInput {
+  return {
+    variant_id: variant.variant_id,
+    sku: variant.sku,
+    barcode: variant.barcode,
+    size: variant.options.size,
+    color: variant.options.color,
+    other: variant.options.other,
+    default_purchase_price: valueOrEmpty(variant.unit_cost),
+    default_selling_price: valueOrEmpty(variant.unit_price ?? variant.effective_unit_price),
+    min_selling_price: valueOrEmpty(variant.min_price ?? variant.effective_min_price),
+    reorder_level: valueOrEmpty(variant.reorder_level),
+    status: variant.status || 'active',
+  };
+}
+
 export function CatalogLibraryWorkspace() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -98,6 +125,7 @@ export function CatalogLibraryWorkspace() {
   const [error, setError] = useState('');
   const [toast, setToast] = useState('');
   const [savePending, setSavePending] = useState(false);
+  const [photoSyncPending, setPhotoSyncPending] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const openedFromParamRef = useRef('');
@@ -117,7 +145,7 @@ export function CatalogLibraryWorkspace() {
         setError('');
       } catch (loadError) {
         setWorkspace(null);
-        setError(loadError instanceof Error ? loadError.message : 'Unable to load catalog right now.');
+        setError(cleanWorkspaceErrorMessage(loadError, 'Unable to load catalog right now.'));
       }
     });
   };
@@ -184,17 +212,42 @@ export function CatalogLibraryWorkspace() {
         setError('Product name must be at least 2 characters.');
         return;
       }
-      const response = await saveCatalogProduct({
-        product_id: draft.product_id,
-        identity,
-        variants: [],
-      });
+      let response: Awaited<ReturnType<typeof saveCatalogProduct>>;
+      try {
+        response = await saveCatalogProduct({
+          product_id: draft.product_id,
+          identity,
+          variants: [],
+        });
+      } catch (saveError) {
+        const fallbackRequired =
+          draft.product_id
+          && saveError instanceof Error
+          && /at least one variant is required/i.test(saveError.message);
+        if (!fallbackRequired) {
+          throw saveError;
+        }
+
+        const existing = workspace?.items.find((item) => item.product_id === draft.product_id);
+        const fallbackVariant = existing?.variants[0];
+        if (!fallbackVariant) {
+          throw new Error(
+            'This backend still requires at least one variant to update a product. Add one variant first, or deploy the updated backend.',
+          );
+        }
+
+        response = await saveCatalogProduct({
+          product_id: draft.product_id,
+          identity,
+          variants: [variantAsLegacyUpsertInput(fallbackVariant)],
+        });
+      }
       setNotice(`Saved product: ${response.product.name}.`);
       setToast('Catalog product saved.');
       setDrawerOpen(false);
       loadWorkspace(queryInput);
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Unable to save product identity.');
+      setError(cleanWorkspaceErrorMessage(saveError, 'Unable to save product identity.'));
     } finally {
       setSavePending(false);
     }
@@ -319,7 +372,7 @@ export function CatalogLibraryWorkspace() {
             </div>
 
             <form className="workspace-form" onSubmit={saveProductIdentity}>
-              <div className="workspace-form-grid">
+              <div className={`workspace-form-grid ${styles.identityGrid}`}>
                 <label>
                   Product name
                   <input
@@ -407,7 +460,7 @@ export function CatalogLibraryWorkspace() {
                     inputMode="decimal"
                   />
                 </label>
-                <div className="field-span-2">
+                <div className={`field-span-2 ${styles.fullWidth}`}>
                   <label>Product photo</label>
                   <ProductPhotoField
                     image={productImage}
@@ -422,6 +475,32 @@ export function CatalogLibraryWorkspace() {
                           image_url: image.large_url,
                         },
                       }));
+                      if (!draft.product_id) {
+                        return;
+                      }
+                      setPhotoSyncPending(true);
+                      setError('');
+                      void (async () => {
+                        try {
+                          const response = await attachCatalogProductMedia(draft.product_id as string, image.upload_id);
+                          setProductImage(response.product.image);
+                          setDraft((current) => ({
+                            ...current,
+                            identity: {
+                              ...current.identity,
+                              pending_primary_media_upload_id: '',
+                              remove_primary_image: false,
+                              image_url: response.product.image_url || image.large_url,
+                            },
+                          }));
+                          setToast('Product photo uploaded.');
+                          loadWorkspace(queryInput);
+                        } catch (uploadError) {
+                          setError(cleanWorkspaceErrorMessage(uploadError, 'Unable to attach product photo.'));
+                        } finally {
+                          setPhotoSyncPending(false);
+                        }
+                      })();
                     }}
                     onRemove={() => {
                       setProductImage(null);
@@ -454,7 +533,7 @@ export function CatalogLibraryWorkspace() {
               </label>
 
               <div className={styles.drawerActions}>
-                <button type="submit" disabled={savePending}>
+                <button type="submit" disabled={savePending || photoSyncPending}>
                   {savePending ? 'Saving…' : 'Save Product'}
                 </button>
                 <button

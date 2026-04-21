@@ -139,6 +139,25 @@
   flex-wrap: wrap;
 }
 
+.identityGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.identityGrid label {
+  min-width: 0;
+}
+
+.identityGrid input,
+.identityGrid textarea,
+.identityGrid select {
+  width: 100%;
+  min-width: 0;
+}
+
+.fullWidth {
+  grid-column: 1 / -1;
+}
+
 @media (min-width: 1120px) {
   .layoutWithDrawer {
     display: grid;
@@ -161,5 +180,11 @@
     border: 1px solid var(--border-subtle);
     border-radius: 12px;
     z-index: 2;
+  }
+}
+
+@media (max-width: 760px) {
+  .identityGrid {
+    grid-template-columns: 1fr;
   }
 }

@@ -6,7 +6,7 @@ import type { ProductMedia } from '@/types/catalog';
 
 type ProductPhotoFieldProps = {
   image: ProductMedia | null;
-  onUploaded: (image: ProductMedia) => void;
+  onUploaded: (image: ProductMedia) => void | Promise<void>;
   onRemove: () => void;
 };
 
@@ -56,16 +56,6 @@ async function normalizeUploadImage(file: File): Promise<File> {
     type: 'image/jpeg',
     lastModified: Date.now(),
   });
-}
-
-function shouldUseNativeCapture() {
-  if (typeof window === 'undefined' || typeof navigator === 'undefined') {
-    return false;
-  }
-  const coarsePointer = window.matchMedia?.('(pointer: coarse)').matches ?? false;
-  const touchDevice = navigator.maxTouchPoints > 0;
-  const mobileUserAgent = /android|iphone|ipad|ipod/i.test(navigator.userAgent);
-  return coarsePointer || touchDevice || mobileUserAgent;
 }
 
 export function ProductPhotoField({ image, onUploaded, onRemove }: ProductPhotoFieldProps) {
@@ -194,7 +184,7 @@ export function ProductPhotoField({ image, onUploaded, onRemove }: ProductPhotoF
     try {
       const optimizedFile = await normalizeUploadImage(file);
       const uploaded = await uploadStagedProductMedia(optimizedFile);
-      onUploaded(uploaded);
+      await onUploaded(uploaded);
       setIsCameraOpen(false);
     } catch (uploadError) {
       setError(
@@ -246,8 +236,17 @@ export function ProductPhotoField({ image, onUploaded, onRemove }: ProductPhotoF
   };
 
   const openCapture = () => {
-    if (shouldUseNativeCapture()) {
-      fallbackCaptureRef.current?.click();
+    const canUseDirectCamera =
+      typeof window !== 'undefined'
+      && window.isSecureContext
+      && typeof navigator !== 'undefined'
+      && Boolean(navigator.mediaDevices?.getUserMedia);
+    if (!canUseDirectCamera) {
+      if (fallbackCaptureRef.current && typeof fallbackCaptureRef.current.showPicker === 'function') {
+        fallbackCaptureRef.current.showPicker();
+      } else {
+        fallbackCaptureRef.current?.click();
+      }
       return;
     }
     setCameraReady(false);
