@@ -1220,9 +1220,9 @@ export function InventoryWorkspace() {
           </span>
         }
         actions={
-          <div className=[ styles.inventoryPanelActions ].join(' ')>
-            <form className=[ styles.workspaceSearch ].join(' ') onSubmit={onSearch}>
-              <div className=[ styles.inventorySearchCombobox ].join(' ')>
+          <div className={[ styles.inventoryPanelActions ].join(' ')}>
+            <form className={[ styles.workspaceSearch ].join(' ')} onSubmit={onSearch}>
+              <div className={[ styles.inventorySearchCombobox ].join(' ')}>
                 <input
                   type="search"
                   value={queryInput}
@@ -1247,7 +1247,7 @@ export function InventoryWorkspace() {
                   }}
                 />
                 {searchSuggestionsOpen && visibleSearchSuggestions.length ? (
-                  <ul className=[ styles.inventorySearchSuggestions ].join(' ') role="listbox" aria-label="Inventory search suggestions">
+                  <ul className={[ styles.inventorySearchSuggestions ].join(' ')} role="listbox" aria-label="Inventory search suggestions">
                     {visibleSearchSuggestions.map((suggestion) => (
                       <li key={suggestion}>
                         <button
