@@ -22,6 +22,7 @@ from easy_ecom.domain.services.auth_service import AuthService
 from easy_ecom.domain.services.billing_service import BillingService
 from easy_ecom.domain.services.commerce_service import (
     CatalogService,
+    CustomersService,
     InventoryService,
     ReturnsService,
     SalesService,
@@ -73,6 +74,7 @@ class ServiceContainer:
         self.transaction = TransactionService(session_factory)
         self.catalog = CatalogService(session_factory)
         self.inventory = InventoryService(session_factory)
+        self.customers = CustomersService(session_factory)
         self.sales = SalesService(session_factory)
         self.returns = ReturnsService(session_factory)
 

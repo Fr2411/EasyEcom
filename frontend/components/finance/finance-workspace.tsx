@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createFinanceTransaction, getFinanceWorkspace, updateFinanceTransaction } from '@/lib/api/finance';
 import { formatDateTime, formatMoney, numberFromString } from '@/lib/commerce-format';
 import type {
@@ -12,20 +12,13 @@ import type {
   FinanceTransaction,
   FinanceTransactionInput,
 } from '@/types/finance';
-import {
-  DraftRecommendationCard,
-  StagedActionFooter,
-  WorkspaceEmpty,
-  WorkspaceNotice,
-  WorkspacePanel,
-} from '@/components/commerce/workspace-primitives';
+import { WorkspaceEmpty, WorkspaceNotice, WorkspacePanel } from '@/components/commerce/workspace-primitives';
 
 type FinanceDraft = {
   transaction_id: string | null;
   origin_type: FinanceTransactionInput['origin_type'];
   occurred_at: string;
   amount: string;
-  direction: FinanceTransactionInput['direction'];
   status: NonNullable<FinanceTransactionInput['status']>;
   counterparty_name: string;
   counterparty_type: FinanceCounterpartyType;
@@ -52,7 +45,6 @@ function buildEmptyDraft(): FinanceDraft {
     origin_type: 'manual_payment',
     occurred_at: currentLocalDateTime(),
     amount: '',
-    direction: 'in',
     status: 'completed',
     counterparty_name: '',
     counterparty_type: 'internal',
@@ -61,17 +53,12 @@ function buildEmptyDraft(): FinanceDraft {
   };
 }
 
-function isCommerceOrigin(transaction: FinanceTransaction) {
-  return transaction.origin_type === 'sale_fulfillment' || transaction.origin_type === 'return_refund';
-}
-
 function buildDraftFromTransaction(transaction: FinanceTransaction): FinanceDraft {
   return {
     transaction_id: transaction.transaction_id,
     origin_type: transaction.origin_type === 'manual_expense' ? 'manual_expense' : 'manual_payment',
     occurred_at: isoToLocalInput(transaction.occurred_at),
     amount: String(transaction.amount),
-    direction: transaction.direction,
     status: transaction.status,
     counterparty_name: transaction.counterparty_name ?? '',
     counterparty_type: transaction.counterparty_type ?? 'internal',
@@ -94,21 +81,15 @@ function buildPayload(draft: FinanceDraft): FinanceTransactionInput {
   };
 }
 
-function originLabel(transaction: FinanceTransaction) {
-  return transaction.source_label || transaction.origin_type.replaceAll('_', ' ');
-}
-
 function sourceHref(transaction: FinanceTransaction) {
   const query = encodeURIComponent(transaction.reference || transaction.origin_id || transaction.transaction_id);
   if (transaction.origin_type === 'sale_fulfillment') return `/sales?q=${query}`;
-  if (transaction.origin_type === 'return_refund') return `/returns?q=${query}`;
+  if (transaction.origin_type === 'return_refund') return `/returns?q=${query}&tab=history`;
   return null;
 }
 
-function splitStatusLabel(transaction: FinanceTransaction) {
-  if (transaction.origin_type === 'sale_fulfillment' && transaction.status === 'posted') return 'Posted to finance';
-  if (transaction.origin_type === 'return_refund' && transaction.status === 'posted') return 'Refund posted';
-  return transaction.status;
+function isEditableManual(transaction: FinanceTransaction) {
+  return transaction.editable && (transaction.origin_type === 'manual_payment' || transaction.origin_type === 'manual_expense');
 }
 
 export function FinanceWorkspace() {
@@ -119,6 +100,7 @@ export function FinanceWorkspace() {
   const [receivables, setReceivables] = useState<FinanceReceivable[]>([]);
   const [payables, setPayables] = useState<FinancePayable[]>([]);
   const [draft, setDraft] = useState<FinanceDraft>(buildEmptyDraft());
+  const [showEntryForm, setShowEntryForm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState('');
@@ -146,46 +128,57 @@ export function FinanceWorkspace() {
     void refreshWorkspace();
   }, []);
 
-  function resetDraft() {
-    setDraft(buildEmptyDraft());
-    setNotice('');
-  }
+  const cards = useMemo(() => {
+    if (!overview) return [];
+    return [
+      { label: 'Cash collected', value: overview.cash_collected },
+      { label: 'Refunds paid', value: overview.refunds_paid },
+      { label: 'Expenses', value: overview.expenses },
+      { label: 'Receivables', value: overview.receivables },
+      { label: 'Net operating', value: overview.net_operating },
+    ];
+  }, [overview]);
 
-  function editManualTransaction(transaction: FinanceTransaction) {
-    if (!transaction.editable || isCommerceOrigin(transaction)) return;
+  const resetDraft = () => {
+    setDraft(buildEmptyDraft());
+    setShowEntryForm(false);
+  };
+
+  const editTransaction = (transaction: FinanceTransaction) => {
+    if (!isEditableManual(transaction)) return;
     setDraft(buildDraftFromTransaction(transaction));
+    setShowEntryForm(true);
     setNotice(`Editing ${transaction.reference || transaction.transaction_id}.`);
     setError('');
-  }
+  };
 
-  async function submitTransaction() {
+  const submitTransaction = async () => {
     if (!draft.amount.trim() || numberFromString(draft.amount) <= 0) {
       setError('Amount must be greater than zero.');
       return;
     }
 
     setSaving(true);
-    setError('');
     try {
       const payload = buildPayload(draft);
       if (draft.transaction_id) {
         await updateFinanceTransaction(draft.transaction_id, payload);
-        setNotice('Manual finance entry updated.');
+        setNotice('Cash entry updated.');
       } else {
         await createFinanceTransaction(payload);
-        setNotice(payload.origin_type === 'manual_expense' ? 'Manual expense recorded.' : 'Manual payment recorded.');
+        setNotice(payload.origin_type === 'manual_expense' ? 'Expense entry recorded.' : 'Cash entry recorded.');
       }
-      setDraft(buildEmptyDraft());
+      resetDraft();
       await refreshWorkspace();
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : 'Unable to save transaction.');
+      setError(submitError instanceof Error ? submitError.message : 'Unable to save cash entry.');
     } finally {
       setSaving(false);
     }
-  }
+  };
 
   if (loading && !overview) {
-    return <div className="reports-loading">Loading finance workspace…</div>;
+    return <div className="reports-loading">Loading finance…</div>;
   }
 
   if (error && !overview) {
@@ -193,381 +186,279 @@ export function FinanceWorkspace() {
   }
 
   if (!overview) {
-    return <WorkspaceEmpty title="Finance workspace unavailable" message="No finance data was returned for this tenant." />;
+    return <WorkspaceEmpty title="Finance unavailable" message="No finance data was returned for this workspace." />;
   }
 
-  const snapshotCards = [
-    { label: 'Revenue', value: overview.revenue },
-    { label: 'Cash collected', value: overview.cash_collected },
-    { label: 'Refunds paid', value: overview.refunds_paid },
-    { label: 'Expenses', value: overview.expenses },
-    { label: 'Receivables', value: overview.receivables },
-    { label: 'Net operating', value: overview.net_operating },
-  ];
-
   return (
-    <div className="finance-module">
+    <div className="operations-page finance-module">
+      <div className="operations-toolbar">
+        <div>
+          <p className="operations-eyebrow">Cash book</p>
+          <h2>Operational cash visibility</h2>
+          <p>Sales fulfillment and refund posting happen automatically. Use this page for manual cash movement and collection review.</p>
+        </div>
+        <div className="operations-toolbar-actions">
+          <button type="button" className="btn-primary" onClick={() => setShowEntryForm((current) => !current)}>
+            {showEntryForm ? 'Close Entry' : 'Add Cash Entry'}
+          </button>
+        </div>
+      </div>
+
       <WorkspaceNotice tone="info">
-        Fulfilled sales and paid refunds post automatically. Use this workspace only for manual operating payments and expenses.
+        Commerce-linked transactions are read-only here. Fix sales or refund issues in their original workspace.
       </WorkspaceNotice>
-      <section className="finance-checklist" aria-label="Finance first-run checklist">
-        <h4>Finance first-run checklist</h4>
-        <ul>
-          <li>1. Post at least one sale from Sales so commerce-origin receivables appear.</li>
-          <li>2. Record manual operating cash movement here for expenses or adjustments.</li>
-          <li>3. Review receivables and refunds, then reconcile payables before period close.</li>
-        </ul>
-      </section>
       {notice ? <WorkspaceNotice tone="success">{notice}</WorkspaceNotice> : null}
       {error ? <WorkspaceNotice tone="error">{error}</WorkspaceNotice> : null}
 
-      <div className="finance-cards">
-        {snapshotCards.map((card) => (
-          <article key={card.label} className="ps-card">
-            <p>{card.label}</p>
+      <div className="operations-kpi-grid">
+        {cards.map((card) => (
+          <article key={card.label} className="operations-kpi-card">
+            <span>{card.label}</span>
             <strong>{formatMoney(card.value)}</strong>
           </article>
         ))}
       </div>
 
-      <div className="finance-layout">
-        <WorkspacePanel
-          title={draft.transaction_id ? 'Edit manual entry' : 'Record manual finance entry'}
-          description="Manual finance is limited to operating cash movement. Commerce-origin transactions stay read-only and must be corrected from Sales or Returns."
-        >
-          <form
-            className="finance-entry-form workspace-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void submitTransaction();
-            }}
-          >
-            <div className="workspace-form-grid compact">
-              <label>
-                Entry type
-                <select
-                  value={draft.origin_type}
-                  onChange={(event) =>
-                    setDraft((current) => ({
-                      ...current,
-                      origin_type: event.target.value === 'manual_expense' ? 'manual_expense' : 'manual_payment',
-                      direction: event.target.value === 'manual_expense' ? 'out' : 'in',
-                      status: event.target.value === 'manual_expense' ? 'unpaid' : 'completed',
-                      counterparty_type: event.target.value === 'manual_expense' ? 'vendor' : current.counterparty_type,
-                    }))
-                  }
-                >
-                  <option value="manual_payment">Manual payment</option>
-                  <option value="manual_expense">Manual expense</option>
-                </select>
-              </label>
-              <label>
-                Occurred at
-                <input
-                  type="datetime-local"
-                  value={draft.occurred_at}
-                  onChange={(event) => setDraft((current) => ({ ...current, occurred_at: event.target.value }))}
-                />
-              </label>
-              <label>
-                Amount
-                <input
-                  inputMode="decimal"
-                  value={draft.amount}
-                  onChange={(event) => setDraft((current) => ({ ...current, amount: event.target.value }))}
-                  placeholder="0.00"
-                />
-              </label>
-              <label>
-                Reference *
-                <input
-                  value={draft.reference}
-                  onChange={(event) => setDraft((current) => ({ ...current, reference: event.target.value }))}
-                  placeholder="Receipt, transfer, or bill number"
-                />
-              </label>
-              <label>
-                Counterparty *
-                <input
-                  value={draft.counterparty_name}
-                  onChange={(event) => setDraft((current) => ({ ...current, counterparty_name: event.target.value }))}
-                  placeholder={draft.origin_type === 'manual_expense' ? 'Supplier or payee' : 'Customer or internal source'}
-                />
-              </label>
-              <label>
-                Counterparty type
-                <select
-                  value={draft.counterparty_type}
-                  onChange={(event) =>
-                    setDraft((current) => ({ ...current, counterparty_type: event.target.value as FinanceCounterpartyType }))
-                  }
-                >
-                  {draft.origin_type === 'manual_expense' ? (
-                    <>
-                      <option value="vendor">Vendor</option>
-                      <option value="internal">Internal</option>
-                    </>
-                  ) : (
-                    <>
-                      <option value="internal">Internal</option>
-                      <option value="customer">Customer</option>
-                    </>
-                  )}
-                </select>
-              </label>
-              <label>
-                Status *
-                <select
-                  value={draft.status}
-                  onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value as FinanceDraft['status'] }))}
-                >
-                  {draft.origin_type === 'manual_expense' ? (
-                    <>
-                      <option value="unpaid">Unpaid</option>
-                      <option value="partial">Partial</option>
-                      <option value="paid">Paid</option>
-                    </>
-                  ) : (
-                    <>
-                      <option value="completed">Completed</option>
-                      <option value="pending">Pending</option>
-                      <option value="posted">Posted</option>
-                    </>
-                  )}
-                </select>
-              </label>
-              <label className="workspace-form-wide">
-                Note
-                <textarea
-                  rows={4}
-                  value={draft.note}
-                  onChange={(event) => setDraft((current) => ({ ...current, note: event.target.value }))}
-                  placeholder="Add a short audit note"
-                />
-              </label>
-            </div>
-
-            <DraftRecommendationCard
-              title={draft.origin_type === 'manual_expense' ? 'Manual expense draft' : 'Manual payment draft'}
-              summary="Commerce-origin events post automatically and stay read-only in this workspace."
-            >
-              <div className="settings-context">
-                <div>
-                  <dt>Write mode</dt>
-                  <dd>{draft.transaction_id ? 'Updating a previously recorded manual entry.' : 'Creating a manual operating entry.'}</dd>
-                </div>
-                <div>
-                  <dt>Journal effect</dt>
-                  <dd>{draft.origin_type === 'manual_expense' ? 'Cash out via operating expense.' : 'Cash in via manual payment.'}</dd>
-                </div>
-                <div>
-                  <dt>Counterparty</dt>
-                  <dd>{draft.counterparty_name.trim() || 'Not specified yet.'}</dd>
-                </div>
+      <div className="operations-split-layout finance-split-layout">
+        <WorkspacePanel title="Receivables and refund status" description="Review money still to collect, refund payments already posted, and commerce-linked activity.">
+          <div className="operations-dual-section">
+            <section>
+              <div className="operations-section-heading">
+                <h4>Receivables</h4>
+                <p>Orders with money still outstanding.</p>
               </div>
-            </DraftRecommendationCard>
+              {receivables.length ? (
+                <div className="operations-list-stack compact">
+                  {receivables.map((item) => (
+                    <Link key={item.sale_id} href={`/sales?q=${encodeURIComponent(item.sale_no)}&tab=open`} className="operations-list-card as-link">
+                      <div className="operations-list-card-head">
+                        <strong>{item.sale_no}</strong>
+                        <span>{formatMoney(item.outstanding_balance)}</span>
+                      </div>
+                      <p>{item.customer_name}</p>
+                      <div className="operations-inline-meta compact">
+                        <span>{item.payment_status}</span>
+                        <span>{formatDateTime(item.sale_date)}</span>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <WorkspaceEmpty title="No open receivables" message="Outstanding customer balances will appear here once unpaid sales exist." />
+              )}
+            </section>
 
-            <StagedActionFooter summary="Manual entries stay editable. Commerce-origin events are corrected from Sales or Returns.">
-              <button type="button" className="secondary" onClick={resetDraft} disabled={saving}>
-                Reset
-              </button>
-              <button type="submit" className="btn-primary" disabled={saving}>
-                {saving
-                  ? 'Saving…'
-                  : draft.transaction_id
-                    ? 'Update manual entry'
-                    : draft.origin_type === 'manual_expense'
-                      ? 'Record manual expense'
-                      : 'Record manual payment'}
-              </button>
-            </StagedActionFooter>
-          </form>
-        </WorkspacePanel>
+            <section>
+              <div className="operations-section-heading">
+                <h4>Recent refunds</h4>
+                <p>Latest cash-out events posted from returns.</p>
+              </div>
+              {recentRefunds.length ? (
+                <div className="operations-list-stack compact">
+                  {recentRefunds.map((item) => (
+                    <Link key={item.transaction_id} href={`/returns?q=${encodeURIComponent(item.reference)}&tab=history`} className="operations-list-card as-link">
+                      <div className="operations-list-card-head">
+                        <strong>{item.reference || 'Refund payment'}</strong>
+                        <span>-{formatMoney(item.amount)}</span>
+                      </div>
+                      <p>{item.counterparty_name || 'Customer refund'}</p>
+                      <div className="operations-inline-meta compact">
+                        <span>{formatDateTime(item.occurred_at)}</span>
+                        <span>{item.status}</span>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <WorkspaceEmpty title="No recent refunds" message="Refund cash-out events will appear here after return refunds are posted." />
+              )}
+            </section>
+          </div>
 
-        <div className="finance-side-stack">
-          <WorkspacePanel
-            title="Commerce-origin transactions (read-only)"
-            description="These transactions are created by fulfillment or refund workflows and are read-only here."
-          >
-            <p className="finance-role-chip">Owner / Finance staff</p>
+          {payables.length ? (
+            <section className="operations-subsection-block">
+              <div className="operations-section-heading">
+                <h4>Outstanding payables</h4>
+                <p>Unpaid supplier or operating expenses still visible in the current window.</p>
+              </div>
+              <div className="operations-list-stack compact">
+                {payables.map((item) => (
+                  <div key={item.transaction_id} className="operations-list-card static">
+                    <div className="operations-list-card-head">
+                      <strong>{item.reference}</strong>
+                      <span>{formatMoney(item.amount)}</span>
+                    </div>
+                    <p>{item.vendor_name || item.note || 'Payable entry'}</p>
+                    <div className="operations-inline-meta compact">
+                      <span>{item.status}</span>
+                      <span>{formatDateTime(item.occurred_at)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          <section className="operations-subsection-block">
+            <div className="operations-section-heading">
+              <h4>Commerce-linked activity</h4>
+              <p>Read-only finance entries created from completed sales and recorded refunds.</p>
+            </div>
             {commerceTransactions.length ? (
-              <div className="finance-row-list">
-                {commerceTransactions.map((transaction) => {
-                  const href = sourceHref(transaction);
-                  return (
-                    <article key={transaction.transaction_id} className="finance-row-card finance-row-readonly">
-                      <div className="finance-row-card-head">
-                        <div>
-                          <span className="finance-origin-pill">{originLabel(transaction)}</span>
-                          <strong>{transaction.reference || transaction.source_label}</strong>
-                          <p>{transaction.note || transaction.counterparty_name || transaction.source_label}</p>
-                        </div>
-                        <strong className={transaction.direction === 'out' ? 'delta-negative' : 'delta-positive'}>
-                          {transaction.direction === 'out' ? '-' : '+'}
-                          {formatMoney(transaction.amount)}
-                        </strong>
+              <div className="operations-list-stack compact">
+                {commerceTransactions.map((item) => {
+                  const href = sourceHref(item);
+                  const card = (
+                    <div className="operations-list-card-head">
+                      <strong>{item.reference || item.source_label}</strong>
+                      <span>{item.direction === 'out' ? '-' : ''}{formatMoney(item.amount)}</span>
+                    </div>
+                  );
+                  return href ? (
+                    <Link key={item.transaction_id} href={href} className="operations-list-card as-link">
+                      {card}
+                      <p>{item.counterparty_name || item.source_label}</p>
+                      <div className="operations-inline-meta compact">
+                        <span>{item.source_label}</span>
+                        <span>{formatDateTime(item.occurred_at)}</span>
                       </div>
-                      <div className="finance-row-meta">
-                        <span>{splitStatusLabel(transaction)}</span>
-                        <span>{formatDateTime(transaction.occurred_at)}</span>
-                        {transaction.counterparty_name ? <span>{transaction.counterparty_name}</span> : null}
-                        {href ? (
-                          <Link href={href} className="button-link secondary finance-source-link">
-                            Open source
-                          </Link>
-                        ) : null}
+                    </Link>
+                  ) : (
+                    <div key={item.transaction_id} className="operations-list-card static">
+                      {card}
+                      <p>{item.counterparty_name || item.source_label}</p>
+                      <div className="operations-inline-meta compact">
+                        <span>{item.source_label}</span>
+                        <span>{formatDateTime(item.occurred_at)}</span>
                       </div>
-                    </article>
+                    </div>
                   );
                 })}
               </div>
             ) : (
-              <WorkspaceEmpty
-                title="No commerce-origin transactions yet"
-                message="Fulfilled sales and paid refunds will appear here automatically. Continue from Sales or Returns to create source transactions."
-              />
-            )}
-          </WorkspacePanel>
-
-          <WorkspacePanel
-            title="Manual finance transactions (editable)"
-            description="Keep operating cash movement here. Manual entries remain editable."
-          >
-            <p className="finance-role-chip">Owner / Finance staff</p>
-            {manualTransactions.length ? (
-              <div className="finance-row-list finance-row-list-tight">
-                {manualTransactions.map((transaction) => (
-                  <article key={transaction.transaction_id} className="finance-transaction-card">
-                    <div className="finance-row-card-head">
-                      <div>
-                        <span className="finance-origin-pill">{originLabel(transaction)}</span>
-                        <strong>{transaction.reference || transaction.source_label}</strong>
-                        <p>{transaction.note || transaction.counterparty_name || transaction.source_label}</p>
-                      </div>
-                      <strong className={transaction.direction === 'out' ? 'delta-negative' : 'delta-positive'}>
-                        {transaction.direction === 'out' ? '-' : '+'}
-                        {formatMoney(transaction.amount)}
-                      </strong>
-                    </div>
-                    <div className="finance-row-meta">
-                      <span>{transaction.status}</span>
-                      <span>{formatDateTime(transaction.occurred_at)}</span>
-                      {transaction.counterparty_name ? <span>{transaction.counterparty_name}</span> : null}
-                    </div>
-                    <div className="workspace-actions">
-                      <button type="button" className="secondary" onClick={() => editManualTransaction(transaction)}>
-                        Edit
-                      </button>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <WorkspaceEmpty title="No manual finance entries" message="Record the first manual payment or expense to seed the journal." />
-            )}
-          </WorkspacePanel>
-        </div>
-      </div>
-
-      <WorkspacePanel
-        title="Receivables and recent refunds"
-        description="Revenue stays separate from cash collected. Refund payouts appear as their own finance events."
-      >
-        <p className="finance-role-chip">Warehouse / General staff: monitor only</p>
-        <div className="finance-two-up">
-          <section className="finance-ledger-block">
-            <header>
-              <h4>Receivables</h4>
-              <p>{formatMoney(overview.receivables)} still open from fulfilled sales.</p>
-            </header>
-            {receivables.length ? (
-              <div className="finance-row-list">
-                {receivables.map((item) => (
-                  <article key={item.sale_id} className="finance-row-card">
-                    <div className="finance-row-card-head">
-                      <div>
-                        <strong>{item.sale_no}</strong>
-                        <p>{item.customer_name}</p>
-                      </div>
-                      <strong>{formatMoney(item.outstanding_balance)}</strong>
-                    </div>
-                    <div className="finance-row-meta">
-                      <span>Paid {formatMoney(item.amount_paid)}</span>
-                      <span>{item.payment_status}</span>
-                      <span>{formatDateTime(item.sale_date)}</span>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <WorkspaceEmpty title="No outstanding receivables" message="Open customer balances will appear after sales are fulfilled. Go to Sales to post new receivables." />
+              <WorkspaceEmpty title="No commerce activity yet" message="Completed sales and refund postings will appear here automatically." />
             )}
           </section>
+        </WorkspacePanel>
 
-          <section className="finance-ledger-block">
-            <header>
-              <h4>Payables</h4>
-              <p>{formatMoney(overview.payables)} still open from manual operating expenses.</p>
-            </header>
-            {payables.length ? (
-              <div className="finance-row-list">
-                {payables.map((item) => (
-                  <article key={item.transaction_id} className="finance-row-card">
-                    <div className="finance-row-card-head">
-                      <div>
-                        <strong>{item.reference || 'Manual expense'}</strong>
-                        <p>{item.vendor_name || item.note || 'Operating payable'}</p>
-                      </div>
-                      <strong className="delta-negative">{formatMoney(item.amount)}</strong>
-                    </div>
-                    <div className="finance-row-meta">
-                      <span>{item.status}</span>
-                      <span>{formatDateTime(item.occurred_at)}</span>
-                    </div>
-                  </article>
-                ))}
+        <WorkspacePanel title="Manual cash ledger" description="Create or edit manual cash-in and expense entries without changing commerce-origin transactions.">
+          {showEntryForm ? (
+            <div className="operations-detail-stack">
+              <div className="operations-form-grid compact">
+                <label>
+                  Entry type
+                  <select
+                    value={draft.origin_type}
+                    onChange={(event) =>
+                      setDraft((current) => ({
+                        ...current,
+                        origin_type: event.target.value === 'manual_expense' ? 'manual_expense' : 'manual_payment',
+                        status: event.target.value === 'manual_expense' ? 'unpaid' : 'completed',
+                        counterparty_type: event.target.value === 'manual_expense' ? 'vendor' : 'internal',
+                      }))
+                    }
+                  >
+                    <option value="manual_payment">Cash in</option>
+                    <option value="manual_expense">Expense</option>
+                  </select>
+                </label>
+                <label>
+                  Date and time
+                  <input
+                    type="datetime-local"
+                    value={draft.occurred_at}
+                    onChange={(event) => setDraft((current) => ({ ...current, occurred_at: event.target.value }))}
+                  />
+                </label>
+                <label>
+                  Amount
+                  <input
+                    inputMode="decimal"
+                    value={draft.amount}
+                    onChange={(event) => setDraft((current) => ({ ...current, amount: event.target.value }))}
+                    placeholder="0.00"
+                  />
+                </label>
+                <label>
+                  Status
+                  <select
+                    value={draft.status}
+                    onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value as FinanceDraft['status'] }))}
+                  >
+                    <option value="completed">Completed</option>
+                    <option value="pending">Pending</option>
+                    <option value="unpaid">Unpaid</option>
+                    <option value="paid">Paid</option>
+                  </select>
+                </label>
+                <label>
+                  Counterparty
+                  <input
+                    value={draft.counterparty_name}
+                    onChange={(event) => setDraft((current) => ({ ...current, counterparty_name: event.target.value }))}
+                    placeholder="Supplier, courier, internal transfer"
+                  />
+                </label>
+                <label>
+                  Counterparty type
+                  <select
+                    value={draft.counterparty_type}
+                    onChange={(event) => setDraft((current) => ({ ...current, counterparty_type: event.target.value as FinanceCounterpartyType }))}
+                  >
+                    <option value="internal">Internal</option>
+                    <option value="vendor">Vendor</option>
+                    <option value="customer">Customer</option>
+                  </select>
+                </label>
+                <label>
+                  Reference
+                  <input
+                    value={draft.reference}
+                    onChange={(event) => setDraft((current) => ({ ...current, reference: event.target.value }))}
+                    placeholder="Voucher or transfer reference"
+                  />
+                </label>
+                <label className="field-span-2">
+                  Note
+                  <textarea
+                    rows={3}
+                    value={draft.note}
+                    onChange={(event) => setDraft((current) => ({ ...current, note: event.target.value }))}
+                    placeholder="Short audit note"
+                  />
+                </label>
               </div>
-            ) : (
-              <WorkspaceEmpty title="No open payables" message="Unpaid manual operating expenses will appear here." />
-            )}
-          </section>
-        </div>
+              <div className="operations-toolbar-actions">
+                <button type="button" className="btn-primary" onClick={() => void submitTransaction()} disabled={saving}>
+                  {saving ? 'Saving…' : 'Save Entry'}
+                </button>
+                <button type="button" className="secondary" onClick={resetDraft}>Reset</button>
+              </div>
+            </div>
+          ) : null}
 
-        <section className="finance-ledger-block finance-refund-block">
-          <header>
-            <h4>Recent refunds</h4>
-            <p>{formatMoney(overview.refunds_paid)} paid out from return workflows.</p>
-          </header>
-          {recentRefunds.length ? (
-            <div className="finance-row-list">
-              {recentRefunds.map((transaction) => (
-                <article key={transaction.transaction_id} className="finance-row-card finance-row-readonly">
-                  <div className="finance-row-card-head">
-                    <div>
-                      <span className="finance-origin-pill">From Returns</span>
-                      <strong>{transaction.reference || transaction.source_label}</strong>
-                      <p>{transaction.note || transaction.counterparty_name || transaction.source_label}</p>
-                    </div>
-                    <strong className="delta-negative">-{formatMoney(transaction.amount)}</strong>
+          {manualTransactions.length ? (
+            <div className="operations-list-stack compact">
+              {manualTransactions.map((item) => (
+                <button key={item.transaction_id} type="button" className="operations-list-card static as-button" onClick={() => editTransaction(item)}>
+                  <div className="operations-list-card-head">
+                    <strong>{item.reference || item.source_label}</strong>
+                    <span>{item.direction === 'out' ? '-' : ''}{formatMoney(item.amount)}</span>
                   </div>
-                  <div className="finance-row-meta">
-                    <span>{splitStatusLabel(transaction)}</span>
-                    <span>{formatDateTime(transaction.occurred_at)}</span>
-                    {transaction.counterparty_name ? <span>{transaction.counterparty_name}</span> : null}
-                    {sourceHref(transaction) ? (
-                      <Link href={sourceHref(transaction)!} className="button-link secondary finance-source-link">
-                        Open return
-                      </Link>
-                    ) : null}
+                  <p>{item.counterparty_name || item.note || 'Manual cash entry'}</p>
+                  <div className="operations-inline-meta compact">
+                    <span>{item.origin_type === 'manual_expense' ? 'Expense' : 'Cash in'}</span>
+                    <span>{item.status}</span>
+                    <span>{formatDateTime(item.occurred_at)}</span>
                   </div>
-                </article>
+                </button>
               ))}
             </div>
           ) : (
-            <WorkspaceEmpty title="No paid refunds yet" message="Refunds appear after payout events are posted in Returns. Open Returns to continue." />
+            <WorkspaceEmpty title="No manual cash entries" message="Use Add Cash Entry to record money-in or expense items that are not created by sales or returns." />
           )}
-        </section>
-      </WorkspacePanel>
+        </WorkspacePanel>
+      </div>
       <div className="mobile-action-safe-spacer" aria-hidden="true" />
     </div>
   );

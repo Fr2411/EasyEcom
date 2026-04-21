@@ -1,53 +1,15 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
-import { WorkspaceNotice, WorkspacePanel } from '@/components/commerce/workspace-primitives';
+import { WorkspaceEmpty, WorkspaceNotice, WorkspacePanel } from '@/components/commerce/workspace-primitives';
 import { getSettingsWorkspace, updateSettingsWorkspace } from '@/lib/api/settings';
 import type { SettingsWorkspace as SettingsWorkspacePayload } from '@/types/settings';
-
-function SettingsLoadingState() {
-  return (
-    <div className="settings-layout settings-loading-layout" role="status" aria-live="polite">
-      <WorkspacePanel
-        title="Tenant settings"
-        description="Loading tenant identity and profile defaults for this workspace."
-      >
-        <div className="settings-loading-copy">
-          <strong>Loading tenant settings…</strong>
-          <p className="settings-muted">Preparing tenant-scoped configuration fields. No stock, sales, or ledger data is modified during loading.</p>
-        </div>
-        <div className="settings-loading-context">
-          <div className="settings-loading-pill" />
-          <div className="settings-loading-pill" />
-          <div className="settings-loading-pill" />
-        </div>
-      </WorkspacePanel>
-
-      <WorkspacePanel
-        title="Profile, defaults, and document prefixes"
-        description="This section loads profile fields, operational defaults, and document prefixes."
-      >
-        <div className="settings-loading-grid">
-          {Array.from({ length: 8 }).map((_, index) => (
-            <div key={`settings-loading-profile-${index}`} className="settings-loading-field" />
-          ))}
-        </div>
-      </WorkspacePanel>
-    </div>
-  );
-}
-
-function sectionStatus(completed: number, total: number) {
-  if (completed === total) return { label: 'Ready', tone: 'is-ready' as const };
-  if (completed > 0) return { label: `${completed}/${total} complete`, tone: 'is-in-progress' as const };
-  return { label: 'Needs setup', tone: 'is-empty' as const };
-}
 
 export function SettingsWorkspace() {
   const [workspace, setWorkspace] = useState<SettingsWorkspacePayload | null>(null);
   const [form, setForm] = useState<SettingsWorkspacePayload | null>(null);
   const [loading, setLoading] = useState(true);
-  const [savingSettings, setSavingSettings] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
 
@@ -55,19 +17,20 @@ export function SettingsWorkspace() {
     let active = true;
     setLoading(true);
     void getSettingsWorkspace()
-      .then((settingsPayload) => {
+      .then((payload) => {
         if (!active) return;
-        setWorkspace(settingsPayload);
-        setForm(settingsPayload);
+        setWorkspace(payload);
+        setForm(payload);
         setError('');
       })
       .catch((loadError) => {
         if (!active) return;
-        setError(loadError instanceof Error ? loadError.message : 'Unable to load tenant settings.');
+        setError(loadError instanceof Error ? loadError.message : 'Unable to load settings.');
       })
       .finally(() => {
         if (active) setLoading(false);
       });
+
     return () => {
       active = false;
     };
@@ -76,7 +39,8 @@ export function SettingsWorkspace() {
   const saveSettings = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!form) return;
-    setSavingSettings(true);
+
+    setSaving(true);
     try {
       const payload = await updateSettingsWorkspace({
         profile: form.profile,
@@ -85,252 +49,223 @@ export function SettingsWorkspace() {
       });
       setWorkspace(payload);
       setForm(payload);
-      setNotice('Tenant settings saved.');
+      setNotice('Settings saved.');
       setError('');
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Unable to save tenant settings.');
+      setError(saveError instanceof Error ? saveError.message : 'Unable to save settings.');
     } finally {
-      setSavingSettings(false);
+      setSaving(false);
     }
   };
 
   if (loading) {
-    return <SettingsLoadingState />;
+    return <div className="reports-loading">Loading settings…</div>;
   }
 
   if (error && !form) {
     return <div className="reports-error">{error}</div>;
   }
 
-  if (!form) {
-    return null;
+  if (!form || !workspace) {
+    return <WorkspaceEmpty title="Settings unavailable" message="No tenant settings were returned for this workspace." />;
   }
 
-  const profileCompleted = [
-    form.profile.business_name,
-    form.profile.contact_name,
-    form.profile.email,
-    form.profile.phone,
-    form.profile.whatsapp_number,
-    form.profile.address,
-  ].filter((value) => value.trim().length > 0).length;
-  const defaultsCompleted = [
-    form.defaults.default_location_name,
-    String(form.defaults.low_stock_threshold),
-  ].filter((value) => value.trim().length > 0).length;
-  const numberingCompleted = [
-    form.prefixes.sales_prefix,
-    form.prefixes.returns_prefix,
-  ].filter((value) => value.trim().length > 0).length;
-  const profileStatus = sectionStatus(profileCompleted, 6);
-  const defaultsStatus = sectionStatus(defaultsCompleted, 2);
-  const numberingStatus = sectionStatus(numberingCompleted, 2);
-
   return (
-    <div className="settings-layout">
-      {notice ? <WorkspaceNotice tone="success">{notice}</WorkspaceNotice> : null}
-      {error ? <WorkspaceNotice tone="error">{error}</WorkspaceNotice> : null}
+    <div className="operations-page settings-module">
+      <form className="operations-form-stack" onSubmit={saveSettings}>
+        <div className="operations-toolbar">
+          <div>
+            <p className="operations-eyebrow">Business setup</p>
+            <h2>Business profile, defaults, and document numbers</h2>
+            <p>Keep core business details current. Technical metadata stays collapsed unless you need it.</p>
+          </div>
+          <div className="operations-toolbar-actions">
+            <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save Settings'}</button>
+          </div>
+        </div>
 
-      <WorkspacePanel title="Tenant settings" description="Confirm the active tenant identity and scope before editing settings.">
-        <dl className="settings-context">
-          <div>
-            <dt>Business</dt>
-            <dd>{workspace?.tenant_context.business_name}</dd>
-          </div>
-          <div>
-            <dt>Status</dt>
-            <dd>{workspace?.tenant_context.status}</dd>
-          </div>
-          <div>
-            <dt>Currency</dt>
-            <dd>{workspace?.tenant_context.currency_code}</dd>
-          </div>
-        </dl>
-        <details className="settings-technical-details">
-          <summary>Advanced technical details</summary>
-          <dl className="settings-context settings-context-technical">
+        {notice ? <WorkspaceNotice tone="success">{notice}</WorkspaceNotice> : null}
+        {error ? <WorkspaceNotice tone="error">{error}</WorkspaceNotice> : null}
+
+        <WorkspacePanel title="Workspace context" description="Confirm the active tenant before editing business settings.">
+          <dl className="operations-definition-grid">
             <div>
-              <dt>Tenant ID</dt>
-              <dd>{workspace?.tenant_context.client_id}</dd>
+              <dt>Business</dt>
+              <dd>{workspace.tenant_context.business_name}</dd>
+            </div>
+            <div>
+              <dt>Status</dt>
+              <dd>{workspace.tenant_context.status}</dd>
+            </div>
+            <div>
+              <dt>Currency</dt>
+              <dd>{workspace.tenant_context.currency_code}</dd>
             </div>
           </dl>
-        </details>
-      </WorkspacePanel>
+          <details className="operations-advanced-block">
+            <summary>Advanced</summary>
+            <dl className="operations-definition-grid compact">
+              <div>
+                <dt>Tenant ID</dt>
+                <dd>{workspace.tenant_context.client_id}</dd>
+              </div>
+            </dl>
+          </details>
+        </WorkspacePanel>
 
-      <form onSubmit={saveSettings}>
-        <WorkspacePanel
-          title="Profile, defaults, and document prefixes"
-          description="Update business profile fields, operational defaults, and numbering prefixes used by sales and returns."
-          actions={<button type="submit" className="btn-primary settings-save-btn" disabled={savingSettings}>{savingSettings ? 'Saving…' : 'Save settings'}</button>}
-        >
-          <section className="settings-section">
-            <div className="workspace-subsection-header">
-              <h4>Business profile</h4>
-              <p>Keep core contact details first for fast routine updates.</p>
-              <span className={`settings-section-status ${profileStatus.tone}`}>{profileStatus.label}</span>
-            </div>
-            <div className="settings-grid">
+        <WorkspacePanel title="Business profile" description="Daily-use contact and identity details for the live workspace.">
+          <div className="operations-form-grid">
+            <label>
+              Business name
+              <input
+                value={form.profile.business_name}
+                onChange={(event) => setForm({ ...form, profile: { ...form.profile, business_name: event.target.value } })}
+              />
+            </label>
+            <label>
+              Contact name
+              <input
+                value={form.profile.contact_name}
+                onChange={(event) => setForm({ ...form, profile: { ...form.profile, contact_name: event.target.value } })}
+              />
+            </label>
+            <label>
+              Email
+              <input
+                value={form.profile.email}
+                onChange={(event) => setForm({ ...form, profile: { ...form.profile, email: event.target.value } })}
+              />
+            </label>
+            <label>
+              Phone
+              <input
+                value={form.profile.phone}
+                onChange={(event) => setForm({ ...form, profile: { ...form.profile, phone: event.target.value } })}
+              />
+            </label>
+            <label className="field-span-2">
+              Address
+              <textarea
+                rows={3}
+                value={form.profile.address}
+                onChange={(event) => setForm({ ...form, profile: { ...form.profile, address: event.target.value } })}
+              />
+            </label>
+          </div>
+
+          <details className="operations-advanced-block">
+            <summary>Advanced</summary>
+            <div className="operations-form-grid compact">
               <label>
-                Business name
+                Owner name
                 <input
-                  value={form.profile.business_name}
-                  onChange={(event) => setForm({ ...form, profile: { ...form.profile, business_name: event.target.value } })}
+                  value={form.profile.owner_name}
+                  onChange={(event) => setForm({ ...form, profile: { ...form.profile, owner_name: event.target.value } })}
                 />
               </label>
               <label>
-                Contact name
+                Website URL
                 <input
-                  value={form.profile.contact_name}
-                  onChange={(event) => setForm({ ...form, profile: { ...form.profile, contact_name: event.target.value } })}
+                  value={form.profile.website_url}
+                  onChange={(event) => setForm({ ...form, profile: { ...form.profile, website_url: event.target.value } })}
                 />
               </label>
               <label>
-                Email
+                Timezone
                 <input
-                  value={form.profile.email}
-                  onChange={(event) => setForm({ ...form, profile: { ...form.profile, email: event.target.value } })}
+                  value={form.profile.timezone}
+                  onChange={(event) => setForm({ ...form, profile: { ...form.profile, timezone: event.target.value } })}
                 />
               </label>
               <label>
-                Phone
+                Currency code
                 <input
-                  value={form.profile.phone}
-                  onChange={(event) => setForm({ ...form, profile: { ...form.profile, phone: event.target.value } })}
+                  value={form.profile.currency_code}
+                  onChange={(event) => setForm({ ...form, profile: { ...form.profile, currency_code: event.target.value } })}
                 />
               </label>
               <label>
-                Secondary phone
+                Currency symbol
                 <input
-                  value={form.profile.whatsapp_number}
-                  onChange={(event) => setForm({ ...form, profile: { ...form.profile, whatsapp_number: event.target.value } })}
+                  value={form.profile.currency_symbol}
+                  onChange={(event) => setForm({ ...form, profile: { ...form.profile, currency_symbol: event.target.value } })}
                 />
               </label>
               <label className="field-span-2">
-                Address
+                Notes
                 <textarea
-                  value={form.profile.address}
-                  onChange={(event) => setForm({ ...form, profile: { ...form.profile, address: event.target.value } })}
+                  rows={3}
+                  value={form.profile.notes}
+                  onChange={(event) => setForm({ ...form, profile: { ...form.profile, notes: event.target.value } })}
                 />
               </label>
             </div>
-            <details className="settings-technical-details settings-advanced-profile">
-              <summary>Additional profile details</summary>
-              <div className="settings-grid settings-grid-advanced">
-                <label>
-                  Owner name
-                  <input
-                    value={form.profile.owner_name}
-                    onChange={(event) => setForm({ ...form, profile: { ...form.profile, owner_name: event.target.value } })}
-                  />
-                </label>
-                <label>
-                  Website URL
-                  <input
-                    value={form.profile.website_url}
-                    onChange={(event) => setForm({ ...form, profile: { ...form.profile, website_url: event.target.value } })}
-                  />
-                </label>
-                <label>
-                  Timezone
-                  <input
-                    value={form.profile.timezone}
-                    onChange={(event) => setForm({ ...form, profile: { ...form.profile, timezone: event.target.value } })}
-                  />
-                </label>
-                <label>
-                  Currency code
-                  <input
-                    value={form.profile.currency_code}
-                    onChange={(event) => setForm({ ...form, profile: { ...form.profile, currency_code: event.target.value } })}
-                  />
-                </label>
-                <label>
-                  Currency symbol
-                  <input
-                    value={form.profile.currency_symbol}
-                    onChange={(event) => setForm({ ...form, profile: { ...form.profile, currency_symbol: event.target.value } })}
-                  />
-                </label>
-                <label className="field-span-2">
-                  Notes
-                  <textarea
-                    value={form.profile.notes}
-                    onChange={(event) => setForm({ ...form, profile: { ...form.profile, notes: event.target.value } })}
-                  />
-                </label>
+          </details>
+        </WorkspacePanel>
+
+        <WorkspacePanel title="Defaults" description="Operational defaults used across catalog, inventory, and sales.">
+          <div className="operations-form-grid compact">
+            <label>
+              Default location name
+              <input
+                value={form.defaults.default_location_name}
+                onChange={(event) => setForm({ ...form, defaults: { ...form.defaults, default_location_name: event.target.value } })}
+              />
+            </label>
+            <label>
+              Low stock threshold
+              <input
+                inputMode="decimal"
+                value={String(form.defaults.low_stock_threshold)}
+                onChange={(event) => setForm({ ...form, defaults: { ...form.defaults, low_stock_threshold: Number(event.target.value || '0') } })}
+              />
+            </label>
+          </div>
+          <div className="operations-toggle-grid">
+            <label className="operations-toggle-card">
+              <input
+                type="checkbox"
+                checked={form.defaults.allow_backorder}
+                onChange={(event) => setForm({ ...form, defaults: { ...form.defaults, allow_backorder: event.target.checked } })}
+              />
+              <div>
+                <strong>Allow backorders</strong>
+                <span>Keep selling even when stock is not available.</span>
               </div>
-            </details>
-          </section>
+            </label>
+            <label className="operations-toggle-card">
+              <input
+                type="checkbox"
+                checked={form.defaults.require_discount_approval}
+                onChange={(event) => setForm({ ...form, defaults: { ...form.defaults, require_discount_approval: event.target.checked } })}
+              />
+              <div>
+                <strong>Require discount approval</strong>
+                <span>Protect minimum-price rules during sales entry.</span>
+              </div>
+            </label>
+          </div>
+        </WorkspacePanel>
 
-          <section className="settings-section">
-            <div className="workspace-subsection-header">
-              <h4>Operational defaults</h4>
-              <p>Review default inventory and approval rules that affect day-to-day operations.</p>
-              <span className={`settings-section-status ${defaultsStatus.tone}`}>{defaultsStatus.label}</span>
-            </div>
-            <div className="settings-grid">
-              <label>
-                Default warehouse name
-                <input
-                  value={form.defaults.default_location_name}
-                  onChange={(event) => setForm({ ...form, defaults: { ...form.defaults, default_location_name: event.target.value } })}
-                />
-              </label>
-              <label>
-                Low-stock threshold
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={form.defaults.low_stock_threshold}
-                  onChange={(event) => setForm({ ...form, defaults: { ...form.defaults, low_stock_threshold: Number(event.target.value) } })}
-                />
-              </label>
-              <label className="admin-checkbox">
-                <input
-                  type="checkbox"
-                  checked={form.defaults.allow_backorder}
-                  onChange={(event) => setForm({ ...form, defaults: { ...form.defaults, allow_backorder: event.target.checked } })}
-                />
-                Allow backorder
-              </label>
-              <label className="admin-checkbox">
-                <input
-                  type="checkbox"
-                  checked={form.defaults.require_discount_approval}
-                  onChange={(event) => setForm({ ...form, defaults: { ...form.defaults, require_discount_approval: event.target.checked } })}
-                />
-                Require discount approval
-              </label>
-            </div>
-          </section>
-
-          <section className="settings-section">
-            <div className="workspace-subsection-header">
-              <h4>Document numbering</h4>
-              <p>Keep prefixes consistent so order and return IDs stay easy to scan.</p>
-              <span className={`settings-section-status ${numberingStatus.tone}`}>{numberingStatus.label}</span>
-            </div>
-            <div className="settings-grid">
-              <label>
-                Sales prefix
-                <input
-                  value={form.prefixes.sales_prefix}
-                  onChange={(event) => setForm({ ...form, prefixes: { ...form.prefixes, sales_prefix: event.target.value.toUpperCase() } })}
-                />
-              </label>
-              <label>
-                Returns prefix
-                <input
-                  value={form.prefixes.returns_prefix}
-                  onChange={(event) => setForm({ ...form, prefixes: { ...form.prefixes, returns_prefix: event.target.value.toUpperCase() } })}
-                />
-              </label>
-            </div>
-          </section>
+        <WorkspacePanel title="Document numbers" description="Prefixes shown in live sales and return records.">
+          <div className="operations-form-grid compact">
+            <label>
+              Sales prefix
+              <input
+                value={form.prefixes.sales_prefix}
+                onChange={(event) => setForm({ ...form, prefixes: { ...form.prefixes, sales_prefix: event.target.value.toUpperCase() } })}
+              />
+            </label>
+            <label>
+              Returns prefix
+              <input
+                value={form.prefixes.returns_prefix}
+                onChange={(event) => setForm({ ...form, prefixes: { ...form.prefixes, returns_prefix: event.target.value.toUpperCase() } })}
+              />
+            </label>
+          </div>
         </WorkspacePanel>
       </form>
-
       <div className="mobile-action-safe-spacer" aria-hidden="true" />
     </div>
   );

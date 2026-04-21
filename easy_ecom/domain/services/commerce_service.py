@@ -2822,6 +2822,125 @@ class SalesService(CommerceBaseService):
             return self._sales_order_payload(session, order)
 
 
+class CustomersService(CommerceBaseService):
+    def list_workspace_customers(
+        self,
+        user: AuthenticatedUser,
+        *,
+        query: str = "",
+        limit: int = 12,
+    ) -> list[dict[str, Any]]:
+        _require_page(user, "Customers")
+        with self._session_factory() as session:
+            stmt = select(CustomerModel).where(
+                CustomerModel.client_id == user.client_id,
+                CustomerModel.status == "active",
+            )
+            trimmed = query.strip()
+            normalized_text = normalize_lookup_text(trimmed)
+            normalized_phone = normalize_phone(trimmed)
+            normalized_email = normalize_email(trimmed)
+            if normalized_text:
+                pattern = f"%{normalized_text}%"
+                filters = [func.lower(CustomerModel.name).like(pattern)]
+                if normalized_phone:
+                    filters.append(CustomerModel.phone_normalized.like(f"{normalized_phone}%"))
+                if normalized_email:
+                    filters.append(CustomerModel.email_normalized.like(f"{normalized_email}%"))
+                stmt = stmt.where(or_(*filters))
+
+            customers = session.execute(
+                stmt.order_by(CustomerModel.updated_at.desc(), CustomerModel.name.asc()).limit(limit)
+            ).scalars().all()
+            return [self._customer_workspace_payload(session, customer) for customer in customers]
+
+    def _customer_workspace_payload(self, session: Session, customer: CustomerModel) -> dict[str, Any]:
+        orders = session.execute(
+            select(SalesOrderModel)
+            .where(
+                SalesOrderModel.client_id == customer.client_id,
+                SalesOrderModel.customer_id == customer.customer_id,
+            )
+            .order_by(SalesOrderModel.created_at.desc())
+        ).scalars().all()
+        returns = session.execute(
+            select(SalesReturnModel)
+            .where(
+                SalesReturnModel.client_id == customer.client_id,
+                SalesReturnModel.customer_id == customer.customer_id,
+            )
+            .order_by(SalesReturnModel.created_at.desc())
+        ).scalars().all()
+
+        completed_orders = [order for order in orders if order.status == "completed"]
+        open_orders = [order for order in orders if order.status in {"draft", "confirmed"}]
+        lifetime_revenue = sum((as_decimal(order.total_amount) for order in completed_orders), ZERO)
+        outstanding_balance = sum(
+            (
+                max(ZERO, as_decimal(order.total_amount) - as_decimal(order.paid_amount))
+                for order in orders
+                if order.status != "cancelled"
+            ),
+            ZERO,
+        )
+
+        recent_orders = [
+            {
+                "sales_order_id": str(order.sales_order_id),
+                "order_number": order.order_number,
+                "status": order.status,
+                "payment_status": order.payment_status,
+                "total_amount": as_decimal(order.total_amount),
+                "ordered_at": order.ordered_at.isoformat() if order.ordered_at else None,
+            }
+            for order in orders[:3]
+        ]
+
+        recent_returns = []
+        order_numbers: dict[str, str] = {}
+        if returns:
+            order_ids = [record.sales_order_id for record in returns if record.sales_order_id]
+            if order_ids:
+                order_numbers = {
+                    str(order.sales_order_id): order.order_number
+                    for order in session.execute(
+                        select(SalesOrderModel).where(
+                            SalesOrderModel.client_id == customer.client_id,
+                            SalesOrderModel.sales_order_id.in_(order_ids),
+                        )
+                    ).scalars()
+                }
+            recent_returns = [
+                {
+                    "sales_return_id": str(record.sales_return_id),
+                    "return_number": record.return_number,
+                    "order_number": order_numbers.get(str(record.sales_order_id or ""), ""),
+                    "refund_status": record.refund_status,
+                    "refund_amount": as_decimal(record.refund_amount),
+                    "requested_at": record.requested_at.isoformat() if record.requested_at else None,
+                }
+                for record in returns[:3]
+            ]
+
+        return {
+            "customer_id": str(customer.customer_id),
+            "name": customer.name,
+            "phone": customer.phone,
+            "email": customer.email,
+            "address": customer.address,
+            "total_orders": len(orders),
+            "completed_orders": len(completed_orders),
+            "open_orders": len(open_orders),
+            "total_returns": len(returns),
+            "lifetime_revenue": lifetime_revenue,
+            "outstanding_balance": outstanding_balance,
+            "last_order_at": orders[0].ordered_at.isoformat() if orders and orders[0].ordered_at else None,
+            "last_return_at": returns[0].requested_at.isoformat() if returns and returns[0].requested_at else None,
+            "recent_orders": recent_orders,
+            "recent_returns": recent_returns,
+        }
+
+
 class ReturnsService(CommerceBaseService):
     def _eligible_lines_payload(
         self,

@@ -1,7 +1,7 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
-import { WorkspaceEmpty, WorkspaceNotice, WorkspacePanel } from '@/components/commerce/workspace-primitives';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { WorkspaceEmpty, WorkspaceNotice, WorkspacePanel, WorkspaceTabs } from '@/components/commerce/workspace-primitives';
 import {
   getFinanceReport,
   getInventoryReport,
@@ -11,6 +11,8 @@ import {
   getSalesReport,
 } from '@/lib/api/reports';
 import { formatMoney, formatQuantity } from '@/lib/commerce-format';
+
+type ReportView = 'sales' | 'inventory' | 'finance' | 'returns';
 
 type ReportsState = {
   overview: Awaited<ReturnType<typeof getReportsOverview>>;
@@ -27,26 +29,23 @@ function isoDate(offsetDays = 0) {
   return current.toISOString().slice(0, 10);
 }
 
-function DeferredList({ items }: { items: Array<{ metric: string; reason: string }> }) {
-  if (!items.length) return null;
-  return (
-    <div className="reports-deferred">
-      <strong>Deferred metrics</strong>
-      <ul className="admin-match-list">
-        {items.map((item) => (
-          <li key={item.metric}>
-            <strong>{item.metric}</strong>
-            <p className="muted">{item.reason}</p>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
+function downloadCsv(filename: string, rows: Array<Array<string | number | null | undefined>>) {
+  const csv = rows
+    .map((row) => row.map((cell) => `"${String(cell ?? '').replaceAll('"', '""')}"`).join(','))
+    .join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 export function ReportsWorkspace() {
   const [filters, setFilters] = useState({ fromDate: isoDate(-29), toDate: isoDate(0) });
   const [draftFilters, setDraftFilters] = useState(filters);
+  const [activeView, setActiveView] = useState<ReportView>('sales');
   const [state, setState] = useState<ReportsState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -74,179 +73,302 @@ export function ReportsWorkspace() {
       .finally(() => {
         if (active) setLoading(false);
       });
+
     return () => {
       active = false;
     };
   }, [filters]);
+
+  const exportActiveView = () => {
+    if (!state) return;
+
+    if (activeView === 'sales') {
+      downloadCsv('sales-report.csv', [
+        ['Product', 'Quantity Sold', 'Revenue'],
+        ...state.sales.top_products.map((item) => [item.product_name, item.qty_sold, item.revenue]),
+      ]);
+      return;
+    }
+
+    if (activeView === 'inventory') {
+      downloadCsv('inventory-report.csv', [
+        ['Product', 'Current Qty'],
+        ...state.inventory.low_stock_items.map((item) => [item.product_name, item.current_qty]),
+      ]);
+      return;
+    }
+
+    if (activeView === 'finance') {
+      downloadCsv('finance-report.csv', [
+        ['Metric', 'Value'],
+        ['Receivables', state.finance.receivables_total],
+        ['Expenses', state.finance.expense_total],
+        ['Net Operating Snapshot', state.finance.net_operating_snapshot ?? ''],
+      ]);
+      return;
+    }
+
+    downloadCsv('returns-report.csv', [
+      ['Metric', 'Value'],
+      ['Returns Count', state.returns.returns_count],
+      ['Return Quantity', state.returns.return_qty_total],
+      ['Return Amount', state.returns.return_amount_total],
+    ]);
+  };
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setFilters(draftFilters);
   };
 
+  const kpis = useMemo(() => {
+    if (!state) return [];
+    return [
+      { label: 'Sales revenue', value: formatMoney(state.overview.sales_revenue_total) },
+      { label: 'Completed orders', value: String(state.overview.sales_count) },
+      { label: 'Operating expense', value: formatMoney(state.overview.expense_total) },
+      { label: 'Receivables', value: formatMoney(state.finance.receivables_total) },
+      { label: 'Returns', value: String(state.returns.returns_count) },
+    ];
+  }, [state]);
+
   return (
-    <div className="reports-module">
-      <div className="reports-start-here">
-        <div className="reports-start-here-helper" role="note" aria-label="Reports review guidance">
-          <p className="reports-start-here-quick">Set range, refresh once, then scan KPI cards first.</p>
-          <details className="reports-start-here-details">
-            <summary>Review sequence</summary>
-            <ol>
-              <li>Check core outcomes first: sales revenue and completed orders.</li>
-              <li>Review Sales and Inventory next to balance demand and stock coverage.</li>
-              <li>Finish with Finance and Returns to validate cash pressure and customer recovery impact.</li>
-            </ol>
-          </details>
+    <div className="operations-page reports-module">
+      <div className="operations-toolbar">
+        <div>
+          <p className="operations-eyebrow">Review views</p>
+          <h2>Focus on one report at a time</h2>
+          <p>Set the date range once, then switch between Sales, Inventory, Finance, and Returns without changing context.</p>
+        </div>
+        <div className="operations-toolbar-actions">
+          <button type="button" className="secondary" onClick={exportActiveView} disabled={!state}>Export</button>
         </div>
       </div>
-      <section className="reports-filter-kpi-bridge" aria-label="KPI outcome controls">
-        <p className="reports-filter-kpi-eyebrow">Step 1</p>
-        <h2>Set KPI window</h2>
-        <p className="reports-filter-kpi-note">The selected date range controls every KPI and report section below.</p>
-        <form className="reports-filter-bar" onSubmit={onSubmit}>
-          <label>
-            From
-            <input
-              type="date"
-              value={draftFilters.fromDate}
-              onChange={(event) => setDraftFilters({ ...draftFilters, fromDate: event.target.value })}
-            />
-          </label>
-          <label>
-            To
-            <input
-              type="date"
-              value={draftFilters.toDate}
-              onChange={(event) => setDraftFilters({ ...draftFilters, toDate: event.target.value })}
-            />
-          </label>
-          <button type="submit" className="btn-primary reports-refresh-btn">Refresh report</button>
-        </form>
-      </section>
 
-      {loading ? (
-        <div className="reports-loading" role="status" aria-live="polite">
-          <strong>Loading tenant reports…</strong>
-          <p className="muted">Refreshing tenant-scoped metrics from audited records. Existing orders and stock ledgers stay unchanged during loading.</p>
-        </div>
-      ) : null}
-      {error ? <div className="reports-error">{error}</div> : null}
+      <form className="operations-filter-bar" onSubmit={onSubmit}>
+        <label>
+          From
+          <input
+            type="date"
+            value={draftFilters.fromDate}
+            onChange={(event) => setDraftFilters({ ...draftFilters, fromDate: event.target.value })}
+          />
+        </label>
+        <label>
+          To
+          <input
+            type="date"
+            value={draftFilters.toDate}
+            onChange={(event) => setDraftFilters({ ...draftFilters, toDate: event.target.value })}
+          />
+        </label>
+        <button type="submit" className="btn-primary">Refresh Report</button>
+      </form>
 
-      {!loading && !error && state ? (
+      {loading ? <div className="reports-loading">Loading reports…</div> : null}
+      {error ? <WorkspaceNotice tone="error">{error}</WorkspaceNotice> : null}
+
+      {!loading && state ? (
         <>
-          <div className="reports-grid reports-kpi-grid">
-            <article className="ps-card reports-kpi-card reports-kpi-card-featured reports-kpi-card-primary">
-              <p>Sales revenue</p>
-              <strong>{formatMoney(state.overview.sales_revenue_total)}</strong>
-              <span>Total money collected from completed sales in this range.</span>
-            </article>
-            <article className="ps-card reports-kpi-card reports-kpi-card-featured reports-kpi-card-primary">
-              <p>Completed orders</p>
-              <strong>{state.overview.sales_count}</strong>
-              <span>Orders your team completed in this reporting window.</span>
-            </article>
-            <article className="ps-card reports-kpi-card reports-kpi-card-secondary">
-              <p>Operating expense</p>
-              <strong>{formatMoney(state.overview.expense_total)}</strong>
-              <span>Total operating spend booked in this range.</span>
-            </article>
-            <article className="ps-card reports-kpi-card reports-kpi-card-secondary">
-              <p>Units returned</p>
-              <strong>{state.overview.returns_total}</strong>
-              <span>Items returned that reduce net sold volume.</span>
-            </article>
-            <article className="ps-card reports-kpi-card reports-kpi-card-secondary">
-              <p>Receivables</p>
-              <strong>{formatMoney(state.finance.receivables_total)}</strong>
-              <span>Outstanding money to collect from completed sales.</span>
-            </article>
+          <div className="operations-kpi-grid">
+            {kpis.map((item) => (
+              <article key={item.label} className="operations-kpi-card">
+                <span>{item.label}</span>
+                <strong>{item.value}</strong>
+              </article>
+            ))}
           </div>
 
-          <WorkspacePanel title="Sales" description="Review this first to see what generated revenue in the selected window.">
-            {state.sales.top_products.length ? (
-              <ul className="admin-match-list">
-                {state.sales.top_products.slice(0, 5).map((item) => (
-                  <li key={`${item.product_id}-${item.product_name}`}>
-                    <strong>{item.product_name}</strong>
-                    <p className="muted">
-                      Qty {item.qty_sold} • Revenue {formatMoney(item.revenue)}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <WorkspaceEmpty title="No sales in range" message="This report window has no completed sales yet." />
-            )}
-            <DeferredList items={state.sales.deferred_metrics} />
-          </WorkspacePanel>
+          <WorkspaceTabs
+            tabs={[
+              { id: 'sales', label: 'Sales' },
+              { id: 'inventory', label: 'Inventory' },
+              { id: 'finance', label: 'Finance' },
+              { id: 'returns', label: 'Returns' },
+            ]}
+            activeTab={activeView}
+            onTabChange={setActiveView}
+          />
 
-          <WorkspacePanel title="Inventory" description="Check variant-level stock posture and low-stock pressure from the live ledger.">
-            <div className="settings-context">
-              <div>
-                <dt>SKUs with stock</dt>
-                <dd>{state.inventory.total_skus_with_stock}</dd>
+          {activeView === 'sales' ? (
+            <WorkspacePanel title="Sales" description="Top products and customers in the selected period.">
+              <div className="operations-kpi-grid compact">
+                <article className="operations-kpi-card">
+                  <span>Revenue</span>
+                  <strong>{formatMoney(state.sales.revenue_total)}</strong>
+                </article>
+                <article className="operations-kpi-card">
+                  <span>Orders</span>
+                  <strong>{state.sales.sales_count}</strong>
+                </article>
               </div>
-              <div>
-                <dt>Total stock units</dt>
-                <dd>{formatQuantity(state.inventory.total_stock_units)}</dd>
+              <div className="operations-dual-section">
+                <section>
+                  <div className="operations-section-heading">
+                    <h4>Top products</h4>
+                    <p>Products that generated the most revenue in this range.</p>
+                  </div>
+                  {state.sales.top_products.length ? (
+                    <div className="operations-list-stack compact">
+                      {state.sales.top_products.map((item) => (
+                        <div key={`${item.product_id}-${item.product_name}`} className="operations-list-card static">
+                          <div className="operations-list-card-head">
+                            <strong>{item.product_name}</strong>
+                            <span>{formatMoney(item.revenue)}</span>
+                          </div>
+                          <p>Qty sold {item.qty_sold}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <WorkspaceEmpty title="No sales in range" message="Completed sales will appear here for the selected date range." />
+                  )}
+                </section>
+                <section>
+                  <div className="operations-section-heading">
+                    <h4>Top customers</h4>
+                    <p>Customers with the strongest sales activity in this range.</p>
+                  </div>
+                  {state.sales.top_customers.length ? (
+                    <div className="operations-list-stack compact">
+                      {state.sales.top_customers.map((item) => (
+                        <div key={`${item.customer_id}-${item.customer_name}`} className="operations-list-card static">
+                          <div className="operations-list-card-head">
+                            <strong>{item.customer_name}</strong>
+                            <span>{formatMoney(item.revenue)}</span>
+                          </div>
+                          <p>{item.sales_count} orders</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <WorkspaceEmpty title="No customer data" message="Top customer activity will appear here after completed sales are recorded." />
+                  )}
+                </section>
               </div>
-              <div>
-                <dt>Inventory value</dt>
-                <dd>{formatMoney(state.inventory.inventory_value)}</dd>
-              </div>
-            </div>
-            <DeferredList items={state.inventory.deferred_metrics} />
-          </WorkspacePanel>
+            </WorkspacePanel>
+          ) : null}
 
-          <WorkspacePanel title="Finance" description="Then validate receivable and expense pressure against sales performance.">
-            <div className="reports-grid">
-              <article className="ps-card">
-                <p>Receivables</p>
-                <strong>{formatMoney(state.finance.receivables_total)}</strong>
-              </article>
-              <article className="ps-card">
-                <p>Expenses</p>
-                <strong>{formatMoney(state.finance.expense_total)}</strong>
-              </article>
-              <article className="ps-card">
-                <p>Net operating snapshot</p>
-                <strong>{formatMoney(state.finance.net_operating_snapshot)}</strong>
-              </article>
-            </div>
-            <DeferredList items={state.finance.deferred_metrics} />
-          </WorkspacePanel>
+          {activeView === 'inventory' ? (
+            <WorkspacePanel title="Inventory" description="Stock coverage and low-stock pressure from live ledger data.">
+              <div className="operations-kpi-grid compact">
+                <article className="operations-kpi-card">
+                  <span>SKUs with stock</span>
+                  <strong>{state.inventory.total_skus_with_stock}</strong>
+                </article>
+                <article className="operations-kpi-card">
+                  <span>Total stock units</span>
+                  <strong>{formatQuantity(state.inventory.total_stock_units)}</strong>
+                </article>
+                <article className="operations-kpi-card">
+                  <span>Inventory value</span>
+                  <strong>{formatMoney(state.inventory.inventory_value)}</strong>
+                </article>
+              </div>
+              {state.inventory.low_stock_items.length ? (
+                <div className="operations-list-stack compact">
+                  {state.inventory.low_stock_items.map((item) => (
+                    <div key={`${item.product_id}-${item.product_name}`} className="operations-list-card static">
+                      <div className="operations-list-card-head">
+                        <strong>{item.product_name}</strong>
+                        <span>{item.current_qty}</span>
+                      </div>
+                      <p>Current quantity at or near reorder pressure.</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <WorkspaceEmpty title="No low-stock items" message="Items under stock pressure will appear here for the selected range." />
+              )}
+            </WorkspacePanel>
+          ) : null}
 
-          <WorkspacePanel title="Returns & Products" description="Finally confirm return drag and product-level outliers that impact margin.">
-            <div className="settings-context">
-              <div>
-                <dt>Returns count</dt>
-                <dd>{state.returns.returns_count}</dd>
+          {activeView === 'finance' ? (
+            <WorkspacePanel title="Finance" description="Cash pressure and outstanding collection in the selected range.">
+              <div className="operations-kpi-grid compact">
+                <article className="operations-kpi-card">
+                  <span>Receivables</span>
+                  <strong>{formatMoney(state.finance.receivables_total)}</strong>
+                </article>
+                <article className="operations-kpi-card">
+                  <span>Expenses</span>
+                  <strong>{formatMoney(state.finance.expense_total)}</strong>
+                </article>
+                <article className="operations-kpi-card">
+                  <span>Net operating</span>
+                  <strong>{formatMoney(state.finance.net_operating_snapshot)}</strong>
+                </article>
               </div>
-              <div>
-                <dt>Returned quantity</dt>
-                <dd>{state.returns.return_qty_total}</dd>
+              {state.finance.deferred_metrics.length ? (
+                <WorkspaceNotice tone="info">
+                  Some finance metrics are deferred until more transactional data is available.
+                </WorkspaceNotice>
+              ) : null}
+            </WorkspacePanel>
+          ) : null}
+
+          {activeView === 'returns' ? (
+            <WorkspacePanel title="Returns" description="Return drag and low-movement product context in the same review view.">
+              <div className="operations-kpi-grid compact">
+                <article className="operations-kpi-card">
+                  <span>Returns count</span>
+                  <strong>{state.returns.returns_count}</strong>
+                </article>
+                <article className="operations-kpi-card">
+                  <span>Returned quantity</span>
+                  <strong>{state.returns.return_qty_total}</strong>
+                </article>
+                <article className="operations-kpi-card">
+                  <span>Return amount</span>
+                  <strong>{formatMoney(state.returns.return_amount_total)}</strong>
+                </article>
               </div>
-              <div>
-                <dt>Return amount</dt>
-                <dd>{formatMoney(state.returns.return_amount_total)}</dd>
+              <div className="operations-dual-section">
+                <section>
+                  <div className="operations-section-heading">
+                    <h4>Highest selling products</h4>
+                    <p>Useful context when returns affect core products.</p>
+                  </div>
+                  {state.products.highest_selling.length ? (
+                    <div className="operations-list-stack compact">
+                      {state.products.highest_selling.map((item) => (
+                        <div key={`${item.product_id}-${item.product_name}`} className="operations-list-card static">
+                          <div className="operations-list-card-head">
+                            <strong>{item.product_name}</strong>
+                            <span>{formatMoney(item.revenue)}</span>
+                          </div>
+                          <p>Qty sold {item.qty_sold}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <WorkspaceEmpty title="No product movement" message="Product movement will appear here after completed sales are recorded." />
+                  )}
+                </section>
+                <section>
+                  <div className="operations-section-heading">
+                    <h4>Low or zero movement</h4>
+                    <p>Products that may need pricing or stock review.</p>
+                  </div>
+                  {state.products.low_or_zero_movement.length ? (
+                    <div className="operations-list-stack compact">
+                      {state.products.low_or_zero_movement.map((item) => (
+                        <div key={`${item.product_id}-${item.product_name}`} className="operations-list-card static">
+                          <div className="operations-list-card-head">
+                            <strong>{item.product_name}</strong>
+                            <span>{formatMoney(item.revenue)}</span>
+                          </div>
+                          <p>Qty sold {item.qty_sold}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <WorkspaceEmpty title="No low-movement products" message="Low-movement products will appear here when a selected range has little or no demand." />
+                  )}
+                </section>
               </div>
-            </div>
-            {state.products.highest_selling.length ? (
-              <ul className="admin-match-list">
-                {state.products.highest_selling.slice(0, 5).map((item) => (
-                  <li key={`${item.product_id}-${item.product_name}`}>
-                    <strong>{item.product_name}</strong>
-                    <p className="muted">
-                      Qty {item.qty_sold} • Revenue {formatMoney(item.revenue)}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <WorkspaceNotice tone="info">No product movement qualified for this range yet.</WorkspaceNotice>
-            )}
-            <DeferredList items={[...state.returns.deferred_metrics, ...state.products.deferred_metrics]} />
-          </WorkspacePanel>
+            </WorkspacePanel>
+          ) : null}
         </>
       ) : null}
       <div className="mobile-action-safe-spacer" aria-hidden="true" />
