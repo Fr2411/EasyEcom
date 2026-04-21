@@ -1,6 +1,25 @@
 .dashboard {
   display: grid;
   gap: 1rem;
+  --chart-primary: var(--primary);
+  --chart-primary-strong: var(--primary-strong);
+  --chart-secondary-blue: #26a8ff;
+  --chart-secondary-cyan: #22d3ee;
+  --chart-positive: #2ad47f;
+  --chart-warning: #f59e0b;
+  --chart-critical: #ef4444;
+  --chart-neutral: color-mix(in srgb, var(--text-muted) 78%, #94a3b8);
+  --chart-grid: color-mix(in srgb, var(--border) 84%, transparent);
+}
+
+:global(html[data-theme='dark']) .dashboard {
+  --chart-secondary-blue: #4fb6ff;
+  --chart-secondary-cyan: #45e2ff;
+  --chart-positive: #39e091;
+  --chart-warning: #ffb020;
+  --chart-critical: #ff5f5f;
+  --chart-neutral: color-mix(in srgb, var(--text-muted) 72%, #bcc7d8);
+  --chart-grid: color-mix(in srgb, var(--border) 88%, rgba(255, 255, 255, 0.06));
 }
 
 .headerCard {
@@ -189,21 +208,30 @@
   display: grid;
   gap: 0.65rem;
   box-shadow: 0 6px 24px rgba(8, 24, 41, 0.08);
+  transition: transform 140ms ease, box-shadow 140ms ease, opacity 120ms ease;
 }
 
 .widgetDragging {
-  opacity: 0.65;
+  opacity: 0.58;
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--primary) 18%, transparent);
 }
 
 .widgetHeader {
   display: flex;
   justify-content: space-between;
   gap: 0.75rem;
-  align-items: center;
+  align-items: flex-start;
 }
 
 .widgetHeaderMain {
   min-width: 0;
+}
+
+.widgetTitleRow {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
 }
 
 .widgetHeader h4 {
@@ -212,11 +240,78 @@
   line-height: 1.25;
 }
 
-.widgetHeader p {
-  margin: 0.22rem 0 0;
+.widgetHeaderRight {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.legendChips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  max-width: min(56vw, 32rem);
+}
+
+.legendChip {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.14rem 0.48rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.71rem;
+  line-height: 1.2;
   color: var(--text-muted);
-  font-size: 0.8rem;
+  background: color-mix(in oklab, var(--surface) 90%, transparent);
+}
+
+.legendDot {
+  width: 0.46rem;
+  height: 0.46rem;
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--surface) 70%, var(--border));
+}
+
+.infoButton {
+  width: 1.05rem;
+  height: 1.05rem;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: color-mix(in oklab, var(--surface) 90%, transparent);
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: help;
+}
+
+.infoButton:hover {
+  border-color: color-mix(in oklab, var(--primary) 38%, var(--border));
+  color: var(--text);
+}
+
+.helpTooltip {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 0.35rem);
+  z-index: 30;
+  min-width: min(28rem, 60vw);
+  max-width: min(32rem, 70vw);
+  border: 1px solid color-mix(in oklab, var(--border) 82%, var(--primary-soft));
+  border-radius: 10px;
+  padding: 0.48rem 0.6rem;
+  background: color-mix(in srgb, var(--surface-raised, var(--surface)) 92%, transparent);
+  color: var(--text);
+  font-size: 0.76rem;
   line-height: 1.35;
+  box-shadow: 0 12px 28px rgba(8, 24, 41, 0.14);
 }
 
 .dragHandle {
@@ -250,22 +345,6 @@
   gap: 0.45rem;
   width: 100%;
   min-height: 180px;
-}
-
-.chartLegendRight {
-  display: inline-flex;
-  gap: 0.45rem;
-  justify-self: end;
-  flex-wrap: wrap;
-  font-size: 0.74rem;
-  color: var(--text-muted);
-}
-
-.chartLegendRight span {
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 0.14rem 0.5rem;
-  background: color-mix(in oklab, var(--surface) 90%, transparent);
 }
 
 .chartNote {
@@ -407,6 +486,26 @@
   .scoreRow {
     grid-template-columns: 1fr;
     gap: 0.2rem;
+  }
+
+  .widgetHeader {
+    flex-wrap: wrap;
+  }
+
+  .widgetHeaderRight {
+    width: 100%;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .legendChips {
+    max-width: 100%;
+    justify-content: flex-start;
+  }
+
+  .helpTooltip {
+    min-width: min(90vw, 22rem);
+    max-width: min(92vw, 24rem);
   }
 }
 

@@ -14,7 +14,6 @@ import {
   CartesianGrid,
   Cell,
   ComposedChart,
-  Legend,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -63,6 +62,17 @@ type WidgetLayout = {
   left: WidgetId[];
   right: WidgetId[];
   hidden: WidgetId[];
+};
+
+type DragSource = {
+  widgetId: WidgetId;
+  fromColumn: WidgetColumn;
+  fromIndex: number;
+};
+
+type DragTarget = {
+  column: WidgetColumn;
+  index: number;
 };
 
 const WIDGET_STORAGE_KEY = 'easyecom.dashboard.widgets.v2';
@@ -139,15 +149,15 @@ const WIDGET_META: Record<WidgetId, { title: string; subtitle: string }> = {
 };
 
 const CHART_COLORS = {
-  revenue: '#ff6a1a',
-  orders: '#2f8fff',
-  aov: '#2ccf9d',
-  profit: '#56d6ae',
-  margin: '#f5b35c',
-  neutral: '#9aa7b8',
-  warning: '#f97316',
-  critical: '#ef4444',
-  positive: '#34d399',
+  primary: 'var(--chart-primary)',
+  primaryStrong: 'var(--chart-primary-strong)',
+  secondaryBlue: 'var(--chart-secondary-blue)',
+  secondaryCyan: 'var(--chart-secondary-cyan)',
+  positive: 'var(--chart-positive)',
+  warning: 'var(--chart-warning)',
+  critical: 'var(--chart-critical)',
+  neutral: 'var(--chart-neutral)',
+  grid: 'var(--chart-grid)',
 };
 
 const DEFAULT_LAYOUT: WidgetLayout = normalizeWidgetLayout({
@@ -279,13 +289,6 @@ function shortName(name: string, max = 18) {
   return name.length <= max ? name : `${name.slice(0, max - 1)}…`;
 }
 
-function zoneLabel(zone: string) {
-  if (zone === 'low_cover_high_velocity') return 'Low cover + high velocity';
-  if (zone === 'high_cover_low_velocity') return 'High cover + low velocity';
-  if (zone === 'healthy') return 'Healthy';
-  return 'Watch';
-}
-
 function recommendationLabel(value: DashboardPriceDiscountImpactPoint['recommendation']) {
   if (value === 'raise') return 'Raise';
   if (value === 'discount') return 'Discount';
@@ -298,6 +301,103 @@ function actionTone(value: DashboardReorderPriorityRow['recommended_action']) {
   return styles.actionNeutral;
 }
 
+type LegendChip = {
+  label: string;
+  color: string;
+};
+
+function legendForWidget(widgetId: WidgetId, financialVisible: boolean): LegendChip[] {
+  if (widgetId === 'revenue_orders_aov') {
+    return [
+      { label: 'Revenue', color: CHART_COLORS.primary },
+      { label: 'Orders', color: CHART_COLORS.secondaryBlue },
+      { label: 'AOV', color: CHART_COLORS.secondaryCyan },
+    ];
+  }
+  if (widgetId === 'gross_profit_margin') {
+    return [
+      { label: 'Revenue', color: CHART_COLORS.primary },
+      { label: 'Gross profit', color: CHART_COLORS.positive },
+      { label: 'Margin %', color: CHART_COLORS.warning },
+    ];
+  }
+  if (widgetId === 'conversion_funnel') {
+    return [{ label: 'Orders by stage', color: CHART_COLORS.secondaryBlue }];
+  }
+  if (widgetId === 'product_performance_quadrant') {
+    return [
+      { label: 'Star', color: CHART_COLORS.positive },
+      { label: 'Sleeper', color: CHART_COLORS.secondaryBlue },
+      { label: 'Margin killer', color: CHART_COLORS.warning },
+      { label: 'Laggard', color: CHART_COLORS.neutral },
+    ];
+  }
+  if (widgetId === 'category_brand_profit_mix') {
+    return [
+      { label: 'Size = Revenue', color: CHART_COLORS.primary },
+      { label: 'Group = Category/Brand', color: CHART_COLORS.neutral },
+    ];
+  }
+  if (widgetId === 'returns_intelligence') {
+    return [
+      { label: 'Returns', color: CHART_COLORS.warning },
+      { label: 'Return rate %', color: CHART_COLORS.critical },
+      { label: 'Heatmap', color: CHART_COLORS.primary },
+    ];
+  }
+  if (widgetId === 'inventory_aging_waterfall') {
+    return [
+      {
+        label: financialVisible ? 'Inventory value' : 'On hand qty',
+        color: financialVisible ? CHART_COLORS.primary : CHART_COLORS.secondaryBlue,
+      },
+      { label: financialVisible ? 'Net value change' : 'Net qty change', color: CHART_COLORS.positive },
+    ];
+  }
+  if (widgetId === 'sell_through_cover_matrix') {
+    return [
+      { label: 'Low cover + high velocity', color: CHART_COLORS.critical },
+      { label: 'High cover + low velocity', color: CHART_COLORS.warning },
+      { label: 'Healthy', color: CHART_COLORS.positive },
+      { label: 'Watch', color: CHART_COLORS.neutral },
+    ];
+  }
+  if (widgetId === 'reorder_priority_scoreboard') {
+    return [{ label: 'Priority score', color: CHART_COLORS.warning }];
+  }
+  return [
+    { label: 'Raise', color: CHART_COLORS.critical },
+    { label: 'Keep', color: CHART_COLORS.neutral },
+    { label: 'Discount', color: CHART_COLORS.positive },
+  ];
+}
+
+function previewVisibleColumns(
+  layout: WidgetLayout,
+  hiddenSet: Set<WidgetId>,
+  dragSource: DragSource | null,
+  dragTarget: DragTarget | null,
+) {
+  const left = layout.left.filter((widgetId) => !hiddenSet.has(widgetId));
+  const right = layout.right.filter((widgetId) => !hiddenSet.has(widgetId));
+
+  if (!dragSource || !dragTarget) {
+    return { left, right };
+  }
+
+  const removeWidget = (items: WidgetId[]) => items.filter((item) => item !== dragSource.widgetId);
+  const nextLeft = removeWidget(left);
+  const nextRight = removeWidget(right);
+  const targetColumnItems = dragTarget.column === 'left' ? nextLeft : nextRight;
+  const safeIndex = Math.max(0, Math.min(dragTarget.index, targetColumnItems.length));
+  targetColumnItems.splice(safeIndex, 0, dragSource.widgetId);
+
+  return {
+    left: nextLeft,
+    right: nextRight,
+  };
+}
+
 export function DashboardAnalyticsWorkspace() {
   const [filters, setFilters] = useState<DashboardFilters>({ ...DEFAULT_FILTERS });
   const [customRange, setCustomRange] = useState({ from_date: '', to_date: '' });
@@ -306,7 +406,9 @@ export function DashboardAnalyticsWorkspace() {
   const [isPending, startTransition] = useTransition();
   const [layout, setLayout] = useState<WidgetLayout>(DEFAULT_LAYOUT);
   const [customizeOpen, setCustomizeOpen] = useState(false);
-  const [draggingWidget, setDraggingWidget] = useState<WidgetId | null>(null);
+  const [helpOpenWidget, setHelpOpenWidget] = useState<WidgetId | null>(null);
+  const [dragSource, setDragSource] = useState<DragSource | null>(null);
+  const [dragTarget, setDragTarget] = useState<DragTarget | null>(null);
 
   const loadDashboard = (nextFilters: DashboardFilters) => {
     startTransition(async () => {
@@ -345,6 +447,28 @@ export function DashboardAnalyticsWorkspace() {
     if (typeof window === 'undefined') return;
     window.localStorage.setItem(WIDGET_STORAGE_KEY, JSON.stringify(layout));
   }, [layout]);
+
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setHelpOpenWidget(null);
+        setDragSource(null);
+        setDragTarget(null);
+      }
+    };
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target?.closest('[data-help-container="true"]')) {
+        setHelpOpenWidget(null);
+      }
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    document.addEventListener('pointerdown', closeOnOutsideClick);
+    return () => {
+      document.removeEventListener('keydown', closeOnEscape);
+      document.removeEventListener('pointerdown', closeOnOutsideClick);
+    };
+  }, []);
 
   const onRangeChange = (value: DashboardRangeKey) => {
     if (value === 'custom') {
@@ -419,16 +543,43 @@ export function DashboardAnalyticsWorkspace() {
     setLayout(DEFAULT_LAYOUT);
   };
 
+  const onDragStartWidget = (widgetId: WidgetId, fromColumn: WidgetColumn, fromIndex: number) => {
+    setHelpOpenWidget(null);
+    setDragSource({ widgetId, fromColumn, fromIndex });
+    setDragTarget({ column: fromColumn, index: fromIndex });
+  };
+
+  const onDragTargetChange = (column: WidgetColumn, index: number) => {
+    setDragTarget((current) => {
+      if (current && current.column === column && current.index === index) {
+        return current;
+      }
+      return { column, index };
+    });
+  };
+
   const onDropToColumn = (event: DragEvent<HTMLElement>, column: WidgetColumn, index: number) => {
     event.preventDefault();
-    if (!draggingWidget) return;
-    moveWidget(draggingWidget, column, index);
-    setDraggingWidget(null);
+    const source = dragSource;
+    if (!source) return;
+    const target = dragTarget ?? { column, index };
+    moveWidget(source.widgetId, target.column, target.index);
+    setDragSource(null);
+    setDragTarget(null);
+  };
+
+  const onDragEndWidget = () => {
+    setDragSource(null);
+    setDragTarget(null);
   };
 
   const hiddenSet = useMemo(() => new Set(layout.hidden), [layout.hidden]);
-  const visibleLeft = layout.left.filter((widgetId) => !hiddenSet.has(widgetId));
-  const visibleRight = layout.right.filter((widgetId) => !hiddenSet.has(widgetId));
+  const previewColumns = useMemo(
+    () => previewVisibleColumns(layout, hiddenSet, dragSource, dragTarget),
+    [layout, hiddenSet, dragSource, dragTarget],
+  );
+  const visibleLeft = previewColumns.left;
+  const visibleRight = previewColumns.right;
 
   const financialVisible = dashboard?.visibility.can_view_financial_metrics ?? false;
   const kpis = dashboard?.kpis ?? [];
@@ -453,41 +604,31 @@ export function DashboardAnalyticsWorkspace() {
         revenue: numberFromString(String(item.revenue)),
         orders: item.orders,
         aov: numberFromString(String(item.aov)),
-        anomaly: item.anomaly_flag,
       }));
       if (!points.length) return <EmptyState />;
-      const anomalies = points.filter((item) => item.anomaly);
       return (
-        <>
-          <div className={styles.chartWrap}>
-            <ResponsiveContainer width="100%" height={280}>
-              <LineChart data={points} margin={{ top: 30, right: 12, left: 2, bottom: 4 }}>
-                <CartesianGrid strokeDasharray="4 4" stroke="var(--border)" />
-                <XAxis dataKey="period" tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
-                <YAxis
-                  yAxisId="left"
-                  tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
-                  tickFormatter={(value) => `${numberCompact(value)}`}
-                />
-                <YAxis
-                  yAxisId="right"
-                  orientation="right"
-                  tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
-                />
-                <Tooltip contentStyle={tooltipStyle()} />
-                <Legend align="right" verticalAlign="top" wrapperStyle={{ fontSize: 11, lineHeight: 1.2 }} />
-                <Line yAxisId="left" dataKey="revenue" type="monotone" stroke={CHART_COLORS.revenue} strokeWidth={2.4} dot={false} name="Revenue" />
-                <Line yAxisId="right" dataKey="orders" type="monotone" stroke={CHART_COLORS.orders} strokeWidth={2.2} dot={false} name="Orders" />
-                <Line yAxisId="left" dataKey="aov" type="monotone" stroke={CHART_COLORS.aov} strokeWidth={2.2} dot={false} name="AOV" />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-          {anomalies.length ? (
-            <div className={styles.chartNote}>Anomaly flag: {anomalies.map((item) => item.period).join(', ')}</div>
-          ) : (
-            <div className={styles.chartNote}>No anomaly spikes in this range.</div>
-          )}
-        </>
+        <div className={styles.chartWrap}>
+          <ResponsiveContainer width="100%" height={280}>
+            <LineChart data={points} margin={{ top: 14, right: 12, left: 2, bottom: 4 }}>
+              <CartesianGrid strokeDasharray="4 4" stroke={CHART_COLORS.grid} />
+              <XAxis dataKey="period" tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
+              <YAxis
+                yAxisId="left"
+                tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
+                tickFormatter={(value) => `${numberCompact(value)}`}
+              />
+              <YAxis
+                yAxisId="right"
+                orientation="right"
+                tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
+              />
+              <Tooltip contentStyle={tooltipStyle()} />
+              <Line yAxisId="left" dataKey="revenue" type="monotone" stroke={CHART_COLORS.primary} strokeWidth={2.4} dot={false} name="Revenue" />
+              <Line yAxisId="right" dataKey="orders" type="monotone" stroke={CHART_COLORS.secondaryBlue} strokeWidth={2.2} dot={false} name="Orders" />
+              <Line yAxisId="left" dataKey="aov" type="monotone" stroke={CHART_COLORS.secondaryCyan} strokeWidth={2.2} dot={false} name="AOV" />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
       );
     }
 
@@ -509,16 +650,15 @@ export function DashboardAnalyticsWorkspace() {
       return (
         <div className={styles.chartWrap}>
           <ResponsiveContainer width="100%" height={280}>
-            <ComposedChart data={points} margin={{ top: 30, right: 12, left: 2, bottom: 4 }}>
-              <CartesianGrid strokeDasharray="4 4" stroke="var(--border)" />
+            <ComposedChart data={points} margin={{ top: 14, right: 12, left: 2, bottom: 4 }}>
+              <CartesianGrid strokeDasharray="4 4" stroke={CHART_COLORS.grid} />
               <XAxis dataKey="period" tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
               <YAxis yAxisId="money" tick={{ fill: 'var(--text-muted)', fontSize: 12 }} tickFormatter={(value) => numberCompact(value)} />
               <YAxis yAxisId="margin" orientation="right" tick={{ fill: 'var(--text-muted)', fontSize: 12 }} tickFormatter={(value) => `${value}%`} />
               <Tooltip contentStyle={tooltipStyle()} />
-              <Legend align="right" verticalAlign="top" wrapperStyle={{ fontSize: 11, lineHeight: 1.2 }} />
-              <Bar yAxisId="money" dataKey="revenue" fill={CHART_COLORS.revenue} name="Revenue" radius={[6, 6, 0, 0]} />
-              <Line yAxisId="money" dataKey="grossProfit" stroke={CHART_COLORS.profit} strokeWidth={2.4} dot={false} name="Est. gross profit" />
-              <Area yAxisId="margin" dataKey="margin" fill={CHART_COLORS.margin} fillOpacity={0.22} stroke={CHART_COLORS.margin} strokeWidth={2} name="Margin %" />
+              <Bar yAxisId="money" dataKey="revenue" fill={CHART_COLORS.primary} name="Revenue" radius={[6, 6, 0, 0]} />
+              <Line yAxisId="money" dataKey="grossProfit" stroke={CHART_COLORS.positive} strokeWidth={2.4} dot={false} name="Est. gross profit" />
+              <Area yAxisId="margin" dataKey="margin" fill={CHART_COLORS.warning} fillOpacity={0.22} stroke={CHART_COLORS.warning} strokeWidth={2} name="Margin %" />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
@@ -536,13 +676,12 @@ export function DashboardAnalyticsWorkspace() {
         <>
           <div className={styles.chartWrap}>
             <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={data} layout="vertical" margin={{ top: 30, right: 8, left: 20, bottom: 4 }}>
-                <CartesianGrid strokeDasharray="4 4" stroke="var(--border)" />
+              <BarChart data={data} layout="vertical" margin={{ top: 14, right: 8, left: 20, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="4 4" stroke={CHART_COLORS.grid} />
                 <XAxis type="number" tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
                 <YAxis type="category" dataKey="label" width={88} tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
                 <Tooltip contentStyle={tooltipStyle()} />
-                <Legend align="right" verticalAlign="top" wrapperStyle={{ fontSize: 11, lineHeight: 1.2 }} />
-                <Bar dataKey="count" radius={[0, 6, 6, 0]} fill={CHART_COLORS.orders} name="Orders by stage" />
+                <Bar dataKey="count" radius={[0, 6, 6, 0]} fill={CHART_COLORS.secondaryBlue} name="Orders by stage" />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -587,8 +726,8 @@ export function DashboardAnalyticsWorkspace() {
       return (
         <div className={styles.chartWrap}>
           <ResponsiveContainer width="100%" height={280}>
-            <ScatterChart margin={{ top: 30, right: 8, left: 8, bottom: 14 }}>
-              <CartesianGrid strokeDasharray="4 4" stroke="var(--border)" />
+            <ScatterChart margin={{ top: 14, right: 8, left: 8, bottom: 14 }}>
+              <CartesianGrid strokeDasharray="4 4" stroke={CHART_COLORS.grid} />
               <XAxis
                 type="number"
                 dataKey="sales_velocity"
@@ -605,11 +744,10 @@ export function DashboardAnalyticsWorkspace() {
               />
               <ZAxis type="number" dataKey="revenue" range={[80, 380]} name="Revenue" />
               <Tooltip cursor={{ strokeDasharray: '4 4' }} contentStyle={tooltipStyle()} />
-              <Legend align="right" verticalAlign="top" wrapperStyle={{ fontSize: 11, lineHeight: 1.2 }} />
-              <Scatter name="Star" data={byQuadrant.star} fill="#1fbf8f" />
-              <Scatter name="Sleeper" data={byQuadrant.sleeper} fill="#3b82f6" />
-              <Scatter name="Margin killer" data={byQuadrant.margin_killer} fill="#f97316" />
-              <Scatter name="Laggard" data={byQuadrant.laggard} fill="#9aa7b8" />
+              <Scatter name="Star" data={byQuadrant.star} fill={CHART_COLORS.positive} />
+              <Scatter name="Sleeper" data={byQuadrant.sleeper} fill={CHART_COLORS.secondaryBlue} />
+              <Scatter name="Margin killer" data={byQuadrant.margin_killer} fill={CHART_COLORS.warning} />
+              <Scatter name="Laggard" data={byQuadrant.laggard} fill={CHART_COLORS.neutral} />
             </ScatterChart>
           </ResponsiveContainer>
         </div>
@@ -630,17 +768,13 @@ export function DashboardAnalyticsWorkspace() {
       return (
         <>
           <div className={styles.chartWrap}>
-            <div className={styles.chartLegendRight}>
-              <span>Size: Revenue</span>
-              <span>Group: Category / Brand</span>
-            </div>
             <ResponsiveContainer width="100%" height={280}>
               <Treemap
                 data={treeData}
                 dataKey="size"
                 aspectRatio={4 / 3}
                 stroke="var(--border)"
-                fill={CHART_COLORS.revenue}
+                fill={CHART_COLORS.primary}
               >
                 <Tooltip contentStyle={tooltipStyle()} formatter={(value) => moneyCompact(numberFromString(String(value)))} />
               </Treemap>
@@ -678,13 +812,12 @@ export function DashboardAnalyticsWorkspace() {
         <>
           <div className={styles.chartWrap}>
             <ResponsiveContainer width="100%" height={220}>
-              <ComposedChart data={trend} margin={{ top: 30, right: 8, left: 4, bottom: 4 }}>
-                <CartesianGrid strokeDasharray="4 4" stroke="var(--border)" />
+              <ComposedChart data={trend} margin={{ top: 14, right: 8, left: 4, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="4 4" stroke={CHART_COLORS.grid} />
                 <XAxis dataKey="period" tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
                 <YAxis yAxisId="left" tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
                 <YAxis yAxisId="right" orientation="right" tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
                 <Tooltip contentStyle={tooltipStyle()} />
-                <Legend align="right" verticalAlign="top" wrapperStyle={{ fontSize: 11, lineHeight: 1.2 }} />
                 <Bar yAxisId="left" dataKey="returnsCount" fill={CHART_COLORS.warning} radius={[5, 5, 0, 0]} name="Returns" />
                 <Line yAxisId="right" dataKey="returnRate" stroke={CHART_COLORS.critical} strokeWidth={2.4} dot={false} name="Return rate %" />
               </ComposedChart>
@@ -745,22 +878,21 @@ export function DashboardAnalyticsWorkspace() {
       return (
         <div className={styles.chartWrap}>
           <ResponsiveContainer width="100%" height={280}>
-            <ComposedChart data={points} margin={{ top: 30, right: 8, left: 8, bottom: 8 }}>
-              <CartesianGrid strokeDasharray="4 4" stroke="var(--border)" />
+            <ComposedChart data={points} margin={{ top: 14, right: 8, left: 8, bottom: 8 }}>
+              <CartesianGrid strokeDasharray="4 4" stroke={CHART_COLORS.grid} />
               <XAxis dataKey="bucket" tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
               <YAxis yAxisId="left" tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
               <YAxis yAxisId="right" orientation="right" tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
               <Tooltip contentStyle={tooltipStyle()} />
-              <Legend align="right" verticalAlign="top" wrapperStyle={{ fontSize: 11, lineHeight: 1.2 }} />
               {financialVisible ? (
-                <Bar yAxisId="left" dataKey="inventoryValue" fill={CHART_COLORS.revenue} radius={[6, 6, 0, 0]} name="Inventory value" />
+                <Bar yAxisId="left" dataKey="inventoryValue" fill={CHART_COLORS.primary} radius={[6, 6, 0, 0]} name="Inventory value" />
               ) : (
-                <Bar yAxisId="left" dataKey="onHandQty" fill={CHART_COLORS.orders} radius={[6, 6, 0, 0]} name="On hand qty" />
+                <Bar yAxisId="left" dataKey="onHandQty" fill={CHART_COLORS.secondaryBlue} radius={[6, 6, 0, 0]} name="On hand qty" />
               )}
               {financialVisible ? (
-                <Line yAxisId="right" dataKey="netValueChange" stroke={CHART_COLORS.profit} strokeWidth={2.2} name="Net value change" />
+                <Line yAxisId="right" dataKey="netValueChange" stroke={CHART_COLORS.positive} strokeWidth={2.2} name="Net value change" />
               ) : (
-                <Line yAxisId="right" dataKey="netQtyChange" stroke={CHART_COLORS.profit} strokeWidth={2.2} name="Net qty change" />
+                <Line yAxisId="right" dataKey="netQtyChange" stroke={CHART_COLORS.positive} strokeWidth={2.2} name="Net qty change" />
               )}
             </ComposedChart>
           </ResponsiveContainer>
@@ -787,8 +919,8 @@ export function DashboardAnalyticsWorkspace() {
       return (
         <div className={styles.chartWrap}>
           <ResponsiveContainer width="100%" height={280}>
-            <ScatterChart margin={{ top: 30, right: 10, left: 8, bottom: 12 }}>
-              <CartesianGrid strokeDasharray="4 4" stroke="var(--border)" />
+            <ScatterChart margin={{ top: 14, right: 10, left: 8, bottom: 12 }}>
+              <CartesianGrid strokeDasharray="4 4" stroke={CHART_COLORS.grid} />
               <XAxis
                 type="number"
                 dataKey="daysCover"
@@ -805,12 +937,6 @@ export function DashboardAnalyticsWorkspace() {
               />
               <ZAxis type="number" dataKey="revenue" range={[80, 380]} />
               <Tooltip contentStyle={tooltipStyle()} />
-              <Legend
-                align="right"
-                verticalAlign="top"
-                formatter={(value) => zoneLabel(String(value))}
-                wrapperStyle={{ fontSize: 11, lineHeight: 1.2 }}
-              />
               {zones.map(({ zone, color }) => (
                 <Scatter key={zone} name={zone} data={points.filter((item) => item.zone === zone)} fill={color} />
               ))}
@@ -831,12 +957,11 @@ export function DashboardAnalyticsWorkspace() {
         <>
           <div className={styles.chartWrap}>
             <ResponsiveContainer width="100%" height={320}>
-              <BarChart data={points} layout="vertical" margin={{ top: 30, right: 8, left: 16, bottom: 4 }}>
-                <CartesianGrid strokeDasharray="4 4" stroke="var(--border)" />
+              <BarChart data={points} layout="vertical" margin={{ top: 14, right: 8, left: 16, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="4 4" stroke={CHART_COLORS.grid} />
                 <XAxis type="number" tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
                 <YAxis type="category" dataKey="product_name" width={140} tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
                 <Tooltip contentStyle={tooltipStyle()} />
-                <Legend align="right" verticalAlign="top" wrapperStyle={{ fontSize: 11, lineHeight: 1.2 }} />
                 <Bar dataKey="score" fill={CHART_COLORS.warning} radius={[0, 6, 6, 0]} name="Priority score" />
               </BarChart>
             </ResponsiveContainer>
@@ -889,8 +1014,8 @@ export function DashboardAnalyticsWorkspace() {
         <>
           <div className={styles.chartWrap}>
             <ResponsiveContainer width="100%" height={250}>
-              <ScatterChart margin={{ top: 30, right: 8, left: 8, bottom: 10 }}>
-                <CartesianGrid strokeDasharray="4 4" stroke="var(--border)" />
+              <ScatterChart margin={{ top: 14, right: 8, left: 8, bottom: 10 }}>
+                <CartesianGrid strokeDasharray="4 4" stroke={CHART_COLORS.grid} />
                 <XAxis
                   type="number"
                   dataKey="discountPercent"
@@ -907,12 +1032,6 @@ export function DashboardAnalyticsWorkspace() {
                 />
                 <ZAxis type="number" dataKey="revenue" range={[80, 360]} />
                 <Tooltip contentStyle={tooltipStyle()} />
-                <Legend
-                  align="right"
-                  verticalAlign="top"
-                  formatter={(value) => recommendationLabel(value as DashboardPriceDiscountImpactPoint['recommendation'])}
-                  wrapperStyle={{ fontSize: 11, lineHeight: 1.2 }}
-                />
                 {recommendationGroups.map((recommendation) => (
                   <Scatter
                     key={recommendation}
@@ -926,12 +1045,11 @@ export function DashboardAnalyticsWorkspace() {
           </div>
           <div className={styles.chartWrap}>
             <ResponsiveContainer width="100%" height={150}>
-              <BarChart data={liftBars} margin={{ top: 30, right: 8, left: 4, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="4 4" stroke="var(--border)" />
+              <BarChart data={liftBars} margin={{ top: 14, right: 8, left: 4, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="4 4" stroke={CHART_COLORS.grid} />
                 <XAxis dataKey="recommendation" tickFormatter={(value) => recommendationLabel(value as DashboardPriceDiscountImpactPoint['recommendation'])} tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
                 <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
                 <Tooltip contentStyle={tooltipStyle()} formatter={(value) => `${numberFromString(String(value)).toFixed(2)}%`} />
-                <Legend align="right" verticalAlign="top" wrapperStyle={{ fontSize: 11, lineHeight: 1.2 }} />
                 <Bar dataKey="averageLift" radius={[6, 6, 0, 0]} name="Avg lift %">
                   {liftBars.map((row) => (
                     <Cell key={row.recommendation} fill={colorByRecommendation[row.recommendation as DashboardPriceDiscountImpactPoint['recommendation']]} />
@@ -950,33 +1068,81 @@ export function DashboardAnalyticsWorkspace() {
   const renderColumn = (column: WidgetColumn, widgetIds: WidgetId[]) => (
     <div
       className={styles.column}
-      onDragOver={(event) => event.preventDefault()}
+      onDragOver={(event) => {
+        event.preventDefault();
+        onDragTargetChange(column, widgetIds.length);
+      }}
       onDrop={(event) => onDropToColumn(event, column, widgetIds.length)}
     >
       {widgetIds.length === 0 ? <div className={styles.columnEmpty}>No charts selected for this column.</div> : null}
       {widgetIds.map((widgetId, index) => (
         <article
           key={widgetId}
-          className={`${styles.widgetCard} ${draggingWidget === widgetId ? styles.widgetDragging : ''}`}
-          onDragOver={(event) => event.preventDefault()}
+          className={`${styles.widgetCard} ${dragSource?.widgetId === widgetId ? styles.widgetDragging : ''}`}
+          onDragOver={(event) => {
+            event.preventDefault();
+            onDragTargetChange(column, index);
+          }}
           onDrop={(event) => onDropToColumn(event, column, index)}
         >
           <header className={styles.widgetHeader}>
             <div className={styles.widgetHeaderMain}>
-              <h4>{WIDGET_META[widgetId].title}</h4>
-              <p>{WIDGET_META[widgetId].subtitle}</p>
+              <div
+                className={styles.widgetTitleRow}
+                data-help-container="true"
+                onMouseEnter={() => setHelpOpenWidget(widgetId)}
+                onMouseLeave={() => setHelpOpenWidget((current) => (current === widgetId ? null : current))}
+              >
+                <h4>{WIDGET_META[widgetId].title}</h4>
+                <button
+                  type="button"
+                  className={styles.infoButton}
+                  aria-label={`How to read ${WIDGET_META[widgetId].title}`}
+                  aria-expanded={helpOpenWidget === widgetId}
+                  aria-describedby={helpOpenWidget === widgetId ? `chart-help-${widgetId}` : undefined}
+                  onFocus={() => setHelpOpenWidget(widgetId)}
+                  onBlur={(event) => {
+                    const relatedTarget = event.relatedTarget as HTMLElement | null;
+                    if (!relatedTarget?.closest('[data-help-container="true"]')) {
+                      setHelpOpenWidget((current) => (current === widgetId ? null : current));
+                    }
+                  }}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setHelpOpenWidget((current) => (current === widgetId ? null : widgetId));
+                  }}
+                  title="How to read"
+                >
+                  i
+                </button>
+                {helpOpenWidget === widgetId ? (
+                  <div role="tooltip" id={`chart-help-${widgetId}`} className={styles.helpTooltip}>
+                    {WIDGET_META[widgetId].subtitle}
+                  </div>
+                ) : null}
+              </div>
             </div>
-            <button
-              type="button"
-              className={styles.dragHandle}
-              draggable
-              onDragStart={() => setDraggingWidget(widgetId)}
-              onDragEnd={() => setDraggingWidget(null)}
-              title="Drag to reorder"
-              aria-label={`Drag ${WIDGET_META[widgetId].title} chart`}
-            >
-              <span aria-hidden="true">⋮⋮</span>
-            </button>
+            <div className={styles.widgetHeaderRight}>
+              <div className={styles.legendChips} aria-label={`${WIDGET_META[widgetId].title} legend`}>
+                {legendForWidget(widgetId, financialVisible).map((legend) => (
+                  <span key={`${widgetId}-${legend.label}`} className={styles.legendChip}>
+                    <span className={styles.legendDot} style={{ backgroundColor: legend.color }} aria-hidden="true" />
+                    {legend.label}
+                  </span>
+                ))}
+              </div>
+              <button
+                type="button"
+                className={styles.dragHandle}
+                draggable
+                onDragStart={() => onDragStartWidget(widgetId, column, index)}
+                onDragEnd={onDragEndWidget}
+                title="Drag to reorder"
+                aria-label={`Drag ${WIDGET_META[widgetId].title} chart`}
+              >
+                <span aria-hidden="true">⋮⋮</span>
+              </button>
+            </div>
           </header>
           {renderWidget(widgetId)}
         </article>
