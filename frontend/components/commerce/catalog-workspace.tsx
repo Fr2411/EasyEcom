@@ -822,7 +822,7 @@ export function CatalogWorkspace() {
             onChange={setQueryInput}
             onSubmit={() => void onWorkspaceIntent(queryInput)}
           >
-            <p className={styles.workspaceFieldNote catalogDecisionSentence}>
+            <p className={`${styles.workspaceFieldNote} catalogDecisionSentence`}>
               Use one clue first, then open the closest product.
             </p>
             <details className={styles.catalogDecisionDetails}>
@@ -865,13 +865,13 @@ export function CatalogWorkspace() {
         {error ? <WorkspaceNotice tone="error">{error}</WorkspaceNotice> : null}
         {workspaceLoadFallback ? (
           <WorkspaceNotice tone="error">
-            <div className={styles.workspaceStack catalogFallbackNotice}>
+            <div className={`${styles.workspaceStack} catalogFallbackNotice`}>
               <strong>{workspaceLoadFallback.title}</strong>
               <p className={styles.catalogFallbackPrimaryGuidance}>
                 Retry catalog load first. If it still fails, use Go to Dashboard to refresh your session.
               </p>
               <span>{workspaceLoadFallback.detail}</span>
-              <span className={styles.workspaceFieldNote catalogFallbackContext}>{workspaceLoadFallback.context}</span>
+              <span className={`${styles.workspaceFieldNote} catalogFallbackContext`}>{workspaceLoadFallback.context}</span>
               {workspaceLoadFailureCount >= 2 ? (
                 <strong className={styles.catalogFallbackRetryWarning}>
                   Repeated failures: open Dashboard to refresh your session, wait a moment, then return to Catalog.
@@ -906,7 +906,7 @@ export function CatalogWorkspace() {
               description="Open the best match first. Product rows hold shared details; variants are the saleable SKUs."
               items={workspace.items}
               renderItem={(product) => (
-                <article key={product.product_id} className={styles.guidedMatchItem catalogParentCard}>
+                <article key={product.product_id} className={`${styles.guidedMatchItem} catalogParentCard`}>
                   <div className={styles.guidedMatchItemHeader}>
                     <div className={styles.guidedMatchItemIdentity}>
                       {product.image?.thumbnail_url ? (
@@ -954,8 +954,8 @@ export function CatalogWorkspace() {
                     )}
                   </div>
                   <div className={styles.guidedMatchItemMeta}>
-                    <span className={styles.catalogMetaChip isCritical}>Variants: {product.variants.length}</span>
-                    <span className={styles.catalogMetaChip isCritical}>Product Min Selling Price (Template): {formatMoney(product.min_price)}</span>
+                    <span className={`${styles.catalogMetaChip} isCritical`}>Variants: {product.variants.length}</span>
+                    <span className={`${styles.catalogMetaChip} isCritical`}>Product Min Selling Price (Template): {formatMoney(product.min_price)}</span>
                     <span className={styles.catalogMetaChip}>Product Default Selling Price (Template): {formatMoney(product.default_price)}</span>
                     <span className={styles.catalogMetaChip}>SKU Base: {product.sku_root || 'Generated from product name'}</span>
                     <span className={styles.catalogMetaChip}>Equivalent Max Discount: {formatPercent(product.max_discount_percent)}</span>
@@ -1140,7 +1140,7 @@ export function CatalogWorkspace() {
                   />
                 </h4>
               </div>
-              <div className={styles.workspaceFormGrid compact}>
+              <div className={`${styles.workspaceFormGrid} compact`}>
                 <label>
                   Default selling price
                   <input
@@ -1247,7 +1247,7 @@ export function CatalogWorkspace() {
                       <button type="button" onClick={() => applyDefaultsToVariants('all')}>Apply to all rows</button>
                     </div>
                   </div>
-                  <div className={styles.workspaceFormGrid compact}>
+                  <div className={`${styles.workspaceFormGrid} compact`}>
                     <label>
                       Default purchase cost
                       <input
@@ -1364,7 +1364,7 @@ export function CatalogWorkspace() {
                         </div>
                       </div>
 
-                      <div className={styles.workspaceFormGrid compact}>
+                      <div className={`${styles.workspaceFormGrid} compact`}>
                         <label>
                           Size
                           <input
