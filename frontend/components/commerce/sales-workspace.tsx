@@ -102,6 +102,7 @@ function financeStatusLabel(order: SalesOrder) {
 
 function buildSeedKey(searchParams: { get: (name: string) => string | null }) {
   return [
+    (searchParams.get('seed_order_id') ?? '').trim(),
     (searchParams.get('seed_variant_id') ?? '').trim(),
     (searchParams.get('seed_sku') ?? '').trim(),
     (searchParams.get('seed_phone') ?? '').trim(),
@@ -114,6 +115,7 @@ export function SalesWorkspace() {
   const searchParams = useSearchParams();
   const searchKey = searchParams.toString();
   const handledSeedKeyRef = useRef('');
+  const handledOrderSeedRef = useRef('');
   const [activeTab, setActiveTab] = useState<SalesTab>('new');
   const [lookupQuery, setLookupQuery] = useState('');
   const [lookupPending, setLookupPending] = useState(false);
@@ -153,6 +155,35 @@ export function SalesWorkspace() {
       setActiveTab('open');
     }
     void loadOrders(q);
+  }, [searchKey]);
+
+  useEffect(() => {
+    const seedOrderId = (searchParams.get('seed_order_id') ?? '').trim();
+    if (!seedOrderId) {
+      handledOrderSeedRef.current = '';
+      return;
+    }
+    if (handledOrderSeedRef.current === seedOrderId) {
+      return;
+    }
+    handledOrderSeedRef.current = seedOrderId;
+    setActiveTab('open');
+    setNotice('');
+    setError('');
+
+    void (async () => {
+      try {
+        const order = await getSalesOrder(seedOrderId);
+        const nextTab = order.status === 'completed' ? 'completed' : 'open';
+        setSelectedOrder(order);
+        setOrderQuery(order.order_number);
+        setActiveTab(nextTab);
+        await loadOrders(order.order_number);
+        setNotice(`Opened order ${order.order_number}.`);
+      } catch (seedError) {
+        setError(safeSalesWorkspaceErrorMessage(seedError, 'Unable to open the requested order.'));
+      }
+    })();
   }, [searchKey]);
 
   const addVariantToDraft = (variant: SaleLookupVariant) => {
@@ -196,6 +227,11 @@ export function SalesWorkspace() {
     const seedPhone = (searchParams.get('seed_phone') ?? '').trim();
     const seedEmail = (searchParams.get('seed_email') ?? '').trim();
     const seedName = (searchParams.get('seed_name') ?? '').trim();
+    const seedOrderId = (searchParams.get('seed_order_id') ?? '').trim();
+
+    if (seedOrderId) {
+      return;
+    }
 
     setActiveTab('new');
 
@@ -353,10 +389,10 @@ export function SalesWorkspace() {
       setActiveTab(action === 'confirm_and_fulfill' ? 'completed' : 'open');
       setNotice(
         action === 'save_draft'
-          ? 'Draft order saved.'
+          ? `Draft order ${response.order.order_number} saved.`
           : action === 'confirm'
-            ? 'Order reserved and moved to open orders.'
-            : 'Sale completed and stock updated.',
+            ? `Order ${response.order.order_number} reserved and moved to open orders.`
+            : `Sale ${response.order.order_number} completed and stock updated.`,
       );
     } catch (submitError) {
       setError(safeSalesWorkspaceErrorMessage(submitError, 'Unable to save the order.'));
@@ -376,6 +412,8 @@ export function SalesWorkspace() {
   };
 
   const runOrderAction = async (action: 'confirm' | 'fulfill' | 'cancel', orderId: string) => {
+    setNotice('');
+    setError('');
     try {
       const response =
         action === 'confirm'
@@ -387,10 +425,10 @@ export function SalesWorkspace() {
       await loadOrders(orderQuery.trim());
       setNotice(
         action === 'confirm'
-          ? 'Order reserved and moved to open orders.'
+          ? `Order ${response.order.order_number} reserved and moved to open orders.`
           : action === 'fulfill'
-            ? 'Sale completed and stock updated.'
-            : 'Order cancelled.',
+            ? `Sale ${response.order.order_number} completed and stock updated.`
+            : `Order ${response.order.order_number} cancelled.`,
       );
     } catch (actionError) {
       setError(safeSalesWorkspaceErrorMessage(actionError, 'Unable to update the order.'));

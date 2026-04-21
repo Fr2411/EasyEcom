@@ -40,10 +40,9 @@ function createEmptyDraft(): ReturnCreatePayload {
 
 function buildRefundDraft(record?: ReturnRecord | null): ReturnRefundDraft {
   const outstanding = record?.refund_outstanding_amount ? Number(record.refund_outstanding_amount) : NaN;
-  const defaultAmount =
-    record && !Number.isNaN(outstanding) && outstanding > 0
-      ? record.refund_outstanding_amount
-      : record?.refund_amount ?? '';
+  const defaultAmount = record && !Number.isNaN(outstanding) && outstanding > 0
+    ? record.refund_outstanding_amount
+    : '';
 
   return {
     refund_date: currentLocalDateTime(),
@@ -52,6 +51,13 @@ function buildRefundDraft(record?: ReturnRecord | null): ReturnRefundDraft {
     reference: record?.return_number ?? '',
     note: record ? `Refund payment for ${record.return_number}` : '',
   };
+}
+
+function canRecordRefund(record?: ReturnRecord | null) {
+  if (!record) return false;
+  if (record.status === 'closed') return false;
+  const outstanding = Number(record.refund_outstanding_amount ?? '0');
+  return Number.isFinite(outstanding) && outstanding > 0;
 }
 
 function buildReturnStatusLabel(record: ReturnRecord) {
@@ -73,6 +79,7 @@ export function ReturnsWorkspace() {
   const searchParams = useSearchParams();
   const searchKey = searchParams.toString();
   const handledSeedKeyRef = useRef('');
+  const handledReturnSeedRef = useRef('');
   const [activeTab, setActiveTab] = useState<ReturnsTab>('create');
   const [lookupQuery, setLookupQuery] = useState('');
   const [lookupOrders, setLookupOrders] = useState<ReturnLookupOrder[]>([]);
@@ -90,14 +97,17 @@ export function ReturnsWorkspace() {
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
 
-  const loadHistory = async (query = '') => {
+  const loadHistory = async (query = ''): Promise<ReturnRecord[]> => {
     setHistoryLoading(true);
     try {
       const payload = await getReturns(query);
-      setHistory(payload.items ?? []);
+      const items = payload.items ?? [];
+      setHistory(items);
       setError('');
+      return items;
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load returns.');
+      return [];
     } finally {
       setHistoryLoading(false);
     }
@@ -116,6 +126,38 @@ export function ReturnsWorkspace() {
   }, [searchKey]);
 
   useEffect(() => {
+    const seedReturnId = (searchParams.get('seed_return_id') ?? '').trim();
+    if (seedReturnId) {
+      if (handledReturnSeedRef.current === seedReturnId) {
+        return;
+      }
+      handledReturnSeedRef.current = seedReturnId;
+      setActiveTab('history');
+      setHistoryQuery(seedReturnId);
+      setLookupQuery('');
+      setLookupOrders([]);
+      setEligible(null);
+      setSelectedOrder(null);
+      setDraft(createEmptyDraft());
+      void (async () => {
+        const items = await loadHistory(seedReturnId);
+        const seedLower = seedReturnId.toLowerCase();
+        const matched = items.find(
+          (item) => item.sales_return_id === seedReturnId || item.return_number.toLowerCase() === seedLower,
+        );
+        if (matched) {
+          openReturnDetails(matched);
+          setNotice(`Opened return ${matched.return_number}.`);
+          return;
+        }
+        setSelectedReturn(null);
+        setRefundDraft(buildRefundDraft());
+        setNotice('Requested return was not found in this workspace.');
+      })();
+      return;
+    }
+    handledReturnSeedRef.current = '';
+
     const seedKey = buildSeedKey(searchParams);
     if (!seedKey.replaceAll('|', '')) {
       handledSeedKeyRef.current = '';
@@ -280,6 +322,10 @@ export function ReturnsWorkspace() {
   const submitRefund = async () => {
     if (!selectedReturn) {
       setError('Select a return before recording a refund.');
+      return;
+    }
+    if (!canRecordRefund(selectedReturn)) {
+      setError('This return has no outstanding refund balance.');
       return;
     }
     if (!refundDraft.amount.trim() || Number(refundDraft.amount) <= 0) {
@@ -555,6 +601,7 @@ export function ReturnsWorkspace() {
                       <input
                         type="datetime-local"
                         value={refundDraft.refund_date}
+                        disabled={!canRecordRefund(selectedReturn)}
                         onChange={(event) => setRefundDraft((current) => ({ ...current, refund_date: event.target.value }))}
                       />
                     </label>
@@ -563,6 +610,7 @@ export function ReturnsWorkspace() {
                       <input
                         inputMode="decimal"
                         value={refundDraft.amount}
+                        disabled={!canRecordRefund(selectedReturn)}
                         onChange={(event) => setRefundDraft((current) => ({ ...current, amount: event.target.value }))}
                         placeholder="0.00"
                       />
@@ -571,6 +619,7 @@ export function ReturnsWorkspace() {
                       Method
                       <input
                         value={refundDraft.method}
+                        disabled={!canRecordRefund(selectedReturn)}
                         onChange={(event) => setRefundDraft((current) => ({ ...current, method: event.target.value }))}
                         placeholder="Cash, bank transfer, card reversal"
                       />
@@ -579,6 +628,7 @@ export function ReturnsWorkspace() {
                       Reference
                       <input
                         value={refundDraft.reference}
+                        disabled={!canRecordRefund(selectedReturn)}
                         onChange={(event) => setRefundDraft((current) => ({ ...current, reference: event.target.value }))}
                         placeholder="Refund receipt or transfer id"
                       />
@@ -588,10 +638,15 @@ export function ReturnsWorkspace() {
                       <textarea
                         rows={3}
                         value={refundDraft.note}
+                        disabled={!canRecordRefund(selectedReturn)}
                         onChange={(event) => setRefundDraft((current) => ({ ...current, note: event.target.value }))}
                       />
                     </label>
                   </div>
+
+                  {!canRecordRefund(selectedReturn) ? (
+                    <WorkspaceNotice tone="info">Refund is already fully recorded for this return.</WorkspaceNotice>
+                  ) : null}
 
                   {selectedReturn.recent_refunds?.length ? (
                     <div className="operations-list-stack compact">
@@ -611,10 +666,22 @@ export function ReturnsWorkspace() {
                   ) : null}
 
                   <div className="operations-toolbar-actions wrap">
-                    <button type="button" className="btn-primary" onClick={() => void submitRefund()} disabled={submitting}>
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      onClick={() => void submitRefund()}
+                      disabled={submitting || !canRecordRefund(selectedReturn)}
+                    >
                       {submitting ? 'Saving…' : 'Record Refund'}
                     </button>
-                    <button type="button" className="secondary" onClick={() => setRefundDraft(buildRefundDraft(selectedReturn))}>Reset</button>
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => setRefundDraft(buildRefundDraft(selectedReturn))}
+                      disabled={!canRecordRefund(selectedReturn)}
+                    >
+                      Reset
+                    </button>
                   </div>
                 </>
               ) : (

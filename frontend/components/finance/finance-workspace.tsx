@@ -81,10 +81,31 @@ function buildPayload(draft: FinanceDraft): FinanceTransactionInput {
   };
 }
 
+function buildModuleHref(path: '/sales' | '/returns', params: Record<string, string | undefined>) {
+  const search = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (!value) return;
+    search.set(key, value);
+  });
+  const query = search.toString();
+  return query ? `${path}?${query}` : path;
+}
+
 function sourceHref(transaction: FinanceTransaction) {
-  const query = encodeURIComponent(transaction.reference || transaction.origin_id || transaction.transaction_id);
-  if (transaction.origin_type === 'sale_fulfillment') return `/sales?q=${query}`;
-  if (transaction.origin_type === 'return_refund') return `/returns?q=${query}&tab=history`;
+  const query = transaction.reference || transaction.origin_id || transaction.transaction_id;
+  if (transaction.origin_type === 'sale_fulfillment') {
+    return buildModuleHref('/sales', {
+      seed_order_id: transaction.origin_id ?? undefined,
+      q: query,
+    });
+  }
+  if (transaction.origin_type === 'return_refund') {
+    return buildModuleHref('/returns', {
+      seed_return_id: transaction.origin_id ?? undefined,
+      q: query,
+      tab: 'history',
+    });
+  }
   return null;
 }
 
@@ -224,7 +245,14 @@ export function FinanceWorkspace() {
               {receivables.length ? (
                 <div className="operations-list-stack compact">
                   {receivables.map((item) => (
-                    <Link key={item.sale_id} href={`/sales?q=${encodeURIComponent(item.sale_no)}&tab=open`} className="operations-list-card as-link">
+                    <Link
+                      key={item.sale_id}
+                      href={buildModuleHref('/sales', {
+                        seed_order_id: item.sale_id,
+                        q: item.sale_no,
+                      })}
+                      className="operations-list-card as-link"
+                    >
                       <div className="operations-list-card-head">
                         <strong>{item.sale_no}</strong>
                         <span>{formatMoney(item.outstanding_balance)}</span>
@@ -249,7 +277,15 @@ export function FinanceWorkspace() {
               {recentRefunds.length ? (
                 <div className="operations-list-stack compact">
                   {recentRefunds.map((item) => (
-                    <Link key={item.transaction_id} href={`/returns?q=${encodeURIComponent(item.reference)}&tab=history`} className="operations-list-card as-link">
+                    <Link
+                      key={item.transaction_id}
+                      href={buildModuleHref('/returns', {
+                        seed_return_id: item.origin_id ?? undefined,
+                        q: item.reference,
+                        tab: 'history',
+                      })}
+                      className="operations-list-card as-link"
+                    >
                       <div className="operations-list-card-head">
                         <strong>{item.reference || 'Refund payment'}</strong>
                         <span>-{formatMoney(item.amount)}</span>
