@@ -443,12 +443,20 @@ export function InventoryOpsWorkspace() {
 
   const rows = workspace?.stock_items ?? [];
   const activeReceiveProductVariants = useMemo(() => receiveProduct?.variants ?? [], [receiveProduct]);
+  const drawerOpen = receiveOpen || adjustOpen;
 
   return (
-    <div className="workspace-stack">
+    <div
+      className={[
+        'workspace-stack',
+        styles.layout,
+        drawerOpen ? styles.layoutWithDrawer : '',
+      ].join(' ').trim()}
+    >
       {toast ? <WorkspaceToast message={toast} onClose={() => setToast('')} /> : null}
 
       <WorkspacePanel
+        className={styles.mainPanel}
         title={
           <span className="workspace-heading">
             Inventory

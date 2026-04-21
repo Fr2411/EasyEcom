@@ -1,3 +1,11 @@
+.layout {
+  position: relative;
+}
+
+.mainPanel {
+  min-width: 0;
+}
+
 .toolbar {
   display: flex;
   gap: 12px;
@@ -129,4 +137,29 @@
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+@media (min-width: 1120px) {
+  .layoutWithDrawer {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(360px, 520px);
+    align-items: start;
+    gap: 12px;
+  }
+
+  .drawerBackdrop {
+    display: none;
+  }
+
+  .drawer {
+    position: sticky;
+    top: 12px;
+    right: auto;
+    width: 100%;
+    max-width: none;
+    height: calc(100dvh - 24px);
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    z-index: 2;
+  }
 }

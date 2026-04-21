@@ -201,10 +201,17 @@ export function CatalogLibraryWorkspace() {
   };
 
   return (
-    <div className="workspace-stack">
+    <div
+      className={[
+        'workspace-stack',
+        styles.layout,
+        drawerOpen ? styles.layoutWithDrawer : '',
+      ].join(' ').trim()}
+    >
       {toast ? <WorkspaceToast message={toast} onClose={() => setToast('')} /> : null}
 
       <WorkspacePanel
+        className={styles.mainPanel}
         title={
           <span className="workspace-heading">
             Catalog
