@@ -62,7 +62,7 @@ const solutions = [
 
 const operationsPoints = [
   'Track catalog, stock, and warehouses in one place',
-  'Create and manage sales, purchases, and returns',
+  'Create and manage sales and returns',
   'Review finance and reports with tenant-safe access',
   'Keep daily operations auditable and consistent',
 ];
@@ -224,7 +224,7 @@ export default function PublicLandingPage() {
     <PublicLayout ctaLabel="Start Free" ctaHref="/signup">
       <HeroSection
         title="Run your sales and operations in one workspace"
-        description="EasyEcom helps you manage catalog, inventory, sales, purchases, returns, and reporting from one platform."
+        description="EasyEcom helps you manage catalog, inventory, sales, returns, and reporting from one platform."
         trustLine="Used by growing businesses to handle sales, inventory, and operations in one place."
         actions={
           <>

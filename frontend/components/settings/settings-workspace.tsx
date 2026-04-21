@@ -120,12 +120,11 @@ export function SettingsWorkspace() {
   ].filter((value) => value.trim().length > 0).length;
   const numberingCompleted = [
     form.prefixes.sales_prefix,
-    form.prefixes.purchases_prefix,
     form.prefixes.returns_prefix,
   ].filter((value) => value.trim().length > 0).length;
   const profileStatus = sectionStatus(profileCompleted, 6);
   const defaultsStatus = sectionStatus(defaultsCompleted, 2);
-  const numberingStatus = sectionStatus(numberingCompleted, 3);
+  const numberingStatus = sectionStatus(numberingCompleted, 2);
 
   return (
     <div className="settings-layout">
@@ -161,7 +160,7 @@ export function SettingsWorkspace() {
       <form onSubmit={saveSettings}>
         <WorkspacePanel
           title="Profile, defaults, and document prefixes"
-          description="Update business profile fields, operational defaults, and numbering prefixes used by sales, purchases, and returns."
+          description="Update business profile fields, operational defaults, and numbering prefixes used by sales and returns."
           actions={<button type="submit" className="btn-primary settings-save-btn" disabled={savingSettings}>{savingSettings ? 'Saving…' : 'Save settings'}</button>}
         >
           <section className="settings-section">
@@ -309,7 +308,7 @@ export function SettingsWorkspace() {
           <section className="settings-section">
             <div className="workspace-subsection-header">
               <h4>Document numbering</h4>
-              <p>Keep prefixes consistent so order, purchase, and return IDs stay easy to scan.</p>
+              <p>Keep prefixes consistent so order and return IDs stay easy to scan.</p>
               <span className={`settings-section-status ${numberingStatus.tone}`}>{numberingStatus.label}</span>
             </div>
             <div className="settings-grid">
@@ -318,13 +317,6 @@ export function SettingsWorkspace() {
                 <input
                   value={form.prefixes.sales_prefix}
                   onChange={(event) => setForm({ ...form, prefixes: { ...form.prefixes, sales_prefix: event.target.value.toUpperCase() } })}
-                />
-              </label>
-              <label>
-                Purchases prefix
-                <input
-                  value={form.prefixes.purchases_prefix}
-                  onChange={(event) => setForm({ ...form, prefixes: { ...form.prefixes, purchases_prefix: event.target.value.toUpperCase() } })}
                 />
               </label>
               <label>

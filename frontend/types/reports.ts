@@ -58,15 +58,6 @@ export type ReturnsReport = {
   deferred_metrics: ReportDeferredMetric[];
 };
 
-export type PurchasesReport = {
-  from_date: string;
-  to_date: string;
-  purchases_count: number;
-  purchases_subtotal: number;
-  purchases_trend: Array<{ period: string; subtotal: number; quantity: number }>;
-  deferred_metrics: ReportDeferredMetric[];
-};
-
 export type ReportsOverview = {
   from_date: string;
   to_date: string;
@@ -74,5 +65,4 @@ export type ReportsOverview = {
   sales_count: number;
   expense_total: number;
   returns_total: number;
-  purchases_total: number;
 };

@@ -10,7 +10,6 @@ import {
   Gauge,
   HandCoins,
   PackageSearch,
-  Receipt,
   RefreshCw,
   Settings,
   ShoppingCart,
@@ -31,7 +30,6 @@ const ICONS = {
   returns: RefreshCw,
   admin: Sparkles,
   automation: ClipboardList,
-  purchases: Receipt,
   billing: BadgeDollarSign,
   settings: Settings
 } as const;

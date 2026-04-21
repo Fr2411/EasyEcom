@@ -49,7 +49,6 @@ const ACCESS_PAGE_OPTIONS = [
   { code: 'DASHBOARD', label: 'Dashboard' },
   { code: 'CATALOG', label: 'Catalog' },
   { code: 'INVENTORY', label: 'Inventory' },
-  { code: 'PURCHASES', label: 'Purchases' },
   { code: 'SALES', label: 'Sales' },
   { code: 'CUSTOMERS', label: 'Customers' },
   { code: 'FINANCE', label: 'Finance' },

@@ -6,7 +6,6 @@ import {
   getFinanceReport,
   getInventoryReport,
   getProductsReport,
-  getPurchasesReport,
   getReportsOverview,
   getReturnsReport,
   getSalesReport,
@@ -17,7 +16,6 @@ type ReportsState = {
   overview: Awaited<ReturnType<typeof getReportsOverview>>;
   sales: Awaited<ReturnType<typeof getSalesReport>>;
   inventory: Awaited<ReturnType<typeof getInventoryReport>>;
-  purchases: Awaited<ReturnType<typeof getPurchasesReport>>;
   finance: Awaited<ReturnType<typeof getFinanceReport>>;
   returns: Awaited<ReturnType<typeof getReturnsReport>>;
   products: Awaited<ReturnType<typeof getProductsReport>>;
@@ -60,14 +58,13 @@ export function ReportsWorkspace() {
       getReportsOverview(filters),
       getSalesReport(filters),
       getInventoryReport(filters),
-      getPurchasesReport(filters),
       getFinanceReport(filters),
       getReturnsReport(filters),
       getProductsReport(filters),
     ])
-      .then(([overview, sales, inventory, purchases, finance, returns, products]) => {
+      .then(([overview, sales, inventory, finance, returns, products]) => {
         if (!active) return;
-        setState({ overview, sales, inventory, purchases, finance, returns, products });
+        setState({ overview, sales, inventory, finance, returns, products });
         setError('');
       })
       .catch((loadError) => {
@@ -97,7 +94,7 @@ export function ReportsWorkspace() {
             <ol>
               <li>Check core outcomes first: sales revenue and completed orders.</li>
               <li>Review Sales and Inventory next to balance demand and stock coverage.</li>
-              <li>Finish with Purchases, Finance, and Returns to validate cash and margin pressure.</li>
+              <li>Finish with Finance and Returns to validate cash pressure and customer recovery impact.</li>
             </ol>
           </details>
         </div>
@@ -159,9 +156,9 @@ export function ReportsWorkspace() {
               <span>Items returned that reduce net sold volume.</span>
             </article>
             <article className="ps-card reports-kpi-card reports-kpi-card-secondary">
-              <p>Purchase spend</p>
-              <strong>{formatMoney(state.overview.purchases_total)}</strong>
-              <span>Money committed to inbound inventory in this range.</span>
+              <p>Receivables</p>
+              <strong>{formatMoney(state.finance.receivables_total)}</strong>
+              <span>Outstanding money to collect from completed sales.</span>
             </article>
           </div>
 
@@ -201,16 +198,8 @@ export function ReportsWorkspace() {
             <DeferredList items={state.inventory.deferred_metrics} />
           </WorkspacePanel>
 
-          <WorkspacePanel title="Purchases & Finance" description="Then validate cash-out and receivable pressure against sales performance.">
+          <WorkspacePanel title="Finance" description="Then validate receivable and expense pressure against sales performance.">
             <div className="reports-grid">
-              <article className="ps-card">
-                <p>Purchase orders</p>
-                <strong>{state.purchases.purchases_count}</strong>
-              </article>
-              <article className="ps-card">
-                <p>Purchase subtotal</p>
-                <strong>{formatMoney(state.purchases.purchases_subtotal)}</strong>
-              </article>
               <article className="ps-card">
                 <p>Receivables</p>
                 <strong>{formatMoney(state.finance.receivables_total)}</strong>
@@ -224,7 +213,7 @@ export function ReportsWorkspace() {
                 <strong>{formatMoney(state.finance.net_operating_snapshot)}</strong>
               </article>
             </div>
-            <DeferredList items={[...state.purchases.deferred_metrics, ...state.finance.deferred_metrics]} />
+            <DeferredList items={state.finance.deferred_metrics} />
           </WorkspacePanel>
 
           <WorkspacePanel title="Returns & Products" description="Finally confirm return drag and product-level outliers that impact margin.">

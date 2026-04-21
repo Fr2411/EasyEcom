@@ -3,7 +3,6 @@ import type {
   FinanceReport,
   InventoryReport,
   ProductsReport,
-  PurchasesReport,
   ReportsOverview,
   ReturnsReport,
   SalesReport,
@@ -31,10 +30,6 @@ export async function getSalesReport(params: { fromDate?: string; toDate?: strin
 
 export async function getInventoryReport(params: { fromDate?: string; toDate?: string } = {}) {
   return apiClient<InventoryReport>(`/reports/inventory${buildDateQuery(params)}`);
-}
-
-export async function getPurchasesReport(params: { fromDate?: string; toDate?: string } = {}) {
-  return apiClient<PurchasesReport>(`/reports/purchases${buildDateQuery(params)}`);
 }
 
 export async function getFinanceReport(params: { fromDate?: string; toDate?: string } = {}) {

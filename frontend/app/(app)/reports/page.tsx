@@ -3,7 +3,7 @@ import { ReportsWorkspace } from '@/components/reports/reports-workspace';
 
 export default function ReportsPage() {
   return (
-    <PageShell title="Reporting & Analytics" description="Track sales, inventory, finance, returns, and purchases with truthful tenant-scoped metrics."
+    <PageShell title="Reporting & Analytics" description="Track sales, inventory, finance, and returns with truthful tenant-scoped metrics."
       hideHeader
     >
       <ReportsWorkspace />

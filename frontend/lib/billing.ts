@@ -28,7 +28,7 @@ const BILLING_PRESENTATION: Record<BillingPlanCode, BillingPresentation> = {
     ctaLabel: 'Start Growth',
     highlight: true,
     features: [
-      'Reports, customers, and purchases',
+      'Reports, customers, and deeper operations visibility',
       'Automation and advanced operations tools',
       'Owner-managed subscription controls',
       'Full paid workspace access',

@@ -4,7 +4,6 @@ import { FormEvent, useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { ArrowRight, Search } from 'lucide-react';
 import { NAV_ITEMS } from '@/types/navigation';
-import { ThemeToggle } from '@/components/theme/theme-toggle';
 
 const DEFAULT_TITLE = 'Operations Workspace';
 
@@ -79,8 +78,8 @@ function getHeaderContext(pathname: string): HeaderContext {
         subtitle: '',
         summary: '',
         searchScope: 'inventory',
-        actionLabel: 'View purchases',
-        actionHref: '/purchases',
+        actionLabel: 'Open catalog',
+        actionHref: '/catalog',
       };
     case '/sales':
       return {
@@ -101,16 +100,6 @@ function getHeaderContext(pathname: string): HeaderContext {
         searchScope: 'sales',
         actionLabel: 'Open sales',
         actionHref: '/sales',
-      };
-    case '/purchases':
-      return {
-        section: 'Commerce',
-        title: 'Purchases',
-        subtitle: 'Inbound stock',
-        summary: 'Keep receiving, vendor tracking, and stock intake aligned with inventory truth.',
-        searchScope: 'inventory',
-        actionLabel: 'Open inventory',
-        actionHref: '/inventory',
       };
     case '/automation':
       return {
@@ -212,25 +201,6 @@ export function TopHeader() {
   const pageContext = getHeaderContext(pathname);
   const [scope, setScope] = useState<SearchScope>(pageContext.searchScope);
   const [query, setQuery] = useState('');
-  const isCatalogRoute = pathname === '/catalog';
-  const isSalesRoute = pathname === '/sales';
-  const headerClassName = [
-    'top-header',
-    isCatalogRoute ? 'top-header-catalog' : '',
-    isSalesRoute ? 'top-header-sales' : '',
-  ]
-    .filter(Boolean)
-    .join(' ');
-  const focusCatalogFinder = () => {
-    if (typeof window === 'undefined') return;
-    window.requestAnimationFrame(() => {
-      const finder = document.getElementById('catalog-local-finder-input');
-      if (finder instanceof HTMLInputElement) {
-        finder.focus();
-        finder.select();
-      }
-    });
-  };
 
   useEffect(() => {
     setScope(pageContext.searchScope);
@@ -242,7 +212,7 @@ export function TopHeader() {
     if (!trimmed) return;
 
     const params = new URLSearchParams({ q: trimmed });
-    const targetRoute = isCatalogRoute ? '/catalog' : SEARCH_SCOPE_ROUTES[scope];
+    const targetRoute = SEARCH_SCOPE_ROUTES[scope];
     router.push(`${targetRoute}?${params.toString()}`);
   };
   const actionToneClass =
@@ -254,23 +224,11 @@ export function TopHeader() {
   const actionClassName = `header-btn ${actionToneClass} header-cross-module-action`.trim();
 
   return (
-    <header className={headerClassName}>
-      {isCatalogRoute ? (
-        <a className="header-catalog-skip-link" href="#catalog-local-finder-input" onClick={focusCatalogFinder}>
-          Skip to Catalog finder
-        </a>
-      ) : null}
+    <header className="top-header top-header-consistent">
       <div className="header-copy">
         <p className="header-title">{pageContext.title ?? matchedRoute?.label ?? DEFAULT_TITLE}</p>
       </div>
-      <form
-        className={isCatalogRoute ? 'header-search header-search-secondary' : 'header-search'}
-        aria-label={isCatalogRoute ? 'Secondary global workspace search' : 'Global workspace search'}
-        onSubmit={onSubmit}
-      >
-        {isCatalogRoute ? (
-          <span className="header-search-context">Catalog finder is primary on this page. Use this only for cross-module navigation.</span>
-        ) : null}
+      <form className="header-search" aria-label="Global workspace search" onSubmit={onSubmit}>
         <span className="header-search-icon" aria-hidden="true">
           <Search size={16} />
         </span>
@@ -288,29 +246,22 @@ export function TopHeader() {
           type="search"
           aria-label="Global search query"
           className="header-search-input"
-          placeholder={isCatalogRoute ? 'Secondary global search: orders, SKUs, returns' : 'Global search: orders, SKUs, returns'}
+          placeholder="Search orders, SKUs, and returns"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
-        <button type="submit" className="header-search-button">{isCatalogRoute ? 'Global search' : 'Search all'}</button>
+        <button type="submit" className="header-search-button">Search</button>
       </form>
-      <div className={isCatalogRoute ? 'header-utilities header-utilities-catalog' : 'header-utilities'}>
-        {!isCatalogRoute ? (
-          <div className="header-theme-mobile" aria-label="Display mode">
-            <ThemeToggle />
-          </div>
-        ) : null}
-        <div className={isCatalogRoute ? 'header-action-cluster' : undefined}>
-          <button
-            type="button"
-            className={actionClassName}
-            onClick={() => router.push(pageContext.actionHref)}
-            aria-label={pageContext.actionLabel}
-          >
-            {pageContext.actionLabel}
-            <ArrowRight size={14} aria-hidden="true" />
-          </button>
-        </div>
+      <div className="header-utilities">
+        <button
+          type="button"
+          className={actionClassName}
+          onClick={() => router.push(pageContext.actionHref)}
+          aria-label={pageContext.actionLabel}
+        >
+          {pageContext.actionLabel}
+          <ArrowRight size={14} aria-hidden="true" />
+        </button>
       </div>
     </header>
   );
