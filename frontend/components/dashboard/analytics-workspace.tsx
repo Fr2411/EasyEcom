@@ -12,7 +12,6 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Cell,
   ComposedChart,
   Line,
   LineChart,
@@ -322,7 +321,7 @@ function legendForWidget(widgetId: WidgetId, financialVisible: boolean): LegendC
     ];
   }
   if (widgetId === 'conversion_funnel') {
-    return [{ label: 'Orders by stage', color: CHART_COLORS.secondaryBlue }];
+    return [{ label: 'Orders by stage', color: CHART_COLORS.primary }];
   }
   if (widgetId === 'product_performance_quadrant') {
     return [
@@ -340,7 +339,7 @@ function legendForWidget(widgetId: WidgetId, financialVisible: boolean): LegendC
   }
   if (widgetId === 'returns_intelligence') {
     return [
-      { label: 'Returns', color: CHART_COLORS.warning },
+      { label: 'Returns', color: CHART_COLORS.primary },
       { label: 'Return rate %', color: CHART_COLORS.critical },
       { label: 'Heatmap', color: CHART_COLORS.primary },
     ];
@@ -349,7 +348,7 @@ function legendForWidget(widgetId: WidgetId, financialVisible: boolean): LegendC
     return [
       {
         label: financialVisible ? 'Inventory value' : 'On hand qty',
-        color: financialVisible ? CHART_COLORS.primary : CHART_COLORS.secondaryBlue,
+        color: CHART_COLORS.primary,
       },
       { label: financialVisible ? 'Net value change' : 'Net qty change', color: CHART_COLORS.positive },
     ];
@@ -363,7 +362,7 @@ function legendForWidget(widgetId: WidgetId, financialVisible: boolean): LegendC
     ];
   }
   if (widgetId === 'reorder_priority_scoreboard') {
-    return [{ label: 'Priority score', color: CHART_COLORS.warning }];
+    return [{ label: 'Priority score', color: CHART_COLORS.primary }];
   }
   return [
     { label: 'Raise', color: CHART_COLORS.critical },
@@ -681,7 +680,7 @@ export function DashboardAnalyticsWorkspace() {
                 <XAxis type="number" tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
                 <YAxis type="category" dataKey="label" width={88} tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
                 <Tooltip contentStyle={tooltipStyle()} />
-                <Bar dataKey="count" radius={[0, 6, 6, 0]} fill={CHART_COLORS.secondaryBlue} name="Orders by stage" />
+                <Bar dataKey="count" radius={[0, 6, 6, 0]} fill={CHART_COLORS.primary} name="Orders by stage" />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -818,7 +817,7 @@ export function DashboardAnalyticsWorkspace() {
                 <YAxis yAxisId="left" tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
                 <YAxis yAxisId="right" orientation="right" tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
                 <Tooltip contentStyle={tooltipStyle()} />
-                <Bar yAxisId="left" dataKey="returnsCount" fill={CHART_COLORS.warning} radius={[5, 5, 0, 0]} name="Returns" />
+                <Bar yAxisId="left" dataKey="returnsCount" fill={CHART_COLORS.primary} radius={[5, 5, 0, 0]} name="Returns" />
                 <Line yAxisId="right" dataKey="returnRate" stroke={CHART_COLORS.critical} strokeWidth={2.4} dot={false} name="Return rate %" />
               </ComposedChart>
             </ResponsiveContainer>
@@ -887,7 +886,7 @@ export function DashboardAnalyticsWorkspace() {
               {financialVisible ? (
                 <Bar yAxisId="left" dataKey="inventoryValue" fill={CHART_COLORS.primary} radius={[6, 6, 0, 0]} name="Inventory value" />
               ) : (
-                <Bar yAxisId="left" dataKey="onHandQty" fill={CHART_COLORS.secondaryBlue} radius={[6, 6, 0, 0]} name="On hand qty" />
+                <Bar yAxisId="left" dataKey="onHandQty" fill={CHART_COLORS.primary} radius={[6, 6, 0, 0]} name="On hand qty" />
               )}
               {financialVisible ? (
                 <Line yAxisId="right" dataKey="netValueChange" stroke={CHART_COLORS.positive} strokeWidth={2.2} name="Net value change" />
@@ -962,7 +961,7 @@ export function DashboardAnalyticsWorkspace() {
                 <XAxis type="number" tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
                 <YAxis type="category" dataKey="product_name" width={140} tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
                 <Tooltip contentStyle={tooltipStyle()} />
-                <Bar dataKey="score" fill={CHART_COLORS.warning} radius={[0, 6, 6, 0]} name="Priority score" />
+                <Bar dataKey="score" fill={CHART_COLORS.primary} radius={[0, 6, 6, 0]} name="Priority score" />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -1050,11 +1049,7 @@ export function DashboardAnalyticsWorkspace() {
                 <XAxis dataKey="recommendation" tickFormatter={(value) => recommendationLabel(value as DashboardPriceDiscountImpactPoint['recommendation'])} tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
                 <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
                 <Tooltip contentStyle={tooltipStyle()} formatter={(value) => `${numberFromString(String(value)).toFixed(2)}%`} />
-                <Bar dataKey="averageLift" radius={[6, 6, 0, 0]} name="Avg lift %">
-                  {liftBars.map((row) => (
-                    <Cell key={row.recommendation} fill={colorByRecommendation[row.recommendation as DashboardPriceDiscountImpactPoint['recommendation']]} />
-                  ))}
-                </Bar>
+                <Bar dataKey="averageLift" fill={CHART_COLORS.primary} radius={[6, 6, 0, 0]} name="Avg lift %" />
               </BarChart>
             </ResponsiveContainer>
           </div>
