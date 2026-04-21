@@ -103,11 +103,182 @@ class DashboardProductOpportunityResponse(BaseModel):
     unavailable_reason: str | None = None
 
 
+class DashboardRevenueOrdersAovPointResponse(BaseModel):
+    period: str
+    revenue: Decimal
+    orders: int
+    aov: Decimal
+    anomaly_flag: bool = False
+
+
+class DashboardRevenueOrdersAovTrendResponse(BaseModel):
+    items: list[DashboardRevenueOrdersAovPointResponse]
+
+
+class DashboardGrossProfitMarginPointResponse(BaseModel):
+    period: str
+    revenue: Decimal
+    estimated_gross_profit: Decimal | None = None
+    margin_percent: Decimal | None = None
+
+
+class DashboardGrossProfitMarginTrendResponse(BaseModel):
+    items: list[DashboardGrossProfitMarginPointResponse]
+    unavailable_reason: str | None = None
+
+
+class DashboardConversionFunnelStageResponse(BaseModel):
+    stage: str
+    label: str
+    count: int
+    conversion_percent_from_previous: Decimal | None = None
+    drop_off_from_previous: int | None = None
+
+
+class DashboardConversionDropOffReasonResponse(BaseModel):
+    reason: str
+    count: int
+
+
+class DashboardConversionFunnelResponse(BaseModel):
+    stages: list[DashboardConversionFunnelStageResponse]
+    drop_off_reasons: list[DashboardConversionDropOffReasonResponse]
+
+
+class DashboardProductPerformancePointResponse(BaseModel):
+    product_id: str
+    product_name: str
+    sales_velocity: Decimal
+    estimated_margin_percent: Decimal | None = None
+    revenue: Decimal
+    days_cover: Decimal | None = None
+    quadrant: str
+
+
+class DashboardProductPerformanceQuadrantResponse(BaseModel):
+    items: list[DashboardProductPerformancePointResponse]
+    unavailable_reason: str | None = None
+
+
+class DashboardBrandProfitMixNodeResponse(BaseModel):
+    brand: str
+    revenue: Decimal
+    estimated_gross_profit: Decimal | None = None
+    margin_percent: Decimal | None = None
+    product_count: int
+
+
+class DashboardCategoryProfitMixNodeResponse(BaseModel):
+    category: str
+    revenue: Decimal
+    estimated_gross_profit: Decimal | None = None
+    margin_percent: Decimal | None = None
+    brands: list[DashboardBrandProfitMixNodeResponse]
+
+
+class DashboardCategoryBrandProfitMixResponse(BaseModel):
+    categories: list[DashboardCategoryProfitMixNodeResponse]
+    unavailable_reason: str | None = None
+
+
+class DashboardReturnsReasonCellResponse(BaseModel):
+    product_id: str
+    product_name: str
+    reason: str
+    returns_qty: Decimal
+    refund_amount: Decimal | None = None
+
+
+class DashboardReturnsReasonSummaryResponse(BaseModel):
+    reason: str
+    returns_qty: Decimal
+
+
+class DashboardReturnsIntelligenceTrendPointResponse(BaseModel):
+    period: str
+    returns_count: int
+    return_rate_percent: Decimal
+    refund_amount: Decimal | None = None
+
+
+class DashboardReturnsIntelligenceResponse(BaseModel):
+    heatmap: list[DashboardReturnsReasonCellResponse]
+    top_reasons: list[DashboardReturnsReasonSummaryResponse]
+    trend: list[DashboardReturnsIntelligenceTrendPointResponse]
+
+
+class DashboardInventoryAgingBucketResponse(BaseModel):
+    bucket: str
+    on_hand_qty: Decimal
+    inventory_value: Decimal | None = None
+    net_qty_change: Decimal
+    net_value_change: Decimal | None = None
+
+
+class DashboardInventoryAgingWaterfallResponse(BaseModel):
+    buckets: list[DashboardInventoryAgingBucketResponse]
+    unavailable_reason: str | None = None
+
+
+class DashboardSellThroughCoverPointResponse(BaseModel):
+    product_id: str
+    product_name: str
+    sell_through_percent: Decimal
+    days_cover: Decimal | None = None
+    sales_velocity: Decimal
+    zone: str
+    revenue: Decimal
+
+
+class DashboardSellThroughCoverMatrixResponse(BaseModel):
+    items: list[DashboardSellThroughCoverPointResponse]
+
+
+class DashboardReorderPriorityRowResponse(BaseModel):
+    product_id: str
+    product_name: str
+    priority_score: Decimal
+    sales_velocity: Decimal
+    days_cover: Decimal | None = None
+    estimated_margin_percent: Decimal | None = None
+    revenue: Decimal
+    recommended_action: str
+
+
+class DashboardReorderPriorityScoreboardResponse(BaseModel):
+    items: list[DashboardReorderPriorityRowResponse]
+
+
+class DashboardPriceDiscountImpactPointResponse(BaseModel):
+    product_id: str
+    product_name: str
+    discount_percent: Decimal
+    unit_lift_percent: Decimal
+    net_margin_percent: Decimal | None = None
+    revenue: Decimal
+    recommendation: Literal["raise", "keep", "discount"]
+
+
+class DashboardPriceDiscountImpactResponse(BaseModel):
+    items: list[DashboardPriceDiscountImpactPointResponse]
+    unavailable_reason: str | None = None
+
+
 class DashboardChartsResponse(BaseModel):
     revenue_profit_trend: DashboardRevenueProfitTrendResponse
     stock_movement_trend: list[DashboardStockMovementPointResponse]
     returns_trend: DashboardReturnsTrendResponse
     product_opportunity_matrix: DashboardProductOpportunityResponse
+    revenue_orders_aov_trend: DashboardRevenueOrdersAovTrendResponse
+    gross_profit_margin_trend: DashboardGrossProfitMarginTrendResponse
+    conversion_funnel: DashboardConversionFunnelResponse
+    product_performance_quadrant: DashboardProductPerformanceQuadrantResponse
+    category_brand_profit_mix: DashboardCategoryBrandProfitMixResponse
+    returns_intelligence: DashboardReturnsIntelligenceResponse
+    inventory_aging_waterfall: DashboardInventoryAgingWaterfallResponse
+    sell_through_cover_matrix: DashboardSellThroughCoverMatrixResponse
+    reorder_priority_scoreboard: DashboardReorderPriorityScoreboardResponse
+    price_discount_impact: DashboardPriceDiscountImpactResponse
 
 
 class DashboardStockInvestmentRowResponse(BaseModel):

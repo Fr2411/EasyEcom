@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from easy_ecom.core.errors import ApiException
 from easy_ecom.core.time_utils import ensure_utc, now_utc
 from easy_ecom.data.store.postgres_models import (
+    CategoryModel,
     ClientModel,
     InventoryLedgerModel,
     ProductModel,
@@ -19,6 +20,7 @@ from easy_ecom.data.store.postgres_models import (
     SalesOrderItemModel,
     SalesOrderModel,
     SalesReturnModel,
+    SalesReturnItemModel,
 )
 from easy_ecom.domain.models.auth import AuthenticatedUser
 from easy_ecom.domain.services.commerce_service import (
@@ -71,6 +73,8 @@ class ProductSalesAggregate:
     units_sold: Decimal = ZERO
     revenue: Decimal = ZERO
     estimated_cost: Decimal = ZERO
+    discount_total: Decimal = ZERO
+    gross_before_discount: Decimal = ZERO
     cost_complete: bool = True
 
 
@@ -80,8 +84,12 @@ class SalesAggregation:
     units_sold: Decimal = ZERO
     revenue_total: Decimal = ZERO
     estimated_cost_total: Decimal = ZERO
+    discount_total: Decimal = ZERO
+    gross_before_discount_total: Decimal = ZERO
     cost_complete: bool = True
     revenue_by_bucket: dict[str, Decimal] = field(default_factory=lambda: defaultdict(lambda: ZERO))
+    orders_by_bucket: dict[str, int] = field(default_factory=lambda: defaultdict(int))
+    discount_by_bucket: dict[str, Decimal] = field(default_factory=lambda: defaultdict(lambda: ZERO))
     gross_profit_by_bucket: dict[str, Decimal] = field(default_factory=lambda: defaultdict(lambda: ZERO))
     incomplete_profit_buckets: set[str] = field(default_factory=set)
     products: dict[str, ProductSalesAggregate] = field(default_factory=dict)
@@ -186,6 +194,12 @@ class DashboardAnalyticsService(CommerceBaseService):
                 location_ids=selected_location_ids,
                 range_ctx=range_ctx,
             )
+            on_hand_at_range_start = self._stock_map_until(
+                session=session,
+                client_id=user.client_id,
+                location_ids=selected_location_ids,
+                end_exclusive_utc=range_ctx.start_utc,
+            )
             previous_stock_received = self._stock_received_total(
                 session=session,
                 client_id=user.client_id,
@@ -243,6 +257,64 @@ class DashboardAnalyticsService(CommerceBaseService):
                 gross_profit_unavailable_reason=revenue_unavailable_reason,
             )
             slow_movers = self._slow_movers(product_stock, current_sales, can_view_financial_metrics)
+            product_dimensions = self._product_dimension_map(
+                session=session,
+                client_id=user.client_id,
+                product_ids=set(current_sales.products.keys()) | set(previous_sales.products.keys()) | set(product_stock.keys()),
+            )
+            conversion_funnel = self._conversion_funnel(
+                session=session,
+                client_id=user.client_id,
+                location_ids=selected_location_ids,
+                range_ctx=range_ctx,
+            )
+            returns_intelligence = self._returns_intelligence(
+                session=session,
+                client_id=user.client_id,
+                location_ids=selected_location_ids,
+                range_ctx=range_ctx,
+                returns_agg=current_returns,
+                orders_by_bucket=current_sales.orders_by_bucket,
+                can_view_financial_metrics=can_view_financial_metrics,
+            )
+            inventory_aging = self._inventory_aging_waterfall(
+                session=session,
+                client_id=user.client_id,
+                location_ids=selected_location_ids,
+                on_hand_map=on_hand_map,
+                start_on_hand_map=on_hand_at_range_start,
+                as_of_date=range_ctx.to_date,
+                can_view_financial_metrics=can_view_financial_metrics,
+            )
+            sell_through_cover = self._sell_through_cover_matrix(
+                product_stock=product_stock,
+                current_sales=current_sales,
+                range_days=range_ctx.days,
+            )
+            reorder_priority = self._reorder_priority_scoreboard(
+                current_sales=current_sales,
+                product_stock=product_stock,
+                range_days=range_ctx.days,
+                can_view_financial_metrics=can_view_financial_metrics,
+            )
+            price_discount_impact = self._price_discount_impact(
+                current_sales=current_sales,
+                previous_sales=previous_sales,
+                range_days=range_ctx.days,
+                can_view_financial_metrics=can_view_financial_metrics,
+            )
+            product_performance_quadrant = self._product_performance_quadrant(
+                current_sales=current_sales,
+                product_stock=product_stock,
+                range_days=range_ctx.days,
+                can_view_financial_metrics=can_view_financial_metrics,
+            )
+            category_brand_mix = self._category_brand_profit_mix(
+                current_sales=current_sales,
+                product_dimensions=product_dimensions,
+                can_view_financial_metrics=can_view_financial_metrics,
+                unavailable_reason=revenue_unavailable_reason,
+            )
 
             return {
                 "generated_at": now_utc().isoformat(),
@@ -292,6 +364,40 @@ class DashboardAnalyticsService(CommerceBaseService):
                     "product_opportunity_matrix": {
                         "items": opportunity_points if can_view_financial_metrics and current_sales.cost_complete else [],
                         "unavailable_reason": opportunity_unavailable_reason,
+                    },
+                    "revenue_orders_aov_trend": {
+                        "items": self._revenue_orders_aov_points(range_ctx=range_ctx, sales=current_sales),
+                    },
+                    "gross_profit_margin_trend": {
+                        "items": self._gross_profit_margin_points(
+                            range_ctx=range_ctx,
+                            sales=current_sales,
+                            can_view_financial_metrics=can_view_financial_metrics,
+                        ),
+                        "unavailable_reason": revenue_unavailable_reason,
+                    },
+                    "conversion_funnel": conversion_funnel,
+                    "product_performance_quadrant": {
+                        "items": product_performance_quadrant
+                        if can_view_financial_metrics and current_sales.cost_complete
+                        else [],
+                        "unavailable_reason": revenue_unavailable_reason,
+                    },
+                    "category_brand_profit_mix": category_brand_mix,
+                    "returns_intelligence": returns_intelligence,
+                    "inventory_aging_waterfall": {
+                        "buckets": inventory_aging,
+                        "unavailable_reason": None if can_view_financial_metrics else "Financial metrics are hidden for your role.",
+                    },
+                    "sell_through_cover_matrix": {
+                        "items": sell_through_cover,
+                    },
+                    "reorder_priority_scoreboard": {
+                        "items": reorder_priority,
+                    },
+                    "price_discount_impact": {
+                        "items": price_discount_impact if can_view_financial_metrics and current_sales.cost_complete else [],
+                        "unavailable_reason": revenue_unavailable_reason,
                     },
                 },
                 "tables": {
@@ -440,6 +546,30 @@ class DashboardAnalyticsService(CommerceBaseService):
         }
         return on_hand, reserved
 
+    def _stock_map_until(
+        self,
+        *,
+        session: Session,
+        client_id: str,
+        location_ids: list[str],
+        end_exclusive_utc: datetime,
+    ) -> dict[str, Decimal]:
+        return {
+            str(variant_id): as_decimal(quantity)
+            for variant_id, quantity in session.execute(
+                select(
+                    InventoryLedgerModel.variant_id,
+                    func.coalesce(func.sum(InventoryLedgerModel.quantity_delta), ZERO),
+                )
+                .where(
+                    InventoryLedgerModel.client_id == client_id,
+                    InventoryLedgerModel.location_id.in_(location_ids),
+                    InventoryLedgerModel.created_at < end_exclusive_utc,
+                )
+                .group_by(InventoryLedgerModel.variant_id)
+            ).all()
+        }
+
     def _build_stock_snapshot(
         self,
         *,
@@ -528,6 +658,7 @@ class DashboardAnalyticsService(CommerceBaseService):
                 SalesOrderItemModel.quantity_fulfilled,
                 SalesOrderItemModel.quantity_cancelled,
                 SalesOrderItemModel.line_total_amount,
+                SalesOrderItemModel.discount_amount,
             )
             .join(SalesOrderItemModel, SalesOrderItemModel.sales_order_id == SalesOrderModel.sales_order_id)
             .join(ProductVariantModel, ProductVariantModel.variant_id == SalesOrderItemModel.variant_id)
@@ -575,7 +706,8 @@ class DashboardAnalyticsService(CommerceBaseService):
                 missing_cost_lines.discard(line_key)
 
         zone = self._zoneinfo(range_ctx.timezone)
-        for event_at, _order_id, line_id, product_id, product_name, quantity, quantity_fulfilled, quantity_cancelled, line_total in rows:
+        seen_orders_per_bucket: set[tuple[str, str]] = set()
+        for event_at, order_id, line_id, product_id, product_name, quantity, quantity_fulfilled, quantity_cancelled, line_total, discount_amount in rows:
             line_key = str(line_id)
             sold_quantity = as_decimal(quantity_fulfilled)
             if sold_quantity <= ZERO:
@@ -586,10 +718,20 @@ class DashboardAnalyticsService(CommerceBaseService):
             event_local = ensure_utc(event_at).astimezone(zone)
             bucket = self._bucket_label(range_ctx, event_local.date())
             revenue = as_decimal(line_total)
+            discount = as_decimal(discount_amount)
+            gross_before_discount = revenue + discount
+
+            order_bucket_key = (bucket, str(order_id))
+            if order_bucket_key not in seen_orders_per_bucket:
+                seen_orders_per_bucket.add(order_bucket_key)
+                aggregation.orders_by_bucket[bucket] += 1
 
             aggregation.units_sold += sold_quantity
             aggregation.revenue_total += revenue
             aggregation.revenue_by_bucket[bucket] += revenue
+            aggregation.discount_total += discount
+            aggregation.gross_before_discount_total += gross_before_discount
+            aggregation.discount_by_bucket[bucket] += discount
 
             product_key = str(product_id)
             product_agg = aggregation.products.setdefault(
@@ -598,6 +740,8 @@ class DashboardAnalyticsService(CommerceBaseService):
             )
             product_agg.units_sold += sold_quantity
             product_agg.revenue += revenue
+            product_agg.discount_total += discount
+            product_agg.gross_before_discount += gross_before_discount
 
             if line_key in missing_cost_lines:
                 aggregation.cost_complete = False
@@ -1313,6 +1457,685 @@ class DashboardAnalyticsService(CommerceBaseService):
             reverse=True,
         )
         return rows[:8]
+
+    def _revenue_orders_aov_points(self, *, range_ctx: DashboardRange, sales: SalesAggregation) -> list[dict[str, object]]:
+        buckets = self._bucket_labels(range_ctx)
+        revenues = [sales.revenue_by_bucket.get(bucket, ZERO) for bucket in buckets]
+        revenue_avg = (sum(revenues, ZERO) / Decimal(str(len(revenues)))) if revenues else ZERO
+        anomaly_threshold_high = revenue_avg * Decimal("1.50")
+        anomaly_threshold_low = revenue_avg * Decimal("0.50")
+
+        points: list[dict[str, object]] = []
+        for bucket in buckets:
+            revenue = sales.revenue_by_bucket.get(bucket, ZERO).quantize(MONEY_QUANTUM)
+            orders = sales.orders_by_bucket.get(bucket, 0)
+            aov = (revenue / Decimal(str(orders))).quantize(MONEY_QUANTUM) if orders > 0 else ZERO
+            anomaly_flag = bool(
+                len(buckets) >= 6
+                and revenue_avg > ZERO
+                and (revenue >= anomaly_threshold_high or revenue <= anomaly_threshold_low)
+            )
+            points.append(
+                {
+                    "period": bucket,
+                    "revenue": revenue,
+                    "orders": orders,
+                    "aov": aov,
+                    "anomaly_flag": anomaly_flag,
+                }
+            )
+        return points
+
+    def _gross_profit_margin_points(
+        self,
+        *,
+        range_ctx: DashboardRange,
+        sales: SalesAggregation,
+        can_view_financial_metrics: bool,
+    ) -> list[dict[str, object]]:
+        points: list[dict[str, object]] = []
+        for bucket in self._bucket_labels(range_ctx):
+            revenue = sales.revenue_by_bucket.get(bucket, ZERO).quantize(MONEY_QUANTUM)
+            estimated_gross_profit = None
+            margin_percent = None
+            if can_view_financial_metrics and bucket not in sales.incomplete_profit_buckets:
+                profit = sales.gross_profit_by_bucket.get(bucket, ZERO).quantize(MONEY_QUANTUM)
+                estimated_gross_profit = profit
+                if revenue > ZERO:
+                    margin_percent = ((profit / revenue) * Decimal("100")).quantize(PERCENT_QUANTUM)
+            points.append(
+                {
+                    "period": bucket,
+                    "revenue": revenue,
+                    "estimated_gross_profit": estimated_gross_profit,
+                    "margin_percent": margin_percent,
+                }
+            )
+        return points
+
+    def _conversion_funnel(
+        self,
+        *,
+        session: Session,
+        client_id: str,
+        location_ids: list[str],
+        range_ctx: DashboardRange,
+    ) -> dict[str, object]:
+        rows = session.execute(
+            select(SalesOrderModel.status, func.count())
+            .where(
+                SalesOrderModel.client_id == client_id,
+                SalesOrderModel.location_id.in_(location_ids),
+                SalesOrderModel.created_at >= range_ctx.start_utc,
+                SalesOrderModel.created_at < range_ctx.end_exclusive_utc,
+            )
+            .group_by(SalesOrderModel.status)
+        ).all()
+
+        status_counts: dict[str, int] = {str(status): int(count or 0) for status, count in rows}
+        inquiry_count = sum(status_counts.values())
+        draft_count = status_counts.get("draft", 0)
+        reserved_count = status_counts.get("confirmed", 0)
+        completed_count = status_counts.get("completed", 0)
+
+        raw_stages = [
+            ("inquiry", "Inquiry", inquiry_count),
+            ("draft", "Draft", draft_count),
+            ("reserved", "Reserved", reserved_count),
+            ("completed", "Completed", completed_count),
+        ]
+        stages: list[dict[str, object]] = []
+        previous_count: int | None = None
+        for stage_key, label, count in raw_stages:
+            conversion_percent = None
+            drop_off = None
+            if previous_count is not None and previous_count > 0:
+                conversion_percent = ((Decimal(str(count)) / Decimal(str(previous_count))) * Decimal("100")).quantize(
+                    PERCENT_QUANTUM
+                )
+                drop_off = max(previous_count - count, 0)
+            stages.append(
+                {
+                    "stage": stage_key,
+                    "label": label,
+                    "count": count,
+                    "conversion_percent_from_previous": conversion_percent,
+                    "drop_off_from_previous": drop_off,
+                }
+            )
+            previous_count = count
+
+        drop_off_reasons = [
+            {"reason": self._humanize_status(status), "count": count}
+            for status, count in sorted(status_counts.items(), key=lambda item: item[1], reverse=True)
+            if status not in {"draft", "confirmed", "completed"}
+        ]
+
+        return {
+            "stages": stages,
+            "drop_off_reasons": drop_off_reasons[:6],
+        }
+
+    def _product_dimension_map(
+        self,
+        *,
+        session: Session,
+        client_id: str,
+        product_ids: set[str],
+    ) -> dict[str, dict[str, str]]:
+        if not product_ids:
+            return {}
+        rows = session.execute(
+            select(ProductModel.product_id, ProductModel.brand, CategoryModel.name)
+            .outerjoin(CategoryModel, CategoryModel.category_id == ProductModel.category_id)
+            .where(
+                ProductModel.client_id == client_id,
+                ProductModel.product_id.in_(list(product_ids)),
+            )
+        ).all()
+        return {
+            str(product_id): {
+                "brand": (brand or "").strip() or "Unbranded",
+                "category": (category_name or "").strip() or "Uncategorized",
+            }
+            for product_id, brand, category_name in rows
+        }
+
+    def _product_performance_quadrant(
+        self,
+        *,
+        current_sales: SalesAggregation,
+        product_stock: dict[str, ProductStockAggregate],
+        range_days: int,
+        can_view_financial_metrics: bool,
+    ) -> list[dict[str, object]]:
+        if not can_view_financial_metrics:
+            return []
+
+        divisor = Decimal(str(max(range_days, 1)))
+        velocity_values: list[Decimal] = []
+        prepared: list[dict[str, object]] = []
+        for product in current_sales.products.values():
+            if product.revenue <= ZERO:
+                continue
+            velocity = (product.units_sold / divisor).quantize(PERCENT_QUANTUM)
+            velocity_values.append(velocity)
+            margin_percent = None
+            if product.cost_complete and product.revenue > ZERO:
+                margin_percent = (((product.revenue - product.estimated_cost) / product.revenue) * Decimal("100")).quantize(
+                    PERCENT_QUANTUM
+                )
+            stock = product_stock.get(product.product_id)
+            available = stock.available_qty if stock else ZERO
+            days_cover = None
+            if velocity > ZERO and available > ZERO:
+                days_cover = (available / velocity).quantize(PERCENT_QUANTUM)
+            prepared.append(
+                {
+                    "product_id": product.product_id,
+                    "product_name": product.product_name,
+                    "sales_velocity": velocity,
+                    "estimated_margin_percent": margin_percent,
+                    "revenue": product.revenue.quantize(MONEY_QUANTUM),
+                    "days_cover": days_cover,
+                    "quadrant": "laggard",
+                }
+            )
+
+        velocity_threshold = self._decimal_median(velocity_values)
+        margin_threshold = Decimal("25.00")
+        for point in prepared:
+            margin = as_optional_decimal(point["estimated_margin_percent"])
+            velocity = as_decimal(point["sales_velocity"])
+            if margin is None:
+                point["quadrant"] = "watch"
+            elif velocity >= velocity_threshold and margin >= margin_threshold:
+                point["quadrant"] = "star"
+            elif velocity >= velocity_threshold and margin < margin_threshold:
+                point["quadrant"] = "margin_killer"
+            elif velocity < velocity_threshold and margin >= margin_threshold:
+                point["quadrant"] = "sleeper"
+            else:
+                point["quadrant"] = "laggard"
+
+        prepared.sort(key=lambda item: as_decimal(item["revenue"]), reverse=True)
+        return prepared[:30]
+
+    def _category_brand_profit_mix(
+        self,
+        *,
+        current_sales: SalesAggregation,
+        product_dimensions: dict[str, dict[str, str]],
+        can_view_financial_metrics: bool,
+        unavailable_reason: str | None,
+    ) -> dict[str, object]:
+        if not can_view_financial_metrics:
+            return {"categories": [], "unavailable_reason": "Financial metrics are hidden for your role."}
+
+        category_accumulator: dict[str, dict[str, object]] = {}
+        for product in current_sales.products.values():
+            if product.revenue <= ZERO:
+                continue
+            dims = product_dimensions.get(product.product_id, {})
+            category = dims.get("category") or "Uncategorized"
+            brand = dims.get("brand") or "Unbranded"
+            category_bucket = category_accumulator.setdefault(
+                category,
+                {
+                    "revenue": ZERO,
+                    "estimated_gross_profit": ZERO,
+                    "cost_complete": True,
+                    "brands": {},
+                },
+            )
+            category_bucket["revenue"] = as_decimal(category_bucket["revenue"]) + product.revenue
+            if product.cost_complete:
+                category_bucket["estimated_gross_profit"] = as_decimal(category_bucket["estimated_gross_profit"]) + (
+                    product.revenue - product.estimated_cost
+                )
+            else:
+                category_bucket["cost_complete"] = False
+
+            brand_map: dict[str, dict[str, object]] = category_bucket["brands"]  # type: ignore[assignment]
+            brand_bucket = brand_map.setdefault(
+                brand,
+                {
+                    "revenue": ZERO,
+                    "estimated_gross_profit": ZERO,
+                    "cost_complete": True,
+                    "products": set(),
+                },
+            )
+            brand_bucket["revenue"] = as_decimal(brand_bucket["revenue"]) + product.revenue
+            if product.cost_complete:
+                brand_bucket["estimated_gross_profit"] = as_decimal(brand_bucket["estimated_gross_profit"]) + (
+                    product.revenue - product.estimated_cost
+                )
+            else:
+                brand_bucket["cost_complete"] = False
+            casted_products: set[str] = brand_bucket["products"]  # type: ignore[assignment]
+            casted_products.add(product.product_id)
+
+        categories: list[dict[str, object]] = []
+        for category, values in category_accumulator.items():
+            category_revenue = as_decimal(values["revenue"]).quantize(MONEY_QUANTUM)
+            category_profit = (
+                as_decimal(values["estimated_gross_profit"]).quantize(MONEY_QUANTUM) if values.get("cost_complete", False) else None
+            )
+            category_margin = (
+                ((category_profit / category_revenue) * Decimal("100")).quantize(PERCENT_QUANTUM)
+                if category_profit is not None and category_revenue > ZERO
+                else None
+            )
+
+            brands_payload: list[dict[str, object]] = []
+            brand_map: dict[str, dict[str, object]] = values["brands"]  # type: ignore[assignment]
+            for brand, brand_values in brand_map.items():
+                brand_revenue = as_decimal(brand_values["revenue"]).quantize(MONEY_QUANTUM)
+                brand_profit = (
+                    as_decimal(brand_values["estimated_gross_profit"]).quantize(MONEY_QUANTUM)
+                    if brand_values.get("cost_complete", False)
+                    else None
+                )
+                brand_margin = (
+                    ((brand_profit / brand_revenue) * Decimal("100")).quantize(PERCENT_QUANTUM)
+                    if brand_profit is not None and brand_revenue > ZERO
+                    else None
+                )
+                brands_payload.append(
+                    {
+                        "brand": brand,
+                        "revenue": brand_revenue,
+                        "estimated_gross_profit": brand_profit,
+                        "margin_percent": brand_margin,
+                        "product_count": len(brand_values["products"]),
+                    }
+                )
+            brands_payload.sort(key=lambda item: as_decimal(item["revenue"]), reverse=True)
+            categories.append(
+                {
+                    "category": category,
+                    "revenue": category_revenue,
+                    "estimated_gross_profit": category_profit,
+                    "margin_percent": category_margin,
+                    "brands": brands_payload[:10],
+                }
+            )
+
+        categories.sort(key=lambda item: as_decimal(item["revenue"]), reverse=True)
+        return {
+            "categories": categories[:12],
+            "unavailable_reason": unavailable_reason if not current_sales.cost_complete else None,
+        }
+
+    def _returns_intelligence(
+        self,
+        *,
+        session: Session,
+        client_id: str,
+        location_ids: list[str],
+        range_ctx: DashboardRange,
+        returns_agg: ReturnsAggregation,
+        orders_by_bucket: dict[str, int],
+        can_view_financial_metrics: bool,
+    ) -> dict[str, object]:
+        event_expr = func.coalesce(SalesReturnModel.received_at, SalesReturnModel.requested_at, SalesReturnModel.created_at)
+        rows = session.execute(
+            select(
+                event_expr,
+                ProductModel.product_id,
+                ProductModel.name,
+                SalesReturnItemModel.disposition,
+                SalesReturnItemModel.quantity,
+                SalesReturnItemModel.unit_refund_amount,
+            )
+            .join(SalesReturnModel, SalesReturnModel.sales_return_id == SalesReturnItemModel.sales_return_id)
+            .join(SalesOrderModel, SalesOrderModel.sales_order_id == SalesReturnModel.sales_order_id)
+            .join(ProductVariantModel, ProductVariantModel.variant_id == SalesReturnItemModel.variant_id)
+            .join(ProductModel, ProductModel.product_id == ProductVariantModel.product_id)
+            .where(
+                SalesReturnItemModel.client_id == client_id,
+                SalesReturnModel.client_id == client_id,
+                SalesOrderModel.client_id == client_id,
+                ProductVariantModel.client_id == client_id,
+                ProductModel.client_id == client_id,
+                SalesOrderModel.location_id.in_(location_ids),
+                event_expr >= range_ctx.start_utc,
+                event_expr < range_ctx.end_exclusive_utc,
+            )
+        ).all()
+
+        heatmap: dict[tuple[str, str], dict[str, object]] = {}
+        reason_totals: dict[str, Decimal] = defaultdict(lambda: ZERO)
+        for _event_at, product_id, product_name, disposition, quantity, unit_refund_amount in rows:
+            reason = (str(disposition or "").strip().replace("_", " ") or "other").title()
+            key = (str(product_id), reason)
+            quantity_value = as_decimal(quantity)
+            refund_amount = (quantity_value * as_decimal(unit_refund_amount)).quantize(MONEY_QUANTUM)
+            entry = heatmap.setdefault(
+                key,
+                {
+                    "product_id": str(product_id),
+                    "product_name": product_name,
+                    "reason": reason,
+                    "returns_qty": ZERO,
+                    "refund_amount": ZERO,
+                },
+            )
+            entry["returns_qty"] = as_decimal(entry["returns_qty"]) + quantity_value
+            entry["refund_amount"] = as_decimal(entry["refund_amount"]) + refund_amount
+            reason_totals[reason] += quantity_value
+
+        heatmap_rows = list(heatmap.values())
+        heatmap_rows.sort(key=lambda item: (as_decimal(item["returns_qty"]), item["product_name"]), reverse=True)
+        top_reasons = [
+            {"reason": reason, "returns_qty": quantity.quantize(PERCENT_QUANTUM)}
+            for reason, quantity in sorted(reason_totals.items(), key=lambda item: item[1], reverse=True)
+        ]
+
+        trend = []
+        for bucket in self._bucket_labels(range_ctx):
+            returns_count = returns_agg.count_by_bucket.get(bucket, 0)
+            completed_orders = max(orders_by_bucket.get(bucket, 0), 0)
+            return_rate_percent = (
+                ((Decimal(str(returns_count)) / Decimal(str(completed_orders))) * Decimal("100")).quantize(PERCENT_QUANTUM)
+                if completed_orders > 0
+                else ZERO
+            )
+            trend.append(
+                {
+                    "period": bucket,
+                    "returns_count": returns_count,
+                    "return_rate_percent": return_rate_percent,
+                    "refund_amount": (
+                        returns_agg.amount_by_bucket.get(bucket, ZERO).quantize(MONEY_QUANTUM)
+                        if can_view_financial_metrics
+                        else None
+                    ),
+                }
+            )
+
+        serialized_heatmap = [
+            {
+                **row,
+                "returns_qty": as_decimal(row["returns_qty"]).quantize(PERCENT_QUANTUM),
+                "refund_amount": as_decimal(row["refund_amount"]).quantize(MONEY_QUANTUM)
+                if can_view_financial_metrics
+                else None,
+            }
+            for row in heatmap_rows[:40]
+        ]
+        return {
+            "heatmap": serialized_heatmap,
+            "top_reasons": top_reasons[:8],
+            "trend": trend,
+        }
+
+    def _inventory_aging_waterfall(
+        self,
+        *,
+        session: Session,
+        client_id: str,
+        location_ids: list[str],
+        on_hand_map: dict[str, Decimal],
+        start_on_hand_map: dict[str, Decimal],
+        as_of_date: date,
+        can_view_financial_metrics: bool,
+    ) -> list[dict[str, object]]:
+        rows = session.execute(
+            select(
+                ProductVariantModel.variant_id,
+                ProductVariantModel.cost_amount,
+                ProductVariantModel.created_at,
+            )
+            .where(ProductVariantModel.client_id == client_id)
+        ).all()
+        last_received_map = {
+            str(variant_id): ensure_utc(last_received_at)
+            for variant_id, last_received_at in session.execute(
+                select(InventoryLedgerModel.variant_id, func.max(InventoryLedgerModel.created_at))
+                .where(
+                    InventoryLedgerModel.client_id == client_id,
+                    InventoryLedgerModel.location_id.in_(location_ids),
+                    InventoryLedgerModel.movement_type == "stock_received",
+                )
+                .group_by(InventoryLedgerModel.variant_id)
+            ).all()
+            if last_received_at is not None
+        }
+
+        bucket_order = ("0-30", "31-60", "61-90", "90+")
+        buckets: dict[str, dict[str, Decimal]] = {
+            label: {
+                "on_hand_qty": ZERO,
+                "inventory_value": ZERO,
+                "net_qty_change": ZERO,
+                "net_value_change": ZERO,
+            }
+            for label in bucket_order
+        }
+
+        for variant_id, cost_amount, created_at in rows:
+            variant_key = str(variant_id)
+            on_hand_qty = on_hand_map.get(variant_key, ZERO)
+            if on_hand_qty <= ZERO:
+                continue
+            start_qty = start_on_hand_map.get(variant_key, ZERO)
+            net_qty_change = on_hand_qty - start_qty
+            anchor = last_received_map.get(variant_key, ensure_utc(created_at))
+            age_days = max((as_of_date - anchor.date()).days, 0)
+            bucket_label = self._inventory_age_bucket(age_days)
+            bucket = buckets[bucket_label]
+            bucket["on_hand_qty"] += on_hand_qty
+            bucket["net_qty_change"] += net_qty_change
+            if can_view_financial_metrics:
+                cost_decimal = as_optional_decimal(cost_amount)
+                if cost_decimal is not None:
+                    bucket["inventory_value"] += (on_hand_qty * cost_decimal).quantize(MONEY_QUANTUM)
+                    bucket["net_value_change"] += (net_qty_change * cost_decimal).quantize(MONEY_QUANTUM)
+
+        return [
+            {
+                "bucket": label,
+                "on_hand_qty": buckets[label]["on_hand_qty"].quantize(PERCENT_QUANTUM),
+                "inventory_value": buckets[label]["inventory_value"].quantize(MONEY_QUANTUM)
+                if can_view_financial_metrics
+                else None,
+                "net_qty_change": buckets[label]["net_qty_change"].quantize(PERCENT_QUANTUM),
+                "net_value_change": buckets[label]["net_value_change"].quantize(MONEY_QUANTUM)
+                if can_view_financial_metrics
+                else None,
+            }
+            for label in bucket_order
+        ]
+
+    def _sell_through_cover_matrix(
+        self,
+        *,
+        product_stock: dict[str, ProductStockAggregate],
+        current_sales: SalesAggregation,
+        range_days: int,
+    ) -> list[dict[str, object]]:
+        product_ids = set(product_stock.keys()) | set(current_sales.products.keys())
+        divisor = Decimal(str(max(range_days, 1)))
+        rows: list[dict[str, object]] = []
+
+        for product_id in product_ids:
+            stock = product_stock.get(product_id)
+            sales = current_sales.products.get(product_id)
+            product_name = sales.product_name if sales else (stock.product_name if stock else "Unknown product")
+            units_sold = sales.units_sold if sales else ZERO
+            revenue = sales.revenue if sales else ZERO
+            on_hand = stock.on_hand_qty if stock else ZERO
+            available = stock.available_qty if stock else ZERO
+            denominator = units_sold + max(on_hand, ZERO)
+            sell_through_percent = (
+                ((units_sold / denominator) * Decimal("100")).quantize(PERCENT_QUANTUM) if denominator > ZERO else ZERO
+            )
+            sales_velocity = (units_sold / divisor).quantize(PERCENT_QUANTUM)
+            days_cover = (available / sales_velocity).quantize(PERCENT_QUANTUM) if sales_velocity > ZERO and available > ZERO else None
+
+            zone = "watch"
+            if sales_velocity >= Decimal("0.50") and (days_cover is None or days_cover <= Decimal("14")):
+                zone = "low_cover_high_velocity"
+            elif sales_velocity <= Decimal("0.20") and days_cover is not None and days_cover >= Decimal("45"):
+                zone = "high_cover_low_velocity"
+            elif sales_velocity >= Decimal("0.50") and days_cover is not None and days_cover <= Decimal("45"):
+                zone = "healthy"
+
+            rows.append(
+                {
+                    "product_id": product_id,
+                    "product_name": product_name,
+                    "sell_through_percent": sell_through_percent,
+                    "days_cover": days_cover,
+                    "sales_velocity": sales_velocity,
+                    "zone": zone,
+                    "revenue": revenue.quantize(MONEY_QUANTUM),
+                }
+            )
+
+        rows.sort(key=lambda item: as_decimal(item["revenue"]), reverse=True)
+        return rows[:40]
+
+    def _reorder_priority_scoreboard(
+        self,
+        *,
+        current_sales: SalesAggregation,
+        product_stock: dict[str, ProductStockAggregate],
+        range_days: int,
+        can_view_financial_metrics: bool,
+    ) -> list[dict[str, object]]:
+        divisor = Decimal(str(max(range_days, 1)))
+        rows: list[dict[str, object]] = []
+        for product in current_sales.products.values():
+            sales_velocity = (product.units_sold / divisor).quantize(PERCENT_QUANTUM)
+            if sales_velocity <= ZERO:
+                continue
+            stock = product_stock.get(product.product_id)
+            available = stock.available_qty if stock else ZERO
+            days_cover = (available / sales_velocity).quantize(PERCENT_QUANTUM) if available > ZERO else None
+            margin_percent = None
+            if can_view_financial_metrics and product.cost_complete and product.revenue > ZERO:
+                margin_percent = (((product.revenue - product.estimated_cost) / product.revenue) * Decimal("100")).quantize(
+                    PERCENT_QUANTUM
+                )
+
+            if days_cover is None:
+                stockout_risk = Decimal("2.2")
+            elif days_cover <= Decimal("7"):
+                stockout_risk = Decimal("3.0")
+            elif days_cover <= Decimal("14"):
+                stockout_risk = Decimal("2.0")
+            elif days_cover <= Decimal("30"):
+                stockout_risk = Decimal("1.2")
+            else:
+                stockout_risk = Decimal("0.6")
+
+            margin_factor = Decimal("1.0")
+            if margin_percent is not None:
+                margin_factor = max(Decimal("0.5"), min(Decimal("2.5"), margin_percent / Decimal("20")))
+            score = (sales_velocity * margin_factor * stockout_risk * Decimal("100")).quantize(PERCENT_QUANTUM)
+
+            recommended_action = "Monitor"
+            if stockout_risk >= Decimal("2.0"):
+                recommended_action = "Reorder now"
+            elif stockout_risk >= Decimal("1.2"):
+                recommended_action = "Plan reorder"
+
+            rows.append(
+                {
+                    "product_id": product.product_id,
+                    "product_name": product.product_name,
+                    "priority_score": score,
+                    "sales_velocity": sales_velocity,
+                    "days_cover": days_cover,
+                    "estimated_margin_percent": margin_percent,
+                    "revenue": product.revenue.quantize(MONEY_QUANTUM),
+                    "recommended_action": recommended_action,
+                }
+            )
+
+        rows.sort(key=lambda item: as_decimal(item["priority_score"]), reverse=True)
+        return rows[:20]
+
+    def _price_discount_impact(
+        self,
+        *,
+        current_sales: SalesAggregation,
+        previous_sales: SalesAggregation,
+        range_days: int,
+        can_view_financial_metrics: bool,
+    ) -> list[dict[str, object]]:
+        if not can_view_financial_metrics:
+            return []
+        divisor = Decimal(str(max(range_days, 1)))
+        rows: list[dict[str, object]] = []
+        for product in current_sales.products.values():
+            if product.revenue <= ZERO:
+                continue
+            discount_percent = (
+                ((product.discount_total / product.gross_before_discount) * Decimal("100")).quantize(PERCENT_QUANTUM)
+                if product.gross_before_discount > ZERO
+                else ZERO
+            )
+            current_velocity = (product.units_sold / divisor).quantize(PERCENT_QUANTUM)
+            previous = previous_sales.products.get(product.product_id)
+            previous_velocity = (previous.units_sold / divisor).quantize(PERCENT_QUANTUM) if previous else ZERO
+            if previous_velocity > ZERO:
+                unit_lift = (((current_velocity - previous_velocity) / previous_velocity) * Decimal("100")).quantize(PERCENT_QUANTUM)
+            elif current_velocity > ZERO:
+                unit_lift = Decimal("100.00")
+            else:
+                unit_lift = ZERO
+
+            net_margin_percent = None
+            if product.cost_complete and product.revenue > ZERO:
+                net_margin_percent = (((product.revenue - product.estimated_cost) / product.revenue) * Decimal("100")).quantize(
+                    PERCENT_QUANTUM
+                )
+
+            recommendation: str = "keep"
+            if discount_percent >= Decimal("8.00") and (net_margin_percent is None or net_margin_percent < Decimal("15.00")):
+                recommendation = "raise"
+            elif unit_lift >= Decimal("12.00") and (net_margin_percent is None or net_margin_percent >= Decimal("20.00")):
+                recommendation = "discount"
+
+            rows.append(
+                {
+                    "product_id": product.product_id,
+                    "product_name": product.product_name,
+                    "discount_percent": discount_percent,
+                    "unit_lift_percent": unit_lift,
+                    "net_margin_percent": net_margin_percent,
+                    "revenue": product.revenue.quantize(MONEY_QUANTUM),
+                    "recommendation": recommendation,
+                }
+            )
+
+        rows.sort(key=lambda item: as_decimal(item["revenue"]), reverse=True)
+        return rows[:30]
+
+    def _decimal_median(self, values: list[Decimal]) -> Decimal:
+        if not values:
+            return ZERO
+        ordered = sorted(values)
+        middle = len(ordered) // 2
+        if len(ordered) % 2:
+            return ordered[middle]
+        return ((ordered[middle - 1] + ordered[middle]) / Decimal("2")).quantize(PERCENT_QUANTUM)
+
+    def _inventory_age_bucket(self, age_days: int) -> str:
+        if age_days <= 30:
+            return "0-30"
+        if age_days <= 60:
+            return "31-60"
+        if age_days <= 90:
+            return "61-90"
+        return "90+"
+
+    def _humanize_status(self, value: str) -> str:
+        return value.replace("_", " ").strip().title()
 
     def _bucket_labels(self, range_ctx: DashboardRange) -> list[str]:
         labels: list[str] = []

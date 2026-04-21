@@ -1,0 +1,414 @@
+.dashboard {
+  display: grid;
+  gap: 1rem;
+}
+
+.headerCard {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: linear-gradient(180deg, color-mix(in oklab, var(--surface) 92%, transparent) 0%, var(--surface) 100%);
+}
+
+.headerTop {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.headerTop h2 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.headerTop p {
+  margin: 0.35rem 0 0;
+  color: var(--text-muted);
+}
+
+.headerActions {
+  display: inline-flex;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.filtersRow {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+
+.filterField {
+  min-width: 10rem;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.filterField span {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.customRange {
+  display: inline-flex;
+  gap: 0.6rem;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.rangeMeta {
+  margin-left: auto;
+  display: grid;
+  gap: 0.2rem;
+  text-align: right;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.chartPicker {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.chartPickerItem {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.6rem;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.55rem;
+  align-items: flex-start;
+}
+
+.chartPickerItem strong {
+  display: block;
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.chartPickerItem span {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.errorBox {
+  border-radius: 12px;
+  border: 1px solid color-mix(in oklab, var(--danger) 22%, var(--border));
+  background: color-mix(in oklab, var(--danger) 8%, var(--surface));
+  padding: 0.8rem;
+  display: flex;
+  gap: 0.6rem;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.errorBox p {
+  margin: 0;
+}
+
+.loadingBox {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 0.9rem;
+  color: var(--text-muted);
+}
+
+.kpiGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.kpiCard {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  padding: 0.8rem;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.kpiCard p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.kpiCard strong {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.2;
+}
+
+.kpiCard span {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.board {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.8rem;
+  align-items: start;
+}
+
+.column {
+  display: grid;
+  gap: 0.55rem;
+  align-content: start;
+}
+
+.columnEmpty {
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  padding: 0.8rem;
+  color: var(--text-muted);
+  text-align: center;
+  background: color-mix(in oklab, var(--surface) 92%, transparent);
+}
+
+.dropZone {
+  border: 1px dashed color-mix(in oklab, var(--primary) 30%, var(--border));
+  border-radius: 10px;
+  padding: 0.32rem 0.5rem;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  text-align: center;
+  background: color-mix(in oklab, var(--surface) 85%, transparent);
+}
+
+.widgetCard {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  padding: 0.8rem;
+  display: grid;
+  gap: 0.65rem;
+  box-shadow: 0 6px 24px rgba(8, 24, 41, 0.08);
+}
+
+.widgetDragging {
+  opacity: 0.65;
+}
+
+.widgetHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.widgetHeader h4 {
+  margin: 0;
+  font-size: 0.98rem;
+  line-height: 1.25;
+}
+
+.widgetHeader p {
+  margin: 0.22rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.widgetActions {
+  display: inline-flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.dragHandle {
+  cursor: grab;
+}
+
+.hideBtn {
+  color: var(--text-muted);
+}
+
+.chartWrap {
+  width: 100%;
+  min-height: 180px;
+}
+
+.chartNote {
+  margin-top: -0.2rem;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.inlineStats {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+.emptyState {
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  padding: 1rem;
+  text-align: center;
+  color: var(--text-muted);
+  background: color-mix(in oklab, var(--surface) 88%, transparent);
+}
+
+.heatmapWrap {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.heatmapHeader {
+  padding: 0.55rem 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in oklab, var(--surface) 88%, transparent);
+}
+
+.heatmapTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.76rem;
+}
+
+.heatmapTable th,
+.heatmapTable td {
+  border: 1px solid var(--border);
+  padding: 0.35rem 0.4rem;
+  text-align: center;
+}
+
+.heatmapTable th:first-child,
+.heatmapTable td:first-child {
+  text-align: left;
+  font-weight: 600;
+}
+
+.scoreRows {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.scoreRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0.55rem;
+  align-items: center;
+  font-size: 0.78rem;
+}
+
+.scoreRow strong {
+  font-weight: 600;
+}
+
+.actionCritical,
+.actionWarning,
+.actionNeutral {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.18rem 0.45rem;
+}
+
+.actionCritical {
+  color: #ffffff;
+  background: #dc2626;
+  border-color: #dc2626;
+}
+
+.actionWarning {
+  color: #ffffff;
+  background: #ea580c;
+  border-color: #ea580c;
+}
+
+.actionNeutral {
+  color: var(--text-muted);
+  background: color-mix(in oklab, var(--surface) 80%, var(--border));
+}
+
+.footerLinks {
+  display: inline-flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.footerLinks a {
+  text-decoration: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.32rem 0.62rem;
+  background: var(--surface);
+}
+
+.footerLinks a:hover {
+  border-color: color-mix(in oklab, var(--primary) 46%, var(--border));
+  color: var(--text);
+}
+
+@media (max-width: 1200px) {
+  .kpiGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1024px) {
+  .board {
+    grid-template-columns: 1fr;
+  }
+
+  .rangeMeta {
+    width: 100%;
+    margin-left: 0;
+    text-align: left;
+  }
+
+  .chartPicker {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .kpiGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .headerActions,
+  .filtersRow,
+  .customRange {
+    width: 100%;
+  }
+
+  .filterField {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .scoreRow {
+    grid-template-columns: 1fr;
+    gap: 0.2rem;
+  }
+}
+
+@media (max-width: 520px) {
+  .kpiGrid {
+    grid-template-columns: 1fr;
+  }
+}
