@@ -8272,3 +8272,143 @@ html[data-theme='dark'] .operations-definition-grid div,
 html[data-theme='dark'] .operations-toggle-card {
   background: rgba(20, 24, 32, 0.88);
 }
+
+/* 2026-04 dark theme consistency hardening */
+:root {
+  --ui-control-bg: var(--surface-raised);
+  --ui-control-bg-hover: color-mix(in srgb, var(--surface-raised) 88%, var(--primary-soft));
+  --ui-control-border: var(--border-strong);
+  --ui-card-bg: color-mix(in srgb, var(--surface) 90%, transparent);
+  --ui-card-bg-soft: color-mix(in srgb, var(--surface-muted) 90%, transparent);
+  --ui-muted-text: var(--text-muted);
+  --ui-chip-bg: color-mix(in srgb, var(--surface-raised) 92%, transparent);
+  --ui-chip-text: var(--text);
+}
+
+html[data-theme='dark'] {
+  --ui-control-bg: color-mix(in srgb, var(--surface-raised) 92%, #1b2230 8%);
+  --ui-control-bg-hover: color-mix(in srgb, var(--surface-raised) 82%, #202a3d 18%);
+  --ui-control-border: color-mix(in srgb, var(--border-strong) 90%, rgba(175, 196, 255, 0.24));
+  --ui-card-bg: color-mix(in srgb, var(--surface) 94%, #121926 6%);
+  --ui-card-bg-soft: color-mix(in srgb, var(--surface-raised) 92%, #121926 8%);
+  --ui-muted-text: #c5cbd8;
+  --ui-chip-bg: color-mix(in srgb, var(--surface-raised) 88%, #1a2130 12%);
+  --ui-chip-text: #e6ebf5;
+}
+
+input,
+textarea,
+select {
+  background: var(--ui-control-bg);
+  color: var(--text);
+  border-color: var(--ui-control-border);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--ui-muted-text);
+}
+
+button {
+  background: var(--ui-control-bg);
+  color: var(--text);
+  border-color: var(--ui-control-border);
+}
+
+button:hover {
+  background: var(--ui-control-bg-hover);
+  border-color: color-mix(in srgb, var(--ui-control-border) 72%, var(--primary) 28%);
+}
+
+.header-search,
+.header-search-button,
+.workspace-tab,
+.workspace-panel,
+.top-header,
+.page-shell,
+.sidebar,
+.kpi-card,
+.section-card,
+.billing-summary-card,
+.admin-access-summary div,
+.admin-access-row,
+.reports-filter-kpi-bridge,
+.operations-toolbar,
+.operations-filter-bar,
+.operations-search-bar,
+.operations-kpi-card,
+.operations-list-card,
+.operations-priority-card,
+.operations-definition-grid div,
+.operations-toggle-card {
+  background: var(--ui-card-bg);
+  border-color: var(--ui-control-border);
+  color: var(--text);
+}
+
+.operations-section-heading p,
+.operations-list-card p,
+.operations-inline-meta,
+.operations-filter-bar label,
+.operations-search-bar label,
+.operations-form-grid label,
+.workspace-field-note,
+.muted,
+.customers-meta {
+  color: var(--ui-muted-text);
+}
+
+.status-pill,
+.header-pill,
+.page-shell-chip,
+.header-kicker-pill,
+.header-command-chip,
+.brand-badge,
+.landing-hero-badges span,
+.hero-code-chip-row span,
+.pricing-footnote-points span {
+  background: var(--ui-chip-bg);
+  color: var(--ui-chip-text);
+  border-color: var(--ui-control-border);
+}
+
+.status-pill-active {
+  border-color: color-mix(in srgb, var(--success) 48%, var(--ui-control-border));
+  background: color-mix(in srgb, var(--success) 18%, var(--ui-chip-bg));
+  color: color-mix(in srgb, var(--success) 74%, var(--text));
+}
+
+html[data-theme='dark'] .top-header.top-header-catalog,
+html[data-theme='dark'] .top-header.top-header-catalog .header-search.header-search-secondary,
+html[data-theme='dark'] .header-utilities-catalog .theme-toggle.theme-toggle-header-catalog,
+html[data-theme='dark'] .page-content[data-route-root='catalog'] .page-shell,
+html[data-theme='dark'] .page-content[data-route-root='catalog'] .workspace-panel,
+html[data-theme='dark'] .page-content[data-route-root='catalog'] .guided-match-group,
+html[data-theme='dark'] .page-content[data-route-root='catalog'] .guided-match-item,
+html[data-theme='dark'] .page-content[data-route-root='catalog'] .catalog-local-finder-panel,
+html[data-theme='dark'] .reports-start-here-helper {
+  background: var(--ui-card-bg-soft);
+  border-color: var(--ui-control-border);
+}
+
+html[data-theme='dark'] .page-content[data-route-root='catalog'] .catalog-local-finder-panel .guided-next-step[data-kind='new'],
+html[data-theme='dark'] .reports-start-here-helper {
+  box-shadow: var(--shadow-sm);
+}
+
+html[data-theme='dark'] .page-content[data-route-root='catalog'] .catalog-local-finder-panel .guided-next-step[data-kind='new'],
+html[data-theme='dark'] .page-content[data-route-root='catalog'] .catalog-parent-card .guided-match-item-meta span,
+html[data-theme='dark'] .page-content[data-route-root='catalog'] .catalog-parent-card .catalog-meta-chip,
+html[data-theme='dark'] .page-content[data-route-root='catalog'] .guided-match-variant-primary-metric {
+  border-color: var(--ui-control-border);
+  background: var(--ui-chip-bg);
+  color: var(--ui-chip-text);
+}
+
+html[data-theme='dark'] .page-content[data-route-root='catalog'] .workspace-field-note,
+html[data-theme='dark'] .page-content[data-route-root='catalog'] .guided-match-item-meta span,
+html[data-theme='dark'] .reports-start-here-quick,
+html[data-theme='dark'] .reports-start-here-details summary,
+html[data-theme='dark'] .reports-start-here-details ol {
+  color: var(--ui-muted-text);
+}
