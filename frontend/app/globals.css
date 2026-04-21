@@ -6610,6 +6610,16 @@ html[data-theme='dark'] .theme-toggle-applied {
   color: #fff;
 }
 
+.product-photo-camera-fallback {
+  display: grid;
+  gap: 0.6rem;
+  justify-items: start;
+  padding: 0.75rem;
+  border: 1px dashed var(--border);
+  border-radius: 0.8rem;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+}
+
 .product-photo-buttons {
   display: flex;
   flex-wrap: wrap;
