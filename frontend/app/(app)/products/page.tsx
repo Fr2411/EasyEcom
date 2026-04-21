@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
 
 export default function ProductsPage() {
-  redirect('/catalog');
+  redirect('/products-stock');
 }

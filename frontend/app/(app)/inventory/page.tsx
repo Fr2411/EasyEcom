@@ -1,12 +1,21 @@
-import { PageShell } from '@/components/ui/page-shell';
-import { InventoryWorkspace } from '@/components/commerce/inventory-workspace';
+import { redirect } from 'next/navigation';
 
-export default function InventoryPage() {
-  return (
-    <PageShell title="Inventory" description="Find or create products from Receive Stock, track availability, and keep every movement auditable."
-      hideHeader
-    >
-      <InventoryWorkspace />
-    </PageShell>
-  );
+function firstParam(value: string | string[] | undefined) {
+  if (Array.isArray(value)) return value[0] ?? '';
+  return value ?? '';
+}
+
+export default function InventoryPage({
+  searchParams,
+}: {
+  searchParams: Record<string, string | string[] | undefined>;
+}) {
+  const query = firstParam(searchParams.q).trim();
+  const params = new URLSearchParams();
+  if (query) {
+    params.set('q', query);
+  }
+  params.set('mode', 'inventory');
+  const suffix = params.toString() ? `?${params.toString()}` : '';
+  redirect(`/products-stock${suffix}`);
 }

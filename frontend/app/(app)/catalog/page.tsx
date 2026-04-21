@@ -1,14 +1,21 @@
-import { PageShell } from '@/components/ui/page-shell';
-import { CatalogWorkspace } from '@/components/commerce/catalog-workspace';
+import { redirect } from 'next/navigation';
 
-export default function CatalogPage() {
-  return (
-    <PageShell
-      title="Catalog"
-      description="Manage product details and their sellable variants. Use Receive Stock for daily stock intake."
-      hideHeader
-    >
-      <CatalogWorkspace />
-    </PageShell>
-  );
+function firstParam(value: string | string[] | undefined) {
+  if (Array.isArray(value)) return value[0] ?? '';
+  return value ?? '';
+}
+
+export default function CatalogPage({
+  searchParams,
+}: {
+  searchParams: Record<string, string | string[] | undefined>;
+}) {
+  const query = firstParam(searchParams.q).trim();
+  const params = new URLSearchParams();
+  if (query) {
+    params.set('q', query);
+  }
+  params.set('mode', 'catalog');
+  const suffix = params.toString() ? `?${params.toString()}` : '';
+  redirect(`/products-stock${suffix}`);
 }
