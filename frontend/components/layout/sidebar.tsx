@@ -1,7 +1,5 @@
 'use client';
 
-import { useState } from 'react';
-import { usePathname } from 'next/navigation';
 import { Building2, Mail, PanelLeftClose, PanelLeftOpen, UserRound } from 'lucide-react';
 import { NAV_GROUP_ORDER } from '@/types/navigation';
 import { NavItem } from '@/components/ui/nav-item';
@@ -19,8 +17,6 @@ export function Sidebar({
   onToggle?: () => void;
 }) {
   const { user } = useAuth();
-  const pathname = usePathname();
-  const isCatalogRoute = pathname === '/catalog';
   const visibleItems = getVisibleNavigationItems(user);
   const groupedNavigation = NAV_GROUP_ORDER.map((group) => ({
     group,
@@ -28,7 +24,6 @@ export function Sidebar({
   })).filter(({ items }) => items.length > 0);
   const workspaceName = user?.business_name?.trim() || (user?.roles?.includes('SUPER_ADMIN') ? 'Easy-Ecom Internal' : 'Business workspace');
   const primaryRole = user?.roles?.[0]?.replaceAll('_', ' ') || 'Workspace user';
-  const [showWorkspaceDetails, setShowWorkspaceDetails] = useState(false);
 
   return (
     <aside className={collapsed ? 'sidebar sidebar-collapsed' : 'sidebar'} aria-label="Primary">
@@ -52,7 +47,28 @@ export function Sidebar({
             </button>
           </div>
         </div>
-        {/* <h1 className="brand-title">Command Center</h1> */}
+        <div className="sidebar-user-card sidebar-workspace-card">
+          <div className="sidebar-user-row">
+            <Building2 size={15} aria-hidden="true" />
+            <div>
+              <strong>{workspaceName}</strong>
+              <small>Workspace</small>
+            </div>
+          </div>
+          <div className="sidebar-user-row">
+            <UserRound size={15} aria-hidden="true" />
+            <div>
+              <span>{user?.name || 'Unknown user'}</span>
+              <small>{primaryRole}</small>
+            </div>
+          </div>
+          <div className="sidebar-user-row">
+            <Mail size={15} aria-hidden="true" />
+            <div>
+              <span>{user?.email || 'No email available'}</span>
+            </div>
+          </div>
+        </div>
       </div>
       <nav className="sidebar-nav">
         {groupedNavigation.map(({ group, items }) => (
@@ -69,46 +85,9 @@ export function Sidebar({
         ))}
       </nav>
       <footer className="sidebar-footer">
-        <p className="sidebar-footer-copy">Tenant-safe, ledger-backed workflows.</p>
-        <div className={isCatalogRoute ? 'sidebar-theme-control sidebar-theme-control-catalog' : 'sidebar-theme-control'}>
-          <p className="eyebrow">Display mode (optional)</p>
-          <p className="workspace-field-note">Use this only when you need better comfort or contrast.</p>
+        <div className="sidebar-theme-control">
           <ThemeToggle />
         </div>
-        <button
-          type="button"
-          className="sidebar-meta-toggle"
-          onClick={() => setShowWorkspaceDetails((value) => !value)}
-          aria-expanded={showWorkspaceDetails}
-        >
-          {showWorkspaceDetails ? 'Hide workspace details' : 'Show workspace details'}
-        </button>
-        {showWorkspaceDetails ? (
-          <div className="sidebar-user-card sidebar-user-card-expanded">
-            <div className="sidebar-user-row">
-              <Building2 size={15} aria-hidden="true" />
-              <div>
-                <p className="eyebrow">Business</p>
-                <strong>{workspaceName}</strong>
-              </div>
-            </div>
-            <div className="sidebar-user-row">
-              <UserRound size={15} aria-hidden="true" />
-              <div>
-                <p className="eyebrow">User</p>
-                <span>{user?.name || 'Unknown user'}</span>
-                <small>{primaryRole}</small>
-              </div>
-            </div>
-            <div className="sidebar-user-row">
-              <Mail size={15} aria-hidden="true" />
-              <div>
-                <p className="eyebrow">Email</p>
-                <span>{user?.email || 'No email available'}</span>
-              </div>
-            </div>
-          </div>
-        ) : null}
         <SidebarLogoutButton />
       </footer>
     </aside>

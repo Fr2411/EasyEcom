@@ -295,11 +295,11 @@ export function TopHeader() {
         <button type="submit" className="header-search-button">{isCatalogRoute ? 'Global search' : 'Search all'}</button>
       </form>
       <div className={isCatalogRoute ? 'header-utilities header-utilities-catalog' : 'header-utilities'}>
-        <div className={isCatalogRoute ? 'header-theme-cluster' : undefined}>
-          <div className={isCatalogRoute ? 'header-theme-mobile header-theme-catalog' : 'header-theme-mobile'} aria-label="Display mode">
-            <ThemeToggle variant={isCatalogRoute ? 'header-catalog' : 'default'} />
+        {!isCatalogRoute ? (
+          <div className="header-theme-mobile" aria-label="Display mode">
+            <ThemeToggle />
           </div>
-        </div>
+        ) : null}
         <div className={isCatalogRoute ? 'header-action-cluster' : undefined}>
           <button
             type="button"

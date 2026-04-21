@@ -3369,17 +3369,15 @@ button:hover {
 }
 
 .sidebar-theme-control {
-  margin-top: 0.75rem;
+  margin-top: 0;
   display: grid;
   gap: 0.45rem;
 }
 
-.sidebar-theme-label-row {
-  margin: 0;
-  font-size: 0.78rem;
-  font-weight: 600;
-  line-height: 1.25;
-  color: var(--text);
+.sidebar-workspace-card {
+  margin-top: 0.55rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid rgba(90, 114, 108, 0.12);
 }
 
 .sidebar-theme-control .theme-toggle {
@@ -3394,29 +3392,6 @@ button:hover {
 .sidebar-theme-control .theme-toggle-option span {
   font-size: 0.78rem;
   font-weight: 600;
-}
-
-.sidebar-meta-toggle {
-  margin-top: 0.8rem;
-  width: 100%;
-  border: 1px solid rgba(90, 114, 108, 0.16);
-  background: rgba(255, 255, 255, 0.74);
-  color: var(--text);
-  border-radius: 12px;
-  min-height: 2rem;
-  padding: 0.4rem 0.65rem;
-  font-size: 0.8rem;
-  text-align: left;
-}
-
-.sidebar-meta-toggle:hover {
-  background: rgba(255, 255, 255, 0.94);
-}
-
-.sidebar-user-card-expanded {
-  margin-top: 0.65rem;
-  border-top: 1px solid rgba(90, 114, 108, 0.12);
-  padding-top: 0.65rem;
 }
 
 .sidebar-logout-btn {
