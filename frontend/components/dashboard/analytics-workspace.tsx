@@ -438,9 +438,20 @@ export function DashboardAnalyticsWorkspace() {
 
   const renderWidget = (widgetId: WidgetId) => {
     if (!dashboard) return <EmptyState reason="Loading chart data..." />;
+    const charts = (dashboard.charts ?? {}) as Partial<DashboardAnalytics['charts']>;
+    const revenueOrdersAovTrend = charts.revenue_orders_aov_trend ?? { items: [] };
+    const grossProfitMarginTrend = charts.gross_profit_margin_trend ?? { items: [], unavailable_reason: null };
+    const conversionFunnel = charts.conversion_funnel ?? { stages: [], drop_off_reasons: [] };
+    const productPerformanceQuadrant = charts.product_performance_quadrant ?? { items: [], unavailable_reason: null };
+    const categoryBrandProfitMix = charts.category_brand_profit_mix ?? { categories: [], unavailable_reason: null };
+    const returnsIntelligence = charts.returns_intelligence ?? { heatmap: [], top_reasons: [], trend: [] };
+    const inventoryAgingWaterfall = charts.inventory_aging_waterfall ?? { buckets: [], unavailable_reason: null };
+    const sellThroughCoverMatrix = charts.sell_through_cover_matrix ?? { items: [] };
+    const reorderPriorityScoreboard = charts.reorder_priority_scoreboard ?? { items: [] };
+    const priceDiscountImpact = charts.price_discount_impact ?? { items: [], unavailable_reason: null };
 
     if (widgetId === 'revenue_orders_aov') {
-      const points = dashboard.charts.revenue_orders_aov_trend.items.map((item) => ({
+      const points = revenueOrdersAovTrend.items.map((item) => ({
         period: item.period,
         revenue: numberFromString(String(item.revenue)),
         orders: item.orders,
@@ -484,7 +495,7 @@ export function DashboardAnalyticsWorkspace() {
     }
 
     if (widgetId === 'gross_profit_margin') {
-      const trend = dashboard.charts.gross_profit_margin_trend;
+      const trend = grossProfitMarginTrend;
       if (!trend.items.length) return <EmptyState reason={trend.unavailable_reason} />;
       const points = trend.items.map((item) => ({
         period: item.period,
@@ -518,7 +529,7 @@ export function DashboardAnalyticsWorkspace() {
     }
 
     if (widgetId === 'conversion_funnel') {
-      const funnel = dashboard.charts.conversion_funnel;
+      const funnel = conversionFunnel;
       if (!funnel.stages.length) return <EmptyState />;
       const data = funnel.stages.map((stage) => ({
         label: stage.label,
@@ -557,7 +568,7 @@ export function DashboardAnalyticsWorkspace() {
     }
 
     if (widgetId === 'product_performance_quadrant') {
-      const matrix = dashboard.charts.product_performance_quadrant;
+      const matrix = productPerformanceQuadrant;
       if (!matrix.items.length) return <EmptyState reason={matrix.unavailable_reason} />;
 
       const points = matrix.items.map((item) => ({
@@ -608,7 +619,7 @@ export function DashboardAnalyticsWorkspace() {
     }
 
     if (widgetId === 'category_brand_profit_mix') {
-      const mix = dashboard.charts.category_brand_profit_mix;
+      const mix = categoryBrandProfitMix;
       if (!mix.categories.length) return <EmptyState reason={mix.unavailable_reason} />;
       const treeData = mix.categories.map((category) => ({
         name: category.category,
@@ -645,7 +656,7 @@ export function DashboardAnalyticsWorkspace() {
     }
 
     if (widgetId === 'returns_intelligence') {
-      const intelligence = dashboard.charts.returns_intelligence;
+      const intelligence = returnsIntelligence;
       const trend = intelligence.trend.map((point) => ({
         period: point.period,
         returnRate: numberFromString(String(point.return_rate_percent)),
@@ -720,7 +731,7 @@ export function DashboardAnalyticsWorkspace() {
     }
 
     if (widgetId === 'inventory_aging_waterfall') {
-      const aging = dashboard.charts.inventory_aging_waterfall;
+      const aging = inventoryAgingWaterfall;
       if (!aging.buckets.length) return <EmptyState reason={aging.unavailable_reason} />;
       const points = aging.buckets.map((bucket) => ({
         bucket: bucket.bucket,
@@ -756,7 +767,7 @@ export function DashboardAnalyticsWorkspace() {
     }
 
     if (widgetId === 'sell_through_cover_matrix') {
-      const matrix = dashboard.charts.sell_through_cover_matrix.items;
+      const matrix = sellThroughCoverMatrix.items;
       if (!matrix.length) return <EmptyState />;
       const points = matrix.map((item) => ({
         product_name: shortName(item.product_name, 24),
@@ -803,7 +814,7 @@ export function DashboardAnalyticsWorkspace() {
     }
 
     if (widgetId === 'reorder_priority_scoreboard') {
-      const rows = dashboard.charts.reorder_priority_scoreboard.items;
+      const rows = reorderPriorityScoreboard.items;
       if (!rows.length) return <EmptyState />;
       const points = rows.slice(0, 12).map((item) => ({
         product_name: shortName(item.product_name, 20),
@@ -836,7 +847,7 @@ export function DashboardAnalyticsWorkspace() {
     }
 
     if (widgetId === 'price_discount_impact') {
-      const impact = dashboard.charts.price_discount_impact;
+      const impact = priceDiscountImpact;
       if (!impact.items.length) return <EmptyState reason={impact.unavailable_reason} />;
 
       const points = impact.items.map((item) => ({
