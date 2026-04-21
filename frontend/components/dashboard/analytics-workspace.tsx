@@ -621,7 +621,6 @@ export function DashboardAnalyticsWorkspace() {
     <div className="dashboard-analytics space-y-6">
       <section className="section-card dashboard-hero-card bg-glass p-6 rounded-lg shadow-glass transition-normal hover:shadow-glass-hover">
         <div className="foundation-hero">
-          <p className="eyebrow text-xs text-muted uppercase tracking-wider">Business Analytics</p>
           <h3 className="workspace-heading text-lg font-semibold mt-2">
             What to do now
             <HoverHint
@@ -632,7 +631,6 @@ export function DashboardAnalyticsWorkspace() {
           <article className="dashboard-action-lead bg-glass rounded-lg shadow-glass" aria-label="Dashboard first action">
             <span className="dashboard-action-eyebrow">Do this now</span>
             <strong className="dashboard-action-title">{actionLead.title}</strong>
-            <p className="dashboard-action-summary">{actionLead.summary}</p>
             <div className="dashboard-action-links">
               <Link href={actionLead.href} className="dashboard-primary-action-link">
                 {actionLead.cta}
@@ -754,9 +752,6 @@ export function DashboardAnalyticsWorkspace() {
         <div className="dashboard-loading bg-glass p-6 rounded-lg shadow-glass" role="status" aria-live="polite">
           <p className="text-muted">
             Loading business analytics dashboard…
-          </p>
-          <p className="text-muted">
-            We are recomputing tenant-scoped signals from recorded sales, returns, and inventory movements. Existing records remain unchanged.
           </p>
         </div>
       ) : null}

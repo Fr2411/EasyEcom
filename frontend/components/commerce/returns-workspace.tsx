@@ -266,9 +266,7 @@ export function ReturnsWorkspace() {
     <div className="operations-page returns-module">
       <div className="operations-toolbar">
         <div>
-          <p className="operations-eyebrow">Return desk</p>
           <h2>Start from the order, then post the refund</h2>
-          <p>Returns stay anchored to completed orders. Refund payments remain explicit and auditable in history.</p>
         </div>
         <div className="operations-toolbar-actions">
           <button type="button" className="btn-primary" onClick={() => { setActiveTab('create'); resetCreateFlow(); }}>Create Return</button>
@@ -310,7 +308,6 @@ export function ReturnsWorkspace() {
               <section>
                 <div className="operations-section-heading">
                   <h4>Matching completed orders</h4>
-                  <p>Pick the right order once, then review eligible lines.</p>
                 </div>
                 {lookupOrders.length ? (
                   <div className="operations-list-stack compact">
@@ -341,7 +338,7 @@ export function ReturnsWorkspace() {
               <section className="operations-detail-stack">
                 <div className="operations-section-heading">
                   <h4>{eligible ? eligible.order_number : 'Eligible lines'}</h4>
-                  <p>{eligible ? `${eligible.customer_name} · ${eligible.customer_phone}` : 'Eligible lines appear after you open a completed order.'}</p>
+                  {eligible ? <p>{`${eligible.customer_name} · ${eligible.customer_phone}`}</p> : null}
                 </div>
                 {eligible ? (
                   <>

@@ -2,6 +2,7 @@
 
 import { useId, useRef, useState } from 'react';
 import { uploadStagedProductMedia } from '@/lib/api/commerce';
+import { HoverHint } from '@/components/ui/hover-hint';
 import type { ProductMedia } from '@/types/catalog';
 
 type ProductPhotoFieldProps = {
@@ -114,10 +115,11 @@ export function ProductPhotoField({ image, onUploaded, onRemove }: ProductPhotoF
               Remove photo
             </button>
           ) : null}
+          <HoverHint
+            label="Product photo help"
+            text="Upload one primary product photo. EasyEcom stores a large image and a thumbnail for the UI."
+          />
         </div>
-        <p className="workspace-helper-copy">
-          Upload one primary product photo. EasyEcom stores a 768×768 large image for AI and a 256×256 thumbnail for the UI.
-        </p>
         {error ? <p className="workspace-error-copy">{error}</p> : null}
       </div>
     </div>

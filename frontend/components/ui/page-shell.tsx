@@ -16,7 +16,6 @@ export function PageShell({
       {!hideHeader ? (
         <header className="page-shell-header">
           <div className="page-shell-copy">
-            <span className="page-shell-chip">Workspace</span>
             <h2>
               <span className="workspace-heading">
                 {title}

@@ -75,9 +75,7 @@ export function SettingsWorkspace() {
       <form className="operations-form-stack" onSubmit={saveSettings}>
         <div className="operations-toolbar">
           <div>
-            <p className="operations-eyebrow">Business setup</p>
             <h2>Business profile, defaults, and document numbers</h2>
-            <p>Keep core business details current. Technical metadata stays collapsed unless you need it.</p>
           </div>
           <div className="operations-toolbar-actions">
             <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save Settings'}</button>
@@ -230,7 +228,6 @@ export function SettingsWorkspace() {
               />
               <div>
                 <strong>Allow backorders</strong>
-                <span>Keep selling even when stock is not available.</span>
               </div>
             </label>
             <label className="operations-toggle-card">
@@ -241,7 +238,6 @@ export function SettingsWorkspace() {
               />
               <div>
                 <strong>Require discount approval</strong>
-                <span>Protect minimum-price rules during sales entry.</span>
               </div>
             </label>
           </div>

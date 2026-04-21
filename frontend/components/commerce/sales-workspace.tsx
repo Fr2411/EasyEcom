@@ -433,9 +433,7 @@ export function SalesWorkspace() {
     <div className="operations-page sales-module">
       <div className="operations-toolbar">
         <div>
-          <p className="operations-eyebrow">Order desk</p>
           <h2>Find product, attach customer, complete the sale</h2>
-          <p>Use the order desk for daily order creation. Open and completed orders stay in their own clean lists.</p>
         </div>
         <div className="operations-toolbar-actions">
           <button type="button" className="btn-primary" onClick={resetComposer}>New Order</button>
@@ -482,7 +480,6 @@ export function SalesWorkspace() {
                   <section>
                     <div className="operations-section-heading">
                       <h4>Matching items</h4>
-                      <p>Only saleable variants are shown.</p>
                     </div>
                     {variantResults.length ? (
                       <div className="operations-list-stack compact">
@@ -508,7 +505,6 @@ export function SalesWorkspace() {
                   <section>
                     <div className="operations-section-heading">
                       <h4>Matching customers</h4>
-                      <p>Reuse an existing customer when contact data matches.</p>
                     </div>
                     {customerResults.length ? (
                       <div className="operations-list-stack compact">
@@ -532,7 +528,6 @@ export function SalesWorkspace() {
               <section className="operations-subsection-block">
                 <div className="operations-section-heading">
                   <h4>Customer</h4>
-                  <p>Attach an existing customer or enter a new one for this order.</p>
                 </div>
                 <div className="operations-form-grid compact">
                   <label>
@@ -572,7 +567,6 @@ export function SalesWorkspace() {
               <section className="operations-subsection-block">
                 <div className="operations-section-heading">
                   <h4>Cart</h4>
-                  <p>Review quantity, price, and discount before saving.</p>
                 </div>
                 {draftLines.length ? (
                   <div className="table-scroll">
@@ -638,7 +632,6 @@ export function SalesWorkspace() {
               <section className="operations-subsection-block">
                 <div className="operations-section-heading">
                   <h4>Order summary</h4>
-                  <p>Primary path: save draft now or complete the sale when the cart is ready.</p>
                 </div>
                 <div className="operations-definition-grid compact">
                   <div>

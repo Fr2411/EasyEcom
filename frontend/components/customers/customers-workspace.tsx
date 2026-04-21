@@ -84,9 +84,7 @@ export function CustomersWorkspace() {
     <div className="operations-page customers-module">
       <div className="operations-toolbar">
         <div>
-          <p className="operations-eyebrow">Customer lookup</p>
           <h2>{query ? 'Customer search results' : 'Recent customers'}</h2>
-          <p>{query ? 'Review the matched customer, then jump into the right transaction flow.' : 'Use the sidebar or header search to find a customer fast, then continue in Sales or Returns.'}</p>
         </div>
         <div className="operations-toolbar-actions">
           <Link href="/sales" className="btn-primary">Open Sales</Link>
@@ -190,7 +188,6 @@ export function CustomersWorkspace() {
                   <section>
                     <div className="operations-section-heading">
                       <h4>Recent orders</h4>
-                      <p>Open or review the latest order context for this customer.</p>
                     </div>
                     {selectedCustomer.recent_orders.length ? (
                       <div className="operations-list-stack compact">
@@ -216,7 +213,6 @@ export function CustomersWorkspace() {
                   <section>
                     <div className="operations-section-heading">
                       <h4>Recent returns</h4>
-                      <p>Review the latest return and refund history for this customer.</p>
                     </div>
                     {selectedCustomer.recent_returns.length ? (
                       <div className="operations-list-stack compact">

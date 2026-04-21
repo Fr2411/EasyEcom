@@ -136,9 +136,7 @@ export function ReportsWorkspace() {
     <div className="operations-page reports-module">
       <div className="operations-toolbar">
         <div>
-          <p className="operations-eyebrow">Review views</p>
           <h2>Focus on one report at a time</h2>
-          <p>Set the date range once, then switch between Sales, Inventory, Finance, and Returns without changing context.</p>
         </div>
         <div className="operations-toolbar-actions">
           <button type="button" className="secondary" onClick={exportActiveView} disabled={!state}>Export</button>
@@ -206,7 +204,6 @@ export function ReportsWorkspace() {
                 <section>
                   <div className="operations-section-heading">
                     <h4>Top products</h4>
-                    <p>Products that generated the most revenue in this range.</p>
                   </div>
                   {state.sales.top_products.length ? (
                     <div className="operations-list-stack compact">
@@ -227,7 +224,6 @@ export function ReportsWorkspace() {
                 <section>
                   <div className="operations-section-heading">
                     <h4>Top customers</h4>
-                    <p>Customers with the strongest sales activity in this range.</p>
                   </div>
                   {state.sales.top_customers.length ? (
                     <div className="operations-list-stack compact">
@@ -327,7 +323,6 @@ export function ReportsWorkspace() {
                 <section>
                   <div className="operations-section-heading">
                     <h4>Highest selling products</h4>
-                    <p>Useful context when returns affect core products.</p>
                   </div>
                   {state.products.highest_selling.length ? (
                     <div className="operations-list-stack compact">
@@ -348,7 +343,6 @@ export function ReportsWorkspace() {
                 <section>
                   <div className="operations-section-heading">
                     <h4>Low or zero movement</h4>
-                    <p>Products that may need pricing or stock review.</p>
                   </div>
                   {state.products.low_or_zero_movement.length ? (
                     <div className="operations-list-stack compact">

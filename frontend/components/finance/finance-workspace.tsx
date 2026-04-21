@@ -193,9 +193,7 @@ export function FinanceWorkspace() {
     <div className="operations-page finance-module">
       <div className="operations-toolbar">
         <div>
-          <p className="operations-eyebrow">Cash book</p>
           <h2>Operational cash visibility</h2>
-          <p>Sales fulfillment and refund posting happen automatically. Use this page for manual cash movement and collection review.</p>
         </div>
         <div className="operations-toolbar-actions">
           <button type="button" className="btn-primary" onClick={() => setShowEntryForm((current) => !current)}>
@@ -204,9 +202,6 @@ export function FinanceWorkspace() {
         </div>
       </div>
 
-      <WorkspaceNotice tone="info">
-        Commerce-linked transactions are read-only here. Fix sales or refund issues in their original workspace.
-      </WorkspaceNotice>
       {notice ? <WorkspaceNotice tone="success">{notice}</WorkspaceNotice> : null}
       {error ? <WorkspaceNotice tone="error">{error}</WorkspaceNotice> : null}
 
@@ -225,7 +220,6 @@ export function FinanceWorkspace() {
             <section>
               <div className="operations-section-heading">
                 <h4>Receivables</h4>
-                <p>Orders with money still outstanding.</p>
               </div>
               {receivables.length ? (
                 <div className="operations-list-stack compact">
@@ -251,7 +245,6 @@ export function FinanceWorkspace() {
             <section>
               <div className="operations-section-heading">
                 <h4>Recent refunds</h4>
-                <p>Latest cash-out events posted from returns.</p>
               </div>
               {recentRefunds.length ? (
                 <div className="operations-list-stack compact">
@@ -279,7 +272,6 @@ export function FinanceWorkspace() {
             <section className="operations-subsection-block">
               <div className="operations-section-heading">
                 <h4>Outstanding payables</h4>
-                <p>Unpaid supplier or operating expenses still visible in the current window.</p>
               </div>
               <div className="operations-list-stack compact">
                 {payables.map((item) => (
@@ -302,7 +294,6 @@ export function FinanceWorkspace() {
           <section className="operations-subsection-block">
             <div className="operations-section-heading">
               <h4>Commerce-linked activity</h4>
-              <p>Read-only finance entries created from completed sales and recorded refunds.</p>
             </div>
             {commerceTransactions.length ? (
               <div className="operations-list-stack compact">
