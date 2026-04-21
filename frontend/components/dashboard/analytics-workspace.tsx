@@ -284,6 +284,21 @@ function tooltipStyle() {
   };
 }
 
+function tooltipCursorBand() {
+  return {
+    fill: 'var(--chart-cursor-fill)',
+    stroke: 'transparent',
+  };
+}
+
+function tooltipCursorLine() {
+  return {
+    stroke: 'var(--chart-cursor-stroke)',
+    strokeWidth: 1.25,
+    strokeDasharray: '4 4',
+  };
+}
+
 function shortName(name: string, max = 18) {
   return name.length <= max ? name : `${name.slice(0, max - 1)}…`;
 }
@@ -304,6 +319,65 @@ type LegendChip = {
   label: string;
   color: string;
 };
+
+type ProfitMixTile = {
+  name: string;
+  size: number;
+  fill: string;
+  textColor: string;
+};
+
+type TreemapTileProps = {
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  payload?: ProfitMixTile;
+};
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function profitMixFill(value: number, minValue: number, maxValue: number) {
+  const span = maxValue - minValue;
+  const ratio = span <= 0 ? 0.5 : clamp((value - minValue) / span, 0, 1);
+  const lightness = 72 - ratio * 30; // high revenue = deeper orange
+  const fill = `hsl(20 100% ${lightness.toFixed(1)}%)`;
+  const textColor = lightness > 58 ? '#2f1608' : '#fff6ef';
+  return { fill, textColor };
+}
+
+function renderProfitMixTile({ x = 0, y = 0, width = 0, height = 0, payload }: TreemapTileProps) {
+  if (!payload || width <= 0 || height <= 0) return <g />;
+  const showLabel = width >= 120 && height >= 36;
+  const label = shortName(payload.name, Math.max(16, Math.floor(width / 10)));
+  return (
+    <g>
+      <rect
+        x={x}
+        y={y}
+        width={width}
+        height={height}
+        fill={payload.fill}
+        stroke="rgba(255, 255, 255, 0.2)"
+        strokeWidth={1}
+      />
+      {showLabel ? (
+        <text
+          x={x + 10}
+          y={y + 22}
+          fill={payload.textColor}
+          fontSize={12}
+          fontWeight={600}
+          pointerEvents="none"
+        >
+          {label}
+        </text>
+      ) : null}
+    </g>
+  );
+}
 
 function legendForWidget(widgetId: WidgetId, financialVisible: boolean): LegendChip[] {
   if (widgetId === 'revenue_orders_aov') {
@@ -334,7 +408,7 @@ function legendForWidget(widgetId: WidgetId, financialVisible: boolean): LegendC
   if (widgetId === 'category_brand_profit_mix') {
     return [
       { label: 'Size = Revenue', color: CHART_COLORS.primary },
-      { label: 'Group = Category/Brand', color: CHART_COLORS.neutral },
+      { label: 'Color = Revenue intensity', color: CHART_COLORS.warning },
     ];
   }
   if (widgetId === 'returns_intelligence') {
@@ -621,7 +695,7 @@ export function DashboardAnalyticsWorkspace() {
                 orientation="right"
                 tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
               />
-              <Tooltip contentStyle={tooltipStyle()} />
+              <Tooltip contentStyle={tooltipStyle()} cursor={tooltipCursorLine()} />
               <Line yAxisId="left" dataKey="revenue" type="monotone" stroke={CHART_COLORS.primary} strokeWidth={2.4} dot={false} name="Revenue" />
               <Line yAxisId="right" dataKey="orders" type="monotone" stroke={CHART_COLORS.secondaryBlue} strokeWidth={2.2} dot={false} name="Orders" />
               <Line yAxisId="left" dataKey="aov" type="monotone" stroke={CHART_COLORS.secondaryCyan} strokeWidth={2.2} dot={false} name="AOV" />
@@ -654,7 +728,7 @@ export function DashboardAnalyticsWorkspace() {
               <XAxis dataKey="period" tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
               <YAxis yAxisId="money" tick={{ fill: 'var(--text-muted)', fontSize: 12 }} tickFormatter={(value) => numberCompact(value)} />
               <YAxis yAxisId="margin" orientation="right" tick={{ fill: 'var(--text-muted)', fontSize: 12 }} tickFormatter={(value) => `${value}%`} />
-              <Tooltip contentStyle={tooltipStyle()} />
+              <Tooltip contentStyle={tooltipStyle()} cursor={tooltipCursorBand()} />
               <Bar yAxisId="money" dataKey="revenue" fill={CHART_COLORS.primary} name="Revenue" radius={[6, 6, 0, 0]} />
               <Line yAxisId="money" dataKey="grossProfit" stroke={CHART_COLORS.positive} strokeWidth={2.4} dot={false} name="Est. gross profit" />
               <Area yAxisId="margin" dataKey="margin" fill={CHART_COLORS.warning} fillOpacity={0.22} stroke={CHART_COLORS.warning} strokeWidth={2} name="Margin %" />
@@ -679,7 +753,7 @@ export function DashboardAnalyticsWorkspace() {
                 <CartesianGrid strokeDasharray="4 4" stroke={CHART_COLORS.grid} />
                 <XAxis type="number" tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
                 <YAxis type="category" dataKey="label" width={88} tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
-                <Tooltip contentStyle={tooltipStyle()} />
+                <Tooltip contentStyle={tooltipStyle()} cursor={tooltipCursorBand()} />
                 <Bar dataKey="count" radius={[0, 6, 6, 0]} fill={CHART_COLORS.primary} name="Orders by stage" />
               </BarChart>
             </ResponsiveContainer>
@@ -742,7 +816,7 @@ export function DashboardAnalyticsWorkspace() {
                 label={{ value: 'Margin %', angle: -90, position: 'insideLeft' }}
               />
               <ZAxis type="number" dataKey="revenue" range={[80, 380]} name="Revenue" />
-              <Tooltip cursor={{ strokeDasharray: '4 4' }} contentStyle={tooltipStyle()} />
+              <Tooltip cursor={tooltipCursorLine()} contentStyle={tooltipStyle()} />
               <Scatter name="Star" data={byQuadrant.star} fill={CHART_COLORS.positive} />
               <Scatter name="Sleeper" data={byQuadrant.sleeper} fill={CHART_COLORS.secondaryBlue} />
               <Scatter name="Margin killer" data={byQuadrant.margin_killer} fill={CHART_COLORS.warning} />
@@ -756,13 +830,23 @@ export function DashboardAnalyticsWorkspace() {
     if (widgetId === 'category_brand_profit_mix') {
       const mix = categoryBrandProfitMix;
       if (!mix.categories.length) return <EmptyState reason={mix.unavailable_reason} />;
-      const treeData = mix.categories.map((category) => ({
-        name: category.category,
-        children: category.brands.map((brand) => ({
+      const baseTiles = mix.categories.flatMap((category) =>
+        category.brands.map((brand) => ({
           name: `${category.category} / ${brand.brand}`,
           size: numberFromString(String(brand.revenue)),
         })),
-      }));
+      );
+      const values = baseTiles.map((tile) => tile.size);
+      const minValue = values.length ? Math.min(...values) : 0;
+      const maxValue = values.length ? Math.max(...values) : 0;
+      const treeData: ProfitMixTile[] = baseTiles.map((tile) => {
+        const { fill, textColor } = profitMixFill(tile.size, minValue, maxValue);
+        return {
+          ...tile,
+          fill,
+          textColor,
+        };
+      });
 
       return (
         <>
@@ -772,10 +856,14 @@ export function DashboardAnalyticsWorkspace() {
                 data={treeData}
                 dataKey="size"
                 aspectRatio={4 / 3}
-                stroke="var(--border)"
-                fill={CHART_COLORS.primary}
+                stroke="rgba(255, 255, 255, 0.2)"
+                content={renderProfitMixTile}
               >
-                <Tooltip contentStyle={tooltipStyle()} formatter={(value) => moneyCompact(numberFromString(String(value)))} />
+                <Tooltip
+                  contentStyle={tooltipStyle()}
+                  cursor={tooltipCursorBand()}
+                  formatter={(value) => moneyCompact(numberFromString(String(value)))}
+                />
               </Treemap>
             </ResponsiveContainer>
           </div>
@@ -816,7 +904,7 @@ export function DashboardAnalyticsWorkspace() {
                 <XAxis dataKey="period" tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
                 <YAxis yAxisId="left" tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
                 <YAxis yAxisId="right" orientation="right" tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
-                <Tooltip contentStyle={tooltipStyle()} />
+                <Tooltip contentStyle={tooltipStyle()} cursor={tooltipCursorBand()} />
                 <Bar yAxisId="left" dataKey="returnsCount" fill={CHART_COLORS.primary} radius={[5, 5, 0, 0]} name="Returns" />
                 <Line yAxisId="right" dataKey="returnRate" stroke={CHART_COLORS.critical} strokeWidth={2.4} dot={false} name="Return rate %" />
               </ComposedChart>
@@ -882,7 +970,7 @@ export function DashboardAnalyticsWorkspace() {
               <XAxis dataKey="bucket" tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
               <YAxis yAxisId="left" tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
               <YAxis yAxisId="right" orientation="right" tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
-              <Tooltip contentStyle={tooltipStyle()} />
+              <Tooltip contentStyle={tooltipStyle()} cursor={tooltipCursorBand()} />
               {financialVisible ? (
                 <Bar yAxisId="left" dataKey="inventoryValue" fill={CHART_COLORS.primary} radius={[6, 6, 0, 0]} name="Inventory value" />
               ) : (
@@ -935,7 +1023,7 @@ export function DashboardAnalyticsWorkspace() {
                 label={{ value: 'Sell-through %', angle: -90, position: 'insideLeft' }}
               />
               <ZAxis type="number" dataKey="revenue" range={[80, 380]} />
-              <Tooltip contentStyle={tooltipStyle()} />
+              <Tooltip contentStyle={tooltipStyle()} cursor={tooltipCursorLine()} />
               {zones.map(({ zone, color }) => (
                 <Scatter key={zone} name={zone} data={points.filter((item) => item.zone === zone)} fill={color} />
               ))}
@@ -960,7 +1048,7 @@ export function DashboardAnalyticsWorkspace() {
                 <CartesianGrid strokeDasharray="4 4" stroke={CHART_COLORS.grid} />
                 <XAxis type="number" tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
                 <YAxis type="category" dataKey="product_name" width={140} tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
-                <Tooltip contentStyle={tooltipStyle()} />
+                <Tooltip contentStyle={tooltipStyle()} cursor={tooltipCursorBand()} />
                 <Bar dataKey="score" fill={CHART_COLORS.primary} radius={[0, 6, 6, 0]} name="Priority score" />
               </BarChart>
             </ResponsiveContainer>
@@ -1030,7 +1118,7 @@ export function DashboardAnalyticsWorkspace() {
                   label={{ value: 'Unit lift %', angle: -90, position: 'insideLeft' }}
                 />
                 <ZAxis type="number" dataKey="revenue" range={[80, 360]} />
-                <Tooltip contentStyle={tooltipStyle()} />
+                <Tooltip contentStyle={tooltipStyle()} cursor={tooltipCursorLine()} />
                 {recommendationGroups.map((recommendation) => (
                   <Scatter
                     key={recommendation}
@@ -1048,7 +1136,11 @@ export function DashboardAnalyticsWorkspace() {
                 <CartesianGrid strokeDasharray="4 4" stroke={CHART_COLORS.grid} />
                 <XAxis dataKey="recommendation" tickFormatter={(value) => recommendationLabel(value as DashboardPriceDiscountImpactPoint['recommendation'])} tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
                 <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
-                <Tooltip contentStyle={tooltipStyle()} formatter={(value) => `${numberFromString(String(value)).toFixed(2)}%`} />
+                <Tooltip
+                  contentStyle={tooltipStyle()}
+                  cursor={tooltipCursorBand()}
+                  formatter={(value) => `${numberFromString(String(value)).toFixed(2)}%`}
+                />
                 <Bar dataKey="averageLift" fill={CHART_COLORS.primary} radius={[6, 6, 0, 0]} name="Avg lift %" />
               </BarChart>
             </ResponsiveContainer>

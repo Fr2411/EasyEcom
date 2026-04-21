@@ -10,6 +10,8 @@
   --chart-critical: #ef4444;
   --chart-neutral: color-mix(in srgb, var(--text-muted) 78%, #94a3b8);
   --chart-grid: color-mix(in srgb, var(--border) 84%, transparent);
+  --chart-cursor-fill: rgba(255, 106, 26, 0.12);
+  --chart-cursor-stroke: rgba(255, 124, 44, 0.72);
 }
 
 :global(html[data-theme='dark']) .dashboard {
@@ -20,6 +22,8 @@
   --chart-critical: #ff5f5f;
   --chart-neutral: color-mix(in srgb, var(--text-muted) 72%, #bcc7d8);
   --chart-grid: color-mix(in srgb, var(--border) 88%, rgba(255, 255, 255, 0.06));
+  --chart-cursor-fill: rgba(255, 106, 26, 0.2);
+  --chart-cursor-stroke: rgba(255, 162, 92, 0.78);
 }
 
 .headerCard {
