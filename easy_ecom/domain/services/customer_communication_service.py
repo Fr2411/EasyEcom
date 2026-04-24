@@ -957,7 +957,8 @@ class CustomerCommunicationService:
         symbol = (client.currency_symbol or "").strip()
         code = (client.currency_code or "").strip().upper()
         if symbol:
-            return f"{symbol}{amount}"
+            separator = " " if symbol[-1:].isalnum() else ""
+            return f"{symbol}{separator}{amount}"
         return f"{amount} {code}".strip()
 
     def _format_quantity(self, value: Decimal) -> str:

@@ -107,6 +107,15 @@ class CustomerCommunicationGuardrailTests(unittest.TestCase):
         self.assertIn("9 available", reply)
         self.assertIn("$120.00", reply)
 
+    def test_format_money_spaces_alphabetic_currency_symbols(self) -> None:
+        self.assertEqual(
+            self.service._format_money(
+                "289.00",
+                type("Client", (), {"currency_symbol": "AED ", "currency_code": "AED"})(),
+            ),
+            "AED 289.00",
+        )
+
     def test_pet_health_playbook_reply_is_veterinarian_safe(self) -> None:
         reply = self.service._deterministic_playbook_reply(
             client=type("Client", (), {"business_name": "Pet Shop"})(),
