@@ -9,6 +9,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     JSON,
@@ -425,6 +426,204 @@ class CustomerModel(TenantMixin, TimestampMixin, Base):
     address: Mapped[str] = mapped_column(Text, nullable=False, default="")
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="active", index=True)
     notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+
+class AssistantPlaybookModel(TenantMixin, TimestampMixin, Base):
+    __tablename__ = "assistant_playbooks"
+    __table_args__ = (
+        UniqueConstraint("client_id", name="uq_assistant_playbooks_client"),
+    )
+
+    playbook_id: Mapped[str] = mapped_column(GUID(), primary_key=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="active", index=True)
+    business_type: Mapped[str] = mapped_column(String(64), nullable=False, default="general_retail")
+    brand_personality: Mapped[str] = mapped_column(String(64), nullable=False, default="friendly")
+    custom_instructions: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    forbidden_claims: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    sales_goals_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    policy_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    escalation_rules_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    industry_template_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+
+
+class CustomerChannelModel(TenantMixin, TimestampMixin, Base):
+    __tablename__ = "customer_channels"
+    __table_args__ = (
+        UniqueConstraint("client_id", "channel_id", name="uq_customer_channels_client_channel"),
+        UniqueConstraint("client_id", "provider", "external_account_id", name="uq_customer_channels_client_provider_account"),
+        UniqueConstraint("webhook_key", name="uq_customer_channels_webhook_key"),
+        ForeignKeyConstraint(
+            ["client_id", "default_location_id"],
+            ["locations.client_id", "locations.location_id"],
+            name="fk_customer_channels_client_default_location",
+        ),
+        ForeignKeyConstraint(
+            ["client_id", "created_by_user_id"],
+            ["users.client_id", "users.user_id"],
+            name="fk_customer_channels_client_created_by_user",
+        ),
+        Index("ix_customer_channels_client_status", "client_id", "status"),
+        Index("ix_customer_channels_provider", "provider"),
+    )
+
+    channel_id: Mapped[str] = mapped_column(GUID(), primary_key=True)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="inactive", index=True)
+    external_account_id: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    webhook_key: Mapped[str] = mapped_column(String(128), nullable=False, unique=True, index=True)
+    default_location_id: Mapped[str | None] = mapped_column(GUID())
+    auto_send_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    config_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    last_inbound_at: Mapped[datetime | None] = mapped_column(Timestamp)
+    last_outbound_at: Mapped[datetime | None] = mapped_column(Timestamp)
+    created_by_user_id: Mapped[str | None] = mapped_column(GUID(), ForeignKey("users.user_id", ondelete="SET NULL"))
+
+
+class CustomerConversationModel(TenantMixin, TimestampMixin, Base):
+    __tablename__ = "customer_conversations"
+    __table_args__ = (
+        UniqueConstraint("client_id", "conversation_id", name="uq_customer_conversations_client_conversation"),
+        UniqueConstraint("channel_id", "external_sender_id", name="uq_customer_conversations_channel_sender"),
+        ForeignKeyConstraint(
+            ["client_id", "channel_id"],
+            ["customer_channels.client_id", "customer_channels.channel_id"],
+            name="fk_customer_conversations_client_channel",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["client_id", "customer_id"],
+            ["customers.client_id", "customers.customer_id"],
+            name="fk_customer_conversations_client_customer",
+        ),
+        ForeignKeyConstraint(
+            ["client_id", "draft_order_id"],
+            ["sales_orders.client_id", "sales_orders.sales_order_id"],
+            name="fk_customer_conversations_client_draft_order",
+        ),
+        Index("ix_customer_conversations_client_status", "client_id", "status"),
+        Index("ix_customer_conversations_last_message", "client_id", "last_message_at"),
+    )
+
+    conversation_id: Mapped[str] = mapped_column(GUID(), primary_key=True)
+    channel_id: Mapped[str] = mapped_column(GUID(), nullable=False)
+    customer_id: Mapped[str | None] = mapped_column(GUID())
+    draft_order_id: Mapped[str | None] = mapped_column(GUID())
+    external_sender_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    external_sender_name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    external_sender_phone: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    external_sender_email: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="open", index=True)
+    latest_intent: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    latest_summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    memory_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    escalation_reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    last_message_preview: Mapped[str] = mapped_column(String(280), nullable=False, default="")
+    last_message_at: Mapped[datetime | None] = mapped_column(Timestamp)
+
+
+class CustomerMessageModel(TenantMixin, Base):
+    __tablename__ = "customer_messages"
+    __table_args__ = (
+        UniqueConstraint("client_id", "message_id", name="uq_customer_messages_client_message"),
+        ForeignKeyConstraint(
+            ["client_id", "conversation_id"],
+            ["customer_conversations.client_id", "customer_conversations.conversation_id"],
+            name="fk_customer_messages_client_conversation",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["client_id", "channel_id"],
+            ["customer_channels.client_id", "customer_channels.channel_id"],
+            name="fk_customer_messages_client_channel",
+            ondelete="CASCADE",
+        ),
+        Index("ix_customer_messages_conversation", "client_id", "conversation_id", "occurred_at"),
+        Index("ix_customer_messages_channel", "client_id", "channel_id", "occurred_at"),
+        Index("ix_customer_messages_provider_event", "client_id", "provider_event_id"),
+    )
+
+    message_id: Mapped[str] = mapped_column(GUID(), primary_key=True)
+    conversation_id: Mapped[str] = mapped_column(GUID(), nullable=False)
+    channel_id: Mapped[str] = mapped_column(GUID(), nullable=False)
+    direction: Mapped[str] = mapped_column(String(16), nullable=False)
+    sender_role: Mapped[str] = mapped_column(String(32), nullable=False, default="customer")
+    provider_event_id: Mapped[str] = mapped_column(String(160), nullable=False, default="")
+    message_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    content_summary: Mapped[str] = mapped_column(String(280), nullable=False, default="")
+    outbound_status: Mapped[str] = mapped_column(String(32), nullable=False, default="sent", index=True)
+    raw_payload_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    metadata_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    occurred_at: Mapped[datetime] = mapped_column(Timestamp, server_default=func.now(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(Timestamp, server_default=func.now(), nullable=False)
+
+
+class AssistantRunModel(TenantMixin, Base):
+    __tablename__ = "assistant_runs"
+    __table_args__ = (
+        UniqueConstraint("client_id", "run_id", name="uq_assistant_runs_client_run"),
+        ForeignKeyConstraint(
+            ["client_id", "conversation_id"],
+            ["customer_conversations.client_id", "customer_conversations.conversation_id"],
+            name="fk_assistant_runs_client_conversation",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["client_id", "inbound_message_id"],
+            ["customer_messages.client_id", "customer_messages.message_id"],
+            name="fk_assistant_runs_client_inbound_message",
+        ),
+        Index("ix_assistant_runs_conversation", "client_id", "conversation_id", "created_at"),
+        Index("ix_assistant_runs_status", "client_id", "status"),
+    )
+
+    run_id: Mapped[str] = mapped_column(GUID(), primary_key=True)
+    conversation_id: Mapped[str] = mapped_column(GUID(), nullable=False)
+    inbound_message_id: Mapped[str] = mapped_column(GUID(), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="running", index=True)
+    model_provider: Mapped[str] = mapped_column(String(32), nullable=False, default="nvidia")
+    model_name: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    prompt_snapshot_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    response_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    validation_status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    escalation_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    escalation_reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    prompt_tokens: Mapped[int | None] = mapped_column(Integer)
+    completion_tokens: Mapped[int | None] = mapped_column(Integer)
+    total_tokens: Mapped[int | None] = mapped_column(Integer)
+    error_message: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    started_at: Mapped[datetime] = mapped_column(Timestamp, server_default=func.now(), nullable=False)
+    finished_at: Mapped[datetime | None] = mapped_column(Timestamp)
+    created_at: Mapped[datetime] = mapped_column(Timestamp, server_default=func.now(), nullable=False)
+
+
+class AssistantToolCallModel(TenantMixin, Base):
+    __tablename__ = "assistant_tool_calls"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["client_id", "run_id"],
+            ["assistant_runs.client_id", "assistant_runs.run_id"],
+            name="fk_assistant_tool_calls_client_run",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["client_id", "conversation_id"],
+            ["customer_conversations.client_id", "customer_conversations.conversation_id"],
+            name="fk_assistant_tool_calls_client_conversation",
+            ondelete="CASCADE",
+        ),
+        Index("ix_assistant_tool_calls_run", "client_id", "run_id", "created_at"),
+    )
+
+    tool_call_id: Mapped[str] = mapped_column(GUID(), primary_key=True)
+    run_id: Mapped[str] = mapped_column(GUID(), nullable=False)
+    conversation_id: Mapped[str] = mapped_column(GUID(), nullable=False)
+    provider_tool_call_id: Mapped[str] = mapped_column(String(160), nullable=False, default="")
+    tool_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    tool_arguments_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    tool_result_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    validation_status: Mapped[str] = mapped_column(String(32), nullable=False, default="ok")
+    created_at: Mapped[datetime] = mapped_column(Timestamp, server_default=func.now(), nullable=False)
 
 
 class SalesOrderModel(TenantMixin, TimestampMixin, Base):
