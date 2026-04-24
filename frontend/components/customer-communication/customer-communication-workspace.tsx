@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { Bot, MessageSquareText, ShieldAlert } from 'lucide-react';
+import { Bot, Code2, Copy, ExternalLink, Globe2, MessageSquareText, ShieldAlert, Webhook } from 'lucide-react';
 import { WorkspaceEmpty, WorkspaceNotice, WorkspacePanel } from '@/components/commerce/workspace-primitives';
 import {
   createCustomerChannel,
@@ -28,6 +28,10 @@ const BUSINESS_TYPES = [
 
 const PERSONALITIES = ['friendly', 'expert', 'premium', 'casual', 'concise'];
 const CHANNELS = ['website', 'whatsapp', 'instagram', 'facebook', 'messenger', 'other'];
+
+function getApiBaseUrl() {
+  return process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, '') ?? '';
+}
 
 type PlaybookForm = {
   business_type: string;
@@ -128,6 +132,25 @@ function formatDateTime(value?: string | null) {
   }).format(new Date(value));
 }
 
+function buildCustomerChatUrl(origin: string, channelKey: string) {
+  const path = `/customer-chat/${encodeURIComponent(channelKey)}`;
+  return origin ? `${origin}${path}` : path;
+}
+
+function buildPublicChatApiUrl(channelKey: string) {
+  const apiBaseUrl = getApiBaseUrl();
+  return `${apiBaseUrl}/public/customer-communication/chat/${encodeURIComponent(channelKey)}`;
+}
+
+function buildProviderWebhookUrl(channelKey: string, provider: string) {
+  const apiBaseUrl = getApiBaseUrl();
+  return `${apiBaseUrl}/public/customer-communication/webhooks/${encodeURIComponent(channelKey)}/${encodeURIComponent(provider)}`;
+}
+
+function buildIframeSnippet(chatUrl: string) {
+  return `<iframe src="${chatUrl}" title="Store chat" style="width:100%;height:680px;border:0;border-radius:12px;overflow:hidden"></iframe>`;
+}
+
 export function CustomerCommunicationWorkspace() {
   const [workspace, setWorkspace] = useState<CustomerCommunicationWorkspacePayload | null>(null);
   const [playbookForm, setPlaybookForm] = useState<PlaybookForm | null>(null);
@@ -138,6 +161,7 @@ export function CustomerCommunicationWorkspace() {
   const [savingChannel, setSavingChannel] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
+  const [publicOrigin, setPublicOrigin] = useState('');
 
   const activeConversation = workspace?.active_conversation ?? null;
   const playbookQuestions = workspace?.playbook.industry_template.questions ?? [];
@@ -166,6 +190,20 @@ export function CustomerCommunicationWorkspace() {
   useEffect(() => {
     void loadWorkspace();
   }, []);
+
+  useEffect(() => {
+    setPublicOrigin(window.location.origin);
+  }, []);
+
+  async function copyToClipboard(value: string, label: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setNotice(`${label} copied.`);
+      setError('');
+    } catch {
+      setError(`Unable to copy ${label.toLowerCase()}.`);
+    }
+  }
 
   async function savePlaybook(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -370,7 +408,7 @@ export function CustomerCommunicationWorkspace() {
         </form>
 
         <div className="operations-form-stack">
-          <WorkspacePanel title="Channels" description="Shared entry points for website, WhatsApp, Instagram, Facebook, and future adapters.">
+          <WorkspacePanel title="Channel Integrations" description="Shared entry points for website, WhatsApp, Instagram, Facebook, and future adapters.">
             <form className="operations-form-grid compact" onSubmit={createChannel}>
               <label>
                 Provider
@@ -397,15 +435,67 @@ export function CustomerCommunicationWorkspace() {
 
             {workspace.channels.length ? (
               <ul className="assistant-channel-list">
-                {workspace.channels.map((channel) => (
-                  <li key={channel.channel_id}>
-                    <div>
-                      <strong>{channel.display_name}</strong>
-                      <span>{channel.provider} • {channel.status} • {channel.auto_send_enabled ? 'Auto-send' : 'Manual'}</span>
-                    </div>
-                    <code>{channel.webhook_key}</code>
-                  </li>
-                ))}
+                {workspace.channels.map((channel) => {
+                  const chatUrl = buildCustomerChatUrl(publicOrigin, channel.webhook_key);
+                  const chatApiUrl = buildPublicChatApiUrl(channel.webhook_key);
+                  const providerWebhookUrl = buildProviderWebhookUrl(channel.webhook_key, channel.provider);
+                  const iframeSnippet = buildIframeSnippet(chatUrl);
+                  return (
+                    <li key={channel.channel_id} className="assistant-channel-card">
+                      <div className="assistant-channel-card-head">
+                        <div>
+                          <strong>{channel.display_name}</strong>
+                          <span>{channel.provider} • {channel.status} • {channel.auto_send_enabled ? 'Auto-send' : 'Manual review'}</span>
+                        </div>
+                        <code>{channel.webhook_key}</code>
+                      </div>
+
+                      <div className="assistant-integration-grid">
+                        <div className="assistant-integration-item primary">
+                          <span><Globe2 size={16} aria-hidden="true" /> Tenant-safe web link</span>
+                          <a href={chatUrl} target="_blank" rel="noreferrer">{chatUrl}</a>
+                          <div className="assistant-integration-actions">
+                            <button type="button" className="secondary compact-action" onClick={() => void copyToClipboard(chatUrl, 'Web chat link')}>
+                              <Copy size={15} aria-hidden="true" />
+                              Copy
+                            </button>
+                            <a className="button-link secondary compact-action" href={chatUrl} target="_blank" rel="noreferrer">
+                              <ExternalLink size={15} aria-hidden="true" />
+                              Open
+                            </a>
+                          </div>
+                        </div>
+
+                        <div className="assistant-integration-item">
+                          <span><Code2 size={16} aria-hidden="true" /> Website iframe</span>
+                          <code>{iframeSnippet}</code>
+                          <button type="button" className="secondary compact-action" onClick={() => void copyToClipboard(iframeSnippet, 'Iframe snippet')}>
+                            <Copy size={15} aria-hidden="true" />
+                            Copy
+                          </button>
+                        </div>
+
+                        <div className="assistant-integration-item">
+                          <span><Webhook size={16} aria-hidden="true" /> Public chat API</span>
+                          <code>{chatApiUrl}</code>
+                          <button type="button" className="secondary compact-action" onClick={() => void copyToClipboard(chatApiUrl, 'Public chat API URL')}>
+                            <Copy size={15} aria-hidden="true" />
+                            Copy
+                          </button>
+                        </div>
+
+                        <div className="assistant-integration-item">
+                          <span><Webhook size={16} aria-hidden="true" /> Provider webhook</span>
+                          <code>{providerWebhookUrl}</code>
+                          <button type="button" className="secondary compact-action" onClick={() => void copyToClipboard(providerWebhookUrl, 'Provider webhook URL')}>
+                            <Copy size={15} aria-hidden="true" />
+                            Copy
+                          </button>
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
             ) : (
               <WorkspaceEmpty title="No channels" message="Add a channel before receiving customer messages." />

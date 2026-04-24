@@ -119,3 +119,20 @@ export type ChannelUpsertPayload = {
   auto_send_enabled: boolean;
   config: Record<string, unknown>;
 };
+
+export type PublicCustomerChatRequest = {
+  external_sender_id: string;
+  message_text: string;
+  sender_name: string;
+  sender_phone: string;
+  sender_email: string;
+  provider_event_id: string;
+  metadata: Record<string, unknown>;
+};
+
+export type PublicCustomerChatResponse = {
+  conversation: CustomerConversationSummary;
+  inbound_message: CustomerMessage;
+  outbound_message?: CustomerMessage | null;
+  assistant_run?: AssistantRun | null;
+};
