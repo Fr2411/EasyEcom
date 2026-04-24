@@ -57,6 +57,7 @@ GROUNDING_TOOLS = {
 CATALOG_PRICE_RE = re.compile(r"\b(price|cost|how much|rate|unit price)\b")
 CATALOG_STOCK_RE = re.compile(r"\b(available|availability|stock|in stock|do you have|do u have)\b")
 CATALOG_ORDER_RE = re.compile(r"\b(order|buy|purchase|reserve|book it|take it)\b")
+CATALOG_LOOKUP_RE = re.compile(r"\b(check|check if|look up|what about|compare|show me)\b")
 CATALOG_RECOMMENDATION_RE = re.compile(
     r"\b(recommend|suggest|best|which|what should i buy|looking for|need help choosing|need food|need shoes?|need sneakers?)\b"
 )
@@ -742,7 +743,8 @@ class CustomerCommunicationService:
         return ""
 
     def _deterministic_policy_reply(self, *, playbook: AssistantPlaybookModel, inbound_text: str) -> str:
-        if any(self._catalog_intent_flags(inbound_text)):
+        price_intent, stock_intent, _ = self._catalog_intent_flags(inbound_text)
+        if price_intent or stock_intent:
             return ""
         policy = self._policy_text_for_message(playbook, inbound_text)
         return policy or ""
@@ -1091,29 +1093,33 @@ class CustomerCommunicationService:
     def _policy_text_for_message(self, playbook: AssistantPlaybookModel, inbound_text: str) -> str:
         lower = inbound_text.lower()
         policies = {**DEFAULT_POLICIES, **(playbook.policy_json or {})}
-        policy_key = ""
+        policy_keys: list[str] = []
         if re.search(r"\b(return|returns|exchange|fit|refund)\b", lower):
-            policy_key = "returns"
-        elif re.search(r"\b(delivery|deliver|shipping|ship|courier)\b", lower):
-            policy_key = "delivery"
-        elif re.search(r"\b(payment|pay|card|cash|cod)\b", lower):
-            policy_key = "payment"
-        elif re.search(r"\b(warranty|guarantee)\b", lower):
-            policy_key = "warranty"
-        elif re.search(r"\b(discount|offer|promo|coupon)\b", lower):
-            policy_key = "discounts"
-        if not policy_key:
+            policy_keys.append("returns")
+        if re.search(r"\b(delivery|deliver|shipping|ship|courier)\b", lower):
+            policy_keys.append("delivery")
+        if re.search(r"\b(payment|pay|card|cash|cod)\b", lower):
+            policy_keys.append("payment")
+        if re.search(r"\b(warranty|guarantee)\b", lower):
+            policy_keys.append("warranty")
+        if re.search(r"\b(discount|discounts|offer|offers|promo|coupon)\b", lower):
+            policy_keys.append("discounts")
+        if not policy_keys:
             return ""
-        policy = str(policies.get(policy_key) or "").strip()
-        if policy:
-            labels = {
-                "returns": "Return policy",
-                "delivery": "Delivery policy",
-                "payment": "Payment policy",
-                "warranty": "Warranty policy",
-                "discounts": "Discount policy",
-            }
-            return f"{labels[policy_key]}: {policy}"
+        labels = {
+            "returns": "Return policy",
+            "delivery": "Delivery policy",
+            "payment": "Payment policy",
+            "warranty": "Warranty policy",
+            "discounts": "Discount policy",
+        }
+        replies = []
+        for policy_key in policy_keys:
+            policy = str(policies.get(policy_key) or "").strip()
+            if policy:
+                replies.append(f"{labels[policy_key]}: {policy}")
+        if replies:
+            return " ".join(replies)
         return "I do not want to guess the store policy here; I can ask a team member to confirm it for you."
 
     def _remembered_variant_for_message(
@@ -1211,7 +1217,7 @@ class CustomerCommunicationService:
         return bool(CATALOG_PRICE_RE.search(lower)), bool(CATALOG_STOCK_RE.search(lower)), bool(CATALOG_ORDER_RE.search(lower))
 
     def _needs_catalog_grounding(self, text: str) -> bool:
-        return any(self._catalog_intent_flags(text))
+        return any(self._catalog_intent_flags(text)) or bool(CATALOG_LOOKUP_RE.search(text.lower()) and self._catalog_search_queries(text))
 
     def _catalog_search_queries(self, text: str) -> list[str]:
         normalized = re.sub(r"[^a-z0-9+.#/-]+", " ", text.lower()).strip()
@@ -1247,6 +1253,7 @@ class CustomerCommunicationService:
             return None
 
         price_intent, stock_intent, order_intent = self._catalog_intent_flags(inbound_text)
+        lookup_intent = bool(CATALOG_LOOKUP_RE.search(inbound_text.lower()))
         tool_names: list[str] = []
         remembered_variant = self._remembered_variant_for_message(conversation, inbound_text)
         if remembered_variant is not None:
@@ -1258,7 +1265,7 @@ class CustomerCommunicationService:
             }
             availability_result = None
             price_result = None
-            if variant_id and (stock_intent or order_intent):
+            if variant_id and (stock_intent or order_intent or lookup_intent):
                 availability_result = self._execute_and_record_tool(
                     session,
                     tool_name="get_variant_availability",
@@ -1335,7 +1342,7 @@ class CustomerCommunicationService:
         price_result = None
         if len(items) == 1:
             variant_id = str(items[0].get("variant_id") or "").strip()
-            if variant_id and (stock_intent or order_intent):
+            if variant_id and (stock_intent or order_intent or lookup_intent):
                 availability_result = self._execute_and_record_tool(
                     session,
                     tool_name="get_variant_availability",
@@ -1432,7 +1439,8 @@ class CustomerCommunicationService:
         grounding: CatalogGrounding,
     ) -> str:
         price_intent, stock_intent, order_intent = self._catalog_intent_flags(inbound_text)
-        if not (price_intent or stock_intent or order_intent):
+        lookup_intent = bool(CATALOG_LOOKUP_RE.search(inbound_text.lower()))
+        if not (price_intent or stock_intent or order_intent or lookup_intent):
             return ""
 
         items = list(grounding.search_result.get("items") or [])
@@ -1460,7 +1468,7 @@ class CustomerCommunicationService:
         sku_text = f" (SKU {sku})" if sku else ""
 
         facts: list[str] = []
-        if stock_intent or order_intent:
+        if stock_intent or order_intent or lookup_intent:
             available = as_decimal(variant.get("available_to_sell") or ZERO)
             qty_text = self._format_quantity(available)
             if available > ZERO:
@@ -1475,7 +1483,7 @@ class CustomerCommunicationService:
                 facts.append("I do not see a saved selling price for it yet")
 
         fact_text = ", and ".join(facts) if facts else "I found it in the catalog"
-        next_step = "Would you like me to prepare a draft order for it?" if order_intent or stock_intent else "Would you like me to check anything else about it?"
+        next_step = "Would you like me to prepare a draft order for it?" if order_intent or stock_intent or lookup_intent else "Would you like me to check anything else about it?"
         return f"{health_prefix}I checked {label}{sku_text}: {fact_text}. {next_step}{policy_suffix}"
 
     def _format_money(self, value: Any, client: ClientModel) -> str:

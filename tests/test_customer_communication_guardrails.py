@@ -327,6 +327,33 @@ class CustomerCommunicationGuardrailTests(unittest.TestCase):
         self.assertIn("Return policy", reply)
         self.assertIn("7 days", reply)
 
+    def test_policy_answer_can_include_multiple_policy_sections(self) -> None:
+        playbook = self._playbook("shoe_store")
+        playbook.policy_json = {
+            "delivery": "Delivery takes 1-3 business days after confirmation.",
+            "payment": "Staff sends payment links after draft order review.",
+        }
+
+        reply = self.service._deterministic_policy_reply(
+            playbook=playbook,
+            inbound_text="What is your delivery time and payment policy?",
+        )
+
+        self.assertIn("Delivery policy", reply)
+        self.assertIn("Payment policy", reply)
+
+    def test_discount_policy_is_not_blocked_by_buy_language(self) -> None:
+        playbook = self._playbook("shoe_store")
+        playbook.policy_json = {"discounts": "Discounts are staff-approved only."}
+
+        reply = self.service._deterministic_policy_reply(
+            playbook=playbook,
+            inbound_text="Do you give discounts if I buy shoes and the care kit together?",
+        )
+
+        self.assertIn("Discount policy", reply)
+        self.assertIn("staff-approved", reply)
+
     def test_fashion_recommendation_waits_for_size_before_scoring(self) -> None:
         playbook = self._playbook("fashion")
 
@@ -342,6 +369,9 @@ class CustomerCommunicationGuardrailTests(unittest.TestCase):
                 {"size": "M", "occasion": "office party", "colors": ["neutral"], "budget": "250"},
             )
         )
+
+    def test_lookup_language_can_trigger_catalog_grounding(self) -> None:
+        self.assertTrue(self.service._needs_catalog_grounding("Actually check the white MetroCourt in EU 41 too."))
 
 
 if __name__ == "__main__":
