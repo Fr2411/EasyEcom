@@ -51,6 +51,7 @@ GROUNDING_TOOLS = {
     "get_variant_availability",
     "get_variant_price",
     "get_product_recommendations",
+    "create_draft_order",
 }
 
 CATALOG_PRICE_RE = re.compile(r"\b(price|cost|how much|rate|unit price)\b")
@@ -540,9 +541,31 @@ class CustomerCommunicationService:
         history = self._conversation_history(session, str(conversation.client_id), str(conversation.conversation_id))
         tool_names: list[str] = []
         usage: dict[str, int | None] = {"prompt_tokens": None, "completion_tokens": None, "total_tokens": None}
-        playbook_reply = self._deterministic_playbook_reply(client=client, playbook=playbook, inbound_text=inbound.message_text)
+        self._remember_inbound_context(conversation, playbook, inbound.message_text)
+        policy_reply = self._deterministic_policy_reply(playbook=playbook, inbound_text=inbound.message_text)
+        if policy_reply:
+            return policy_reply, tool_names, usage
+        playbook_reply = self._deterministic_playbook_reply(
+            client=client,
+            playbook=playbook,
+            inbound_text=inbound.message_text,
+            memory=conversation.memory_json or {},
+        )
         if playbook_reply:
             return playbook_reply, tool_names, usage
+        recommendation_reply = self._deterministic_recommendation_reply(
+            session,
+            client=client,
+            playbook=playbook,
+            channel=channel,
+            conversation=conversation,
+            inbound_text=inbound.message_text,
+            run=run,
+        )
+        if recommendation_reply is not None:
+            final_text, recommendation_tools = recommendation_reply
+            tool_names.extend(recommendation_tools)
+            return final_text, tool_names, usage
         catalog_grounding = self._deterministic_catalog_grounding(
             session,
             channel=channel,
@@ -552,6 +575,18 @@ class CustomerCommunicationService:
         )
         if catalog_grounding is not None:
             tool_names.extend(catalog_grounding.tool_names)
+            draft_reply = self._deterministic_draft_order_reply(
+                session,
+                channel=channel,
+                conversation=conversation,
+                inbound=inbound,
+                run=run,
+                grounding=catalog_grounding,
+            )
+            if draft_reply is not None:
+                final_text, draft_tools = draft_reply
+                tool_names.extend(draft_tools)
+                return final_text, tool_names, usage
             deterministic_reply = self._compose_catalog_grounded_reply(
                 client=client,
                 playbook=playbook,
@@ -559,6 +594,7 @@ class CustomerCommunicationService:
                 grounding=catalog_grounding,
             )
             if deterministic_reply:
+                self._remember_catalog_grounding(conversation, catalog_grounding)
                 return deterministic_reply, tool_names, usage
 
         messages = [{"role": "system", "content": system_prompt}]
@@ -645,7 +681,14 @@ class CustomerCommunicationService:
             return {"ok": True, "status": "escalated", "reason": reason}
         return {"ok": False, "error": f"Unknown tool: {tool_name}"}
 
-    def _deterministic_playbook_reply(self, *, client: ClientModel, playbook: AssistantPlaybookModel, inbound_text: str) -> str:
+    def _deterministic_playbook_reply(
+        self,
+        *,
+        client: ClientModel,
+        playbook: AssistantPlaybookModel,
+        inbound_text: str,
+        memory: dict[str, Any] | None = None,
+    ) -> str:
         lower = inbound_text.lower()
         price_intent, stock_intent, _ = self._catalog_intent_flags(inbound_text)
         if self._has_escalation_risk_terms(lower):
@@ -669,7 +712,11 @@ class CustomerCommunicationService:
                 "For allergy concerns, please verify the ingredient label and let staff confirm before purchase. "
                 "Tell me the allergen you avoid, quantity, preferred brand, and delivery timing, and I’ll help narrow safe options."
             )
-        if CATALOG_RECOMMENDATION_RE.search(lower) and not (price_intent or stock_intent):
+        if (CATALOG_RECOMMENDATION_RE.search(lower) or self._has_shopping_discovery_intent(lower)) and not (price_intent or stock_intent):
+            if memory and memory.get("pending_recommendation") and self._has_enough_recommendation_preferences(
+                playbook, dict(memory.get("preferences") or {})
+            ):
+                return ""
             template = playbook.industry_template_json or INDUSTRY_TEMPLATES.get(playbook.business_type, INDUSTRY_TEMPLATES["general_retail"])
             questions = [str(question) for question in template.get("questions", []) if str(question).strip()]
             if playbook.business_type == "pet_food":
@@ -693,6 +740,410 @@ class CustomerCommunicationService:
             if questions:
                 return f"I can help with that. Could you share {self._human_join(questions[:4])}?"
         return ""
+
+    def _deterministic_policy_reply(self, *, playbook: AssistantPlaybookModel, inbound_text: str) -> str:
+        if any(self._catalog_intent_flags(inbound_text)):
+            return ""
+        policy = self._policy_text_for_message(playbook, inbound_text)
+        return policy or ""
+
+    def _deterministic_recommendation_reply(
+        self,
+        session: Session,
+        *,
+        client: ClientModel,
+        playbook: AssistantPlaybookModel,
+        channel: CustomerChannelModel,
+        conversation: CustomerConversationModel,
+        inbound_text: str,
+        run: AssistantRunModel,
+    ) -> tuple[str, list[str]] | None:
+        memory = conversation.memory_json or {}
+        pending_recommendation = bool(memory.get("pending_recommendation"))
+        if not pending_recommendation or any(self._catalog_intent_flags(inbound_text)):
+            return None
+        preferences = dict(memory.get("preferences") or {})
+        if not self._has_enough_recommendation_preferences(playbook, preferences):
+            return None
+        result = self._execute_and_record_tool(
+            session,
+            tool_name="search_catalog_variants",
+            arguments={"query": ""},
+            channel=channel,
+            conversation=conversation,
+            run=run,
+        )
+        items = [
+            item
+            for item in (result.get("items") or [])
+            if as_decimal(item.get("available_to_sell") or ZERO) > ZERO
+        ]
+        ranked = sorted(
+            ((self._recommendation_score(preferences, item), item) for item in items),
+            key=lambda pair: pair[0],
+            reverse=True,
+        )
+        choices = [item for score, item in ranked if score > 0][:3]
+        if not choices:
+            return None
+        self._remember_catalog_choices(conversation, choices)
+        pref_text = self._preference_summary(preferences)
+        choice_text = "; ".join(self._catalog_choice_summary(item, client) for item in choices)
+        return (
+            f"Based on {pref_text}, the best matches I found are: {choice_text}. "
+            "Which one should I check or prepare as a draft order?",
+            ["search_catalog_variants"],
+        )
+
+    def _deterministic_draft_order_reply(
+        self,
+        session: Session,
+        *,
+        channel: CustomerChannelModel,
+        conversation: CustomerConversationModel,
+        inbound: CustomerMessageModel,
+        run: AssistantRunModel,
+        grounding: CatalogGrounding,
+    ) -> tuple[str, list[str]] | None:
+        _, _, order_intent = self._catalog_intent_flags(inbound.message_text)
+        if not order_intent:
+            return None
+
+        items = list(grounding.search_result.get("items") or [])
+        if len(items) != 1:
+            return None
+
+        variant = (grounding.availability_result or {}).get("variant") or items[0]
+        label = str(variant.get("label") or variant.get("product_name") or "that item")
+        available = as_decimal(variant.get("available_to_sell") or ZERO)
+        if available <= ZERO:
+            return f"I checked {label}, but it is not available right now. Would you like me to suggest the closest available alternative?", []
+
+        memory = self._memory(conversation)
+        contact = dict(memory.get("customer_contact") or {})
+        customer_name = (
+            str(contact.get("name") or conversation.external_sender_name or "").strip()
+            or self._extract_customer_name(inbound.message_text)
+            or "Customer"
+        )
+        customer_phone = str(contact.get("phone") or conversation.external_sender_phone or self._extract_phone(inbound.message_text) or "").strip()
+        customer_email = str(contact.get("email") or conversation.external_sender_email or self._extract_email(inbound.message_text) or "").strip()
+        if not normalize_phone(customer_phone) and not normalize_email(customer_email):
+            self._remember_catalog_grounding(conversation, grounding)
+            return f"I can prepare a draft order for {label}. Please share a phone number or email so staff can review and follow up.", []
+
+        quantity = self._extract_quantity(inbound.message_text)
+        quantity = max(Decimal("1"), min(quantity, available))
+        result = self._execute_and_record_tool(
+            session,
+            tool_name="create_draft_order",
+            arguments={
+                "customer_name": customer_name,
+                "customer_phone": customer_phone,
+                "customer_email": customer_email,
+                "location_id": variant.get("location_id") or grounding.search_result.get("location_id") or "",
+                "lines": [{"variant_id": str(variant.get("variant_id") or ""), "quantity": quantity}],
+            },
+            channel=channel,
+            conversation=conversation,
+            run=run,
+        )
+        if not result.get("ok"):
+            return (
+                f"I found {label}, but I could not prepare the draft order automatically. "
+                "I’m bringing a team member in to review it and help you finish this.",
+                ["create_draft_order"],
+            )
+
+        self._remember_catalog_grounding(conversation, grounding)
+        memory = self._memory(conversation)
+        memory["draft_order"] = result.get("draft_order") or {}
+        conversation.memory_json = memory
+        draft = result.get("draft_order") or {}
+        order_number = str(draft.get("order_number") or "the draft order")
+        qty_text = self._format_quantity(quantity)
+        return (
+            f"I prepared draft order {order_number} for {qty_text} x {label}. "
+            "A team member will review it before confirmation, payment, or delivery is finalized. "
+            "Would you like me to add delivery details?",
+            ["create_draft_order"],
+        )
+
+    def _memory(self, conversation: CustomerConversationModel) -> dict[str, Any]:
+        memory = conversation.memory_json if isinstance(conversation.memory_json, dict) else {}
+        return dict(memory)
+
+    def _remember_inbound_context(
+        self,
+        conversation: CustomerConversationModel,
+        playbook: AssistantPlaybookModel,
+        inbound_text: str,
+    ) -> None:
+        memory = self._memory(conversation)
+        preferences = dict(memory.get("preferences") or {})
+        preferences.update(self._extract_customer_preferences(playbook, inbound_text))
+        if preferences:
+            memory["preferences"] = preferences
+
+        contact = dict(memory.get("customer_contact") or {})
+        name = self._extract_customer_name(inbound_text)
+        phone = self._extract_phone(inbound_text)
+        email = self._extract_email(inbound_text)
+        if name:
+            contact["name"] = name
+            if not conversation.external_sender_name:
+                conversation.external_sender_name = name
+        if phone:
+            contact["phone"] = phone
+            if not conversation.external_sender_phone:
+                conversation.external_sender_phone = phone
+        if email:
+            contact["email"] = email
+            if not conversation.external_sender_email:
+                conversation.external_sender_email = email
+        if contact:
+            memory["customer_contact"] = contact
+
+        if self._has_shopping_discovery_intent(inbound_text.lower()) or memory.get("pending_recommendation"):
+            memory["pending_recommendation"] = True
+        conversation.memory_json = memory
+
+    def _remember_catalog_grounding(self, conversation: CustomerConversationModel, grounding: CatalogGrounding) -> None:
+        items = list(grounding.search_result.get("items") or [])
+        if len(items) != 1:
+            return
+        variant = dict((grounding.availability_result or {}).get("variant") or items[0])
+        price_variant = (grounding.price_result or {}).get("variant") or {}
+        if price_variant.get("unit_price") is not None:
+            variant["unit_price"] = price_variant.get("unit_price")
+        memory = self._memory(conversation)
+        memory["last_variant"] = variant
+        memory["pending_recommendation"] = False
+        conversation.memory_json = memory
+
+    def _remember_catalog_choices(self, conversation: CustomerConversationModel, choices: list[dict[str, Any]]) -> None:
+        memory = self._memory(conversation)
+        memory["recent_choices"] = [dict(choice) for choice in choices[:5]]
+        memory["pending_recommendation"] = False
+        conversation.memory_json = memory
+
+    def _extract_customer_preferences(self, playbook: AssistantPlaybookModel, text: str) -> dict[str, Any]:
+        lower = text.lower()
+        preferences: dict[str, Any] = {}
+
+        budget_match = re.search(
+            r"\b(?:under|below|less than|max|maximum|budget(?: is)?|up to)\s*(?:aed|dh|dhs|usd|\$)?\s*([0-9]{2,6})\b",
+            lower,
+        ) or re.search(r"\b(?:aed|dh|dhs|usd|\$)\s*([0-9]{2,6})\b", lower)
+        if budget_match:
+            preferences["budget"] = budget_match.group(1)
+
+        size_match = re.search(r"\b(?:size|sz)\s*([a-z]{1,3}|[0-9]{1,2})\b", lower)
+        if not size_match and playbook.business_type in {"shoe_store", "fashion"}:
+            size_match = re.search(r"\b(?:eu|uk|us)\s*([0-9]{1,2})\b", lower)
+        if size_match:
+            preferences["size"] = size_match.group(1).upper()
+
+        color_terms = [
+            "black",
+            "white",
+            "sand",
+            "beige",
+            "cream",
+            "brown",
+            "tan",
+            "navy",
+            "blue",
+            "indigo",
+            "grey",
+            "gray",
+            "charcoal",
+            "green",
+            "emerald",
+            "red",
+            "pink",
+            "clear",
+            "neutral",
+        ]
+        colors = [color for color in color_terms if re.search(rf"\b{re.escape(color)}s?\b", lower)]
+        if "not too flashy" in lower or "nothing flashy" in lower:
+            colors.append("neutral")
+            preferences["style"] = "not too flashy"
+        if colors:
+            preferences["colors"] = sorted(set(colors))
+
+        if re.search(r"\boffice party\b", lower):
+            preferences["occasion"] = "office party"
+        elif re.search(r"\b(work|office|formal|casual|running|gym|breakfast|gift|travel)\b", lower):
+            preferences["occasion"] = re.search(r"\b(work|office|formal|casual|running|gym|breakfast|gift|travel)\b", lower).group(1)
+
+        if playbook.business_type == "pet_food":
+            pet_match = re.search(r"\b(dog|puppy|cat|kitten|bird|rabbit)\b", lower)
+            if pet_match:
+                preferences["pet_type"] = pet_match.group(1)
+            if self._has_allergy_terms(lower):
+                preferences["allergy_concern"] = True
+        if playbook.business_type == "electronics":
+            model_match = re.search(r"\b(iphone|ipad|samsung|galaxy|macbook|laptop|usb-c|type-c|android)\b", lower)
+            if model_match:
+                preferences["device_or_model"] = model_match.group(1)
+        if playbook.business_type == "cosmetics":
+            skin_match = re.search(r"\b(oily|dry|combination|sensitive|acne|dull|hydration|brightening)\b", lower)
+            if skin_match:
+                preferences["skin_need"] = skin_match.group(1)
+
+        return preferences
+
+    def _extract_customer_name(self, text: str) -> str:
+        match = re.search(r"\bmy name is\s+([A-Za-z][A-Za-z .'-]{1,80})", text, re.IGNORECASE)
+        if not match:
+            return ""
+        name = re.split(r"\b(?:phone|mobile|email|and|,)\b", match.group(1).strip(), maxsplit=1, flags=re.IGNORECASE)[0]
+        return " ".join(name.split()).strip(" .,'-")
+
+    def _extract_phone(self, text: str) -> str:
+        match = re.search(r"(?<!\w)(\+?\d[\d\s().-]{6,}\d)(?!\w)", text)
+        if not match:
+            return ""
+        return " ".join(match.group(1).split())
+
+    def _extract_email(self, text: str) -> str:
+        match = re.search(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", text, re.IGNORECASE)
+        return match.group(0).lower() if match else ""
+
+    def _extract_quantity(self, text: str) -> Decimal:
+        lower = text.lower()
+        match = re.search(r"\b(?:qty|quantity|take|need|want|buy|order)\s+([0-9]{1,3})\b", lower)
+        if not match:
+            return Decimal("1")
+        return as_decimal(match.group(1))
+
+    def _has_shopping_discovery_intent(self, lower_text: str) -> bool:
+        return bool(
+            re.search(
+                r"\b(looking for|need something|need help|help me choose|recommend|suggest|which|what should i buy|best|suitable)\b",
+                lower_text,
+            )
+        )
+
+    def _has_enough_recommendation_preferences(self, playbook: AssistantPlaybookModel, preferences: dict[str, Any]) -> bool:
+        if playbook.business_type in {"fashion", "shoe_store"}:
+            return bool(preferences.get("size") and (preferences.get("colors") or preferences.get("occasion") or preferences.get("budget")))
+        if playbook.business_type == "pet_food":
+            return bool(preferences.get("pet_type") and not preferences.get("allergy_concern"))
+        if playbook.business_type == "electronics":
+            return bool(preferences.get("device_or_model") or preferences.get("budget"))
+        if playbook.business_type == "cosmetics":
+            return bool(preferences.get("skin_need"))
+        return bool(preferences)
+
+    def _recommendation_score(self, preferences: dict[str, Any], item: dict[str, Any]) -> int:
+        haystack = " ".join(
+            str(item.get(field) or "")
+            for field in ("label", "sku", "product_name", "brand", "category")
+        ).lower()
+        score = 0
+        size = str(preferences.get("size") or "").lower()
+        if size and re.search(rf"\b{re.escape(size)}\b", haystack):
+            score += 5
+        colors = [str(color).lower() for color in preferences.get("colors") or []]
+        if "neutral" in colors:
+            neutral_terms = ["sand", "beige", "cream", "tan", "black", "white", "navy", "grey", "gray", "charcoal"]
+            if any(term in haystack for term in neutral_terms):
+                score += 3
+        score += sum(3 for color in colors if color != "neutral" and color in haystack)
+        occasion = str(preferences.get("occasion") or "").lower()
+        if occasion:
+            occasion_terms = {
+                "office party": ["blazer", "dress", "shirt", "trouser", "loafer"],
+                "office": ["blazer", "shirt", "trouser", "loafer"],
+                "work": ["blazer", "shirt", "trouser", "loafer", "sneaker"],
+                "running": ["run", "running", "trainer"],
+                "breakfast": ["oats", "coffee", "bread", "honey"],
+            }
+            score += sum(2 for term in occasion_terms.get(occasion, [occasion]) if term in haystack)
+        budget = preferences.get("budget")
+        if budget and item.get("unit_price") is not None:
+            price = as_decimal(item.get("unit_price"))
+            budget_amount = as_decimal(budget)
+            if price <= budget_amount:
+                score += 4
+            elif price <= budget_amount * Decimal("1.15"):
+                score += 1
+            else:
+                score -= 4
+        if as_decimal(item.get("available_to_sell") or ZERO) > ZERO:
+            score += 1
+        return score
+
+    def _preference_summary(self, preferences: dict[str, Any]) -> str:
+        parts: list[str] = []
+        if preferences.get("size"):
+            parts.append(f"size {preferences['size']}")
+        if preferences.get("colors"):
+            parts.append(f"{self._human_join([str(color) for color in preferences['colors']])} colors")
+        if preferences.get("occasion"):
+            parts.append(str(preferences["occasion"]))
+        if preferences.get("budget"):
+            parts.append(f"budget around {preferences['budget']}")
+        return self._human_join(parts) if parts else "what you shared"
+
+    def _policy_text_for_message(self, playbook: AssistantPlaybookModel, inbound_text: str) -> str:
+        lower = inbound_text.lower()
+        policies = {**DEFAULT_POLICIES, **(playbook.policy_json or {})}
+        policy_key = ""
+        if re.search(r"\b(return|returns|exchange|fit|refund)\b", lower):
+            policy_key = "returns"
+        elif re.search(r"\b(delivery|deliver|shipping|ship|courier)\b", lower):
+            policy_key = "delivery"
+        elif re.search(r"\b(payment|pay|card|cash|cod)\b", lower):
+            policy_key = "payment"
+        elif re.search(r"\b(warranty|guarantee)\b", lower):
+            policy_key = "warranty"
+        elif re.search(r"\b(discount|offer|promo|coupon)\b", lower):
+            policy_key = "discounts"
+        if not policy_key:
+            return ""
+        policy = str(policies.get(policy_key) or "").strip()
+        if policy:
+            labels = {
+                "returns": "Return policy",
+                "delivery": "Delivery policy",
+                "payment": "Payment policy",
+                "warranty": "Warranty policy",
+                "discounts": "Discount policy",
+            }
+            return f"{labels[policy_key]}: {policy}"
+        return "I do not want to guess the store policy here; I can ask a team member to confirm it for you."
+
+    def _remembered_variant_for_message(
+        self,
+        conversation: CustomerConversationModel,
+        inbound_text: str,
+    ) -> dict[str, Any] | None:
+        memory = self._memory(conversation)
+        recent_choices = memory.get("recent_choices")
+        if isinstance(recent_choices, list):
+            lower = inbound_text.lower()
+            ordinal_index: int | None = None
+            if re.search(r"\b(first|1st|option 1|number 1)\b", lower):
+                ordinal_index = 0
+            elif re.search(r"\b(second|2nd|option 2|number 2)\b", lower):
+                ordinal_index = 1
+            elif re.search(r"\b(third|3rd|option 3|number 3)\b", lower):
+                ordinal_index = 2
+            if ordinal_index is not None and ordinal_index < len(recent_choices) and isinstance(recent_choices[ordinal_index], dict):
+                return dict(recent_choices[ordinal_index])
+
+        variant = memory.get("last_variant")
+        if not isinstance(variant, dict) or not variant.get("variant_id"):
+            return None
+        lower = inbound_text.lower()
+        if re.search(r"\b(it|that|this|same one|same item|that one|take it|book it|reserve it|price again|what was the price)\b", lower):
+            return dict(variant)
+        if self._catalog_intent_flags(inbound_text)[2] and not self._catalog_search_queries(inbound_text):
+            return dict(variant)
+        return None
 
     def _record_tool_call(
         self,
@@ -787,7 +1238,47 @@ class CustomerCommunicationService:
         if not self._needs_catalog_grounding(inbound_text):
             return None
 
+        price_intent, stock_intent, order_intent = self._catalog_intent_flags(inbound_text)
         tool_names: list[str] = []
+        remembered_variant = self._remembered_variant_for_message(conversation, inbound_text)
+        if remembered_variant is not None:
+            variant_id = str(remembered_variant.get("variant_id") or "").strip()
+            search_result = {
+                "ok": True,
+                "location_id": remembered_variant.get("location_id") or "",
+                "items": [remembered_variant],
+            }
+            availability_result = None
+            price_result = None
+            if variant_id and (stock_intent or order_intent):
+                availability_result = self._execute_and_record_tool(
+                    session,
+                    tool_name="get_variant_availability",
+                    arguments={"variant_id": variant_id, "location_id": remembered_variant.get("location_id") or ""},
+                    channel=channel,
+                    conversation=conversation,
+                    run=run,
+                )
+                tool_names.append("get_variant_availability")
+            if variant_id and (price_intent or order_intent):
+                price_result = self._execute_and_record_tool(
+                    session,
+                    tool_name="get_variant_price",
+                    arguments={"variant_id": variant_id},
+                    channel=channel,
+                    conversation=conversation,
+                    run=run,
+                )
+                tool_names.append("get_variant_price")
+            session.flush()
+            return CatalogGrounding(
+                query=str(remembered_variant.get("sku") or remembered_variant.get("label") or "previous item"),
+                tool_names=tuple(tool_names),
+                search_result=search_result,
+                availability_result=availability_result,
+                price_result=price_result,
+            )
+
         search_result: dict[str, Any] | None = None
         selected_query = ""
         merged_items: dict[str, dict[str, Any]] = {}
@@ -832,7 +1323,6 @@ class CustomerCommunicationService:
             search_result = {**search_result, "items": [selected] if selected is not None else items[:8]}
 
         items = list(search_result.get("items") or [])
-        price_intent, stock_intent, order_intent = self._catalog_intent_flags(inbound_text)
         availability_result = None
         price_result = None
         if len(items) == 1:
@@ -938,6 +1428,8 @@ class CustomerCommunicationService:
             return ""
 
         items = list(grounding.search_result.get("items") or [])
+        policy_text = self._policy_text_for_message(playbook, inbound_text)
+        policy_suffix = f" {policy_text}" if policy_text else ""
         health_prefix = ""
         if playbook.business_type == "pet_food" and self._has_risk_terms(inbound_text.lower()):
             health_prefix = "Because you mentioned a health concern, please check with a veterinarian before changing food. "
@@ -946,12 +1438,12 @@ class CustomerCommunicationService:
             query = grounding.query or "that item"
             return (
                 f"{health_prefix}I checked the catalog for {query}, but I could not find a matching active item yet. "
-                "Could you send the exact product name, size, flavor, or SKU so I can check again?"
+                f"Could you send the exact product name, size, flavor, or SKU so I can check again?{policy_suffix}"
             )
 
         if len(items) > 1:
             choices = "; ".join(self._catalog_choice_summary(item, client) for item in items[:3])
-            return f"{health_prefix}I found a few matches: {choices}. Which one should I check or prepare for you?"
+            return f"{health_prefix}I found a few matches: {choices}. Which one should I check or prepare for you?{policy_suffix}"
 
         variant = (grounding.availability_result or {}).get("variant") or items[0]
         price_variant = (grounding.price_result or {}).get("variant") or variant
@@ -976,7 +1468,7 @@ class CustomerCommunicationService:
 
         fact_text = ", and ".join(facts) if facts else "I found it in the catalog"
         next_step = "Would you like me to prepare a draft order for it?" if order_intent or stock_intent else "Would you like me to check anything else about it?"
-        return f"{health_prefix}I checked {label}{sku_text}: {fact_text}. {next_step}"
+        return f"{health_prefix}I checked {label}{sku_text}: {fact_text}. {next_step}{policy_suffix}"
 
     def _format_money(self, value: Any, client: ClientModel) -> str:
         amount = as_decimal(value).quantize(MONEY_QUANTUM)

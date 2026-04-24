@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from easy_ecom.data.store.postgres_models import AssistantPlaybookModel
+from easy_ecom.data.store.postgres_models import AssistantPlaybookModel, CustomerConversationModel
 from easy_ecom.domain.services.customer_communication_service import CustomerCommunicationService
 
 
@@ -220,6 +220,87 @@ class CustomerCommunicationGuardrailTests(unittest.TestCase):
 
         self.assertIsNotNone(selected)
         self.assertEqual(selected["sku"], "ARF-42-BLK")
+
+    def test_fashion_memory_extracts_preferences_and_contact(self) -> None:
+        conversation = CustomerConversationModel(
+            memory_json={},
+            external_sender_name="",
+            external_sender_phone="",
+            external_sender_email="",
+        )
+
+        self.service._remember_inbound_context(
+            conversation,
+            self._playbook("fashion"),
+            "I am size M, prefer neutral colors, under AED 250. My name is Dana, phone +971501234000.",
+        )
+
+        memory = conversation.memory_json or {}
+        self.assertEqual(memory["preferences"]["size"], "M")
+        self.assertEqual(memory["preferences"]["budget"], "250")
+        self.assertIn("neutral", memory["preferences"]["colors"])
+        self.assertEqual(memory["customer_contact"]["name"], "Dana")
+        self.assertIn("+971501234000", memory["customer_contact"]["phone"])
+
+    def test_previous_variant_context_supports_it_and_price_again(self) -> None:
+        conversation = CustomerConversationModel(
+            memory_json={
+                "last_variant": {
+                    "variant_id": "variant-1",
+                    "label": "Ariya Soft Blazer / M / Sand",
+                    "sku": "ALB-M-SAND",
+                    "location_id": "location-1",
+                }
+            }
+        )
+
+        remembered = self.service._remembered_variant_for_message(conversation, "What was the price again, and can I return it?")
+
+        self.assertIsNotNone(remembered)
+        self.assertEqual(remembered["sku"], "ALB-M-SAND")
+
+    def test_recent_choice_context_supports_first_option(self) -> None:
+        conversation = CustomerConversationModel(
+            memory_json={
+                "recent_choices": [
+                    {"variant_id": "variant-1", "label": "Ariya Soft Blazer / M / Sand", "sku": "ALB-M-SAND"},
+                    {"variant_id": "variant-2", "label": "Minimal Oxford Shirt / M / White", "sku": "MWO-M-WHT"},
+                ]
+            }
+        )
+
+        remembered = self.service._remembered_variant_for_message(conversation, "What is the price for the first one?")
+
+        self.assertIsNotNone(remembered)
+        self.assertEqual(remembered["sku"], "ALB-M-SAND")
+
+    def test_policy_answer_uses_structured_playbook_policy(self) -> None:
+        playbook = self._playbook("fashion")
+        playbook.policy_json = {"returns": "Exchange or return within 7 days if unused and tags are attached."}
+
+        reply = self.service._deterministic_policy_reply(
+            playbook=playbook,
+            inbound_text="Can I return it if it does not fit?",
+        )
+
+        self.assertIn("Return policy", reply)
+        self.assertIn("7 days", reply)
+
+    def test_fashion_recommendation_waits_for_size_before_scoring(self) -> None:
+        playbook = self._playbook("fashion")
+
+        self.assertFalse(
+            self.service._has_enough_recommendation_preferences(
+                playbook,
+                {"occasion": "office party", "colors": ["neutral"]},
+            )
+        )
+        self.assertTrue(
+            self.service._has_enough_recommendation_preferences(
+                playbook,
+                {"size": "M", "occasion": "office party", "colors": ["neutral"], "budget": "250"},
+            )
+        )
 
 
 if __name__ == "__main__":
