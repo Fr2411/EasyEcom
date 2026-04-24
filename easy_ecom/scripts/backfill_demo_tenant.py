@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from easy_ecom.core.config import settings
@@ -618,31 +618,41 @@ def _upsert_demo_channel(session: Session, client_id: str, location: LocationMod
 
 
 def _clean_test_customer_communication(session: Session, client_id: str) -> int:
-    conversations = list(
+    channel_filter = (
+        (CustomerChannelModel.external_account_id.like("cc-test-%"))
+        | (CustomerChannelModel.display_name.like("Website chat test%"))
+    )
+    conversation_count = int(
         session.execute(
-            select(CustomerConversationModel).where(
+            select(func.count()).select_from(CustomerConversationModel).where(
                 CustomerConversationModel.client_id == client_id,
                 CustomerConversationModel.external_sender_id.like("cc-test-%"),
             )
-        ).scalars()
+        ).scalar_one()
+        or 0
     )
-    channels = list(
+    channel_count = int(
         session.execute(
-            select(CustomerChannelModel).where(
+            select(func.count()).select_from(CustomerChannelModel).where(
                 CustomerChannelModel.client_id == client_id,
-                (
-                    (CustomerChannelModel.external_account_id.like("cc-test-%"))
-                    | (CustomerChannelModel.display_name.like("Website chat test%"))
-                ),
+                channel_filter,
             )
-        ).scalars()
+        ).scalar_one()
+        or 0
     )
-    deleted = len(conversations) + len(channels)
-    for conversation in conversations:
-        session.delete(conversation)
-    for channel in channels:
-        session.delete(channel)
-    return deleted
+    session.execute(
+        delete(CustomerConversationModel).where(
+            CustomerConversationModel.client_id == client_id,
+            CustomerConversationModel.external_sender_id.like("cc-test-%"),
+        )
+    )
+    session.execute(
+        delete(CustomerChannelModel).where(
+            CustomerChannelModel.client_id == client_id,
+            channel_filter,
+        )
+    )
+    return conversation_count + channel_count
 
 
 def backfill_shoe_store_demo(tenant_email: str, *, apply: bool) -> dict[str, Any]:
