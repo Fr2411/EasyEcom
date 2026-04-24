@@ -62,6 +62,13 @@ CATALOG_LOOKUP_RE = re.compile(r"\b(check|check if|look up|what about|compare|sh
 CATALOG_BROWSE_RE = re.compile(
     r"\b(collections?|ranges?|options?|models?|styles?|variants?|formal shoes?|casual shoes?|running shoes?|sneakers?|loafers?|sandals?|boots?)\b"
 )
+PRICE_NEGOTIATION_RE = re.compile(
+    r"\b(best price|last price|final price|best you can do|your best|lowest|do better|better price|better deal)\b"
+)
+GREETING_RE = re.compile(
+    r"^\s*(hi|hello|hey|salam|assalamu\s+alaikum|good morning|good afternoon|good evening)\s*[!.]*\s*$",
+    re.IGNORECASE,
+)
 CATALOG_RECOMMENDATION_RE = re.compile(
     r"\b(recommend|suggest|best|which|what should i buy|looking for|need help choosing|need food|need shoes?|need sneakers?)\b"
 )
@@ -620,14 +627,24 @@ class CustomerCommunicationService:
         media_reply = self._media_context_reply(conversation=conversation, inbound_text=inbound.message_text)
         if media_reply:
             return media_reply, tool_names, usage
-        negotiation_reply = self._negotiation_progress_reply(
+        catalog_intent_present = any(self._catalog_intent_flags(inbound.message_text))
+        if not catalog_intent_present:
+            negotiation_reply = self._negotiation_progress_reply(
+                client=client,
+                playbook=playbook,
+                conversation=conversation,
+                inbound_text=inbound.message_text,
+            )
+            if negotiation_reply:
+                return negotiation_reply, tool_names, usage
+        greeting_reply = self._deterministic_greeting_reply(
             client=client,
             playbook=playbook,
             conversation=conversation,
             inbound_text=inbound.message_text,
         )
-        if negotiation_reply:
-            return negotiation_reply, tool_names, usage
+        if greeting_reply:
+            return greeting_reply, tool_names, usage
         playbook_reply = self._deterministic_playbook_reply(
             client=client,
             playbook=playbook,
@@ -787,6 +804,28 @@ class CustomerCommunicationService:
             return {"ok": True, "status": "escalated", "reason": reason}
         return {"ok": False, "error": f"Unknown tool: {tool_name}"}
 
+    def _deterministic_greeting_reply(
+        self,
+        *,
+        client: ClientModel,
+        playbook: AssistantPlaybookModel,
+        conversation: CustomerConversationModel,
+        inbound_text: str,
+    ) -> str:
+        if not GREETING_RE.match(inbound_text):
+            return ""
+        memory = self._memory(conversation)
+        focus_label = str((memory.get("sales_state") or {}).get("focus_label") or "").strip()
+        if focus_label:
+            return f"Hi, I still have {focus_label} in context. Do you want to continue with that or look at something else?"
+        if playbook.business_type == "shoe_store":
+            return f"Hi, welcome to {client.business_name}. What kind of shoes are you looking for today: formal, casual, running, or something else?"
+        template = playbook.industry_template_json or INDUSTRY_TEMPLATES.get(playbook.business_type, INDUSTRY_TEMPLATES["general_retail"])
+        questions = [str(question).strip() for question in template.get("questions", []) if str(question).strip()]
+        if questions:
+            return f"Hi, welcome to {client.business_name}. What are you looking for today?"
+        return f"Hi, welcome to {client.business_name}. How can I help today?"
+
     def _deterministic_playbook_reply(
         self,
         *,
@@ -917,7 +956,8 @@ class CustomerCommunicationService:
         return (
             f"{prefix}based on {pref_text}, these look like the strongest matches right now:\n"
             + "\n".join(choice_lines)
-            + f"\n{persuasion.get('recommendation_tail', '')} {close_line}".strip(),
+            + "\n"
+            + f"{persuasion.get('recommendation_tail', '')} {close_line}".strip(),
             ["search_catalog_variants"],
         )
 
@@ -1781,12 +1821,15 @@ class CustomerCommunicationService:
         discounts_policy = str(({**DEFAULT_POLICIES, **(playbook.policy_json or {})}.get("discounts") or "")).strip()
         cross_sell_enabled = bool((playbook.sales_goals_json or {}).get("cross_sell"))
 
-        asks_best_price = bool(re.search(r"\b(best price|last price|final price|best you can do|your best|lowest|do better|better price)\b", lower))
+        asks_best_price = bool(PRICE_NEGOTIATION_RE.search(lower))
         says_expensive = bool(re.search(r"\b(expensive|too much|too high|pricey|costly)\b", lower))
         asks_bundle = bool(re.search(r"\b(bundle|care kit|laces|socks|accessories|anything to go with it|match with it)\b", lower))
         urgency = bool(re.search(r"\b(today|now|right away|asap|quickly)\b", lower))
         repeated_price_push = int(negotiation_state.get("best_price_asked_count") or 0) >= 1
         stalled = int(negotiation_state.get("stall_count") or 0) >= 2
+
+        if asks_best_price and not price_text:
+            return ""
 
         if asks_best_price and price_text:
             self._update_negotiation_memory(conversation, best_price_ask=True, close_attempt=True, last_move="price_policy_close")
@@ -1951,7 +1994,7 @@ class CustomerCommunicationService:
             policy_keys.append("payment")
         if re.search(r"\b(warranty|guarantee)\b", lower):
             policy_keys.append("warranty")
-        if re.search(r"\b(discount|discounts|offer|offers|promo|coupon)\b", lower):
+        if re.search(r"\b(discount|discounts|offer|offers|promo|coupon)\b", lower) or PRICE_NEGOTIATION_RE.search(lower):
             policy_keys.append("discounts")
         if not policy_keys:
             return ""
@@ -1989,11 +2032,15 @@ class CustomerCommunicationService:
                 ordinal_index = 2
             if ordinal_index is not None and ordinal_index < len(recent_choices) and isinstance(recent_choices[ordinal_index], dict):
                 return dict(recent_choices[ordinal_index])
+            if PRICE_NEGOTIATION_RE.search(lower) and recent_choices and isinstance(recent_choices[0], dict):
+                return dict(recent_choices[0])
 
         variant = memory.get("last_variant")
         if not isinstance(variant, dict) or not variant.get("variant_id"):
             return None
         lower = inbound_text.lower()
+        if PRICE_NEGOTIATION_RE.search(lower):
+            return dict(variant)
         if re.search(
             r"\b(it|that|this|same one|same item|that one|take it|book it|reserve it|price again|what was the price)\b",
             lower,
@@ -2654,6 +2701,7 @@ class CustomerCommunicationService:
                 "Personality: natural, warm, observant, concise, helpful, and commercially sensible without sounding scripted.",
                 f"Brand personality: {playbook.brand_personality}. Channel: {channel.provider}.",
                 "Conversation flow: understand intent, continue naturally from prior context, use remembered buyer signals, buyer archetype, lead source, language, and message modality when helpful, ask one useful clarifying question only when needed, call tools for facts, answer clearly, then offer one smart next step.",
+                "For simple greetings, reply in one short sentence with one useful opening question; do not give a checklist unless the customer asks for a comparison or several options.",
                 "Sound like a top store salesperson who remembers the shopper, understands buying intent, adapts style to the buyer, and reduces friction without sounding pushy or scripted.",
                 "Customers may write in messy, random, mixed, or multi-turn ways. Follow meaning, not a rigid flowchart.",
                 "When the customer's language is clear, answer in that language. If they switch language, adapt.",

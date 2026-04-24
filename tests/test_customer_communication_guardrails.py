@@ -181,6 +181,18 @@ class CustomerCommunicationGuardrailTests(unittest.TestCase):
         self.assertTrue("color" in reply or "preferred color" in reply)
         self.assertIn("budget", reply)
 
+    def test_pure_greeting_gets_short_playbook_based_opener(self) -> None:
+        reply = self.service._deterministic_greeting_reply(
+            client=type("Client", (), {"business_name": "Frabby Footwear"})(),
+            playbook=self._playbook("shoe_store"),
+            conversation=CustomerConversationModel(memory_json={}),
+            inbound_text="Hi",
+        )
+
+        self.assertIn("Frabby Footwear", reply)
+        self.assertEqual(reply.count("?"), 1)
+        self.assertNotIn("\n-", reply)
+
     def test_banglish_budget_shoe_request_updates_language_and_buyer_type(self) -> None:
         conversation = CustomerConversationModel(memory_json={"buyer_archetype": "explorer"})
         playbook = self._playbook("shoe_store")
@@ -199,6 +211,62 @@ class CustomerCommunicationGuardrailTests(unittest.TestCase):
         self.assertEqual(snapshot["customer_signals"]["buyer_archetype"], "budget_buyer")
         self.assertIn("shoe size", reply)
         self.assertIn("budget", reply)
+
+    def test_better_price_uses_recent_recommendation_for_fresh_grounding(self) -> None:
+        conversation = CustomerConversationModel(
+            memory_json={
+                "recent_choices": [
+                    {
+                        "variant_id": "variant-1",
+                        "label": "CloudStep Daily Sneaker / EU 42 / Black",
+                        "sku": "CSD-42-BLK",
+                    }
+                ]
+            }
+        )
+
+        remembered = self.service._remembered_variant_for_message(
+            conversation,
+            "Can you do better price? I might order today if it makes sense.",
+        )
+
+        self.assertIsNotNone(remembered)
+        self.assertEqual(remembered["variant_id"], "variant-1")
+
+    def test_recommendation_reply_keeps_persuasion_tail_on_new_line(self) -> None:
+        conversation = CustomerConversationModel(
+            memory_json={
+                "pending_recommendation": True,
+                "preferences": {"size": "42", "colors": ["black"], "budget": "250"},
+                "buyer_archetype": "budget_buyer",
+            }
+        )
+        with patch.object(
+            self.service,
+            "_execute_and_record_tool",
+            return_value={
+                "items": [
+                    {
+                        "variant_id": "variant-1",
+                        "label": "CloudStep Daily Sneaker / EU 42 / Black",
+                        "sku": "CSD-42-BLK",
+                        "unit_price": "189.00",
+                        "available_to_sell": "5.000",
+                    }
+                ]
+            },
+        ):
+            reply, _ = self.service._deterministic_recommendation_reply(
+                None,
+                client=type("Client", (), {"currency_symbol": "AED ", "currency_code": "AED"})(),
+                playbook=self._playbook("shoe_store"),
+                channel=object(),
+                conversation=conversation,
+                inbound_text="Size 42 black under AED 250",
+                run=object(),
+            )
+
+        self.assertIn("available)\nI’ve kept", reply)
 
     def test_each_vertical_recommendation_asks_domain_questions(self) -> None:
         cases = {
