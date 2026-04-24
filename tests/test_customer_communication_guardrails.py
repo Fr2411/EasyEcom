@@ -261,6 +261,26 @@ class CustomerCommunicationGuardrailTests(unittest.TestCase):
         self.assertIsNotNone(remembered)
         self.assertEqual(remembered["sku"], "ALB-M-SAND")
 
+    def test_previous_variant_context_supports_draft_order_request(self) -> None:
+        conversation = CustomerConversationModel(
+            memory_json={
+                "last_variant": {
+                    "variant_id": "variant-1",
+                    "label": "AeroRun Flex Knit Running Shoe / EU 42 / Black",
+                    "sku": "ARF-42-BLK",
+                    "location_id": "location-1",
+                }
+            }
+        )
+
+        remembered = self.service._remembered_variant_for_message(
+            conversation,
+            "Looks good. Please prepare a draft order. My name is Samir, phone +971501110001.",
+        )
+
+        self.assertIsNotNone(remembered)
+        self.assertEqual(remembered["sku"], "ARF-42-BLK")
+
     def test_recent_choice_context_supports_first_option(self) -> None:
         conversation = CustomerConversationModel(
             memory_json={

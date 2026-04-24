@@ -1139,7 +1139,15 @@ class CustomerCommunicationService:
         if not isinstance(variant, dict) or not variant.get("variant_id"):
             return None
         lower = inbound_text.lower()
-        if re.search(r"\b(it|that|this|same one|same item|that one|take it|book it|reserve it|price again|what was the price)\b", lower):
+        if re.search(
+            r"\b(it|that|this|same one|same item|that one|take it|book it|reserve it|price again|what was the price)\b",
+            lower,
+        ):
+            return dict(variant)
+        if self._catalog_intent_flags(inbound_text)[2] and re.search(
+            r"\b(draft order|prepare(?: a)?(?: draft)? order|make(?: the| an| a)? order|place(?: the| an| a)? order)\b",
+            lower,
+        ):
             return dict(variant)
         if self._catalog_intent_flags(inbound_text)[2] and not self._catalog_search_queries(inbound_text):
             return dict(variant)
