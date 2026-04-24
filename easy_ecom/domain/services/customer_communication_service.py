@@ -479,7 +479,7 @@ class CustomerCommunicationService:
             run.total_tokens = usage.get("total_tokens")
         except Exception as exc:
             error_message = str(exc)[:1000]
-            final_text = self._safe_escalation_text(client.business_name)
+            final_text = self._safe_escalation_text(client.business_name, inbound.message_text)
             run.error_message = error_message
 
         if error_message:
@@ -493,7 +493,7 @@ class CustomerCommunicationService:
                 playbook=playbook,
             )
         if validation_status != "ok":
-            final_text = self._safe_escalation_text(client.business_name)
+            final_text = self._safe_escalation_text(client.business_name, inbound.message_text)
             conversation.status = "escalated"
             conversation.escalation_reason = escalation_reason
 
@@ -612,7 +612,7 @@ class CustomerCommunicationService:
                     }
                 )
             session.flush()
-        return self._safe_escalation_text(client.business_name), tool_names, usage
+        return self._safe_escalation_text(client.business_name, inbound.message_text), tool_names, usage
 
     def _execute_tool(
         self,
@@ -649,9 +649,9 @@ class CustomerCommunicationService:
         lower = inbound_text.lower()
         price_intent, stock_intent, _ = self._catalog_intent_flags(inbound_text)
         if self._has_escalation_risk_terms(lower):
-            return self._safe_escalation_text(client.business_name)
+            return self._safe_escalation_text(client.business_name, inbound_text)
         if playbook.business_type == "electronics" and self._has_electronics_safety_terms(lower):
-            return self._safe_escalation_text(client.business_name)
+            return self._safe_escalation_text(client.business_name, inbound_text)
         if playbook.business_type == "pet_food" and self._has_risk_terms(lower) and not (price_intent or stock_intent):
             return (
                 "I’m sorry your pet is not feeling well. For vomiting, illness, allergies, medication, or sudden symptoms, "
@@ -1771,7 +1771,18 @@ class CustomerCommunicationService:
             ],
         }
 
-    def _safe_escalation_text(self, business_name: str) -> str:
+    def _safe_escalation_text(self, business_name: str, inbound_text: str = "") -> str:
+        lower = inbound_text.lower()
+        if self._has_electronics_safety_terms(lower):
+            return (
+                f"Thanks for reaching out to {business_name}. Please stop using that device or charger now, unplug it if it is safe, "
+                "and keep it away from heat or flammable items. I’m bringing a team member into this chat to help with the safest next step."
+            )
+        if re.search(r"\b(refund|complaint|angry)\b", lower):
+            return (
+                f"Thanks for reaching out to {business_name}. I’m bringing a team member into this chat so they can review the issue "
+                "and help you with the right next step."
+            )
         return (
             f"Thanks for reaching out to {business_name}. I want to make sure you get the right answer, "
             "so I’m bringing a team member into this chat to help with the details."

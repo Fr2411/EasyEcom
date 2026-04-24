@@ -187,6 +187,16 @@ class CustomerCommunicationGuardrailTests(unittest.TestCase):
         self.assertEqual(status, "escalated")
         self.assertIn("Electronics safety concern", reason)
 
+    def test_electronics_safety_escalation_gives_immediate_instruction(self) -> None:
+        reply = self.service._safe_escalation_text(
+            "Circuit House",
+            "My charger is smoking and the battery is swollen.",
+        )
+
+        self.assertIn("stop using", reply)
+        self.assertIn("unplug", reply)
+        self.assertIn("team member", reply)
+
     def test_catalog_item_scoring_resolves_shoe_size_color_brand(self) -> None:
         selected = self.service._select_best_catalog_item(
             "Do you have black AeroRun size 42?",
