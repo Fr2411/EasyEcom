@@ -19,6 +19,8 @@ from easy_ecom.data.store.postgres_models import (
     CustomerChannelModel,
     CustomerConversationModel,
     CustomerModel,
+    FinanceTransactionLinkModel,
+    FinanceTransactionModel,
     InventoryLedgerModel,
     LocationModel,
     PaymentModel,
@@ -26,6 +28,7 @@ from easy_ecom.data.store.postgres_models import (
     ProductVariantModel,
     SalesOrderItemModel,
     SalesOrderModel,
+    ShipmentModel,
     SupplierModel,
     UserModel,
 )
@@ -36,6 +39,7 @@ from easy_ecom.domain.services.customer_communication_service import DEFAULT_ESC
 DEMO_REFERENCE_ID = "DEMO-SHOE-STORE-20260424"
 DEMO_CHANNEL_ACCOUNT_ID = "frabby-footwear-demo-website"
 DEMO_THROWAWAY_PRODUCT_NAMES = ("test", "test2")
+DEMO_THROWAWAY_CUSTOMER_NAMES = ("test", "test2")
 
 
 @dataclass(frozen=True)
@@ -671,6 +675,92 @@ def _archive_throwaway_products(session: Session, client_id: str) -> int:
     return len(products)
 
 
+def _clean_throwaway_sales_records(session: Session, client_id: str) -> tuple[int, int]:
+    customers = list(
+        session.execute(
+            select(CustomerModel).where(
+                CustomerModel.client_id == client_id,
+                func.lower(CustomerModel.name).in_(DEMO_THROWAWAY_CUSTOMER_NAMES),
+            )
+        ).scalars()
+    )
+    customer_ids = [str(customer.customer_id) for customer in customers]
+    if not customer_ids:
+        return 0, 0
+
+    order_ids = list(
+        session.execute(
+            select(SalesOrderModel.sales_order_id).where(
+                SalesOrderModel.client_id == client_id,
+                SalesOrderModel.customer_id.in_(customer_ids),
+                ~SalesOrderModel.order_number.like("SO-DEMO-SHOE-%"),
+            )
+        ).scalars()
+    )
+    if order_ids:
+        transaction_ids = list(
+            session.execute(
+                select(FinanceTransactionLinkModel.transaction_id).where(
+                    FinanceTransactionLinkModel.client_id == client_id,
+                    FinanceTransactionLinkModel.origin_type == "sale_fulfillment",
+                    FinanceTransactionLinkModel.origin_id.in_(order_ids),
+                )
+            ).scalars()
+        )
+        session.execute(
+            delete(FinanceTransactionLinkModel).where(
+                FinanceTransactionLinkModel.client_id == client_id,
+                FinanceTransactionLinkModel.origin_type == "sale_fulfillment",
+                FinanceTransactionLinkModel.origin_id.in_(order_ids),
+            )
+        )
+        if transaction_ids:
+            session.execute(
+                delete(FinanceTransactionModel).where(
+                    FinanceTransactionModel.client_id == client_id,
+                    FinanceTransactionModel.transaction_id.in_(transaction_ids),
+                )
+            )
+        session.execute(
+            delete(InventoryLedgerModel).where(
+                InventoryLedgerModel.client_id == client_id,
+                InventoryLedgerModel.reference_type == "sales_order",
+                InventoryLedgerModel.reference_id.in_(order_ids),
+            )
+        )
+        session.execute(
+            delete(ShipmentModel).where(
+                ShipmentModel.client_id == client_id,
+                ShipmentModel.sales_order_id.in_(order_ids),
+            )
+        )
+        session.execute(
+            delete(PaymentModel).where(
+                PaymentModel.client_id == client_id,
+                PaymentModel.sales_order_id.in_(order_ids),
+            )
+        )
+        session.execute(
+            delete(SalesOrderItemModel).where(
+                SalesOrderItemModel.client_id == client_id,
+                SalesOrderItemModel.sales_order_id.in_(order_ids),
+            )
+        )
+        session.execute(
+            delete(SalesOrderModel).where(
+                SalesOrderModel.client_id == client_id,
+                SalesOrderModel.sales_order_id.in_(order_ids),
+            )
+        )
+
+    archived_customers = 0
+    for customer in customers:
+        if customer.status != "archived":
+            customer.status = "archived"
+            archived_customers += 1
+    return len(order_ids), archived_customers
+
+
 def backfill_shoe_store_demo(tenant_email: str, *, apply: bool) -> dict[str, Any]:
     engine = build_postgres_engine(settings)
     SessionFactory = build_session_factory(engine)
@@ -720,6 +810,7 @@ def backfill_shoe_store_demo(tenant_email: str, *, apply: bool) -> dict[str, Any
 
         cleaned_customer_comm = _clean_test_customer_communication(session, client_id)
         archived_demo_products = _archive_throwaway_products(session, client_id)
+        removed_throwaway_orders, archived_throwaway_customers = _clean_throwaway_sales_records(session, client_id)
         _upsert_playbook(session, client_id)
         channel = _upsert_demo_channel(session, client_id, location, str(user.user_id))
 
@@ -744,6 +835,8 @@ def backfill_shoe_store_demo(tenant_email: str, *, apply: bool) -> dict[str, Any
             "orders_created": orders_created,
             "cleaned_customer_communication_records": cleaned_customer_comm,
             "archived_demo_products": archived_demo_products,
+            "removed_throwaway_orders": removed_throwaway_orders,
+            "archived_throwaway_customers": archived_throwaway_customers,
             "channel_display_name": channel.display_name,
             "channel_key": channel.webhook_key,
         }
