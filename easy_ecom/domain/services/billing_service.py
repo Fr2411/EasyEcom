@@ -6,6 +6,8 @@ import json
 from typing import Any
 
 import httpx
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -287,9 +289,44 @@ class BillingService:
                 if not record.provider_plan_id and self._plan_amount(record.plan_code):
                     record.provider_plan_id = self._create_paypal_plan(plan=record, product_id=record.provider_product_id)
 
+    def _pending_subscription_row(self, session: Session, client_id: str) -> SubscriptionModel | None:
+        for pending in session.new:
+            if isinstance(pending, SubscriptionModel) and str(pending.client_id) == str(client_id):
+                return pending
+        return None
+
+    def _ensure_free_subscription_exists(self, session: Session, client_id: str) -> None:
+        values = {
+            "subscription_id": new_uuid(),
+            "client_id": client_id,
+            "plan_code": "free",
+            "billing_provider": PAYPAL_PROVIDER,
+            "status": "free",
+            "cancel_at_period_end": False,
+        }
+        bind = session.get_bind()
+        if bind is not None and bind.dialect.name == "postgresql":
+            session.execute(
+                pg_insert(SubscriptionModel.__table__)
+                .values(**values)
+                .on_conflict_do_nothing(index_elements=["client_id"])
+            )
+            return
+        try:
+            with session.begin_nested():
+                session.add(SubscriptionModel(**values))
+                session.flush()
+        except IntegrityError:
+            pass
+
     def seed_existing_clients_to_free(self, session: Session) -> None:
         self.ensure_plan_catalog(session)
         clients = session.execute(select(ClientModel)).scalars().all()
+        existing_subscription_client_ids = {
+            str(client_id)
+            for client_id in session.execute(select(SubscriptionModel.client_id)).scalars().all()
+            if client_id is not None
+        }
         for client in clients:
             changed = False
             if not client.billing_plan_code:
@@ -303,20 +340,10 @@ class BillingService:
                 changed = True
             if changed:
                 client.billing_updated_at = now_utc()
-            subscription = session.execute(
-                select(SubscriptionModel).where(SubscriptionModel.client_id == client.client_id)
-            ).scalar_one_or_none()
-            if subscription is None:
-                session.add(
-                    SubscriptionModel(
-                        subscription_id=new_uuid(),
-                        client_id=client.client_id,
-                        plan_code="free",
-                        billing_provider=PAYPAL_PROVIDER,
-                        status="free",
-                        cancel_at_period_end=False,
-                    )
-                )
+            if str(client.client_id) not in existing_subscription_client_ids and self._pending_subscription_row(session, str(client.client_id)) is None:
+                self._ensure_free_subscription_exists(session, str(client.client_id))
+                existing_subscription_client_ids.add(str(client.client_id))
+        session.flush()
 
     def public_plans(self) -> list[dict[str, Any]]:
         with self._session_factory() as session:
@@ -376,19 +403,22 @@ class BillingService:
         ).scalar_one_or_none()
 
     def _subscription_row(self, session: Session, client_id: str) -> SubscriptionModel:
+        pending = self._pending_subscription_row(session, client_id)
+        if pending is not None:
+            return pending
         row = session.execute(
             select(SubscriptionModel).where(SubscriptionModel.client_id == client_id)
         ).scalar_one_or_none()
         if row is None:
-            row = SubscriptionModel(
-                subscription_id=new_uuid(),
-                client_id=client_id,
-                plan_code="free",
-                billing_provider=PAYPAL_PROVIDER,
-                status="free",
-            )
-            session.add(row)
-            session.flush()
+            self._ensure_free_subscription_exists(session, client_id)
+            pending = self._pending_subscription_row(session, client_id)
+            if pending is not None:
+                return pending
+            row = session.execute(
+                select(SubscriptionModel).where(SubscriptionModel.client_id == client_id)
+            ).scalar_one_or_none()
+            if row is None:
+                raise ApiException(status_code=500, code="SUBSCRIPTION_BOOTSTRAP_FAILED", message="Unable to initialize subscription state")
         return row
 
     def _sync_client_snapshot(
