@@ -34,7 +34,17 @@ Each tenant has a structured assistant playbook:
 - escalation rules
 - industry template guidance
 
-Industry templates add domain-specific questions and safety rules. For example, pet food assistants ask about pet type, age, allergies, diet, and health concerns, but they must not diagnose or replace veterinary advice.
+Industry templates add domain-specific questions and safety rules. For example, pet food assistants ask about pet type, age, allergies, diet, and health concerns, but they must not diagnose or replace veterinary advice. Shoe store assistants ask for shoe size, intended use, color or style, fit preference, and budget before recommending or checking exact variants.
+
+## Demo Backfill
+
+Use the tenant demo backfill only for presentation tenants:
+
+```bash
+python3 -m easy_ecom.scripts.backfill_demo_tenant --tenant-email frabby2411@gmail.com --apply
+```
+
+The command is idempotent and tenant-scoped. It upserts shoe-store catalog data, customers, sample orders, an assistant playbook, a website channel, and ledger-backed demo stock adjustments.
 
 ## Conversation Records
 

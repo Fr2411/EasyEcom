@@ -129,6 +129,17 @@ class CustomerCommunicationGuardrailTests(unittest.TestCase):
         self.assertIn("allergies", reply)
         self.assertIn("health concerns", reply)
 
+    def test_shoe_store_recommendation_asks_sales_questions(self) -> None:
+        reply = self.service._deterministic_playbook_reply(
+            client=type("Client", (), {"business_name": "Shoe Shop"})(),
+            playbook=self._playbook("shoe_store"),
+            inbound_text="I need shoes for work. Can you recommend something?",
+        )
+
+        self.assertIn("shoe size", reply)
+        self.assertIn("preferred color", reply)
+        self.assertIn("budget", reply)
+
 
 if __name__ == "__main__":
     unittest.main()

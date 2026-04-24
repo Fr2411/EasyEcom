@@ -1,7 +1,7 @@
 export type AssistantPlaybook = {
   playbook_id: string;
   status: string;
-  business_type: 'general_retail' | 'pet_food' | 'fashion' | 'electronics' | 'cosmetics' | 'grocery' | string;
+  business_type: 'general_retail' | 'pet_food' | 'fashion' | 'shoe_store' | 'electronics' | 'cosmetics' | 'grocery' | string;
   brand_personality: 'friendly' | 'expert' | 'premium' | 'casual' | 'concise' | string;
   custom_instructions: string;
   forbidden_claims: string;

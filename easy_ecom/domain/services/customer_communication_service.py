@@ -56,7 +56,9 @@ GROUNDING_TOOLS = {
 CATALOG_PRICE_RE = re.compile(r"\b(price|cost|how much|rate|unit price)\b")
 CATALOG_STOCK_RE = re.compile(r"\b(available|availability|stock|in stock|do you have|do u have)\b")
 CATALOG_ORDER_RE = re.compile(r"\b(order|buy|purchase|reserve|book it|take it)\b")
-CATALOG_RECOMMENDATION_RE = re.compile(r"\b(recommend|suggest|best|which food|what food|need food|looking for food)\b")
+CATALOG_RECOMMENDATION_RE = re.compile(
+    r"\b(recommend|suggest|best|which food|what food|need food|looking for food|need shoes?|need sneakers?|looking for shoes?|looking for sneakers?)\b"
+)
 CATALOG_SEARCH_STOPWORDS = {
     "a",
     "about",
@@ -124,6 +126,13 @@ INDUSTRY_TEMPLATES: dict[str, dict[str, Any]] = {
     "fashion": {
         "questions": ["size", "color", "occasion", "budget", "fit preference"],
         "safety": ["Confirm size/color variant before stock or price answers."],
+    },
+    "shoe_store": {
+        "questions": ["shoe size", "intended use", "color or style", "fit preference", "budget"],
+        "safety": [
+            "Confirm size and color before stock or price promises.",
+            "Do not claim orthopedic or medical benefits unless tenant data explicitly supports it.",
+        ],
     },
     "electronics": {
         "questions": ["device model", "compatibility need", "warranty preference", "budget"],
@@ -649,6 +658,11 @@ class CustomerCommunicationService:
                     "I can help choose a suitable option. What pet is it for, and what are their age, breed or size, "
                     "current diet, allergies, and any health concerns?"
                 )
+            if playbook.business_type == "shoe_store":
+                return (
+                    "I can help narrow that down. What shoe size do you need, and is it for running, work, casual wear, "
+                    "formal use, or something else? Any preferred color, fit, and budget?"
+                )
             if questions:
                 return f"I can help with that. Could you share {self._human_join(questions[:4])}?"
         return ""
@@ -848,8 +862,8 @@ class CustomerCommunicationService:
             )
 
         if len(items) > 1:
-            choices = ", ".join(str(item.get("label") or item.get("product_name") or item.get("sku")) for item in items[:3])
-            return f"{health_prefix}I found a few matches: {choices}. Which one should I check for you?"
+            choices = "; ".join(self._catalog_choice_summary(item, client) for item in items[:3])
+            return f"{health_prefix}I found a few matches: {choices}. Which one should I check or prepare for you?"
 
         variant = (grounding.availability_result or {}).get("variant") or items[0]
         price_variant = (grounding.price_result or {}).get("variant") or variant
@@ -889,6 +903,19 @@ class CustomerCommunicationService:
         if normalized == normalized.to_integral():
             return str(int(normalized))
         return str(value.quantize(Decimal("0.001")).normalize())
+
+    def _catalog_choice_summary(self, item: dict[str, Any], client: ClientModel) -> str:
+        label = str(item.get("label") or item.get("product_name") or item.get("sku") or "item")
+        sku = str(item.get("sku") or "").strip()
+        available = as_decimal(item.get("available_to_sell") or ZERO)
+        price = item.get("unit_price")
+        parts = [label]
+        if sku:
+            parts.append(f"SKU {sku}")
+        if price is not None:
+            parts.append(self._format_money(price, client))
+        parts.append(f"{self._format_quantity(available)} available" if available > ZERO else "not available")
+        return f"{parts[0]} ({', '.join(parts[1:])})" if len(parts) > 1 else parts[0]
 
     def _human_join(self, values: list[str]) -> str:
         if not values:

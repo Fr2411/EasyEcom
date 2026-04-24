@@ -20,6 +20,7 @@ const BUSINESS_TYPES = [
   { value: 'general_retail', label: 'General retail' },
   { value: 'pet_food', label: 'Pet food' },
   { value: 'fashion', label: 'Fashion' },
+  { value: 'shoe_store', label: 'Shoe store' },
   { value: 'electronics', label: 'Electronics' },
   { value: 'cosmetics', label: 'Cosmetics' },
   { value: 'grocery', label: 'Grocery' },

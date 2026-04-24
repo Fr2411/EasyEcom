@@ -6,7 +6,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, field_validator
 
 
-BusinessType = Literal["general_retail", "pet_food", "fashion", "electronics", "cosmetics", "grocery"]
+BusinessType = Literal["general_retail", "pet_food", "fashion", "shoe_store", "electronics", "cosmetics", "grocery"]
 BrandPersonality = Literal["friendly", "expert", "premium", "casual", "concise"]
 ChannelProvider = Literal["website", "whatsapp", "instagram", "facebook", "messenger", "other"]
 
