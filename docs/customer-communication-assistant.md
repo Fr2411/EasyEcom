@@ -8,9 +8,12 @@ It uses NVIDIA NIM by default:
 
 - `NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1`
 - `NVIDIA_MODEL=google/gemma-4-31b-it`
+- `NVIDIA_FALLBACK_MODEL=nvidia/nemotron-3-super-120b-a12b`
 - `NVIDIA_API_KEY` from deployment secrets
 
 Do not commit provider keys. Rotate any key that was shared outside the secret store.
+
+Gemma remains the primary model. The backend uses a shorter primary timeout for Gemma and retries transient timeout/network/provider failures on the configured fallback model before escalating the conversation. Conversation style should come from the tenant playbook, memory graph, and model behavior; deterministic backend replies are reserved for safety, policy, grounded catalog facts, and draft-order guardrails.
 
 ## Safety Model
 

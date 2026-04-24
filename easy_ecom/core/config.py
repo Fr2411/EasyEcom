@@ -122,6 +122,21 @@ class Settings:
             or "google/gemma-4-31b-it"
         )
     )
+    nvidia_fallback_model: str = field(
+        default_factory=lambda: (
+            os.getenv("NVIDIA_FALLBACK_MODEL", "").strip()
+            or "nvidia/nemotron-3-super-120b-a12b"
+        )
+    )
+    nvidia_primary_timeout_seconds: int = field(
+        default_factory=lambda: _to_int(os.getenv("NVIDIA_PRIMARY_TIMEOUT_SECONDS"), 18)
+    )
+    nvidia_fallback_timeout_seconds: int = field(
+        default_factory=lambda: _to_int(
+            os.getenv("NVIDIA_FALLBACK_TIMEOUT_SECONDS"),
+            _to_int(os.getenv("AI_TIMEOUT_SECONDS"), 45),
+        )
+    )
     nvidia_base_url: str = field(
         default_factory=lambda: (os.getenv("NVIDIA_BASE_URL", "").strip() or os.getenv("ASSISTANT_BASE_URL", "").strip() or "https://integrate.api.nvidia.com/v1").strip()
         or "https://integrate.api.nvidia.com/v1"

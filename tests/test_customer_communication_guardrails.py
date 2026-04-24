@@ -3,9 +3,11 @@ from __future__ import annotations
 from decimal import Decimal
 import json
 import unittest
+from unittest.mock import Mock, patch
 
+import httpx
 from easy_ecom.data.store.postgres_models import AssistantPlaybookModel, CustomerConversationModel
-from easy_ecom.domain.services.customer_communication_service import CustomerCommunicationService
+from easy_ecom.domain.services.customer_communication_service import CustomerCommunicationService, NvidiaChatClient
 
 
 class CustomerCommunicationGuardrailTests(unittest.TestCase):
@@ -19,6 +21,32 @@ class CustomerCommunicationGuardrailTests(unittest.TestCase):
             business_type=business_type,
             brand_personality="friendly",
         )
+
+    def test_nvidia_client_falls_back_to_nemotron_on_primary_timeout(self) -> None:
+        client = NvidiaChatClient()
+        client.base_url = "https://example.test/v1"
+        client.api_key = "test-key"
+        client.model = "google/gemma-4-31b-it"
+        client.fallback_model = "nvidia/nemotron-3-super-120b-a12b"
+        client.primary_timeout_seconds = 1
+        client.fallback_timeout_seconds = 7
+
+        fallback_response = Mock()
+        fallback_response.raise_for_status.return_value = None
+        fallback_response.json.return_value = {"choices": [{"message": {"content": "Fallback reply"}}]}
+
+        with patch(
+            "easy_ecom.domain.services.customer_communication_service.httpx.post",
+            side_effect=[httpx.ReadTimeout("primary timed out"), fallback_response],
+        ) as post:
+            payload = client.create_chat_completion(messages=[{"role": "user", "content": "Hi"}], tools=[])
+
+        self.assertEqual(post.call_args_list[0].kwargs["json"]["model"], "google/gemma-4-31b-it")
+        self.assertEqual(post.call_args_list[0].kwargs["timeout"], 1)
+        self.assertEqual(post.call_args_list[1].kwargs["json"]["model"], "nvidia/nemotron-3-super-120b-a12b")
+        self.assertEqual(post.call_args_list[1].kwargs["timeout"], 7)
+        self.assertEqual(payload["_easy_ecom_model_name"], "nvidia/nemotron-3-super-120b-a12b")
+        self.assertEqual(payload["_easy_ecom_fallback_from"], "google/gemma-4-31b-it")
 
     def test_price_answer_requires_tool_grounding(self) -> None:
         status, reason = self.service._validate_response(

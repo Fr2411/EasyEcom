@@ -199,8 +199,11 @@ class NvidiaChatClient:
     def __init__(self) -> None:
         self.base_url = settings.nvidia_base_url.rstrip("/")
         self.model = settings.nvidia_model
+        self.fallback_model = settings.nvidia_fallback_model
         self.api_key = settings.nvidia_api_key
         self.timeout_seconds = settings.ai_timeout_seconds
+        self.primary_timeout_seconds = settings.nvidia_primary_timeout_seconds
+        self.fallback_timeout_seconds = settings.nvidia_fallback_timeout_seconds
 
     @property
     def is_configured(self) -> bool:
@@ -213,6 +216,48 @@ class NvidiaChatClient:
                 code="AI_PROVIDER_NOT_CONFIGURED",
                 message="NVIDIA AI provider is not configured",
             )
+        primary_timeout = self.primary_timeout_seconds or self.timeout_seconds
+        fallback_model = self.fallback_model.strip()
+        try:
+            payload = self._create_chat_completion(
+                model=self.model,
+                messages=messages,
+                tools=tools,
+                timeout_seconds=primary_timeout,
+            )
+            payload["_easy_ecom_model_name"] = self.model
+            return payload
+        except Exception as exc:
+            if not self._should_try_fallback(exc, fallback_model):
+                raise
+            payload = self._create_chat_completion(
+                model=fallback_model,
+                messages=messages,
+                tools=tools,
+                timeout_seconds=self.fallback_timeout_seconds or self.timeout_seconds,
+            )
+            payload["_easy_ecom_model_name"] = fallback_model
+            payload["_easy_ecom_fallback_from"] = self.model
+            payload["_easy_ecom_fallback_reason"] = exc.__class__.__name__
+            return payload
+
+    def _should_try_fallback(self, exc: Exception, fallback_model: str) -> bool:
+        if not fallback_model or fallback_model == self.model:
+            return False
+        if isinstance(exc, (httpx.TimeoutException, httpx.NetworkError)):
+            return True
+        if isinstance(exc, httpx.HTTPStatusError):
+            return exc.response.status_code in {408, 429, 500, 502, 503, 504}
+        return False
+
+    def _create_chat_completion(
+        self,
+        *,
+        model: str,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        timeout_seconds: int,
+    ) -> dict[str, Any]:
         response = httpx.post(
             f"{self.base_url}/chat/completions",
             headers={
@@ -220,14 +265,14 @@ class NvidiaChatClient:
                 "Content-Type": "application/json",
             },
             json={
-                "model": self.model,
+                "model": model,
                 "messages": messages,
                 "tools": tools,
                 "tool_choice": "auto",
                 "temperature": 0.35,
                 "max_tokens": 650,
             },
-            timeout=self.timeout_seconds,
+            timeout=timeout_seconds,
         )
         response.raise_for_status()
         return response.json()
@@ -644,6 +689,18 @@ class CustomerCommunicationService:
 
         for _ in range(4):
             payload = self._ai_client.create_chat_completion(messages=messages, tools=self._tool_schemas())
+            model_name = str(payload.get("_easy_ecom_model_name") or "").strip()
+            if model_name:
+                run.model_name = model_name
+            fallback_from = str(payload.get("_easy_ecom_fallback_from") or "").strip()
+            if fallback_from:
+                prompt_snapshot = dict(run.prompt_snapshot_json or {})
+                prompt_snapshot["model_fallback"] = {
+                    "from": fallback_from,
+                    "to": model_name,
+                    "reason": str(payload.get("_easy_ecom_fallback_reason") or ""),
+                }
+                run.prompt_snapshot_json = _json_ready(prompt_snapshot)
             usage_payload = payload.get("usage") or {}
             usage = {
                 "prompt_tokens": usage_payload.get("prompt_tokens"),
