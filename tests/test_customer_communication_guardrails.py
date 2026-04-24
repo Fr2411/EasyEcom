@@ -268,6 +268,84 @@ class CustomerCommunicationGuardrailTests(unittest.TestCase):
 
         self.assertIn("available)\nI’ve kept", reply)
 
+    def test_price_negotiation_does_not_jump_to_draft_order_collection(self) -> None:
+        reply = self.service._deterministic_draft_order_reply(
+            None,
+            channel=object(),
+            conversation=CustomerConversationModel(memory_json={}),
+            inbound=type(
+                "Inbound",
+                (),
+                {"message_text": "Can you do better price? I might order today if it makes sense."},
+            )(),
+            run=object(),
+            grounding=type(
+                "Grounding",
+                (),
+                {
+                    "search_result": {
+                        "items": [
+                            {
+                                "variant_id": "variant-1",
+                                "label": "CloudStep Daily Sneaker / EU 42 / Black",
+                                "available_to_sell": "5.000",
+                            }
+                        ]
+                    },
+                    "availability_result": None,
+                },
+            )(),
+        )
+
+        self.assertIsNone(reply)
+
+    def test_better_price_grounded_reply_states_price_and_discount_policy(self) -> None:
+        playbook = self._playbook("shoe_store")
+        playbook.policy_json = {"discounts": "Discounts are staff-approved only."}
+
+        reply = self.service._compose_catalog_grounded_reply(
+            client=type("Client", (), {"currency_symbol": "AED ", "currency_code": "AED"})(),
+            playbook=playbook,
+            conversation=CustomerConversationModel(memory_json={"buyer_archetype": "budget_buyer"}),
+            inbound_text="Can you do better price? I might order today if it makes sense.",
+            grounding=type(
+                "Grounding",
+                (),
+                {
+                    "query": "CSD-42-BLK",
+                    "search_result": {
+                        "items": [
+                            {
+                                "label": "CloudStep Daily Sneaker / EU 42 / Black",
+                                "sku": "CSD-42-BLK",
+                                "available_to_sell": "5.000",
+                                "unit_price": "189.00",
+                            }
+                        ]
+                    },
+                    "availability_result": {
+                        "variant": {
+                            "label": "CloudStep Daily Sneaker / EU 42 / Black",
+                            "sku": "CSD-42-BLK",
+                            "available_to_sell": "5.000",
+                            "unit_price": "189.00",
+                        }
+                    },
+                    "price_result": {
+                        "variant": {
+                            "label": "CloudStep Daily Sneaker / EU 42 / Black",
+                            "sku": "CSD-42-BLK",
+                            "unit_price": "189.00",
+                        }
+                    },
+                },
+            )(),
+        )
+
+        self.assertIn("AED 189.00", reply)
+        self.assertIn("Discount policy", reply)
+        self.assertIn("draft order", reply)
+
     def test_each_vertical_recommendation_asks_domain_questions(self) -> None:
         cases = {
             "fashion": ("Can you suggest something for an office party?", ("size", "occasion", "budget")),

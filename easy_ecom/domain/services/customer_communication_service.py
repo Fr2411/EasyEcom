@@ -971,8 +971,8 @@ class CustomerCommunicationService:
         run: AssistantRunModel,
         grounding: CatalogGrounding,
     ) -> tuple[str, list[str]] | None:
-        _, _, order_intent = self._catalog_intent_flags(inbound.message_text)
-        if not order_intent:
+        price_intent, _, order_intent = self._catalog_intent_flags(inbound.message_text)
+        if not order_intent or price_intent or PRICE_NEGOTIATION_RE.search(inbound.message_text.lower()):
             return None
 
         items = list(grounding.search_result.get("items") or [])
