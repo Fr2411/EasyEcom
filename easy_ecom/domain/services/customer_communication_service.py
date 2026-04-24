@@ -57,7 +57,7 @@ CATALOG_PRICE_RE = re.compile(r"\b(price|cost|how much|rate|unit price)\b")
 CATALOG_STOCK_RE = re.compile(r"\b(available|availability|stock|in stock|do you have|do u have)\b")
 CATALOG_ORDER_RE = re.compile(r"\b(order|buy|purchase|reserve|book it|take it)\b")
 CATALOG_RECOMMENDATION_RE = re.compile(
-    r"\b(recommend|suggest|best|which food|what food|need food|looking for food|need shoes?|need sneakers?|looking for shoes?|looking for sneakers?)\b"
+    r"\b(recommend|suggest|best|which|what should i buy|looking for|need help choosing|need food|need shoes?|need sneakers?)\b"
 )
 CATALOG_SEARCH_STOPWORDS = {
     "a",
@@ -69,6 +69,7 @@ CATALOG_SEARCH_STOPWORDS = {
     "availability",
     "buy",
     "can",
+    "choosing",
     "cost",
     "do",
     "for",
@@ -90,8 +91,10 @@ CATALOG_SEARCH_STOPWORDS = {
     "product",
     "purchase",
     "rate",
+    "recommend",
     "size",
     "stock",
+    "suggest",
     "the",
     "there",
     "this",
@@ -645,11 +648,26 @@ class CustomerCommunicationService:
     def _deterministic_playbook_reply(self, *, client: ClientModel, playbook: AssistantPlaybookModel, inbound_text: str) -> str:
         lower = inbound_text.lower()
         price_intent, stock_intent, _ = self._catalog_intent_flags(inbound_text)
+        if self._has_escalation_risk_terms(lower):
+            return self._safe_escalation_text(client.business_name)
+        if playbook.business_type == "electronics" and self._has_electronics_safety_terms(lower):
+            return self._safe_escalation_text(client.business_name)
         if playbook.business_type == "pet_food" and self._has_risk_terms(lower) and not (price_intent or stock_intent):
             return (
                 "I’m sorry your pet is not feeling well. For vomiting, illness, allergies, medication, or sudden symptoms, "
                 "please check with a veterinarian before changing food. After that, I can help narrow options if you share "
                 "the pet type, age, breed or size, current diet, allergies, and any health concerns."
+            )
+        if playbook.business_type == "cosmetics" and self._has_allergy_terms(lower) and not (price_intent or stock_intent):
+            return (
+                "If you have allergies, sensitivity, burning, or a rash, please avoid applying a new product until you’ve checked "
+                "with a qualified professional or the ingredient label. I can still help narrow options if you share your skin type, "
+                "known allergies, sensitivity level, and desired result."
+            )
+        if playbook.business_type == "grocery" and self._has_allergy_terms(lower) and not (price_intent or stock_intent):
+            return (
+                "For allergy concerns, please verify the ingredient label and let staff confirm before purchase. "
+                "Tell me the allergen you avoid, quantity, preferred brand, and delivery timing, and I’ll help narrow safe options."
             )
         if CATALOG_RECOMMENDATION_RE.search(lower) and not (price_intent or stock_intent):
             template = playbook.industry_template_json or INDUSTRY_TEMPLATES.get(playbook.business_type, INDUSTRY_TEMPLATES["general_retail"])
@@ -664,6 +682,14 @@ class CustomerCommunicationService:
                     "I can help narrow that down. What shoe size do you need, and is it for running, work, casual wear, "
                     "formal use, or something else? Any preferred color, fit, and budget?"
                 )
+            if playbook.business_type == "fashion":
+                return "I can help choose something suitable. What size, color, occasion, fit preference, and budget should I use?"
+            if playbook.business_type == "electronics":
+                return "I can help narrow that down. What device model is it for, what compatibility need matters, and what budget or warranty preference do you have?"
+            if playbook.business_type == "cosmetics":
+                return "I can help shortlist options. What is your skin type, any sensitivity or allergies, desired result, and budget?"
+            if playbook.business_type == "grocery":
+                return "I can help with that. What quantity do you need, any preferred brand, delivery timing, and dietary restrictions?"
             if questions:
                 return f"I can help with that. Could you share {self._human_join(questions[:4])}?"
         return ""
@@ -1200,8 +1226,12 @@ class CustomerCommunicationService:
         if self._has_risk_terms(lower):
             if "request_human_escalation" in tool_names:
                 return "escalated", "Assistant requested human escalation for a risky customer message."
+            if self._has_escalation_risk_terms(lower):
+                return "escalated", "Risky customer message needs human escalation."
             if playbook.business_type == "pet_food" and not re.search(r"\b(vet|veterinarian)\b", response_lower):
                 return "escalated", "Pet health concern needs veterinarian-safe handling."
+            if playbook.business_type == "electronics" and self._has_electronics_safety_terms(lower):
+                return "escalated", "Electronics safety concern needs human escalation."
         if not response_text.strip():
             return "escalated", "Assistant produced an empty response."
         return "ok", ""
@@ -1754,10 +1784,19 @@ class CustomerCommunicationService:
     def _has_risk_terms(self, text: str) -> bool:
         return bool(
             re.search(
-                r"\b(angry|complaint|refund|lawsuit|legal|unsafe|sick|vomit|vomiting|diarrhea|allergy|allergic|medicine|disease|pain|emergency|toxic|poison)\b",
+                r"\b(angry|complaint|refund|lawsuit|legal|unsafe|sick|vomit|vomiting|diarrhea|allergy|allergic|sensitive|sensitivity|rash|burning|medicine|disease|pain|emergency|toxic|poison|smoke|overheat|overheating|shock|spark|swollen|battery)\b",
                 text,
             )
         )
+
+    def _has_escalation_risk_terms(self, text: str) -> bool:
+        return bool(re.search(r"\b(angry|complaint|refund|lawsuit|legal|unsafe|emergency|toxic|poison)\b", text))
+
+    def _has_allergy_terms(self, text: str) -> bool:
+        return bool(re.search(r"\b(allergy|allergic|sensitive|sensitivity|rash|burning)\b", text))
+
+    def _has_electronics_safety_terms(self, text: str) -> bool:
+        return bool(re.search(r"\b(smoke|smoking|overheat|overheating|shock|spark|sparking|swollen|battery swelling|burning smell)\b", text))
 
     def _count(self, session: Session, model, client_id: str) -> int:
         return int(session.execute(select(func.count()).select_from(model).where(model.client_id == client_id)).scalar_one() or 0)

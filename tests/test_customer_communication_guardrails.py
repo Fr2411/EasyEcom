@@ -149,6 +149,44 @@ class CustomerCommunicationGuardrailTests(unittest.TestCase):
         self.assertIn("preferred color", reply)
         self.assertIn("budget", reply)
 
+    def test_each_vertical_recommendation_asks_domain_questions(self) -> None:
+        cases = {
+            "fashion": ("Can you suggest something for an office party?", ("size", "occasion", "budget")),
+            "electronics": ("Which charger should I buy?", ("device model", "compatibility", "warranty")),
+            "cosmetics": ("Can you recommend a serum?", ("skin type", "allergies", "desired result")),
+            "grocery": ("What should I buy for breakfast?", ("quantity", "brand", "dietary restrictions")),
+        }
+        for business_type, (message, expected_terms) in cases.items():
+            with self.subTest(business_type=business_type):
+                reply = self.service._deterministic_playbook_reply(
+                    client=type("Client", (), {"business_name": "Demo Shop"})(),
+                    playbook=self._playbook(business_type),
+                    inbound_text=message,
+                )
+                for term in expected_terms:
+                    self.assertIn(term, reply)
+
+    def test_cosmetics_allergy_reply_is_limited_and_safe(self) -> None:
+        reply = self.service._deterministic_playbook_reply(
+            client=type("Client", (), {"business_name": "Glow Shop"})(),
+            playbook=self._playbook("cosmetics"),
+            inbound_text="My skin is sensitive and I get rashes. Which cream is best?",
+        )
+
+        self.assertIn("qualified professional", reply)
+        self.assertIn("known allergies", reply)
+
+    def test_electronics_safety_concern_escalates(self) -> None:
+        status, reason = self.service._validate_response(
+            inbound_text="My charger is smoking and the battery is swollen. What should I buy?",
+            response_text="Buy a 65W charger.",
+            tool_names=[],
+            playbook=self._playbook("electronics"),
+        )
+
+        self.assertEqual(status, "escalated")
+        self.assertIn("Electronics safety concern", reason)
+
     def test_catalog_item_scoring_resolves_shoe_size_color_brand(self) -> None:
         selected = self.service._select_best_catalog_item(
             "Do you have black AeroRun size 42?",
