@@ -35,6 +35,7 @@ from easy_ecom.domain.services.customer_communication_service import DEFAULT_ESC
 
 DEMO_REFERENCE_ID = "DEMO-SHOE-STORE-20260424"
 DEMO_CHANNEL_ACCOUNT_ID = "frabby-footwear-demo-website"
+DEMO_THROWAWAY_PRODUCT_NAMES = ("test", "test2")
 
 
 @dataclass(frozen=True)
@@ -655,6 +656,21 @@ def _clean_test_customer_communication(session: Session, client_id: str) -> int:
     return conversation_count + channel_count
 
 
+def _archive_throwaway_products(session: Session, client_id: str) -> int:
+    products = list(
+        session.execute(
+            select(ProductModel).where(
+                ProductModel.client_id == client_id,
+                func.lower(ProductModel.name).in_(DEMO_THROWAWAY_PRODUCT_NAMES),
+                ProductModel.status != "archived",
+            )
+        ).scalars()
+    )
+    for product in products:
+        product.status = "archived"
+    return len(products)
+
+
 def backfill_shoe_store_demo(tenant_email: str, *, apply: bool) -> dict[str, Any]:
     engine = build_postgres_engine(settings)
     SessionFactory = build_session_factory(engine)
@@ -703,6 +719,7 @@ def backfill_shoe_store_demo(tenant_email: str, *, apply: bool) -> dict[str, Any
                     stock_adjustments += 1
 
         cleaned_customer_comm = _clean_test_customer_communication(session, client_id)
+        archived_demo_products = _archive_throwaway_products(session, client_id)
         _upsert_playbook(session, client_id)
         channel = _upsert_demo_channel(session, client_id, location, str(user.user_id))
 
@@ -726,6 +743,7 @@ def backfill_shoe_store_demo(tenant_email: str, *, apply: bool) -> dict[str, Any
             "customers": len(customers),
             "orders_created": orders_created,
             "cleaned_customer_communication_records": cleaned_customer_comm,
+            "archived_demo_products": archived_demo_products,
             "channel_display_name": channel.display_name,
             "channel_key": channel.webhook_key,
         }
