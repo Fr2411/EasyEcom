@@ -782,15 +782,16 @@ class CustomerCommunicationService:
         )
 
     def _catalog_grounding_message(self, grounding: CatalogGrounding) -> str:
+        payload = {
+            "query": grounding.query,
+            "search": grounding.search_result,
+            "availability": grounding.availability_result,
+            "price": grounding.price_result,
+        }
         return (
             "Fresh backend grounding results for this customer message. "
             "Use only these catalog, price, and availability facts if you answer product questions: "
-            f"{json.dumps(_json_ready({
-                'query': grounding.query,
-                'search': grounding.search_result,
-                'availability': grounding.availability_result,
-                'price': grounding.price_result,
-            }))}"
+            f"{json.dumps(_json_ready(payload))}"
         )
 
     def _compose_catalog_grounded_reply(
