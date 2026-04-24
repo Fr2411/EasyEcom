@@ -56,6 +56,7 @@ GROUNDING_TOOLS = {
 CATALOG_PRICE_RE = re.compile(r"\b(price|cost|how much|rate|unit price)\b")
 CATALOG_STOCK_RE = re.compile(r"\b(available|availability|stock|in stock|do you have|do u have)\b")
 CATALOG_ORDER_RE = re.compile(r"\b(order|buy|purchase|reserve|book it|take it)\b")
+CATALOG_RECOMMENDATION_RE = re.compile(r"\b(recommend|suggest|best|which food|what food|need food|looking for food)\b")
 CATALOG_SEARCH_STOPWORDS = {
     "a",
     "about",
@@ -468,12 +469,16 @@ class CustomerCommunicationService:
             final_text = self._safe_escalation_text(client.business_name)
             run.error_message = error_message
 
-        validation_status, escalation_reason = self._validate_response(
-            inbound_text=inbound.message_text,
-            response_text=final_text,
-            tool_names=tool_names,
-            playbook=playbook,
-        )
+        if error_message:
+            validation_status = "escalated"
+            escalation_reason = f"Assistant model call failed: {error_message}"
+        else:
+            validation_status, escalation_reason = self._validate_response(
+                inbound_text=inbound.message_text,
+                response_text=final_text,
+                tool_names=tool_names,
+                playbook=playbook,
+            )
         if validation_status != "ok":
             final_text = self._safe_escalation_text(client.business_name)
             conversation.status = "escalated"
@@ -522,6 +527,9 @@ class CustomerCommunicationService:
         history = self._conversation_history(session, str(conversation.client_id), str(conversation.conversation_id))
         tool_names: list[str] = []
         usage: dict[str, int | None] = {"prompt_tokens": None, "completion_tokens": None, "total_tokens": None}
+        playbook_reply = self._deterministic_playbook_reply(client=client, playbook=playbook, inbound_text=inbound.message_text)
+        if playbook_reply:
+            return playbook_reply, tool_names, usage
         catalog_grounding = self._deterministic_catalog_grounding(
             session,
             channel=channel,
@@ -623,6 +631,27 @@ class CustomerCommunicationService:
             run.escalation_reason = reason
             return {"ok": True, "status": "escalated", "reason": reason}
         return {"ok": False, "error": f"Unknown tool: {tool_name}"}
+
+    def _deterministic_playbook_reply(self, *, client: ClientModel, playbook: AssistantPlaybookModel, inbound_text: str) -> str:
+        lower = inbound_text.lower()
+        price_intent, stock_intent, _ = self._catalog_intent_flags(inbound_text)
+        if playbook.business_type == "pet_food" and self._has_risk_terms(lower) and not (price_intent or stock_intent):
+            return (
+                "I’m sorry your pet is not feeling well. For vomiting, illness, allergies, medication, or sudden symptoms, "
+                "please check with a veterinarian before changing food. After that, I can help narrow options if you share "
+                "the pet type, age, breed or size, current diet, allergies, and any health concerns."
+            )
+        if CATALOG_RECOMMENDATION_RE.search(lower) and not (price_intent or stock_intent):
+            template = playbook.industry_template_json or INDUSTRY_TEMPLATES.get(playbook.business_type, INDUSTRY_TEMPLATES["general_retail"])
+            questions = [str(question) for question in template.get("questions", []) if str(question).strip()]
+            if playbook.business_type == "pet_food":
+                return (
+                    "I can help choose a suitable option. What pet is it for, and what are their age, breed or size, "
+                    "current diet, allergies, and any health concerns?"
+                )
+            if questions:
+                return f"I can help with that. Could you share {self._human_join(questions[:4])}?"
+        return ""
 
     def _record_tool_call(
         self,
@@ -860,6 +889,13 @@ class CustomerCommunicationService:
         if normalized == normalized.to_integral():
             return str(int(normalized))
         return str(value.quantize(Decimal("0.001")).normalize())
+
+    def _human_join(self, values: list[str]) -> str:
+        if not values:
+            return "a little more detail"
+        if len(values) == 1:
+            return values[0]
+        return ", ".join(values[:-1]) + f", and {values[-1]}"
 
     def _tool_search_catalog(
         self,

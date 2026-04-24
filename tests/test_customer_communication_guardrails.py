@@ -107,6 +107,28 @@ class CustomerCommunicationGuardrailTests(unittest.TestCase):
         self.assertIn("9 available", reply)
         self.assertIn("$120.00", reply)
 
+    def test_pet_health_playbook_reply_is_veterinarian_safe(self) -> None:
+        reply = self.service._deterministic_playbook_reply(
+            client=type("Client", (), {"business_name": "Pet Shop"})(),
+            playbook=self._playbook("pet_food"),
+            inbound_text="My dog is vomiting. Which food should I buy?",
+        )
+
+        self.assertIn("veterinarian", reply)
+        self.assertIn("current diet", reply)
+        self.assertIn("health concerns", reply)
+
+    def test_pet_recommendation_asks_template_questions(self) -> None:
+        reply = self.service._deterministic_playbook_reply(
+            client=type("Client", (), {"business_name": "Pet Shop"})(),
+            playbook=self._playbook("pet_food"),
+            inbound_text="Can you recommend food for my puppy?",
+        )
+
+        self.assertIn("age", reply)
+        self.assertIn("allergies", reply)
+        self.assertIn("health concerns", reply)
+
 
 if __name__ == "__main__":
     unittest.main()

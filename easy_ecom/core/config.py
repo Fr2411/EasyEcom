@@ -113,7 +113,7 @@ class Settings:
     openai_base_url: str = field(default_factory=lambda: os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").strip() or "https://api.openai.com/v1")
     openai_timeout_seconds: int = field(default_factory=lambda: _to_int(os.getenv("OPENAI_TIMEOUT_SECONDS"), 20))
     ai_provider: str = field(default_factory=lambda: os.getenv("AI_PROVIDER", "nvidia").strip().lower() or "nvidia")
-    ai_timeout_seconds: int = field(default_factory=lambda: _to_int(os.getenv("AI_TIMEOUT_SECONDS"), 20))
+    ai_timeout_seconds: int = field(default_factory=lambda: _to_int(os.getenv("AI_TIMEOUT_SECONDS"), 45))
     nvidia_api_key: str = field(default_factory=lambda: (os.getenv("NVIDIA_API_KEY", "").strip() or os.getenv("ASSISTANT_API_KEY", "").strip()))
     nvidia_model: str = field(
         default_factory=lambda: (
