@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from decimal import Decimal
+import json
 import unittest
 
 from easy_ecom.data.store.postgres_models import AssistantPlaybookModel, CustomerConversationModel
@@ -273,6 +275,25 @@ class CustomerCommunicationGuardrailTests(unittest.TestCase):
 
         self.assertIsNotNone(remembered)
         self.assertEqual(remembered["sku"], "ALB-M-SAND")
+
+    def test_catalog_choice_memory_is_json_serializable(self) -> None:
+        conversation = CustomerConversationModel(memory_json={})
+
+        self.service._remember_catalog_choices(
+            conversation,
+            [
+                {
+                    "variant_id": "variant-1",
+                    "label": "Ariya Soft Blazer / M / Sand",
+                    "sku": "ALB-M-SAND",
+                    "unit_price": Decimal("219.00"),
+                    "available_to_sell": Decimal("11.000"),
+                }
+            ],
+        )
+
+        json.dumps(conversation.memory_json)
+        self.assertEqual(conversation.memory_json["recent_choices"][0]["unit_price"], "219.00")
 
     def test_policy_answer_uses_structured_playbook_policy(self) -> None:
         playbook = self._playbook("fashion")

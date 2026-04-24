@@ -857,7 +857,7 @@ class CustomerCommunicationService:
 
         self._remember_catalog_grounding(conversation, grounding)
         memory = self._memory(conversation)
-        memory["draft_order"] = result.get("draft_order") or {}
+        memory["draft_order"] = _json_ready(result.get("draft_order") or {})
         conversation.memory_json = memory
         draft = result.get("draft_order") or {}
         order_number = str(draft.get("order_number") or "the draft order")
@@ -917,13 +917,13 @@ class CustomerCommunicationService:
         if price_variant.get("unit_price") is not None:
             variant["unit_price"] = price_variant.get("unit_price")
         memory = self._memory(conversation)
-        memory["last_variant"] = variant
+        memory["last_variant"] = _json_ready(variant)
         memory["pending_recommendation"] = False
         conversation.memory_json = memory
 
     def _remember_catalog_choices(self, conversation: CustomerConversationModel, choices: list[dict[str, Any]]) -> None:
         memory = self._memory(conversation)
-        memory["recent_choices"] = [dict(choice) for choice in choices[:5]]
+        memory["recent_choices"] = _json_ready([dict(choice) for choice in choices[:5]])
         memory["pending_recommendation"] = False
         conversation.memory_json = memory
 
