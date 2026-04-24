@@ -980,6 +980,10 @@ def _update_client_profile(client: ClientModel, spec: VerticalDemoSpec) -> None:
     client.instagram_url = spec.instagram_url
     client.whatsapp_number = spec.whatsapp_number
     client.status = "active"
+    client.billing_plan_code = "growth"
+    client.billing_status = "active"
+    client.billing_access_state = "active"
+    client.billing_updated_at = now_utc()
     client.notes = f"{DEMO_REFERENCE_PREFIX} managed demo tenant for {spec.business_type}."
 
 
