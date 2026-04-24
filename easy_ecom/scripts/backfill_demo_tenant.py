@@ -38,6 +38,7 @@ from easy_ecom.domain.services.customer_communication_service import DEFAULT_ESC
 
 DEMO_REFERENCE_ID = "DEMO-SHOE-STORE-20260424"
 DEMO_CHANNEL_ACCOUNT_ID = "frabby-footwear-demo-website"
+DEMO_CHAT_TEST_SENDER_PATTERNS = ("cc-test-%", "frabby-live-%", "frabby-final-%", "frabby-errorcheck-%")
 DEMO_THROWAWAY_PRODUCT_NAMES = ("test", "test2")
 DEMO_THROWAWAY_CUSTOMER_NAMES = ("test", "test2")
 
@@ -623,6 +624,9 @@ def _upsert_demo_channel(session: Session, client_id: str, location: LocationMod
 
 
 def _clean_test_customer_communication(session: Session, client_id: str) -> int:
+    conversation_filter = CustomerConversationModel.external_sender_id.like(DEMO_CHAT_TEST_SENDER_PATTERNS[0])
+    for pattern in DEMO_CHAT_TEST_SENDER_PATTERNS[1:]:
+        conversation_filter = conversation_filter | CustomerConversationModel.external_sender_id.like(pattern)
     channel_filter = (
         (CustomerChannelModel.external_account_id.like("cc-test-%"))
         | (CustomerChannelModel.display_name.like("Website chat test%"))
@@ -631,7 +635,7 @@ def _clean_test_customer_communication(session: Session, client_id: str) -> int:
         session.execute(
             select(func.count()).select_from(CustomerConversationModel).where(
                 CustomerConversationModel.client_id == client_id,
-                CustomerConversationModel.external_sender_id.like("cc-test-%"),
+                conversation_filter,
             )
         ).scalar_one()
         or 0
@@ -648,7 +652,7 @@ def _clean_test_customer_communication(session: Session, client_id: str) -> int:
     session.execute(
         delete(CustomerConversationModel).where(
             CustomerConversationModel.client_id == client_id,
-            CustomerConversationModel.external_sender_id.like("cc-test-%"),
+            conversation_filter,
         )
     )
     session.execute(
