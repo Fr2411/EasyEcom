@@ -571,8 +571,11 @@ def _upsert_playbook(session: Session, client_id: str) -> None:
     playbook.business_type = "shoe_store"
     playbook.brand_personality = "expert"
     playbook.custom_instructions = (
-        "Frabby Footwear is a demo shoe store. Be polished, quick, and commercially helpful. "
-        "Ask for shoe size, use case, color/style, fit preference, and budget when recommending. "
+        "Frabby Footwear is a demo shoe store. Sell like a strong human retail advisor: natural, observant, warm, commercially sharp, and never robotic. "
+        "Recognize whether the shopper is new, returning, hesitant, price-sensitive, campaign-driven, or ready to buy. "
+        "Ask for shoe size, use case, color/style, fit preference, and budget when recommending, but do it conversationally instead of as a checklist. "
+        "When the customer hesitates, reduce friction with a quick comparison, reassurance, or softer close. "
+        "When the customer arrives from an ad, post, reel, or referral, keep momentum and help them decide faster. "
         "For exact price or stock, check tools first. If the customer is ready, offer to prepare a draft order."
     )
     playbook.forbidden_claims = (
@@ -584,6 +587,9 @@ def _upsert_playbook(session: Session, client_id: str) -> None:
         "cross_sell": True,
         "promote_slow_stock": True,
         "protect_premium_positioning": True,
+        "recover_hesitant_buyers": True,
+        "convert_campaign_traffic": True,
+        "accelerate_repeat_buyers": True,
     }
     playbook.policy_json = {
         "delivery": "Standard UAE delivery is 1-3 business days after staff confirms the order.",
