@@ -70,6 +70,7 @@ class CustomerCommunicationGuardrailTests(unittest.TestCase):
         reply = self.service._compose_catalog_grounded_reply(
             client=type("Client", (), {"currency_symbol": "$", "currency_code": "USD"})(),
             playbook=self._playbook("pet_food"),
+            conversation=CustomerConversationModel(memory_json={}),
             inbound_text="Do you have test2 in stock and what is the price?",
             grounding=type(
                 "Grounding",
@@ -105,9 +106,10 @@ class CustomerCommunicationGuardrailTests(unittest.TestCase):
             )(),
         )
 
-        self.assertIn("I checked test2", reply)
-        self.assertIn("9 available", reply)
+        self.assertIn("test2", reply)
+        self.assertIn("available", reply)
         self.assertIn("$120.00", reply)
+        self.assertIn("draft order", reply)
 
     def test_format_money_spaces_alphabetic_currency_symbols(self) -> None:
         self.assertEqual(
@@ -148,7 +150,7 @@ class CustomerCommunicationGuardrailTests(unittest.TestCase):
         )
 
         self.assertIn("shoe size", reply)
-        self.assertIn("preferred color", reply)
+        self.assertTrue("color" in reply or "preferred color" in reply)
         self.assertIn("budget", reply)
 
     def test_each_vertical_recommendation_asks_domain_questions(self) -> None:
@@ -244,6 +246,261 @@ class CustomerCommunicationGuardrailTests(unittest.TestCase):
         self.assertEqual(memory["customer_contact"]["name"], "Dana")
         self.assertIn("+971501234000", memory["customer_contact"]["phone"])
 
+    def test_buyer_archetype_detects_budget_and_repeat_buyers(self) -> None:
+        budget_conversation = CustomerConversationModel(memory_json={"preferences": {"budget": "250"}})
+        repeat_conversation = CustomerConversationModel(memory_json={"thread_graph": {"restored_from_conversation_id": "prev-1"}})
+
+        self.assertEqual(
+            self.service._buyer_archetype(budget_conversation, "Anything cheaper?"),
+            "budget_buyer",
+        )
+        self.assertEqual(
+            self.service._buyer_archetype(repeat_conversation, "I need another pair"),
+            "repeat_buyer",
+        )
+
+    def test_lead_context_is_extracted_from_campaign_reference(self) -> None:
+        conversation = CustomerConversationModel(memory_json={})
+
+        self.service._remember_inbound_context(
+            conversation,
+            self._playbook("shoe_store"),
+            "Hi, I came from your Instagram ad and I need black office shoes in size 42.",
+        )
+
+        memory = conversation.memory_json or {}
+        self.assertEqual(memory["lead_context"]["source"], "instagram")
+        self.assertEqual(memory["lead_context"]["source_type"], "campaign")
+        self.assertEqual(memory["customer_journey"]["lead_source"], "instagram")
+
+    def test_sales_progress_reply_compares_recent_choices_naturally(self) -> None:
+        conversation = CustomerConversationModel(
+            memory_json={
+                "preferences": {"size": "42", "occasion": "work", "budget": "250"},
+                "recent_choices": [
+                    {"label": "Ariya Soft Blazer / 42 / Black", "sku": "ASB-42-BLK", "unit_price": "219.00", "available_to_sell": "11.000"},
+                    {"label": "City Oxford Knit / 42 / Black", "sku": "COK-42-BLK", "unit_price": "199.00", "available_to_sell": "8.000"},
+                ],
+            }
+        )
+
+        reply = self.service._sales_progress_reply(
+            client=type("Client", (), {"currency_symbol": "AED ", "currency_code": "AED"})(),
+            conversation=conversation,
+            inbound_text="Which one is better?",
+        )
+
+        self.assertIn("Between Ariya Soft Blazer", reply)
+        self.assertIn("City Oxford Knit", reply)
+        self.assertIn("I’d lean", reply)
+
+    def test_sales_progress_reply_uses_premium_positioning_for_quality_buyer(self) -> None:
+        conversation = CustomerConversationModel(
+            memory_json={
+                "buyer_archetype": "premium_buyer",
+                "preferences": {"size": "42", "occasion": "work"},
+                "recent_choices": [
+                    {"label": "Ariya Soft Blazer / 42 / Black", "sku": "ASB-42-BLK", "unit_price": "219.00", "available_to_sell": "11.000"},
+                    {"label": "City Oxford Knit / 42 / Black", "sku": "COK-42-BLK", "unit_price": "199.00", "available_to_sell": "8.000"},
+                ],
+            }
+        )
+
+        reply = self.service._sales_progress_reply(
+            client=type("Client", (), {"currency_symbol": "AED ", "currency_code": "AED"})(),
+            conversation=conversation,
+            inbound_text="Which one is better quality?",
+        )
+
+        self.assertIn("stronger overall pick", reply)
+        self.assertIn("quality", reply.lower())
+
+    def test_sales_progress_reply_handles_hesitation_with_soft_close(self) -> None:
+        conversation = CustomerConversationModel(
+            memory_json={
+                "lead_context": {"source": "instagram", "source_type": "campaign"},
+                "sales_state": {"focus_label": "Trail Runner / M / Black"},
+            }
+        )
+
+        reply = self.service._sales_progress_reply(
+            client=type("Client", (), {"currency_symbol": "$", "currency_code": "USD"})(),
+            conversation=conversation,
+            inbound_text="Looks good but I will think about it and maybe later.",
+        )
+
+        self.assertIn("take your time", reply.lower())
+        self.assertIn("Trail Runner / M / Black", reply)
+        self.assertIn("draft order", reply)
+
+    def test_language_instruction_uses_stored_language_hint(self) -> None:
+        conversation = CustomerConversationModel(memory_json={"language_hint": "arabic"})
+
+        instruction = self.service._language_instruction(conversation)
+
+        self.assertIn("Reply in Arabic", instruction)
+
+    def test_negotiation_progress_reply_uses_discount_policy_without_promising(self) -> None:
+        conversation = CustomerConversationModel(
+            memory_json={
+                "sales_state": {"focus_label": "Trail Runner / M / Black", "last_offered_price": "79.00"},
+                "buyer_archetype": "budget_buyer",
+            }
+        )
+        playbook = self._playbook("shoe_store")
+        playbook.policy_json = {"discounts": "Discounts are staff-approved only."}
+
+        reply = self.service._negotiation_progress_reply(
+            client=type("Client", (), {"currency_symbol": "$", "currency_code": "USD"})(),
+            playbook=playbook,
+            conversation=conversation,
+            inbound_text="What is your best price?",
+        )
+
+        self.assertIn("$79.00", reply)
+        self.assertIn("staff-approved", reply)
+        self.assertIn("lower-price alternative", reply)
+
+    def test_negotiation_progress_reply_handles_expensive_signal(self) -> None:
+        conversation = CustomerConversationModel(
+            memory_json={
+                "sales_state": {"focus_label": "Trail Runner / M / Black"},
+                "buyer_archetype": "campaign_buyer",
+            }
+        )
+        reply = self.service._negotiation_progress_reply(
+            client=type("Client", (), {"currency_symbol": "$", "currency_code": "USD"})(),
+            playbook=self._playbook("shoe_store"),
+            conversation=conversation,
+            inbound_text="Looks expensive for me.",
+        )
+
+        self.assertIn("lower-price alternative", reply)
+        self.assertIn("Trail Runner / M / Black", reply)
+
+    def test_negotiation_progress_reply_supports_bundle_interest(self) -> None:
+        conversation = CustomerConversationModel(
+            memory_json={
+                "sales_state": {"focus_label": "Trail Runner / M / Black"},
+            }
+        )
+        playbook = self._playbook("shoe_store")
+        playbook.sales_goals_json = {"cross_sell": True}
+        reply = self.service._negotiation_progress_reply(
+            client=type("Client", (), {"currency_symbol": "$", "currency_code": "USD"})(),
+            playbook=playbook,
+            conversation=conversation,
+            inbound_text="Any socks or care kit to go with it?",
+        )
+
+        self.assertIn("matching socks, care items, or insoles", reply)
+        self.assertIn("practical", reply)
+
+    def test_negotiation_progress_reply_repeated_best_price_reduces_looping(self) -> None:
+        conversation = CustomerConversationModel(
+            memory_json={
+                "sales_state": {"focus_label": "Trail Runner / M / Black", "last_offered_price": "79.00"},
+                "negotiation_state": {"best_price_asked_count": 1},
+            }
+        )
+        playbook = self._playbook("shoe_store")
+        playbook.policy_json = {"discounts": "Discounts are staff-approved only."}
+
+        reply = self.service._negotiation_progress_reply(
+            client=type("Client", (), {"currency_symbol": "$", "currency_code": "USD"})(),
+            playbook=playbook,
+            conversation=conversation,
+            inbound_text="Can you do better price?",
+        )
+
+        self.assertIn("I don’t want to drag you in circles", reply)
+        self.assertIn("draft order", reply)
+
+    def test_sales_progress_reply_updates_hesitation_memory(self) -> None:
+        conversation = CustomerConversationModel(memory_json={"sales_state": {"focus_label": "Trail Runner / M / Black"}})
+
+        self.service._sales_progress_reply(
+            client=type("Client", (), {"currency_symbol": "$", "currency_code": "USD"})(),
+            conversation=conversation,
+            inbound_text="Maybe later, I will think about it.",
+        )
+
+        memory = conversation.memory_json or {}
+        self.assertEqual(memory["negotiation_state"]["stall_count"], 1)
+        self.assertEqual(memory["negotiation_state"]["last_move"], "hesitation_soft_hold")
+
+    def test_language_hint_detects_arabic_text(self) -> None:
+        self.assertEqual(self.service._detect_language_hint("مرحبا، أريد حذاء أسود"), "arabic")
+
+    def test_media_context_reply_asks_for_focus_detail_without_fake_vision(self) -> None:
+        conversation = CustomerConversationModel(memory_json={"message_modality": {"has_image": True}})
+
+        reply = self.service._media_context_reply(
+            conversation=conversation,
+            inbound_text="See attached screenshot, what do you think?",
+        )
+
+        self.assertIn("image or screenshot", reply)
+        self.assertIn("product name", reply)
+
+    def test_remember_inbound_context_stores_language_and_modality(self) -> None:
+        conversation = CustomerConversationModel(memory_json={})
+
+        self.service._remember_inbound_context(
+            conversation,
+            self._playbook("shoe_store"),
+            "مرحبا، see attached screenshot",
+            metadata={"attachments": ["image/png"]},
+        )
+
+        memory = conversation.memory_json or {}
+        self.assertEqual(memory["language_hint"], "arabic")
+        self.assertTrue(memory["message_modality"]["has_image"])
+
+    def test_grounded_price_reply_respects_budget_buyer_style(self) -> None:
+        conversation = CustomerConversationModel(memory_json={"buyer_archetype": "budget_buyer"})
+
+        reply = self.service._compose_catalog_grounded_reply(
+            client=type("Client", (), {"currency_symbol": "$", "currency_code": "USD"})(),
+            playbook=self._playbook("shoe_store"),
+            conversation=conversation,
+            inbound_text="How much is Ariya Soft Blazer?",
+            grounding=type(
+                "Grounding",
+                (),
+                {
+                    "query": "Ariya Soft Blazer",
+                    "search_result": {
+                        "items": [
+                            {
+                                "label": "Ariya Soft Blazer / 42 / Black",
+                                "sku": "ASB-42-BLK",
+                                "available_to_sell": "11.000",
+                                "unit_price": "219.00",
+                            }
+                        ]
+                    },
+                    "availability_result": {
+                        "variant": {
+                            "label": "Ariya Soft Blazer / 42 / Black",
+                            "sku": "ASB-42-BLK",
+                            "available_to_sell": "11.000",
+                            "unit_price": "219.00",
+                        }
+                    },
+                    "price_result": {
+                        "variant": {
+                            "label": "Ariya Soft Blazer / 42 / Black",
+                            "sku": "ASB-42-BLK",
+                            "unit_price": "219.00",
+                        }
+                    },
+                },
+            )(),
+        )
+
+        self.assertIn("closest lower-price alternative", reply)
+
     def test_previous_variant_context_supports_it_and_price_again(self) -> None:
         conversation = CustomerConversationModel(
             memory_json={
@@ -314,6 +571,18 @@ class CustomerCommunicationGuardrailTests(unittest.TestCase):
 
         json.dumps(conversation.memory_json)
         self.assertEqual(conversation.memory_json["recent_choices"][0]["unit_price"], "219.00")
+        self.assertEqual(conversation.memory_json["sales_state"]["offer_state"], "recommendation_ready")
+
+    def test_merge_memory_keeps_existing_and_adds_new_graph_state(self) -> None:
+        merged = self.service._merge_memory(
+            {"preferences": {"size": "M"}, "recent_choices": [{"sku": "A"}]},
+            {"preferences": {"colors": ["black"]}, "recent_choices": [{"sku": "B"}], "sales_state": {"focus_label": "Trail Runner"}},
+        )
+
+        self.assertEqual(merged["preferences"]["size"], "M")
+        self.assertIn("black", merged["preferences"]["colors"])
+        self.assertEqual(merged["recent_choices"][0]["sku"], "B")
+        self.assertEqual(merged["sales_state"]["focus_label"], "Trail Runner")
 
     def test_policy_answer_uses_structured_playbook_policy(self) -> None:
         playbook = self._playbook("fashion")

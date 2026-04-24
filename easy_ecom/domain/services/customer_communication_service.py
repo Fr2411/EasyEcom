@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from copy import deepcopy
 from decimal import Decimal
 import json
 import re
@@ -398,6 +399,8 @@ class CustomerCommunicationService:
                 sender_phone=sender_phone,
                 sender_email=sender_email,
             )
+            self._link_customer_from_contact(session, conversation)
+            self._seed_memory_from_related(session, conversation)
             inbound = self._create_message(
                 session,
                 channel=channel,
@@ -542,10 +545,35 @@ class CustomerCommunicationService:
         history = self._conversation_history(session, str(conversation.client_id), str(conversation.conversation_id))
         tool_names: list[str] = []
         usage: dict[str, int | None] = {"prompt_tokens": None, "completion_tokens": None, "total_tokens": None}
-        self._remember_inbound_context(conversation, playbook, inbound.message_text)
+        self._remember_inbound_context(
+            conversation,
+            playbook,
+            inbound.message_text,
+            metadata=inbound.metadata_json or {},
+            raw_payload=inbound.raw_payload_json or {},
+        )
+        strategy_snapshot = self._conversation_strategy_snapshot(
+            conversation,
+            inbound.message_text,
+            metadata=inbound.metadata_json or {},
+            raw_payload=inbound.raw_payload_json or {},
+        )
+        self._apply_strategy_update(conversation, strategy_snapshot)
+        memory_snapshot = self._memory_graph_snapshot(session, conversation, inbound_text=inbound.message_text)
         policy_reply = self._deterministic_policy_reply(playbook=playbook, inbound_text=inbound.message_text)
         if policy_reply:
             return policy_reply, tool_names, usage
+        media_reply = self._media_context_reply(conversation=conversation, inbound_text=inbound.message_text)
+        if media_reply:
+            return media_reply, tool_names, usage
+        negotiation_reply = self._negotiation_progress_reply(
+            client=client,
+            playbook=playbook,
+            conversation=conversation,
+            inbound_text=inbound.message_text,
+        )
+        if negotiation_reply:
+            return negotiation_reply, tool_names, usage
         playbook_reply = self._deterministic_playbook_reply(
             client=client,
             playbook=playbook,
@@ -554,6 +582,13 @@ class CustomerCommunicationService:
         )
         if playbook_reply:
             return playbook_reply, tool_names, usage
+        sales_progress_reply = self._sales_progress_reply(
+            client=client,
+            conversation=conversation,
+            inbound_text=inbound.message_text,
+        )
+        if sales_progress_reply:
+            return sales_progress_reply, tool_names, usage
         recommendation_reply = self._deterministic_recommendation_reply(
             session,
             client=client,
@@ -591,6 +626,7 @@ class CustomerCommunicationService:
             deterministic_reply = self._compose_catalog_grounded_reply(
                 client=client,
                 playbook=playbook,
+                conversation=conversation,
                 inbound_text=inbound.message_text,
                 grounding=catalog_grounding,
             )
@@ -599,6 +635,9 @@ class CustomerCommunicationService:
                 return deterministic_reply, tool_names, usage
 
         messages = [{"role": "system", "content": system_prompt}]
+        messages.append({"role": "system", "content": self._language_instruction(conversation)})
+        messages.append({"role": "system", "content": self._strategy_message(strategy_snapshot)})
+        messages.append({"role": "system", "content": self._memory_graph_message(memory_snapshot)})
         if catalog_grounding is not None:
             messages.append({"role": "system", "content": self._catalog_grounding_message(catalog_grounding)})
         messages.extend([*history, {"role": "user", "content": inbound.message_text}])
@@ -726,9 +765,13 @@ class CustomerCommunicationService:
                     "current diet, allergies, and any health concerns?"
                 )
             if playbook.business_type == "shoe_store":
+                if memory and dict(memory.get("customer_signals") or {}).get("repeat_buyer"):
+                    return (
+                        "Absolutely — I can help with that again. Tell me the shoe size you want this time, whether it’s for running, work, casual wear, or something more formal, and any color, fit, or budget you want me to stay inside."
+                    )
                 return (
-                    "I can help narrow that down. What shoe size do you need, and is it for running, work, casual wear, "
-                    "formal use, or something else? Any preferred color, fit, and budget?"
+                    "Absolutely — I can help narrow that down. What shoe size do you need, and is it for running, work, casual wear, "
+                    "formal use, or something else? If you already have a color, fit, or budget in mind, send that too."
                 )
             if playbook.business_type == "fashion":
                 return "I can help choose something suitable. What size, color, occasion, fit preference, and budget should I use?"
@@ -747,7 +790,9 @@ class CustomerCommunicationService:
         if price_intent or stock_intent:
             return ""
         policy = self._policy_text_for_message(playbook, inbound_text)
-        return policy or ""
+        if not policy:
+            return ""
+        return f"Of course — here’s the store policy I can confirm right now: {policy}"
 
     def _deterministic_recommendation_reply(
         self,
@@ -790,10 +835,23 @@ class CustomerCommunicationService:
             return None
         self._remember_catalog_choices(conversation, choices)
         pref_text = self._preference_summary(preferences)
-        choice_text = "; ".join(self._catalog_choice_summary(item, client) for item in choices)
+        choice_lines = [
+            f"{index}. {self._catalog_choice_summary(item, client)}"
+            for index, item in enumerate(choices, start=1)
+        ]
+        prefix = self._continuity_prefix(conversation, warm=True)
+        signals = dict(memory.get("customer_signals") or {})
+        archetype = str(memory.get("buyer_archetype") or signals.get("buyer_archetype") or self._buyer_archetype(conversation, inbound_text))
+        persuasion = self._persuasion_style(archetype)
+        close_line = (
+            "If one of these feels right, send the option number and I’ll move it forward for you."
+            if signals.get("high_intent")
+            else "Reply with the option number, or tell me what you want to change and I’ll narrow it further."
+        )
         return (
-            f"Based on {pref_text}, the best matches I found are: {choice_text}. "
-            "Which one should I check or prepare as a draft order?",
+            f"{prefix}based on {pref_text}, these look like the strongest matches right now:\n"
+            + "\n".join(choice_lines)
+            + f"\n{persuasion.get('recommendation_tail', '')} {close_line}".strip(),
             ["search_catalog_variants"],
         )
 
@@ -819,7 +877,8 @@ class CustomerCommunicationService:
         label = str(variant.get("label") or variant.get("product_name") or "that item")
         available = as_decimal(variant.get("available_to_sell") or ZERO)
         if available <= ZERO:
-            return f"I checked {label}, but it is not available right now. Would you like me to suggest the closest available alternative?", []
+            self._update_sales_memory(conversation, focus_label=label, offer_state="out_of_stock", next_step="offer_alternative")
+            return f"I checked {label}, and it’s out of stock right now. If you want, I can show you the closest available alternative so you don’t lose momentum.", []
 
         memory = self._memory(conversation)
         contact = dict(memory.get("customer_contact") or {})
@@ -832,7 +891,8 @@ class CustomerCommunicationService:
         customer_email = str(contact.get("email") or conversation.external_sender_email or self._extract_email(inbound.message_text) or "").strip()
         if not normalize_phone(customer_phone) and not normalize_email(customer_email):
             self._remember_catalog_grounding(conversation, grounding)
-            return f"I can prepare a draft order for {label}. Please share a phone number or email so staff can review and follow up.", []
+            self._update_sales_memory(conversation, focus_label=label, offer_state="contact_needed", next_step="collect_contact")
+            return f"I can get a draft order ready for {label}. Just send a phone number or email and I’ll line it up for staff review.", []
 
         quantity = self._extract_quantity(inbound.message_text)
         quantity = max(Decimal("1"), min(quantity, available))
@@ -862,12 +922,20 @@ class CustomerCommunicationService:
         memory["draft_order"] = _json_ready(result.get("draft_order") or {})
         conversation.memory_json = memory
         draft = result.get("draft_order") or {}
+        self._update_sales_memory(
+            conversation,
+            focus_label=label,
+            offer_state="draft_created",
+            draft_order=draft,
+            next_step="confirm_delivery_details",
+        )
+        draft = result.get("draft_order") or {}
         order_number = str(draft.get("order_number") or "the draft order")
         qty_text = self._format_quantity(quantity)
         return (
-            f"I prepared draft order {order_number} for {qty_text} x {label}. "
-            "A team member will review it before confirmation, payment, or delivery is finalized. "
-            "Would you like me to add delivery details?",
+            f"Perfect — I’ve prepared draft order {order_number} for {qty_text} x {label}. "
+            "The store team will review it before anything is confirmed, charged, or delivered. "
+            "If you want, send delivery details and I’ll add them for the team so they can move faster.",
             ["create_draft_order"],
         )
 
@@ -875,11 +943,221 @@ class CustomerCommunicationService:
         memory = conversation.memory_json if isinstance(conversation.memory_json, dict) else {}
         return dict(memory)
 
+    def _link_customer_from_contact(self, session: Session, conversation: CustomerConversationModel) -> None:
+        if conversation.customer_id:
+            return
+        filters = []
+        normalized_phone = normalize_phone(conversation.external_sender_phone)
+        normalized_email = normalize_email(conversation.external_sender_email)
+        if normalized_phone:
+            filters.append(CustomerModel.phone_normalized == normalized_phone)
+        if normalized_email:
+            filters.append(CustomerModel.email_normalized == normalized_email)
+        if not filters:
+            return
+        customer = session.execute(
+            select(CustomerModel).where(CustomerModel.client_id == conversation.client_id, or_(*filters))
+        ).scalar_one_or_none()
+        if customer is not None:
+            conversation.customer_id = customer.customer_id
+
+    def _related_conversations(
+        self,
+        session: Session,
+        conversation: CustomerConversationModel,
+        *,
+        limit: int = 3,
+    ) -> list[CustomerConversationModel]:
+        stmt = (
+            select(CustomerConversationModel)
+            .where(
+                CustomerConversationModel.client_id == conversation.client_id,
+                CustomerConversationModel.conversation_id != conversation.conversation_id,
+            )
+            .order_by(CustomerConversationModel.last_message_at.desc().nullslast(), CustomerConversationModel.created_at.desc())
+            .limit(12)
+        )
+        candidates = list(session.execute(stmt).scalars())
+        normalized_phone = normalize_phone(conversation.external_sender_phone)
+        normalized_email = normalize_email(conversation.external_sender_email)
+        related: list[CustomerConversationModel] = []
+        for candidate in candidates:
+            same_customer = bool(conversation.customer_id and candidate.customer_id == conversation.customer_id)
+            same_phone = bool(normalized_phone and normalize_phone(candidate.external_sender_phone) == normalized_phone)
+            same_email = bool(normalized_email and normalize_email(candidate.external_sender_email) == normalized_email)
+            if same_customer or same_phone or same_email:
+                related.append(candidate)
+            if len(related) >= limit:
+                break
+        return related
+
+    def _merge_memory(self, base: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
+        merged = deepcopy(base)
+        for key, value in incoming.items():
+            if value in (None, "", [], {}):
+                continue
+            current = merged.get(key)
+            if isinstance(current, dict) and isinstance(value, dict):
+                merged[key] = self._merge_memory(current, value)
+            elif isinstance(current, list) and isinstance(value, list):
+                merged[key] = value + [item for item in current if item not in value]
+            else:
+                merged[key] = deepcopy(value)
+        return merged
+
+    def _seed_memory_from_related(self, session: Session, conversation: CustomerConversationModel) -> None:
+        memory = self._memory(conversation)
+        if memory.get("graph_seeded"):
+            return
+        related = self._related_conversations(session, conversation)
+        if not related:
+            memory["graph_seeded"] = True
+            conversation.memory_json = memory
+            return
+        latest = related[0]
+        latest_memory = self._memory(latest)
+        carry = {
+            "preferences": latest_memory.get("preferences") or {},
+            "customer_contact": latest_memory.get("customer_contact") or {},
+            "last_variant": latest_memory.get("last_variant") or {},
+            "recent_choices": latest_memory.get("recent_choices") or [],
+            "sales_state": latest_memory.get("sales_state") or {},
+            "customer_journey": latest_memory.get("customer_journey") or {},
+            "thread_graph": {
+                "related_conversations": [
+                    {
+                        "conversation_id": str(item.conversation_id),
+                        "channel_id": str(item.channel_id),
+                        "latest_intent": item.latest_intent,
+                        "latest_summary": item.latest_summary,
+                        "last_message_preview": item.last_message_preview,
+                        "last_message_at": item.last_message_at.isoformat() if item.last_message_at else None,
+                    }
+                    for item in related[:3]
+                ]
+            },
+        }
+        memory = self._merge_memory(memory, carry)
+        memory["graph_seeded"] = True
+        memory.setdefault("thread_graph", {})
+        memory["thread_graph"]["restored_from_conversation_id"] = str(latest.conversation_id)
+        conversation.memory_json = _json_ready(memory)
+
+    def _memory_graph_snapshot(
+        self,
+        session: Session,
+        conversation: CustomerConversationModel,
+        *,
+        inbound_text: str,
+    ) -> dict[str, Any]:
+        memory = self._memory(conversation)
+        related = self._related_conversations(session, conversation, limit=2)
+        snapshot = {
+            "customer_contact": memory.get("customer_contact") or {},
+            "preferences": memory.get("preferences") or {},
+            "last_variant": memory.get("last_variant") or {},
+            "recent_choices": memory.get("recent_choices") or [],
+            "sales_state": memory.get("sales_state") or {},
+            "customer_journey": memory.get("customer_journey") or {},
+            "conversation_status": conversation.status,
+            "latest_intent": conversation.latest_intent,
+            "latest_summary": conversation.latest_summary,
+            "related_conversations": [
+                {
+                    "channel_id": str(item.channel_id),
+                    "latest_intent": item.latest_intent,
+                    "latest_summary": item.latest_summary,
+                    "last_message_preview": item.last_message_preview,
+                }
+                for item in related
+            ],
+            "current_message_signals": {
+                "asks_price": self._catalog_intent_flags(inbound_text)[0],
+                "asks_stock": self._catalog_intent_flags(inbound_text)[1],
+                "wants_to_order": self._catalog_intent_flags(inbound_text)[2],
+            },
+        }
+        return _json_ready(snapshot)
+
+    def _memory_graph_message(self, snapshot: dict[str, Any]) -> str:
+        return (
+            "Tenant-safe memory graph snapshot for this customer. Use it to continue naturally, avoid repeating questions, "
+            "and keep selling context consistent. Treat it as tenant-local structured memory, not as permission to invent facts: "
+            f"{json.dumps(snapshot)}"
+        )
+
+    def _update_sales_memory(
+        self,
+        conversation: CustomerConversationModel,
+        *,
+        focus_label: str = "",
+        last_offered_price: Any | None = None,
+        offer_state: str = "",
+        draft_order: dict[str, Any] | None = None,
+        next_step: str = "",
+    ) -> None:
+        memory = self._memory(conversation)
+        sales_state = dict(memory.get("sales_state") or {})
+        if focus_label:
+            sales_state["focus_label"] = focus_label
+        if last_offered_price is not None:
+            sales_state["last_offered_price"] = _json_ready(last_offered_price)
+        if offer_state:
+            sales_state["offer_state"] = offer_state
+        if draft_order:
+            sales_state["draft_order"] = _json_ready(draft_order)
+        if next_step:
+            sales_state["next_step"] = next_step
+        memory["sales_state"] = sales_state
+        journey = dict(memory.get("customer_journey") or {})
+        if focus_label:
+            journey["current_focus"] = focus_label
+        if offer_state:
+            journey["stage"] = offer_state
+        if next_step:
+            journey["next_step"] = next_step
+        memory["customer_journey"] = journey
+        conversation.memory_json = _json_ready(memory)
+
+    def _update_negotiation_memory(
+        self,
+        conversation: CustomerConversationModel,
+        *,
+        price_objection: bool = False,
+        best_price_ask: bool = False,
+        hesitation: bool = False,
+        alternative_offered: bool = False,
+        bundle_interest: bool = False,
+        close_attempt: bool = False,
+        last_move: str = "",
+    ) -> None:
+        memory = self._memory(conversation)
+        state = dict(memory.get("negotiation_state") or {})
+        if price_objection:
+            state["price_objection_count"] = int(state.get("price_objection_count") or 0) + 1
+        if best_price_ask:
+            state["best_price_asked_count"] = int(state.get("best_price_asked_count") or 0) + 1
+        if hesitation:
+            state["stall_count"] = int(state.get("stall_count") or 0) + 1
+        if alternative_offered:
+            state["alternatives_offered_count"] = int(state.get("alternatives_offered_count") or 0) + 1
+        if bundle_interest:
+            state["bundle_interest_count"] = int(state.get("bundle_interest_count") or 0) + 1
+        if close_attempt:
+            state["close_attempt_count"] = int(state.get("close_attempt_count") or 0) + 1
+        if last_move:
+            state["last_move"] = last_move
+        memory["negotiation_state"] = state
+        conversation.memory_json = _json_ready(memory)
+
     def _remember_inbound_context(
         self,
         conversation: CustomerConversationModel,
         playbook: AssistantPlaybookModel,
         inbound_text: str,
+        *,
+        metadata: dict[str, Any] | None = None,
+        raw_payload: dict[str, Any] | None = None,
     ) -> None:
         memory = self._memory(conversation)
         preferences = dict(memory.get("preferences") or {})
@@ -906,8 +1184,35 @@ class CustomerCommunicationService:
         if contact:
             memory["customer_contact"] = contact
 
+        lead_context = self._extract_lead_context(inbound_text)
+        if lead_context:
+            memory["lead_context"] = {**dict(memory.get("lead_context") or {}), **lead_context}
+
+        language_hint = self._detect_language_hint(inbound_text)
+        if language_hint:
+            memory["language_hint"] = language_hint
+
+        modality = self._extract_message_modality(inbound_text, metadata, raw_payload)
+        if modality.get("has_attachment"):
+            memory["message_modality"] = modality
+
         if self._has_shopping_discovery_intent(inbound_text.lower()) or memory.get("pending_recommendation"):
             memory["pending_recommendation"] = True
+        journey = dict(memory.get("customer_journey") or {})
+        if preferences:
+            journey["preference_summary"] = self._preference_summary(preferences)
+        if contact:
+            journey["contact_ready"] = bool(contact.get("phone") or contact.get("email"))
+        if lead_context:
+            journey["lead_source"] = lead_context.get("source") or lead_context.get("source_type") or ""
+        if language_hint:
+            journey["language"] = language_hint
+        if modality.get("has_attachment"):
+            journey["has_attachment"] = True
+        if self._has_shopping_discovery_intent(inbound_text.lower()):
+            journey["stage"] = "discovery"
+            journey["next_step"] = "narrow_recommendation"
+        memory["customer_journey"] = journey
         conversation.memory_json = memory
 
     def _remember_catalog_grounding(self, conversation: CustomerConversationModel, grounding: CatalogGrounding) -> None:
@@ -922,12 +1227,24 @@ class CustomerCommunicationService:
         memory["last_variant"] = _json_ready(variant)
         memory["pending_recommendation"] = False
         conversation.memory_json = memory
+        self._update_sales_memory(
+            conversation,
+            focus_label=str(variant.get("label") or variant.get("product_name") or ""),
+            next_step="confirm_variant_or_order",
+        )
 
     def _remember_catalog_choices(self, conversation: CustomerConversationModel, choices: list[dict[str, Any]]) -> None:
         memory = self._memory(conversation)
         memory["recent_choices"] = _json_ready([dict(choice) for choice in choices[:5]])
         memory["pending_recommendation"] = False
         conversation.memory_json = memory
+        top_choice = choices[0] if choices else {}
+        self._update_sales_memory(
+            conversation,
+            focus_label=str(top_choice.get("label") or top_choice.get("product_name") or ""),
+            offer_state="recommendation_ready",
+            next_step="customer_pick_option",
+        )
 
     def _extract_customer_preferences(self, playbook: AssistantPlaybookModel, text: str) -> dict[str, Any]:
         lower = text.lower()
@@ -1020,6 +1337,68 @@ class CustomerCommunicationService:
             return Decimal("1")
         return as_decimal(match.group(1))
 
+    def _extract_lead_context(self, text: str) -> dict[str, Any]:
+        lower = text.lower()
+        source = ""
+        if re.search(r"\binstagram|insta|ig|reel|story\b", lower):
+            source = "instagram"
+        elif re.search(r"\bfacebook|fb\b", lower):
+            source = "facebook"
+        elif re.search(r"\btiktok\b", lower):
+            source = "tiktok"
+        elif re.search(r"\bgoogle\b", lower):
+            source = "google"
+        elif re.search(r"\bwebsite\b", lower):
+            source = "website"
+        elif re.search(r"\bwhatsapp\b", lower):
+            source = "whatsapp"
+
+        source_type = ""
+        if re.search(r"\b(ad|ads|campaign|promo|promotion|sponsored)\b", lower):
+            source_type = "campaign"
+        elif re.search(r"\b(post|reel|story|video)\b", lower):
+            source_type = "content"
+        elif re.search(r"\b(referred|referral|friend told me|someone told me|recommended by)\b", lower):
+            source_type = "referral"
+        elif source:
+            source_type = "organic"
+
+        if not source and not source_type:
+            return {}
+        return {"source": source, "source_type": source_type}
+
+    def _detect_language_hint(self, text: str) -> str:
+        if re.search(r"[\u0600-\u06FF]", text):
+            return "arabic"
+        if re.search(r"[\u0980-\u09FF]", text):
+            return "bengali"
+        if re.search(r"[\u0900-\u097F]", text):
+            return "hindi"
+        latin_letters = re.findall(r"[A-Za-z]", text)
+        if latin_letters:
+            return "english"
+        return ""
+
+    def _extract_message_modality(
+        self,
+        text: str,
+        metadata: dict[str, Any] | None = None,
+        raw_payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        lower = text.lower()
+        metadata = metadata or {}
+        raw_payload = raw_payload or {}
+        attachments = metadata.get("attachments") or raw_payload.get("attachments") or []
+        has_attachment = bool(attachments or metadata.get("attachment") or raw_payload.get("attachment"))
+        has_image = has_attachment and any("image" in str(item).lower() for item in attachments) if isinstance(attachments, list) else has_attachment
+        mentions_image = bool(re.search(r"\b(image|photo|pic|picture|screenshot|screen shot|attached)\b", lower))
+        if mentions_image and not has_attachment:
+            has_image = True
+        return {
+            "has_attachment": bool(has_attachment or mentions_image),
+            "has_image": bool(has_image or mentions_image),
+        }
+
     def _has_shopping_discovery_intent(self, lower_text: str) -> bool:
         return bool(
             re.search(
@@ -1089,6 +1468,402 @@ class CustomerCommunicationService:
         if preferences.get("budget"):
             parts.append(f"budget around {preferences['budget']}")
         return self._human_join(parts) if parts else "what you shared"
+
+    def _continuity_prefix(self, conversation: CustomerConversationModel, *, warm: bool = False) -> str:
+        memory = self._memory(conversation)
+        journey = dict(memory.get("customer_journey") or {})
+        restored = dict(memory.get("thread_graph") or {}).get("restored_from_conversation_id")
+        focus = str(journey.get("current_focus") or memory.get("sales_state", {}).get("focus_label") or "").strip()
+        if restored and focus:
+            return f"Picking up from where we left off with {focus}, " if warm else f"About {focus}, "
+        if restored:
+            return "Picking up from where we left off, " if warm else "From earlier, "
+        if focus:
+            return f"On {focus}, " if warm else ""
+        return ""
+
+    def _numbered_options(self, items: list[str]) -> str:
+        return "\n".join(f"{index}. {item}" for index, item in enumerate(items, start=1))
+
+    def _buyer_archetype(self, conversation: CustomerConversationModel, inbound_text: str) -> str:
+        memory = self._memory(conversation)
+        stored = str(memory.get("buyer_archetype") or "").strip()
+        if stored:
+            return stored
+        lower = inbound_text.lower()
+        preferences = dict(memory.get("preferences") or {})
+        lead_context = dict(memory.get("lead_context") or {})
+        if conversation.customer_id or dict(memory.get("thread_graph") or {}).get("restored_from_conversation_id"):
+            return "repeat_buyer"
+        if re.search(r"\b(cheap|cheaper|budget|discount|best price|lower|offer)\b", lower) or preferences.get("budget"):
+            return "budget_buyer"
+        if re.search(r"\b(urgent|quick|fast|asap|today|immediately|right now)\b", lower):
+            return "convenience_buyer"
+        if lead_context.get("source_type") == "campaign":
+            return "campaign_buyer"
+        if re.search(r"\b(best|premium|top|quality|comfortable|long lasting|leather)\b", lower):
+            return "premium_buyer"
+        return "explorer"
+
+    def _persuasion_style(self, archetype: str) -> dict[str, str]:
+        styles = {
+            "repeat_buyer": {
+                "closing": "make the next step feel easy because trust already exists",
+                "recommendation_tail": "I can keep this fast for you.",
+                "comparison_tail": "I’d keep it simple and go with the option that needs the least rethinking.",
+            },
+            "budget_buyer": {
+                "closing": "protect margin but help the customer feel smart about value",
+                "recommendation_tail": "I’ve kept value for money in mind here.",
+                "comparison_tail": "I’d lean toward the one that gives the cleaner value-for-money choice.",
+            },
+            "convenience_buyer": {
+                "closing": "reduce friction and move quickly",
+                "recommendation_tail": "I’m keeping this tight so you can decide quickly.",
+                "comparison_tail": "I’d lean toward the easier choice so you can move on quickly.",
+            },
+            "campaign_buyer": {
+                "closing": "keep momentum from ad or content traffic and avoid long back-and-forth",
+                "recommendation_tail": "I’m keeping this simple so you can decide quickly from what brought you in.",
+                "comparison_tail": "I’d lean toward the clearest fit so the decision stays easy.",
+            },
+            "premium_buyer": {
+                "closing": "justify the stronger option with confidence and reassurance",
+                "recommendation_tail": "I’ve leaned toward the stronger-quality picks here.",
+                "comparison_tail": "I’d lean toward the stronger overall option, not just the cheaper one.",
+            },
+            "explorer": {
+                "closing": "guide without pressure",
+                "recommendation_tail": "I can narrow it further once you react to these.",
+                "comparison_tail": "I’d lean toward the safer overall fit based on what you’ve shared.",
+            },
+        }
+        return styles.get(archetype, styles["explorer"])
+
+    def _language_instruction(self, conversation: CustomerConversationModel) -> str:
+        language_hint = str(self._memory(conversation).get("language_hint") or "").strip().lower()
+        labels = {
+            "arabic": "Reply in Arabic unless the customer switches language.",
+            "bengali": "Reply in Bengali unless the customer switches language.",
+            "hindi": "Reply in Hindi unless the customer switches language.",
+            "english": "Reply in natural English unless the customer switches language.",
+        }
+        return labels.get(language_hint, "Reply in the customer's clearest language.")
+
+    def _extract_customer_signals(
+        self,
+        conversation: CustomerConversationModel,
+        inbound_text: str,
+    ) -> dict[str, Any]:
+        lower = inbound_text.lower()
+        memory = self._memory(conversation)
+        sales_state = dict(memory.get("sales_state") or {})
+        customer_contact = dict(memory.get("customer_contact") or {})
+        lead_context = dict(memory.get("lead_context") or {})
+        buyer_archetype = self._buyer_archetype(conversation, inbound_text)
+        return {
+            "price_sensitive": bool(re.search(r"\b(cheap|cheaper|budget|discount|best price|lower|offer|expensive|too much|too high)\b", lower)),
+            "hesitant": bool(re.search(r"\b(later|think about it|let me think|maybe later|not sure|i'll come back)\b", lower)),
+            "high_intent": bool(self._catalog_intent_flags(inbound_text)[2] or sales_state.get("draft_order") or re.search(r"\b(take it|book it|let's do it|prepare it|i want this)\b", lower)),
+            "repeat_buyer": bool(conversation.customer_id or dict(memory.get("thread_graph") or {}).get("restored_from_conversation_id")),
+            "contact_ready": bool(customer_contact.get("phone") or customer_contact.get("email") or conversation.external_sender_phone or conversation.external_sender_email),
+            "campaign_origin": bool(lead_context.get("source_type") == "campaign"),
+            "referral_origin": bool(lead_context.get("source_type") == "referral"),
+            "buyer_archetype": buyer_archetype,
+        }
+
+    def _conversation_strategy_snapshot(
+        self,
+        conversation: CustomerConversationModel,
+        inbound_text: str,
+        *,
+        metadata: dict[str, Any] | None = None,
+        raw_payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        memory = self._memory(conversation)
+        journey = dict(memory.get("customer_journey") or {})
+        sales_state = dict(memory.get("sales_state") or {})
+        negotiation_state = dict(memory.get("negotiation_state") or {})
+        lead_context = dict(memory.get("lead_context") or {})
+        language_hint = str(memory.get("language_hint") or self._detect_language_hint(inbound_text) or "")
+        message_modality = self._extract_message_modality(inbound_text, metadata, raw_payload)
+        signals = self._extract_customer_signals(conversation, inbound_text)
+        buyer_archetype = str(signals.get("buyer_archetype") or self._buyer_archetype(conversation, inbound_text))
+        persuasion = self._persuasion_style(buyer_archetype)
+        lower = inbound_text.lower()
+        price_intent, stock_intent, order_intent = self._catalog_intent_flags(inbound_text)
+        if self._has_escalation_risk_terms(lower):
+            stage = "support"
+        elif order_intent or sales_state.get("offer_state") in {"draft_created", "contact_needed"}:
+            stage = "closing"
+        elif signals["price_sensitive"] or sales_state.get("last_offered_price"):
+            stage = "negotiation"
+        elif journey.get("stage") == "discovery" and sales_state.get("focus_label"):
+            stage = "comparison"
+        elif self._has_shopping_discovery_intent(lower):
+            stage = "discovery"
+        elif price_intent or stock_intent or sales_state.get("focus_label"):
+            stage = "consideration"
+        else:
+            stage = str(journey.get("stage") or "discovery")
+
+        if stage == "support":
+            next_best_action = "handoff_to_human"
+        elif stage == "closing" and not signals["contact_ready"]:
+            next_best_action = "collect_contact_and_prepare_draft"
+        elif stage == "closing":
+            next_best_action = "prepare_or_advance_order"
+        elif stage == "negotiation" and sales_state.get("focus_label"):
+            if int(negotiation_state.get("stall_count") or 0) >= 2:
+                next_best_action = "reduce_pressure_and_hold_context"
+            elif int(negotiation_state.get("price_objection_count") or 0) >= 2 and int(negotiation_state.get("alternatives_offered_count") or 0) == 0:
+                next_best_action = "offer_alternative_then_close"
+            elif int(negotiation_state.get("best_price_asked_count") or 0) >= 2:
+                next_best_action = "restate_policy_then_close"
+            else:
+                next_best_action = "handle_price_objection_and_soft_close"
+        elif stage == "comparison" and sales_state.get("focus_label"):
+            next_best_action = "compare_and_reduce_choice"
+        elif stage == "consideration" and stock_intent and price_intent:
+            next_best_action = "answer_facts_then_soft_close"
+        elif stage == "consideration":
+            next_best_action = "answer_facts_and_offer_next_step"
+        else:
+            next_best_action = "narrow_need_with_one_question"
+
+        return {
+            "journey_stage": stage,
+            "customer_signals": signals,
+            "lead_context": lead_context,
+            "language_hint": language_hint,
+            "message_modality": message_modality,
+            "negotiation_state": negotiation_state,
+            "buyer_archetype": buyer_archetype,
+            "persuasion_style": persuasion,
+            "commercial_goal": {
+                "discovery": "move_from_need_to_shortlist",
+                "comparison": "reduce_choice_friction",
+                "consideration": "build_confidence_and_keep_momentum",
+                "negotiation": "protect_margin_and_close",
+                "closing": "convert_to_draft_order",
+                "support": "preserve_trust_and_handoff",
+            }.get(stage, "move_conversation_forward"),
+            "next_best_action": next_best_action,
+            "current_focus": sales_state.get("focus_label") or journey.get("current_focus") or "",
+        }
+
+    def _strategy_message(self, snapshot: dict[str, Any]) -> str:
+        return (
+            "Conversation strategy snapshot. Use it to decide the most commercially useful next move instead of replying only to the last sentence. "
+            "Customers may be random, may switch topics, may arrive from ads or referrals, and may use different languages. "
+            "Match the customer's language when it is clear, do not force a rigid script, and steer the conversation forward with one smart next step: "
+            f"{json.dumps(_json_ready(snapshot))}"
+        )
+
+    def _apply_strategy_update(self, conversation: CustomerConversationModel, snapshot: dict[str, Any]) -> None:
+        memory = self._memory(conversation)
+        journey = dict(memory.get("customer_journey") or {})
+        journey["stage"] = snapshot.get("journey_stage")
+        journey["next_best_action"] = snapshot.get("next_best_action")
+        journey["commercial_goal"] = snapshot.get("commercial_goal")
+        if snapshot.get("current_focus"):
+            journey["current_focus"] = snapshot.get("current_focus")
+        memory["customer_journey"] = journey
+        memory["customer_signals"] = snapshot.get("customer_signals") or {}
+        if snapshot.get("lead_context"):
+            memory["lead_context"] = snapshot.get("lead_context") or {}
+        if snapshot.get("buyer_archetype"):
+            memory["buyer_archetype"] = snapshot.get("buyer_archetype")
+        if snapshot.get("persuasion_style"):
+            memory["persuasion_style"] = snapshot.get("persuasion_style") or {}
+        if snapshot.get("language_hint"):
+            memory["language_hint"] = snapshot.get("language_hint")
+        if snapshot.get("message_modality"):
+            memory["message_modality"] = snapshot.get("message_modality") or {}
+        if snapshot.get("negotiation_state"):
+            memory["negotiation_state"] = snapshot.get("negotiation_state") or {}
+        conversation.memory_json = _json_ready(memory)
+        conversation.latest_intent = str(snapshot.get("journey_stage") or "")
+
+    def _negotiation_progress_reply(
+        self,
+        *,
+        client: ClientModel,
+        playbook: AssistantPlaybookModel,
+        conversation: CustomerConversationModel,
+        inbound_text: str,
+    ) -> str:
+        memory = self._memory(conversation)
+        lower = inbound_text.lower()
+        sales_state = dict(memory.get("sales_state") or {})
+        negotiation_state = dict(memory.get("negotiation_state") or {})
+        focus_label = str(sales_state.get("focus_label") or memory.get("last_variant", {}).get("label") or "").strip()
+        if not focus_label:
+            return ""
+
+        archetype = str(memory.get("buyer_archetype") or self._buyer_archetype(conversation, inbound_text))
+        last_offered_price = sales_state.get("last_offered_price")
+        price_text = self._format_money(last_offered_price, client) if last_offered_price not in {None, ""} else ""
+        discounts_policy = str(({**DEFAULT_POLICIES, **(playbook.policy_json or {})}.get("discounts") or "")).strip()
+        cross_sell_enabled = bool((playbook.sales_goals_json or {}).get("cross_sell"))
+
+        asks_best_price = bool(re.search(r"\b(best price|last price|final price|best you can do|your best|lowest|do better|better price)\b", lower))
+        says_expensive = bool(re.search(r"\b(expensive|too much|too high|pricey|costly)\b", lower))
+        asks_bundle = bool(re.search(r"\b(bundle|care kit|laces|socks|accessories|anything to go with it|match with it)\b", lower))
+        urgency = bool(re.search(r"\b(today|now|right away|asap|quickly)\b", lower))
+        repeated_price_push = int(negotiation_state.get("best_price_asked_count") or 0) >= 1
+        stalled = int(negotiation_state.get("stall_count") or 0) >= 2
+
+        if asks_best_price and price_text:
+            self._update_negotiation_memory(conversation, best_price_ask=True, close_attempt=True, last_move="price_policy_close")
+            if discounts_policy and repeated_price_push:
+                return (
+                    f"For {focus_label}, the current price I can confirm is {price_text}. {discounts_policy} "
+                    "I don’t want to drag you in circles, so the best next move is either the closest lower-price alternative or a draft order for staff review if you want this one."
+                )
+            if discounts_policy:
+                if archetype in {"repeat_buyer", "campaign_buyer"}:
+                    return (
+                        f"On {focus_label}, the current stored price I can confirm is {price_text}. {discounts_policy} "
+                        "If you want, I can keep this moving by checking the closest lower-price alternative or lining up the draft order for staff review."
+                    )
+                return (
+                    f"For {focus_label}, the current price I can confirm is {price_text}. {discounts_policy} "
+                    "If price is the main decision point, I can also show the closest lower-price alternative or keep this one moving for you."
+                )
+            return (
+                f"For {focus_label}, the current price I can confirm is {price_text}. "
+                "If you want, I can either compare it with the closest lower-price alternative or move it forward for staff review."
+            )
+
+        if says_expensive:
+            self._update_negotiation_memory(conversation, price_objection=True, alternative_offered=True, last_move="offer_lower_price_alternative")
+            if archetype == "premium_buyer":
+                return (
+                    f"I understand. On {focus_label}, you’d mainly be paying for the stronger overall option rather than the lowest price. "
+                    "If you want, I can compare it with the nearest cheaper alternative so you can decide whether the step-up is worth it."
+                )
+            return (
+                f"I understand. If {focus_label} feels a bit high, I can quickly show you the closest lower-price alternative so you can compare value side by side."
+            )
+
+        if asks_bundle and cross_sell_enabled:
+            self._update_negotiation_memory(conversation, bundle_interest=True, last_move="bundle_interest")
+            bundle_hint = "matching care items or accessories"
+            if playbook.business_type == "shoe_store":
+                bundle_hint = "matching socks, care items, or insoles"
+            return (
+                f"I can help with that around {focus_label}. If you want, I can also look for {bundle_hint} that make sense with it, "
+                "and I’ll keep it practical rather than piling on extras."
+            )
+
+        if urgency and self._catalog_intent_flags(inbound_text)[2]:
+            self._update_negotiation_memory(conversation, close_attempt=True, last_move="urgent_close")
+            return (
+                f"Yes — I can keep {focus_label} moving quickly. Send a phone number or email if I don’t have it yet, and I’ll line up the draft order for staff review."
+            )
+
+        if stalled:
+            return (
+                f"No pressure — I’ll keep {focus_label} in context for you. When you’re ready, I can either pick back up with the same option, compare one alternative, or move straight to the draft order."
+            )
+
+        return ""
+
+    def _media_context_reply(
+        self,
+        *,
+        conversation: CustomerConversationModel,
+        inbound_text: str,
+    ) -> str:
+        memory = self._memory(conversation)
+        modality = dict(memory.get("message_modality") or {})
+        if not modality.get("has_image"):
+            return ""
+        if self._catalog_intent_flags(inbound_text)[0] or self._catalog_intent_flags(inbound_text)[1]:
+            return ""
+        return (
+            "I can help with that. If you’re referring to an image or screenshot, tell me the product name, size, color, SKU, "
+            "or the exact issue you want me to focus on, and I’ll take it from there."
+        )
+
+    def _sales_progress_reply(
+        self,
+        *,
+        client: ClientModel,
+        conversation: CustomerConversationModel,
+        inbound_text: str,
+    ) -> str:
+        memory = self._memory(conversation)
+        lower = inbound_text.lower()
+        recent_choices = [dict(item) for item in (memory.get("recent_choices") or []) if isinstance(item, dict)]
+        preferences = dict(memory.get("preferences") or {})
+        lead_context = dict(memory.get("lead_context") or {})
+        focus_variant = dict(memory.get("last_variant") or {})
+        focus_label = str((memory.get("sales_state") or {}).get("focus_label") or focus_variant.get("label") or "").strip()
+        prefix = self._continuity_prefix(conversation, warm=True)
+        archetype = str(memory.get("buyer_archetype") or self._buyer_archetype(conversation, inbound_text))
+        persuasion = self._persuasion_style(archetype)
+
+        if re.search(r"\b(which one|which is better|better one|difference|compare|vs\.?|versus)\b", lower) and len(recent_choices) >= 2:
+            first, second = recent_choices[0], recent_choices[1]
+            first_label = str(first.get("label") or first.get("product_name") or "Option 1")
+            second_label = str(second.get("label") or second.get("product_name") or "Option 2")
+            first_price = self._format_money(first.get("unit_price"), client) if first.get("unit_price") is not None else ""
+            second_price = self._format_money(second.get("unit_price"), client) if second.get("unit_price") is not None else ""
+            budget = as_decimal(preferences.get("budget") or ZERO)
+            first_amount = as_decimal(first.get("unit_price") or ZERO)
+            second_amount = as_decimal(second.get("unit_price") or ZERO)
+            if budget > ZERO and second_amount > ZERO and first_amount > ZERO:
+                preferred = first if abs(first_amount - budget) <= abs(second_amount - budget) else second
+            else:
+                preferred = first
+            preferred_label = str(preferred.get("label") or preferred.get("product_name") or "the first option")
+            first_angle = "looks like the stronger pick if you want the more polished option"
+            second_angle = "is the easier pick if keeping the spend tighter matters more"
+            if archetype == "premium_buyer":
+                first_angle = "looks like the stronger overall pick if quality and finish matter most"
+                second_angle = "still works if you want to spend less, but it’s the more practical choice"
+            elif archetype in {"budget_buyer", "campaign_buyer"}:
+                first_angle = "feels like the more polished option"
+                second_angle = "is the easier value move if keeping the spend tighter matters more"
+            elif archetype == "convenience_buyer":
+                first_angle = "is the cleaner pick if you want the safer decision quickly"
+                second_angle = "is the simpler value option if price matters more than finish"
+            return (
+                f"{prefix}Between {first_label}"
+                + (f" at {first_price}" if first_price else "")
+                + f" and {second_label}"
+                + (f" at {second_price}" if second_price else "")
+                + f", {first_angle}, while {second_label} {second_angle}. "
+                + (f"Based on what you told me about {self._preference_summary(preferences)}, I’d lean to {preferred_label}. " if preferences else f"I’d lean to {preferred_label}. ")
+                + f"{persuasion.get('comparison_tail', '')} If you want, I can move that one forward or help you decide in one more quick message."
+            )
+
+        if re.search(r"\b(later|think about it|let me think|maybe later|not sure|i'll come back)\b", lower):
+            self._update_negotiation_memory(conversation, hesitation=True, last_move="hesitation_soft_hold")
+            source_line = ""
+            if lead_context.get("source") and lead_context.get("source_type") in {"campaign", "content"}:
+                source_line = f" Since you came in from our {lead_context.get('source')} {lead_context.get('source_type')}, I can keep this simple."
+            if focus_label:
+                next_step = "If you want, I can either compare it quickly with the closest alternative or get a draft order ready so you don’t have to repeat everything later."
+                if archetype == "premium_buyer":
+                    next_step = "If you want, I can quickly tell you why it’s the stronger pick versus the nearest alternative, or I can get a draft order ready so you don’t have to restart later."
+                elif archetype in {"budget_buyer", "campaign_buyer"}:
+                    next_step = "If you want, I can quickly compare it with the best lower-price alternative, or get a draft order ready so you don’t have to repeat everything later."
+                elif archetype == "repeat_buyer":
+                    next_step = "If you want, I can keep this easy and either line up the draft order now or compare it with the closest alternative in one quick message."
+                return (
+                    f"No problem — take your time.{source_line} Based on what you shared, {focus_label} still looks like the strongest fit so far. "
+                    + next_step
+                )
+            if recent_choices:
+                return (
+                    f"No problem — take your time.{source_line} Your shortlist is still here. "
+                    "If you want, I can tell you which of the top options is the better pick for your budget and use case, so deciding later is easier."
+                )
+
+        return ""
 
     def _policy_text_for_message(self, playbook: AssistantPlaybookModel, inbound_text: str) -> str:
         lower = inbound_text.lower()
@@ -1435,6 +2210,7 @@ class CustomerCommunicationService:
         *,
         client: ClientModel,
         playbook: AssistantPlaybookModel,
+        conversation: CustomerConversationModel,
         inbound_text: str,
         grounding: CatalogGrounding,
     ) -> str:
@@ -1453,13 +2229,22 @@ class CustomerCommunicationService:
         if not items:
             query = grounding.query or "that item"
             return (
-                f"{health_prefix}I checked the catalog for {query}, but I could not find a matching active item yet. "
-                f"Could you send the exact product name, size, flavor, or SKU so I can check again?{policy_suffix}"
+                f"{health_prefix}I checked the catalog for {query}, but I don’t see a confident active match yet. "
+                f"Send the product name, size, color, flavor, device model, or SKU and I’ll tighten it up for you.{policy_suffix}"
             )
 
+
         if len(items) > 1:
-            choices = "; ".join(self._catalog_choice_summary(item, client) for item in items[:3])
-            return f"{health_prefix}I found a few matches: {choices}. Which one should I check or prepare for you?{policy_suffix}"
+            choices = [
+                self._catalog_choice_summary(item, client)
+                for item in items[:3]
+            ]
+            prefix = self._continuity_prefix(conversation, warm=True)
+            return (
+                f"{health_prefix}{prefix}I found a few close matches:\n"
+                + self._numbered_options(choices)
+                + f"\nTell me the option number, or the size / color / SKU you want and I’ll keep it moving.{policy_suffix}"
+            )
 
         variant = (grounding.availability_result or {}).get("variant") or items[0]
         price_variant = (grounding.price_result or {}).get("variant") or variant
@@ -1467,24 +2252,58 @@ class CustomerCommunicationService:
         sku = str(variant.get("sku") or "").strip()
         sku_text = f" (SKU {sku})" if sku else ""
 
-        facts: list[str] = []
-        if stock_intent or order_intent or lookup_intent:
-            available = as_decimal(variant.get("available_to_sell") or ZERO)
-            qty_text = self._format_quantity(available)
-            if available > ZERO:
-                facts.append(f"we have {qty_text} available")
-            else:
-                facts.append("it is not available right now")
-        if price_intent:
-            unit_price = price_variant.get("unit_price")
-            if unit_price is not None:
-                facts.append(f"the price is {self._format_money(unit_price, client)}")
-            else:
-                facts.append("I do not see a saved selling price for it yet")
+        available = as_decimal(variant.get("available_to_sell") or ZERO)
+        qty_text = self._format_quantity(available)
+        price_text = ""
+        unit_price = price_variant.get("unit_price")
+        if unit_price is not None:
+            price_text = self._format_money(unit_price, client)
 
-        fact_text = ", and ".join(facts) if facts else "I found it in the catalog"
-        next_step = "Would you like me to prepare a draft order for it?" if order_intent or stock_intent or lookup_intent else "Would you like me to check anything else about it?"
-        return f"{health_prefix}I checked {label}{sku_text}: {fact_text}. {next_step}{policy_suffix}"
+        if available <= ZERO:
+            prefix = self._continuity_prefix(conversation)
+            return (
+                f"{health_prefix}{prefix}{label}{sku_text} is out of stock right now. "
+                f"If you want, I can suggest the closest available alternative for you.{policy_suffix}"
+            )
+
+        if price_intent and (stock_intent or lookup_intent or order_intent) and price_text:
+            prefix = self._continuity_prefix(conversation)
+            return (
+                f"{health_prefix}{prefix}Yes — {label}{sku_text} is available, and I can see {qty_text} ready to sell. "
+                f"The current price is {price_text}. "
+                f"If you want, I can prepare a draft order or show the closest cheaper alternative.{policy_suffix}"
+            )
+        strategy = self._conversation_strategy_snapshot(conversation, inbound_text)
+        archetype = str(strategy.get("buyer_archetype") or self._buyer_archetype(conversation, inbound_text))
+        if stock_intent or order_intent or lookup_intent:
+            prefix = self._continuity_prefix(conversation)
+            if strategy.get("next_best_action") == "prepare_or_advance_order":
+                next_step = "If you want, I can prepare the draft order now for staff review."
+            elif strategy.get("next_best_action") == "answer_facts_then_soft_close":
+                next_step = "If you want, I can prepare a draft order or show the closest cheaper alternative so you can decide quickly."
+            else:
+                next_step = "If you want, I can also check the price or prepare a draft order."
+            if archetype == "premium_buyer":
+                next_step = "If you want, I can prepare the draft order or compare it with the nearest alternative so you can choose the stronger option confidently."
+            elif archetype in {"budget_buyer", "campaign_buyer"} and strategy.get("next_best_action") != "prepare_or_advance_order":
+                next_step = "If you want, I can prepare a draft order or show the closest cheaper alternative so the decision stays easy."
+            elif archetype == "repeat_buyer":
+                next_step = "If you want, I can move straight to the draft order so you don’t have to repeat the details."
+            return f"{health_prefix}{prefix}Yes — {label}{sku_text} is available, and I can see {qty_text} ready to sell. {next_step}{policy_suffix}"
+        if price_intent:
+            prefix = self._continuity_prefix(conversation)
+            if price_text:
+                if strategy.get("next_best_action") == "handle_price_objection_and_soft_close":
+                    return f"{health_prefix}{prefix}{label}{sku_text} is currently {price_text}. If price is the main thing, I can also show the closest cheaper alternative or get the draft order moving for you.{policy_suffix}"
+                if archetype == "premium_buyer":
+                    return f"{health_prefix}{prefix}{label}{sku_text} is currently {price_text}. If you want, I can also compare it with the nearest alternative so you can see whether it’s the stronger overall pick.{policy_suffix}"
+                if archetype in {"budget_buyer", "campaign_buyer"}:
+                    return f"{health_prefix}{prefix}{label}{sku_text} is currently {price_text}. If you want, I can also show the closest lower-price alternative or help you move this one forward.{policy_suffix}"
+                return f"{health_prefix}{prefix}{label}{sku_text} is currently {price_text}. If you want, I can also check stock or help you compare it with the closest alternative.{policy_suffix}"
+            return f"{health_prefix}{prefix}I found {label}{sku_text}, but I do not see a saved selling price for it yet. I can ask staff to confirm it for you.{policy_suffix}"
+
+        prefix = self._continuity_prefix(conversation)
+        return f"{health_prefix}{prefix}I found {label}{sku_text}. If you want, I can check stock, price, or prepare the next step for you.{policy_suffix}"
 
     def _format_money(self, value: Any, client: ClientModel) -> str:
         amount = as_decimal(value).quantize(MONEY_QUANTUM)
@@ -1752,9 +2571,13 @@ class CustomerCommunicationService:
         return "\n".join(
             [
                 f"You are the customer service and sales assistant for {client.business_name}.",
-                "Personality: natural, warm, concise, helpful, curious, and commercially sensible without pressure.",
+                "Personality: natural, warm, observant, concise, helpful, and commercially sensible without sounding scripted.",
                 f"Brand personality: {playbook.brand_personality}. Channel: {channel.provider}.",
-                "Conversation flow: understand intent, ask one useful clarifying question when needed, call tools for facts, answer clearly, then offer a next step.",
+                "Conversation flow: understand intent, continue naturally from prior context, use remembered buyer signals, buyer archetype, lead source, language, and message modality when helpful, ask one useful clarifying question only when needed, call tools for facts, answer clearly, then offer one smart next step.",
+                "Sound like a top store salesperson who remembers the shopper, understands buying intent, adapts style to the buyer, and reduces friction without sounding pushy or scripted.",
+                "Customers may write in messy, random, mixed, or multi-turn ways. Follow meaning, not a rigid flowchart.",
+                "When the customer's language is clear, answer in that language. If they switch language, adapt.",
+                "If they refer to an image or screenshot and no vision tool is available, do not pretend you saw it. Ask for the exact detail you should focus on.",
                 "Use short natural transitions only when you are actually checking data with a tool.",
                 "Never invent price, availability, discount, delivery, return, warranty, or product facts.",
                 "For price or stock questions, call the relevant tool first. Availability is variant-level only.",
@@ -2070,7 +2893,7 @@ class CustomerCommunicationService:
             external_sender_phone=sender_phone.strip(),
             external_sender_email=sender_email.strip().lower(),
             status="open",
-            memory_json={},
+            memory_json={"thread_graph": {}, "customer_journey": {}, "sales_state": {}},
         )
         session.add(conversation)
         session.flush()
