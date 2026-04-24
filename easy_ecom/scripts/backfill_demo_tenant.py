@@ -689,6 +689,7 @@ def backfill_shoe_store_demo(tenant_email: str, *, apply: bool) -> dict[str, Any
             variants_by_sku=variants_by_sku,
             created_by_user_id=str(user.user_id),
         )
+        session.flush()
         for product_data in DEMO_PRODUCTS:
             for variant_data in product_data.variants:
                 if _set_stock_target(

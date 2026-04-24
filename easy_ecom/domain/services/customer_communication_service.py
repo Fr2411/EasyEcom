@@ -90,6 +90,7 @@ CATALOG_SEARCH_STOPWORDS = {
     "product",
     "purchase",
     "rate",
+    "size",
     "stock",
     "the",
     "there",
@@ -738,7 +739,7 @@ class CustomerCommunicationService:
         queries: list[str] = []
         if words:
             queries.append(" ".join(words[:6]))
-            queries.extend(words[:5])
+            queries.extend(words[:6])
         if not queries and normalized:
             queries.append(normalized)
         deduped: list[str] = []
@@ -763,9 +764,10 @@ class CustomerCommunicationService:
         tool_names: list[str] = []
         search_result: dict[str, Any] | None = None
         selected_query = ""
+        merged_items: dict[str, dict[str, Any]] = {}
         for query in self._catalog_search_queries(inbound_text):
             selected_query = query
-            search_result = self._execute_and_record_tool(
+            candidate_result = self._execute_and_record_tool(
                 session,
                 tool_name="search_catalog_variants",
                 arguments={"query": query},
@@ -774,7 +776,13 @@ class CustomerCommunicationService:
                 run=run,
             )
             tool_names.append("search_catalog_variants")
-            if search_result.get("items"):
+            for item in candidate_result.get("items") or []:
+                variant_id = str(item.get("variant_id") or "")
+                if variant_id and variant_id not in merged_items:
+                    merged_items[variant_id] = item
+            if candidate_result.get("items") and search_result is None:
+                search_result = candidate_result
+            if len(candidate_result.get("items") or []) == 1 and self._is_exact_catalog_match(query, candidate_result["items"][0]):
                 break
 
         if search_result is None:
@@ -787,6 +795,15 @@ class CustomerCommunicationService:
                 run=run,
             )
             tool_names.append("search_catalog_variants")
+            for item in search_result.get("items") or []:
+                variant_id = str(item.get("variant_id") or "")
+                if variant_id and variant_id not in merged_items:
+                    merged_items[variant_id] = item
+
+        if merged_items:
+            items = list(merged_items.values())
+            selected = self._select_best_catalog_item(inbound_text, items)
+            search_result = {**search_result, "items": [selected] if selected is not None else items[:8]}
 
         items = list(search_result.get("items") or [])
         price_intent, stock_intent, order_intent = self._catalog_intent_flags(inbound_text)
@@ -823,6 +840,51 @@ class CustomerCommunicationService:
             availability_result=availability_result,
             price_result=price_result,
         )
+
+    def _is_exact_catalog_match(self, query: str, item: dict[str, Any]) -> bool:
+        normalized_query = query.strip().lower()
+        if not normalized_query:
+            return False
+        sku = str(item.get("sku") or "").strip().lower()
+        return bool(sku and normalized_query == sku)
+
+    def _select_best_catalog_item(self, inbound_text: str, items: list[dict[str, Any]]) -> dict[str, Any] | None:
+        tokens = self._catalog_search_tokens(inbound_text)
+        if not tokens or len(items) <= 1:
+            return items[0] if len(items) == 1 else None
+        scored = sorted(
+            ((self._catalog_item_score(tokens, item), item) for item in items),
+            key=lambda pair: pair[0],
+            reverse=True,
+        )
+        top_score, top_item = scored[0]
+        second_score = scored[1][0] if len(scored) > 1 else 0
+        if top_score >= 3 and top_score >= second_score + 1:
+            return top_item
+        return None
+
+    def _catalog_search_tokens(self, text: str) -> list[str]:
+        normalized = re.sub(r"[^a-z0-9+.#/-]+", " ", text.lower()).strip()
+        return [
+            word.strip("./-")
+            for word in normalized.split()
+            if word.strip("./-") and word.strip("./-") not in CATALOG_SEARCH_STOPWORDS
+        ]
+
+    def _catalog_item_score(self, tokens: list[str], item: dict[str, Any]) -> int:
+        haystack = " ".join(
+            str(item.get(field) or "")
+            for field in ("label", "sku", "product_name", "brand", "category")
+        ).lower()
+        score = 0
+        for token in tokens:
+            if not token:
+                continue
+            if token == str(item.get("sku") or "").lower():
+                score += 6
+            elif token in haystack:
+                score += 1
+        return score
 
     def _catalog_grounding_message(self, grounding: CatalogGrounding) -> str:
         payload = {

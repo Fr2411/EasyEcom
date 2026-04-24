@@ -140,6 +140,30 @@ class CustomerCommunicationGuardrailTests(unittest.TestCase):
         self.assertIn("preferred color", reply)
         self.assertIn("budget", reply)
 
+    def test_catalog_item_scoring_resolves_shoe_size_color_brand(self) -> None:
+        selected = self.service._select_best_catalog_item(
+            "Do you have black AeroRun size 42?",
+            [
+                {
+                    "variant_id": "1",
+                    "label": "CloudStep Daily Sneaker / EU 42 / Black",
+                    "sku": "CSD-42-BLK",
+                    "product_name": "CloudStep Daily Sneaker",
+                    "brand": "CloudStep",
+                },
+                {
+                    "variant_id": "2",
+                    "label": "AeroRun Flex Knit Running Shoe / EU 42 / Black",
+                    "sku": "ARF-42-BLK",
+                    "product_name": "AeroRun Flex Knit Running Shoe",
+                    "brand": "AeroRun",
+                },
+            ],
+        )
+
+        self.assertIsNotNone(selected)
+        self.assertEqual(selected["sku"], "ARF-42-BLK")
+
 
 if __name__ == "__main__":
     unittest.main()
