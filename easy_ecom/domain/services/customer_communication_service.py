@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 import json
@@ -51,6 +52,61 @@ GROUNDING_TOOLS = {
     "get_variant_price",
     "get_product_recommendations",
 }
+
+CATALOG_PRICE_RE = re.compile(r"\b(price|cost|how much|rate|unit price)\b")
+CATALOG_STOCK_RE = re.compile(r"\b(available|availability|stock|in stock|do you have|do u have)\b")
+CATALOG_ORDER_RE = re.compile(r"\b(order|buy|purchase|reserve|book it|take it)\b")
+CATALOG_SEARCH_STOPWORDS = {
+    "a",
+    "about",
+    "and",
+    "any",
+    "are",
+    "available",
+    "availability",
+    "buy",
+    "can",
+    "cost",
+    "do",
+    "for",
+    "have",
+    "hello",
+    "hey",
+    "hi",
+    "how",
+    "in",
+    "is",
+    "it",
+    "item",
+    "much",
+    "need",
+    "of",
+    "order",
+    "please",
+    "price",
+    "product",
+    "purchase",
+    "rate",
+    "stock",
+    "the",
+    "there",
+    "this",
+    "to",
+    "u",
+    "want",
+    "what",
+    "whats",
+    "you",
+}
+
+
+@dataclass(frozen=True)
+class CatalogGrounding:
+    query: str
+    tool_names: tuple[str, ...]
+    search_result: dict[str, Any]
+    availability_result: dict[str, Any] | None = None
+    price_result: dict[str, Any] | None = None
 
 INDUSTRY_TEMPLATES: dict[str, dict[str, Any]] = {
     "general_retail": {
@@ -464,9 +520,30 @@ class CustomerCommunicationService:
     ) -> tuple[str, list[str], dict[str, int | None]]:
         system_prompt = self._system_prompt(client, playbook, channel)
         history = self._conversation_history(session, str(conversation.client_id), str(conversation.conversation_id))
-        messages = [{"role": "system", "content": system_prompt}, *history, {"role": "user", "content": inbound.message_text}]
         tool_names: list[str] = []
         usage: dict[str, int | None] = {"prompt_tokens": None, "completion_tokens": None, "total_tokens": None}
+        catalog_grounding = self._deterministic_catalog_grounding(
+            session,
+            channel=channel,
+            conversation=conversation,
+            inbound_text=inbound.message_text,
+            run=run,
+        )
+        if catalog_grounding is not None:
+            tool_names.extend(catalog_grounding.tool_names)
+            deterministic_reply = self._compose_catalog_grounded_reply(
+                client=client,
+                playbook=playbook,
+                inbound_text=inbound.message_text,
+                grounding=catalog_grounding,
+            )
+            if deterministic_reply:
+                return deterministic_reply, tool_names, usage
+
+        messages = [{"role": "system", "content": system_prompt}]
+        if catalog_grounding is not None:
+            messages.append({"role": "system", "content": self._catalog_grounding_message(catalog_grounding)})
+        messages.extend([*history, {"role": "user", "content": inbound.message_text}])
 
         for _ in range(4):
             payload = self._ai_client.create_chat_completion(messages=messages, tools=self._tool_schemas())
@@ -496,18 +573,14 @@ class CustomerCommunicationService:
                     conversation=conversation,
                     run=run,
                 )
-                session.add(
-                    AssistantToolCallModel(
-                        tool_call_id=new_uuid(),
-                        client_id=run.client_id,
-                        run_id=run.run_id,
-                        conversation_id=conversation.conversation_id,
-                        provider_tool_call_id=str(tool_call.get("id") or ""),
-                        tool_name=tool_name,
-                        tool_arguments_json=_json_ready(arguments),
-                        tool_result_json=_json_ready(result),
-                        validation_status="ok" if result.get("ok", True) else "error",
-                    )
+                self._record_tool_call(
+                    session,
+                    run=run,
+                    conversation=conversation,
+                    tool_name=tool_name,
+                    arguments=arguments,
+                    result=result,
+                    provider_tool_call_id=str(tool_call.get("id") or ""),
                 )
                 messages.append(
                     {
@@ -550,6 +623,242 @@ class CustomerCommunicationService:
             run.escalation_reason = reason
             return {"ok": True, "status": "escalated", "reason": reason}
         return {"ok": False, "error": f"Unknown tool: {tool_name}"}
+
+    def _record_tool_call(
+        self,
+        session: Session,
+        *,
+        run: AssistantRunModel,
+        conversation: CustomerConversationModel,
+        tool_name: str,
+        arguments: dict[str, Any],
+        result: dict[str, Any],
+        provider_tool_call_id: str = "",
+    ) -> None:
+        session.add(
+            AssistantToolCallModel(
+                tool_call_id=new_uuid(),
+                client_id=run.client_id,
+                run_id=run.run_id,
+                conversation_id=conversation.conversation_id,
+                provider_tool_call_id=provider_tool_call_id,
+                tool_name=tool_name,
+                tool_arguments_json=_json_ready(arguments),
+                tool_result_json=_json_ready(result),
+                validation_status="ok" if result.get("ok", True) else "error",
+            )
+        )
+
+    def _execute_and_record_tool(
+        self,
+        session: Session,
+        *,
+        tool_name: str,
+        arguments: dict[str, Any],
+        channel: CustomerChannelModel,
+        conversation: CustomerConversationModel,
+        run: AssistantRunModel,
+    ) -> dict[str, Any]:
+        result = self._execute_tool(
+            session,
+            tool_name=tool_name,
+            arguments=arguments,
+            channel=channel,
+            conversation=conversation,
+            run=run,
+        )
+        self._record_tool_call(
+            session,
+            run=run,
+            conversation=conversation,
+            tool_name=tool_name,
+            arguments=arguments,
+            result=result,
+        )
+        return result
+
+    def _catalog_intent_flags(self, text: str) -> tuple[bool, bool, bool]:
+        lower = text.lower()
+        return bool(CATALOG_PRICE_RE.search(lower)), bool(CATALOG_STOCK_RE.search(lower)), bool(CATALOG_ORDER_RE.search(lower))
+
+    def _needs_catalog_grounding(self, text: str) -> bool:
+        return any(self._catalog_intent_flags(text))
+
+    def _catalog_search_queries(self, text: str) -> list[str]:
+        normalized = re.sub(r"[^a-z0-9+.#/-]+", " ", text.lower()).strip()
+        words = [
+            word.strip("./-")
+            for word in normalized.split()
+            if word.strip("./-") and word.strip("./-") not in CATALOG_SEARCH_STOPWORDS
+        ]
+        words = [word for word in words if len(word) > 1 or any(char.isdigit() for char in word)]
+        queries: list[str] = []
+        if words:
+            queries.append(" ".join(words[:6]))
+            queries.extend(words[:5])
+        if not queries and normalized:
+            queries.append(normalized)
+        deduped: list[str] = []
+        for query in queries:
+            cleaned = " ".join(query.split())
+            if cleaned and cleaned not in deduped:
+                deduped.append(cleaned)
+        return deduped[:4]
+
+    def _deterministic_catalog_grounding(
+        self,
+        session: Session,
+        *,
+        channel: CustomerChannelModel,
+        conversation: CustomerConversationModel,
+        inbound_text: str,
+        run: AssistantRunModel,
+    ) -> CatalogGrounding | None:
+        if not self._needs_catalog_grounding(inbound_text):
+            return None
+
+        tool_names: list[str] = []
+        search_result: dict[str, Any] | None = None
+        selected_query = ""
+        for query in self._catalog_search_queries(inbound_text):
+            selected_query = query
+            search_result = self._execute_and_record_tool(
+                session,
+                tool_name="search_catalog_variants",
+                arguments={"query": query},
+                channel=channel,
+                conversation=conversation,
+                run=run,
+            )
+            tool_names.append("search_catalog_variants")
+            if search_result.get("items"):
+                break
+
+        if search_result is None:
+            search_result = self._execute_and_record_tool(
+                session,
+                tool_name="search_catalog_variants",
+                arguments={"query": ""},
+                channel=channel,
+                conversation=conversation,
+                run=run,
+            )
+            tool_names.append("search_catalog_variants")
+
+        items = list(search_result.get("items") or [])
+        price_intent, stock_intent, order_intent = self._catalog_intent_flags(inbound_text)
+        availability_result = None
+        price_result = None
+        if len(items) == 1:
+            variant_id = str(items[0].get("variant_id") or "").strip()
+            if variant_id and (stock_intent or order_intent):
+                availability_result = self._execute_and_record_tool(
+                    session,
+                    tool_name="get_variant_availability",
+                    arguments={"variant_id": variant_id, "location_id": items[0].get("location_id") or ""},
+                    channel=channel,
+                    conversation=conversation,
+                    run=run,
+                )
+                tool_names.append("get_variant_availability")
+            if variant_id and price_intent:
+                price_result = self._execute_and_record_tool(
+                    session,
+                    tool_name="get_variant_price",
+                    arguments={"variant_id": variant_id},
+                    channel=channel,
+                    conversation=conversation,
+                    run=run,
+                )
+                tool_names.append("get_variant_price")
+
+        session.flush()
+        return CatalogGrounding(
+            query=selected_query,
+            tool_names=tuple(tool_names),
+            search_result=search_result,
+            availability_result=availability_result,
+            price_result=price_result,
+        )
+
+    def _catalog_grounding_message(self, grounding: CatalogGrounding) -> str:
+        return (
+            "Fresh backend grounding results for this customer message. "
+            "Use only these catalog, price, and availability facts if you answer product questions: "
+            f"{json.dumps(_json_ready({
+                'query': grounding.query,
+                'search': grounding.search_result,
+                'availability': grounding.availability_result,
+                'price': grounding.price_result,
+            }))}"
+        )
+
+    def _compose_catalog_grounded_reply(
+        self,
+        *,
+        client: ClientModel,
+        playbook: AssistantPlaybookModel,
+        inbound_text: str,
+        grounding: CatalogGrounding,
+    ) -> str:
+        price_intent, stock_intent, order_intent = self._catalog_intent_flags(inbound_text)
+        if not (price_intent or stock_intent or order_intent):
+            return ""
+
+        items = list(grounding.search_result.get("items") or [])
+        health_prefix = ""
+        if playbook.business_type == "pet_food" and self._has_risk_terms(inbound_text.lower()):
+            health_prefix = "Because you mentioned a health concern, please check with a veterinarian before changing food. "
+
+        if not items:
+            query = grounding.query or "that item"
+            return (
+                f"{health_prefix}I checked the catalog for {query}, but I could not find a matching active item yet. "
+                "Could you send the exact product name, size, flavor, or SKU so I can check again?"
+            )
+
+        if len(items) > 1:
+            choices = ", ".join(str(item.get("label") or item.get("product_name") or item.get("sku")) for item in items[:3])
+            return f"{health_prefix}I found a few matches: {choices}. Which one should I check for you?"
+
+        variant = (grounding.availability_result or {}).get("variant") or items[0]
+        price_variant = (grounding.price_result or {}).get("variant") or variant
+        label = str(variant.get("label") or variant.get("product_name") or "that item")
+        sku = str(variant.get("sku") or "").strip()
+        sku_text = f" (SKU {sku})" if sku else ""
+
+        facts: list[str] = []
+        if stock_intent or order_intent:
+            available = as_decimal(variant.get("available_to_sell") or ZERO)
+            qty_text = self._format_quantity(available)
+            if available > ZERO:
+                facts.append(f"we have {qty_text} available")
+            else:
+                facts.append("it is not available right now")
+        if price_intent:
+            unit_price = price_variant.get("unit_price")
+            if unit_price is not None:
+                facts.append(f"the price is {self._format_money(unit_price, client)}")
+            else:
+                facts.append("I do not see a saved selling price for it yet")
+
+        fact_text = ", and ".join(facts) if facts else "I found it in the catalog"
+        next_step = "Would you like me to prepare a draft order for it?" if order_intent or stock_intent else "Would you like me to check anything else about it?"
+        return f"{health_prefix}I checked {label}{sku_text}: {fact_text}. {next_step}"
+
+    def _format_money(self, value: Any, client: ClientModel) -> str:
+        amount = as_decimal(value).quantize(MONEY_QUANTUM)
+        symbol = (client.currency_symbol or "").strip()
+        code = (client.currency_code or "").strip().upper()
+        if symbol:
+            return f"{symbol}{amount}"
+        return f"{amount} {code}".strip()
+
+    def _format_quantity(self, value: Decimal) -> str:
+        normalized = value.normalize()
+        if normalized == normalized.to_integral():
+            return str(int(normalized))
+        return str(value.quantize(Decimal("0.001")).normalize())
 
     def _tool_search_catalog(
         self,

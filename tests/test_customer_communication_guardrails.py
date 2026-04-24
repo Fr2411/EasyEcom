@@ -58,6 +58,55 @@ class CustomerCommunicationGuardrailTests(unittest.TestCase):
         self.assertEqual(status, "ok")
         self.assertEqual(reason, "")
 
+    def test_catalog_search_query_removes_service_words(self) -> None:
+        queries = self.service._catalog_search_queries("Hi, do you have test2 in stock and what is the price?")
+
+        self.assertGreaterEqual(len(queries), 1)
+        self.assertEqual(queries[0], "test2")
+
+    def test_grounded_price_stock_reply_uses_tool_facts(self) -> None:
+        reply = self.service._compose_catalog_grounded_reply(
+            client=type("Client", (), {"currency_symbol": "$", "currency_code": "USD"})(),
+            playbook=self._playbook("pet_food"),
+            inbound_text="Do you have test2 in stock and what is the price?",
+            grounding=type(
+                "Grounding",
+                (),
+                {
+                    "query": "test2",
+                    "search_result": {
+                        "items": [
+                            {
+                                "label": "test2",
+                                "sku": "TEST2",
+                                "available_to_sell": "9.000",
+                                "unit_price": "120.00",
+                            }
+                        ]
+                    },
+                    "availability_result": {
+                        "variant": {
+                            "label": "test2",
+                            "sku": "TEST2",
+                            "available_to_sell": "9.000",
+                            "unit_price": "120.00",
+                        }
+                    },
+                    "price_result": {
+                        "variant": {
+                            "label": "test2",
+                            "sku": "TEST2",
+                            "unit_price": "120.00",
+                        }
+                    },
+                },
+            )(),
+        )
+
+        self.assertIn("I checked test2", reply)
+        self.assertIn("9 available", reply)
+        self.assertIn("$120.00", reply)
+
 
 if __name__ == "__main__":
     unittest.main()
