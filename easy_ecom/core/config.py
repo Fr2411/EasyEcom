@@ -129,13 +129,10 @@ class Settings:
         )
     )
     nvidia_primary_timeout_seconds: int = field(
-        default_factory=lambda: _to_int(os.getenv("NVIDIA_PRIMARY_TIMEOUT_SECONDS"), 18)
+        default_factory=lambda: _to_int(os.getenv("NVIDIA_PRIMARY_TIMEOUT_SECONDS"), 8)
     )
     nvidia_fallback_timeout_seconds: int = field(
-        default_factory=lambda: _to_int(
-            os.getenv("NVIDIA_FALLBACK_TIMEOUT_SECONDS"),
-            _to_int(os.getenv("AI_TIMEOUT_SECONDS"), 45),
-        )
+        default_factory=lambda: _to_int(os.getenv("NVIDIA_FALLBACK_TIMEOUT_SECONDS"), 25)
     )
     nvidia_base_url: str = field(
         default_factory=lambda: (os.getenv("NVIDIA_BASE_URL", "").strip() or os.getenv("ASSISTANT_BASE_URL", "").strip() or "https://integrate.api.nvidia.com/v1").strip()

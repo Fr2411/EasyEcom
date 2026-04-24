@@ -13,7 +13,7 @@ It uses NVIDIA NIM by default:
 
 Do not commit provider keys. Rotate any key that was shared outside the secret store.
 
-Gemma remains the primary model. The backend uses a shorter primary timeout for Gemma and retries transient timeout/network/provider failures on the configured fallback model before escalating the conversation. Conversation style should come from the tenant playbook, memory graph, and model behavior; deterministic backend replies are reserved for safety, policy, grounded catalog facts, and draft-order guardrails.
+Gemma remains the primary model. The backend uses a short primary timeout for Gemma and a bounded fallback timeout for transient timeout/network/provider failures, keeping the total provider wait below the public gateway limit before escalating the conversation. Conversation style should come from the tenant playbook, memory graph, and model behavior; deterministic backend replies are reserved for safety, policy, grounded catalog facts, and draft-order guardrails.
 
 ## Safety Model
 

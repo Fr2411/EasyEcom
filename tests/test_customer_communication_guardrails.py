@@ -181,6 +181,25 @@ class CustomerCommunicationGuardrailTests(unittest.TestCase):
         self.assertTrue("color" in reply or "preferred color" in reply)
         self.assertIn("budget", reply)
 
+    def test_banglish_budget_shoe_request_updates_language_and_buyer_type(self) -> None:
+        conversation = CustomerConversationModel(memory_json={"buyer_archetype": "explorer"})
+        playbook = self._playbook("shoe_store")
+        inbound = "Ami je kono formal shoe khujtesi. but within budget"
+
+        self.service._remember_inbound_context(conversation, playbook, inbound)
+        snapshot = self.service._conversation_strategy_snapshot(conversation, inbound)
+        reply = self.service._deterministic_playbook_reply(
+            client=type("Client", (), {"business_name": "Shoe Shop"})(),
+            playbook=playbook,
+            inbound_text=inbound,
+            memory=conversation.memory_json or {},
+        )
+
+        self.assertEqual((conversation.memory_json or {})["language_hint"], "bengali")
+        self.assertEqual(snapshot["customer_signals"]["buyer_archetype"], "budget_buyer")
+        self.assertIn("shoe size", reply)
+        self.assertIn("budget", reply)
+
     def test_each_vertical_recommendation_asks_domain_questions(self) -> None:
         cases = {
             "fashion": ("Can you suggest something for an office party?", ("size", "occasion", "budget")),
@@ -669,6 +688,12 @@ class CustomerCommunicationGuardrailTests(unittest.TestCase):
 
     def test_lookup_language_can_trigger_catalog_grounding(self) -> None:
         self.assertTrue(self.service._needs_catalog_grounding("Actually check the white MetroCourt in EU 41 too."))
+
+    def test_browse_language_triggers_catalog_grounding_without_price_words(self) -> None:
+        queries = self.service._catalog_search_queries("What is formal shoe collection?")
+
+        self.assertTrue(self.service._needs_catalog_grounding("What is formal shoe collection?"))
+        self.assertEqual(queries[0], "formal shoe")
 
 
 if __name__ == "__main__":

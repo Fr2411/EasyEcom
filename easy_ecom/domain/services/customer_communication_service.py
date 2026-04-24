@@ -59,6 +59,9 @@ CATALOG_PRICE_RE = re.compile(r"\b(price|cost|how much|rate|unit price)\b")
 CATALOG_STOCK_RE = re.compile(r"\b(available|availability|stock|in stock|do you have|do u have)\b")
 CATALOG_ORDER_RE = re.compile(r"\b(order|buy|purchase|reserve|book it|take it)\b")
 CATALOG_LOOKUP_RE = re.compile(r"\b(check|check if|look up|what about|compare|show me)\b")
+CATALOG_BROWSE_RE = re.compile(
+    r"\b(collections?|ranges?|options?|models?|styles?|variants?|formal shoes?|casual shoes?|running shoes?|sneakers?|loafers?|sandals?|boots?)\b"
+)
 CATALOG_RECOMMENDATION_RE = re.compile(
     r"\b(recommend|suggest|best|which|what should i buy|looking for|need help choosing|need food|need shoes?|need sneakers?)\b"
 )
@@ -73,6 +76,8 @@ CATALOG_SEARCH_STOPWORDS = {
     "buy",
     "can",
     "choosing",
+    "collection",
+    "collections",
     "cost",
     "do",
     "for",
@@ -89,10 +94,14 @@ CATALOG_SEARCH_STOPWORDS = {
     "need",
     "of",
     "order",
+    "option",
+    "options",
     "please",
     "price",
     "product",
     "purchase",
+    "range",
+    "ranges",
     "rate",
     "recommend",
     "size",
@@ -1431,6 +1440,13 @@ class CustomerCommunicationService:
             return "bengali"
         if re.search(r"[\u0900-\u097F]", text):
             return "hindi"
+        lower = text.lower()
+        banglish_hits = re.findall(
+            r"\b(ami|amra|apni|tumi|kono|akta|ekta|je|khujchi|khujtesi|khujte|chai|lagbe|moddhe|bhalo|juta|budgeter)\b",
+            lower,
+        )
+        if len(set(banglish_hits)) >= 2:
+            return "bengali"
         latin_letters = re.findall(r"[A-Za-z]", text)
         if latin_letters:
             return "english"
@@ -1459,9 +1475,10 @@ class CustomerCommunicationService:
     def _has_shopping_discovery_intent(self, lower_text: str) -> bool:
         return bool(
             re.search(
-                r"\b(looking for|need something|need help|help me choose|recommend|suggest|which|what should i buy|best|suitable)\b",
+                r"\b(looking for|need something|need help|help me choose|recommend|suggest|which|what should i buy|best|suitable|khujchi|khujtesi|khujte|chai|lagbe)\b",
                 lower_text,
             )
+            or ("formal" in lower_text and "shoe" in lower_text and "budget" in lower_text)
         )
 
     def _has_enough_recommendation_preferences(self, playbook: AssistantPlaybookModel, preferences: dict[str, Any]) -> bool:
@@ -1544,15 +1561,12 @@ class CustomerCommunicationService:
 
     def _buyer_archetype(self, conversation: CustomerConversationModel, inbound_text: str) -> str:
         memory = self._memory(conversation)
-        stored = str(memory.get("buyer_archetype") or "").strip()
-        if stored:
-            return stored
         lower = inbound_text.lower()
         preferences = dict(memory.get("preferences") or {})
         lead_context = dict(memory.get("lead_context") or {})
         if conversation.customer_id or dict(memory.get("thread_graph") or {}).get("restored_from_conversation_id"):
             return "repeat_buyer"
-        if re.search(r"\b(cheap|cheaper|budget|discount|best price|lower|offer)\b", lower) or preferences.get("budget"):
+        if re.search(r"\b(cheap|cheaper|budget|within budget|budget er|budgeter|moddhe|discount|best price|lower|offer)\b", lower) or preferences.get("budget"):
             return "budget_buyer"
         if re.search(r"\b(urgent|quick|fast|asap|today|immediately|right now)\b", lower):
             return "convenience_buyer"
@@ -1560,6 +1574,9 @@ class CustomerCommunicationService:
             return "campaign_buyer"
         if re.search(r"\b(best|premium|top|quality|comfortable|long lasting|leather)\b", lower):
             return "premium_buyer"
+        stored = str(memory.get("buyer_archetype") or "").strip()
+        if stored:
+            return stored
         return "explorer"
 
     def _persuasion_style(self, archetype: str) -> dict[str, str]:
@@ -2049,7 +2066,11 @@ class CustomerCommunicationService:
         return bool(CATALOG_PRICE_RE.search(lower)), bool(CATALOG_STOCK_RE.search(lower)), bool(CATALOG_ORDER_RE.search(lower))
 
     def _needs_catalog_grounding(self, text: str) -> bool:
-        return any(self._catalog_intent_flags(text)) or bool(CATALOG_LOOKUP_RE.search(text.lower()) and self._catalog_search_queries(text))
+        lower = text.lower()
+        return any(self._catalog_intent_flags(text)) or bool(
+            (CATALOG_LOOKUP_RE.search(lower) or CATALOG_BROWSE_RE.search(lower))
+            and self._catalog_search_queries(text)
+        )
 
     def _catalog_search_queries(self, text: str) -> list[str]:
         normalized = re.sub(r"[^a-z0-9+.#/-]+", " ", text.lower()).strip()
@@ -2085,7 +2106,8 @@ class CustomerCommunicationService:
             return None
 
         price_intent, stock_intent, order_intent = self._catalog_intent_flags(inbound_text)
-        lookup_intent = bool(CATALOG_LOOKUP_RE.search(inbound_text.lower()))
+        lower_inbound = inbound_text.lower()
+        lookup_intent = bool(CATALOG_LOOKUP_RE.search(lower_inbound) or CATALOG_BROWSE_RE.search(lower_inbound))
         tool_names: list[str] = []
         remembered_variant = self._remembered_variant_for_message(conversation, inbound_text)
         if remembered_variant is not None:
@@ -2272,7 +2294,8 @@ class CustomerCommunicationService:
         grounding: CatalogGrounding,
     ) -> str:
         price_intent, stock_intent, order_intent = self._catalog_intent_flags(inbound_text)
-        lookup_intent = bool(CATALOG_LOOKUP_RE.search(inbound_text.lower()))
+        lower_inbound = inbound_text.lower()
+        lookup_intent = bool(CATALOG_LOOKUP_RE.search(lower_inbound) or CATALOG_BROWSE_RE.search(lower_inbound))
         if not (price_intent or stock_intent or order_intent or lookup_intent):
             return ""
 
