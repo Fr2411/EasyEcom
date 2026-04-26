@@ -228,6 +228,7 @@ class AIChatService(CommerceBaseService):
         origin: str,
         client_ip: str,
         tool_base_url: str,
+        trusted_origins: set[str] | None = None,
     ) -> dict[str, Any]:
         inbound_payload = self._record_public_inbound(
             widget_key=widget_key,
@@ -237,6 +238,7 @@ class AIChatService(CommerceBaseService):
             metadata=metadata,
             origin=origin,
             client_ip=client_ip,
+            trusted_origins=trusted_origins,
         )
 
         if inbound_payload["handoff_required"]:
@@ -676,6 +678,7 @@ class AIChatService(CommerceBaseService):
             "default_location_id": str(profile.default_location_id) if profile.default_location_id else None,
             "opening_message": profile.opening_message or DEFAULT_OPENING_MESSAGE,
             "handoff_message": profile.handoff_message or DEFAULT_HANDOFF_MESSAGE,
+            "chat_link": self._chat_link(api_base_url=api_base_url, widget_key=channel.widget_key),
             "widget_script": self._widget_script(api_base_url=api_base_url, widget_key=channel.widget_key),
         }
 
@@ -689,6 +692,7 @@ class AIChatService(CommerceBaseService):
         metadata: dict[str, Any] | None,
         origin: str,
         client_ip: str,
+        trusted_origins: set[str] | None,
     ) -> dict[str, Any]:
         with self._session_factory() as session:
             row = session.execute(
@@ -704,7 +708,7 @@ class AIChatService(CommerceBaseService):
             channel, profile = row
             if channel.status != "active" or not profile.is_enabled:
                 raise ApiException(status_code=403, code="AI_WIDGET_DISABLED", message="Chat widget is not enabled")
-            self._validate_public_origin(origin, channel.allowed_origins_json or [])
+            self._validate_public_origin(origin, channel.allowed_origins_json or [], trusted_origins=trusted_origins)
 
             conversation = self._get_or_create_conversation(
                 session,
@@ -982,11 +986,20 @@ class AIChatService(CommerceBaseService):
             raise ApiException(status_code=404, code="LOCATION_NOT_FOUND", message="Default AI location was not found")
         return str(exists)
 
-    def _validate_public_origin(self, origin: str, allowed_origins: list[str]) -> None:
+    def _validate_public_origin(
+        self,
+        origin: str,
+        allowed_origins: list[str],
+        *,
+        trusted_origins: set[str] | None = None,
+    ) -> None:
+        normalized_origin = _normalize_origin(origin)
+        normalized_trusted = {_normalize_origin(item) for item in trusted_origins or set() if str(item).strip()}
+        if normalized_origin and normalized_origin in normalized_trusted:
+            return
         normalized_allowed = {_normalize_origin(item) for item in allowed_origins if str(item).strip()}
         if "*" in normalized_allowed:
             return
-        normalized_origin = _normalize_origin(origin)
         if not normalized_origin and settings.app_env != "production":
             return
         if not normalized_allowed:
@@ -1053,6 +1066,9 @@ class AIChatService(CommerceBaseService):
             ).scalar_one_or_none()
             if exists is None:
                 return token
+
+    def _chat_link(self, *, api_base_url: str, widget_key: str) -> str:
+        return f"{api_base_url.rstrip('/')}/ai/chat/public/{widget_key}"
 
     def _widget_script(self, *, api_base_url: str, widget_key: str) -> str:
         base = api_base_url.rstrip("/")

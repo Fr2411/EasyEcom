@@ -38,6 +38,7 @@ export function AIAssistantWorkspace() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   const loadWorkspace = useCallback(async () => {
     setLoading(true);
@@ -90,6 +91,19 @@ export function AIAssistantWorkspace() {
     }
   };
 
+  const copyChatLink = async () => {
+    if (!settings?.chat_link || typeof navigator === 'undefined' || !navigator.clipboard) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(settings.chat_link);
+      setCopiedLink(true);
+      window.setTimeout(() => setCopiedLink(false), 1800);
+    } catch {
+      setError('Unable to copy the customer chat link from this browser.');
+    }
+  };
+
   return (
     <div className="operations-page ai-assistant-module">
       <div className="operations-toolbar">
@@ -127,7 +141,7 @@ export function AIAssistantWorkspace() {
         </article>
       </div>
 
-      <WorkspacePanel title="Website chat link" description="Tenant website chat channel details.">
+      <WorkspacePanel title="Website chat" description="Tenant website chat channel details.">
         {settings ? (
           <div className="operations-detail-stack">
             <dl className="operations-definition-grid">
@@ -148,7 +162,23 @@ export function AIAssistantWorkspace() {
                 <dd className="ai-assistant-code-text">{settings.widget_key}</dd>
               </div>
               <div>
-                <dt>Script URL</dt>
+                <dt>Customer chat link</dt>
+                <dd className="ai-assistant-code-text">{settings.chat_link}</dd>
+              </div>
+            </dl>
+            <div className="ai-assistant-link-row">
+              <input aria-label="Customer chat link" readOnly value={settings.chat_link} />
+              <a className="button-link secondary" href={settings.chat_link} target="_blank" rel="noreferrer">
+                Open link
+              </a>
+              <button type="button" className="secondary" onClick={copyChatLink} disabled={!settings.chat_link}>
+                <Copy size={16} aria-hidden="true" />
+                {copiedLink ? 'Copied' : 'Copy link'}
+              </button>
+            </div>
+            <dl className="operations-definition-grid compact">
+              <div>
+                <dt>Widget script URL</dt>
                 <dd className="ai-assistant-code-text">{scriptUrl || 'Not available'}</dd>
               </div>
             </dl>

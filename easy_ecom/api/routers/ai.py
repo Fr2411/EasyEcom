@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
+
 from fastapi import APIRouter, Depends, Header, Query, Request, Response
+from fastapi.responses import HTMLResponse
 
 from easy_ecom.api.dependencies import ServiceContainer, get_authenticated_user, get_container
 from easy_ecom.api.schemas.ai import (
@@ -87,6 +90,17 @@ def website_chat_widget() -> Response:
     return Response(content=WIDGET_JS, media_type="application/javascript")
 
 
+@router.get("/chat/public/{widget_key}", include_in_schema=False)
+def public_chat_page(widget_key: str, request: Request) -> HTMLResponse:
+    api_base_url = _api_base_url(request)
+    content = (
+        PUBLIC_CHAT_PAGE_HTML
+        .replace("__EASY_ECOM_API_BASE_URL__", json.dumps(api_base_url))
+        .replace("__EASY_ECOM_WIDGET_KEY__", json.dumps(widget_key))
+    )
+    return HTMLResponse(content=content)
+
+
 @router.post("/chat/public/{widget_key}/messages", response_model=PublicChatMessageResponse)
 def public_chat_message(
     widget_key: str,
@@ -104,6 +118,7 @@ def public_chat_message(
         origin=request.headers.get("origin", ""),
         client_ip=client_ip,
         tool_base_url=f"{_api_base_url(request)}/ai/tools",
+        trusted_origins={_api_base_url(request)},
     )
     return PublicChatMessageResponse.model_validate(result)
 
@@ -351,4 +366,255 @@ WIDGET_JS = r"""
   root.appendChild(button);
   document.body.appendChild(root);
 })();
+"""
+
+
+PUBLIC_CHAT_PAGE_HTML = r"""
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Store chat</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f3f7f8;
+      --panel: #ffffff;
+      --text: #112327;
+      --muted: #5d7177;
+      --border: #dbe5e7;
+      --primary: #0f766e;
+      --primary-strong: #0a5d57;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main {
+      width: min(760px, calc(100vw - 28px));
+      min-height: 100vh;
+      margin: 0 auto;
+      display: grid;
+      align-content: center;
+      padding: 24px 0;
+    }
+    .chat-shell {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      background: var(--panel);
+      box-shadow: 0 20px 60px rgba(15, 35, 42, 0.12);
+    }
+    header {
+      padding: 16px 18px;
+      background: #112327;
+      color: #ffffff;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 1.05rem;
+    }
+    header p {
+      margin: 4px 0 0;
+      color: rgba(255, 255, 255, 0.72);
+      font-size: 0.88rem;
+    }
+    .customer-fields {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      padding: 14px;
+      border-bottom: 1px solid var(--border);
+      background: #f8fbfb;
+    }
+    label {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+    input {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      padding: 10px 11px;
+      color: var(--text);
+      font: inherit;
+    }
+    .messages {
+      height: min(54vh, 460px);
+      min-height: 320px;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 14px;
+      background: #f8fafc;
+    }
+    .message {
+      max-width: 82%;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: #ffffff;
+      line-height: 1.45;
+      white-space: pre-wrap;
+    }
+    .message.customer {
+      align-self: flex-end;
+      background: #e8f7f3;
+      border-color: #c4e8df;
+    }
+    .message.system {
+      align-self: center;
+      max-width: 100%;
+      color: var(--muted);
+      background: transparent;
+      border: 0;
+      padding: 4px 0;
+      font-size: 0.86rem;
+    }
+    form {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      padding: 14px;
+      border-top: 1px solid var(--border);
+      background: #ffffff;
+    }
+    form input {
+      min-height: 44px;
+    }
+    button {
+      min-height: 44px;
+      border: 0;
+      border-radius: 9px;
+      padding: 0 18px;
+      background: var(--primary);
+      color: #ffffff;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    button:disabled {
+      opacity: 0.62;
+      cursor: not-allowed;
+    }
+    button:hover:not(:disabled) {
+      background: var(--primary-strong);
+    }
+    @media (max-width: 640px) {
+      main {
+        width: 100vw;
+        min-height: 100vh;
+        padding: 0;
+      }
+      .chat-shell {
+        min-height: 100vh;
+        border: 0;
+        border-radius: 0;
+      }
+      .customer-fields,
+      form {
+        grid-template-columns: 1fr;
+      }
+      .messages {
+        height: 50vh;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="chat-shell" aria-label="Store chat">
+      <header>
+        <h1>Chat with us</h1>
+        <p>Send a message and the store assistant will reply here.</p>
+      </header>
+      <div class="customer-fields">
+        <label>Name <input id="customer-name" autocomplete="name" /></label>
+        <label>Phone <input id="customer-phone" autocomplete="tel" inputmode="tel" /></label>
+        <label>Email <input id="customer-email" autocomplete="email" inputmode="email" /></label>
+        <label>Delivery address <input id="customer-address" autocomplete="street-address" /></label>
+      </div>
+      <div id="messages" class="messages" aria-live="polite"></div>
+      <form id="chat-form">
+        <input id="message-input" autocomplete="off" placeholder="Type your message" />
+        <button id="send-button" type="submit">Send</button>
+      </form>
+    </section>
+  </main>
+  <script>
+    const apiBaseUrl = __EASY_ECOM_API_BASE_URL__;
+    const widgetKey = __EASY_ECOM_WIDGET_KEY__;
+    const storageKey = "easy_ecom_chat_session_" + widgetKey;
+    let sessionId = localStorage.getItem(storageKey);
+    if (!sessionId) {
+      sessionId = "web_" + Math.random().toString(36).slice(2) + Date.now().toString(36);
+      localStorage.setItem(storageKey, sessionId);
+    }
+
+    const messages = document.getElementById("messages");
+    const form = document.getElementById("chat-form");
+    const input = document.getElementById("message-input");
+    const sendButton = document.getElementById("send-button");
+    const customerName = document.getElementById("customer-name");
+    const customerPhone = document.getElementById("customer-phone");
+    const customerEmail = document.getElementById("customer-email");
+    const customerAddress = document.getElementById("customer-address");
+
+    function addMessage(text, kind) {
+      const item = document.createElement("div");
+      item.className = "message " + kind;
+      item.textContent = text;
+      messages.appendChild(item);
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    addMessage("Hi, how can we help you today?", "assistant");
+
+    form.addEventListener("submit", async function (event) {
+      event.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = "";
+      addMessage(text, "customer");
+      sendButton.disabled = true;
+      try {
+        const response = await fetch(apiBaseUrl + "/ai/chat/public/" + encodeURIComponent(widgetKey) + "/messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            browser_session_id: sessionId,
+            message: text,
+            customer: {
+              name: customerName.value.trim(),
+              phone: customerPhone.value.trim(),
+              email: customerEmail.value.trim(),
+              address: customerAddress.value.trim()
+            },
+            metadata: { source: "standalone_chat_link" }
+          })
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload && payload.error && payload.error.message ? payload.error.message : "Chat request failed");
+        }
+        addMessage(payload.reply_text || "The store assistant could not reply right now.", "assistant");
+      } catch (error) {
+        addMessage(error instanceof Error ? error.message : "Unable to send message right now.", "system");
+      } finally {
+        sendButton.disabled = false;
+        input.focus();
+      }
+    });
+  </script>
+</body>
+</html>
 """

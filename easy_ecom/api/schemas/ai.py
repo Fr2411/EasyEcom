@@ -37,6 +37,7 @@ class AIAgentSettingsResponse(BaseModel):
     default_location_id: str | None
     opening_message: str
     handoff_message: str
+    chat_link: str
     widget_script: str
 
 

@@ -8230,6 +8230,8 @@ html[data-theme='dark'] .settings-section-status.is-empty {
 
 .ai-assistant-module .operations-toolbar-actions button,
 .ai-assistant-module .operations-toolbar-actions a,
+.ai-assistant-link-row a,
+.ai-assistant-link-row button,
 .ai-assistant-script-row button {
   display: inline-flex;
   align-items: center;
@@ -8242,6 +8244,20 @@ html[data-theme='dark'] .settings-section-status.is-empty {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
   font-size: 0.83rem;
   line-height: 1.45;
+}
+
+.ai-assistant-link-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.ai-assistant-link-row input {
+  width: 100%;
+  min-height: 2.75rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-size: 0.82rem;
 }
 
 .ai-assistant-script-row {
@@ -8300,6 +8316,10 @@ html[data-theme='dark'] .settings-section-status.is-empty {
   }
 
   .ai-assistant-script-row {
+    grid-template-columns: 1fr;
+  }
+
+  .ai-assistant-link-row {
     grid-template-columns: 1fr;
   }
 }

@@ -27,6 +27,7 @@ export type AIAgentSettings = {
   default_location_id: string | null;
   opening_message: string;
   handoff_message: string;
+  chat_link: string;
   widget_script: string;
 };
 
