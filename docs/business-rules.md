@@ -38,3 +38,5 @@
 - Availability responses must resolve from variant-level stock truth.
 - AI must not promise unavailable stock, invalid pricing, or unauthorized catalog data.
 - Human-review controls remain mandatory for risky outbound communication flows.
+- Fully automatic customer replies are allowed only when backend guardrails pass; refunds, returns, payment disputes, ambiguous variants, stock conflicts, and pricing violations must hand off.
+- n8n may orchestrate the conversation, but all catalog, stock, customer, and order actions must go through EasyEcom tenant-scoped AI tool APIs.

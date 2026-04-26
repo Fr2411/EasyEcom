@@ -8,6 +8,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
+    ForeignKeyConstraint,
     ForeignKey,
     Index,
     Integer,
@@ -93,6 +94,165 @@ class ClientSettingsModel(TenantMixin, TimestampMixin, Base):
     return_prefix: Mapped[str] = mapped_column(String(16), nullable=False, default="RT")
 
 
+class AIAgentProfileModel(TenantMixin, TimestampMixin, Base):
+    __tablename__ = "ai_agent_profiles"
+    __table_args__ = (
+        UniqueConstraint("client_id", name="uq_ai_agent_profiles_client"),
+        UniqueConstraint("client_id", "ai_agent_profile_id", name="uq_ai_agent_profiles_client_profile_id"),
+        ForeignKeyConstraint(
+            ["client_id", "default_location_id"],
+            ["locations.client_id", "locations.location_id"],
+            name="fk_ai_agent_profiles_default_location_tenant",
+        ),
+    )
+
+    ai_agent_profile_id: Mapped[str] = mapped_column(GUID(), primary_key=True)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    display_name: Mapped[str] = mapped_column(String(255), nullable=False, default="Website sales assistant")
+    n8n_webhook_url: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    persona_prompt: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    store_policy: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    faq_json: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON)
+    escalation_rules_json: Mapped[list[str] | None] = mapped_column(JSON)
+    allowed_actions_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    default_location_id: Mapped[str | None] = mapped_column(GUID())
+    opening_message: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    handoff_message: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+
+class AIChatChannelModel(TenantMixin, TimestampMixin, Base):
+    __tablename__ = "ai_chat_channels"
+    __table_args__ = (
+        UniqueConstraint("widget_key", name="uq_ai_chat_channels_widget_key"),
+        UniqueConstraint("client_id", "channel_type", name="uq_ai_chat_channels_client_type"),
+        UniqueConstraint("client_id", "ai_chat_channel_id", name="uq_ai_chat_channels_client_channel_id"),
+        ForeignKeyConstraint(
+            ["client_id", "agent_profile_id"],
+            ["ai_agent_profiles.client_id", "ai_agent_profiles.ai_agent_profile_id"],
+            name="fk_ai_chat_channels_profile_tenant",
+        ),
+        ForeignKeyConstraint(
+            ["client_id", "default_location_id"],
+            ["locations.client_id", "locations.location_id"],
+            name="fk_ai_chat_channels_default_location_tenant",
+        ),
+        ForeignKeyConstraint(
+            ["client_id", "created_by_user_id"],
+            ["users.client_id", "users.user_id"],
+            name="fk_ai_chat_channels_created_by_tenant",
+        ),
+        Index("ix_ai_chat_channels_client_status", "client_id", "status"),
+    )
+
+    ai_chat_channel_id: Mapped[str] = mapped_column(GUID(), primary_key=True)
+    agent_profile_id: Mapped[str] = mapped_column(GUID(), nullable=False)
+    channel_type: Mapped[str] = mapped_column(String(32), nullable=False, default="website")
+    display_name: Mapped[str] = mapped_column(String(255), nullable=False, default="Website chat")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="active", index=True)
+    widget_key: Mapped[str] = mapped_column(String(96), nullable=False, index=True)
+    allowed_origins_json: Mapped[list[str] | None] = mapped_column(JSON)
+    default_location_id: Mapped[str | None] = mapped_column(GUID())
+    created_by_user_id: Mapped[str | None] = mapped_column(GUID())
+    last_inbound_at: Mapped[datetime | None] = mapped_column(Timestamp)
+    last_outbound_at: Mapped[datetime | None] = mapped_column(Timestamp)
+
+
+class AIConversationModel(TenantMixin, TimestampMixin, Base):
+    __tablename__ = "ai_conversations"
+    __table_args__ = (
+        UniqueConstraint("ai_chat_channel_id", "browser_session_id", name="uq_ai_conversations_channel_session"),
+        UniqueConstraint("client_id", "ai_conversation_id", name="uq_ai_conversations_client_conversation_id"),
+        ForeignKeyConstraint(
+            ["client_id", "ai_chat_channel_id"],
+            ["ai_chat_channels.client_id", "ai_chat_channels.ai_chat_channel_id"],
+            name="fk_ai_conversations_channel_tenant",
+        ),
+        ForeignKeyConstraint(
+            ["client_id", "customer_id"],
+            ["customers.client_id", "customers.customer_id"],
+            name="fk_ai_conversations_customer_tenant",
+        ),
+        Index("ix_ai_conversations_client_status", "client_id", "status"),
+        Index("ix_ai_conversations_client_last_message", "client_id", "last_message_at"),
+    )
+
+    ai_conversation_id: Mapped[str] = mapped_column(GUID(), primary_key=True)
+    ai_chat_channel_id: Mapped[str] = mapped_column(GUID(), nullable=False)
+    customer_id: Mapped[str | None] = mapped_column(GUID())
+    browser_session_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="open", index=True)
+    customer_name_snapshot: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    customer_phone_snapshot: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    customer_email_snapshot: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    customer_address_snapshot: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    latest_intent: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    latest_summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    handoff_reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    last_message_preview: Mapped[str] = mapped_column(String(280), nullable=False, default="")
+    last_message_at: Mapped[datetime | None] = mapped_column(Timestamp)
+    metadata_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+
+
+class AIMessageModel(TenantMixin, Base):
+    __tablename__ = "ai_messages"
+    __table_args__ = (
+        UniqueConstraint("client_id", "ai_message_id", name="uq_ai_messages_client_message_id"),
+        ForeignKeyConstraint(
+            ["client_id", "ai_conversation_id"],
+            ["ai_conversations.client_id", "ai_conversations.ai_conversation_id"],
+            name="fk_ai_messages_conversation_tenant",
+        ),
+        ForeignKeyConstraint(
+            ["client_id", "ai_chat_channel_id"],
+            ["ai_chat_channels.client_id", "ai_chat_channels.ai_chat_channel_id"],
+            name="fk_ai_messages_channel_tenant",
+        ),
+        Index("ix_ai_messages_client_conversation", "client_id", "ai_conversation_id", "occurred_at"),
+    )
+
+    ai_message_id: Mapped[str] = mapped_column(GUID(), primary_key=True)
+    ai_conversation_id: Mapped[str] = mapped_column(GUID(), nullable=False)
+    ai_chat_channel_id: Mapped[str] = mapped_column(GUID(), nullable=False)
+    direction: Mapped[str] = mapped_column(String(16), nullable=False)
+    message_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    content_summary: Mapped[str] = mapped_column(String(280), nullable=False, default="")
+    raw_payload_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    ai_metadata_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    model_name: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    error_message: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    occurred_at: Mapped[datetime] = mapped_column(Timestamp, server_default=func.now(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(Timestamp, server_default=func.now(), nullable=False)
+
+
+class AIToolCallModel(TenantMixin, Base):
+    __tablename__ = "ai_tool_calls"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["client_id", "ai_conversation_id"],
+            ["ai_conversations.client_id", "ai_conversations.ai_conversation_id"],
+            name="fk_ai_tool_calls_conversation_tenant",
+        ),
+        ForeignKeyConstraint(
+            ["client_id", "ai_message_id"],
+            ["ai_messages.client_id", "ai_messages.ai_message_id"],
+            name="fk_ai_tool_calls_message_tenant",
+        ),
+        Index("ix_ai_tool_calls_client_conversation", "client_id", "ai_conversation_id", "created_at"),
+    )
+
+    ai_tool_call_id: Mapped[str] = mapped_column(GUID(), primary_key=True)
+    ai_conversation_id: Mapped[str] = mapped_column(GUID(), nullable=False)
+    ai_message_id: Mapped[str | None] = mapped_column(GUID())
+    tool_name: Mapped[str] = mapped_column(String(96), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="succeeded", index=True)
+    request_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    response_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    error_message: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    started_at: Mapped[datetime] = mapped_column(Timestamp, server_default=func.now(), nullable=False)
+    finished_at: Mapped[datetime | None] = mapped_column(Timestamp)
+    created_at: Mapped[datetime] = mapped_column(Timestamp, server_default=func.now(), nullable=False)
+
+
 class RoleModel(Base):
     __tablename__ = "roles"
 
@@ -106,6 +266,7 @@ class UserModel(TenantMixin, TimestampMixin, Base):
     __table_args__ = (
         UniqueConstraint("email", name="uq_users_email"),
         UniqueConstraint("user_code", name="uq_users_user_code"),
+        UniqueConstraint("client_id", "user_id", name="uq_users_client_user_id"),
     )
 
     user_id: Mapped[str] = mapped_column(GUID(), primary_key=True)
@@ -202,6 +363,7 @@ class LocationModel(TenantMixin, TimestampMixin, Base):
     __tablename__ = "locations"
     __table_args__ = (
         UniqueConstraint("client_id", "code", name="uq_locations_client_code"),
+        UniqueConstraint("client_id", "location_id", name="uq_locations_client_location_id"),
     )
 
     location_id: Mapped[str] = mapped_column(GUID(), primary_key=True)
@@ -410,6 +572,7 @@ class CustomerModel(TenantMixin, TimestampMixin, Base):
     __tablename__ = "customers"
     __table_args__ = (
         UniqueConstraint("client_id", "code", name="uq_customers_client_code"),
+        UniqueConstraint("client_id", "customer_id", name="uq_customers_client_customer_id"),
         Index("ix_customers_client_phone_normalized", "client_id", "phone_normalized"),
         Index("ix_customers_client_email_normalized", "client_id", "email_normalized"),
     )
@@ -431,6 +594,16 @@ class SalesOrderModel(TenantMixin, TimestampMixin, Base):
     __tablename__ = "sales_orders"
     __table_args__ = (
         UniqueConstraint("client_id", "order_number", name="uq_sales_orders_client_number"),
+        ForeignKeyConstraint(
+            ["client_id", "source_channel_id"],
+            ["ai_chat_channels.client_id", "ai_chat_channels.ai_chat_channel_id"],
+            name="fk_sales_orders_ai_source_channel_tenant",
+        ),
+        ForeignKeyConstraint(
+            ["client_id", "source_conversation_id"],
+            ["ai_conversations.client_id", "ai_conversations.ai_conversation_id"],
+            name="fk_sales_orders_ai_source_conversation_tenant",
+        ),
     )
 
     sales_order_id: Mapped[str] = mapped_column(GUID(), primary_key=True)
@@ -445,6 +618,8 @@ class SalesOrderModel(TenantMixin, TimestampMixin, Base):
     notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_by_user_id: Mapped[str | None] = mapped_column(GUID(), ForeignKey("users.user_id", ondelete="SET NULL"))
     source_type: Mapped[str] = mapped_column(String(32), nullable=False, default="manual", index=True)
+    source_channel_id: Mapped[str | None] = mapped_column(GUID())
+    source_conversation_id: Mapped[str | None] = mapped_column(GUID())
     subtotal_amount: Mapped[Decimal] = mapped_column(Amount, nullable=False, default=Decimal("0"))
     discount_amount: Mapped[Decimal] = mapped_column(Amount, nullable=False, default=Decimal("0"))
     total_amount: Mapped[Decimal] = mapped_column(Amount, nullable=False, default=Decimal("0"))

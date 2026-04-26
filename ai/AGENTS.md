@@ -13,6 +13,8 @@ This folder owns AI-facing retrieval, channel integrations, prompt orchestration
 - Recommendations must respect active product status, tenant catalog boundaries, and approved pricing rules.
 - Do not let AI promise unavailable stock.
 - Do not let AI use stale or ambiguous product records when a precise variant match is required.
+- n8n workflows must use EasyEcom AI tool APIs and must not query tenant tables directly.
+- Public chat widgets must validate widget key, origin, conversation session, and rate limits before invoking n8n.
 
 ---
 
@@ -27,3 +29,7 @@ AI should support:
 - revenue optimization
 
 But correctness comes before persuasion.
+
+## n8n Boundary
+
+EasyEcom owns durable conversation state, policy, customer/order data, stock truth, and tool-call audit logs. n8n owns orchestration and LLM prompting only. Any order confirmation must go through the EasyEcom order tool so stock reservation and pricing checks remain backend-enforced.

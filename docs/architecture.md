@@ -17,5 +17,11 @@
 - Customer access is currently embedded inside transaction flows rather than exposed as a standalone CRM shell
 - `Automation` remains the last intentionally blank module
 
+## AI customer communication boundary
+- EasyEcom is the tenant-safe commerce brain for AI chat: policy, durable memory, tool-call audit, product lookup, variant availability, and order confirmation live in FastAPI/PostgreSQL.
+- n8n is the orchestration layer for LLM flow and channel workflow. It must call EasyEcom AI tool APIs instead of querying PostgreSQL directly.
+- Website chat is the first supported public channel through an embeddable widget key. WhatsApp/Messenger should attach to the same AI tool boundary later rather than reintroducing the removed legacy channel schema.
+- AI-created orders may be confirmed automatically only through the backend order tool, which reuses variant-level stock validation and records source conversation/channel references.
+
 ## Rebuild rule
 - New features should extend the current mounted modules and typed services instead of reviving deleted legacy paths

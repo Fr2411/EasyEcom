@@ -18,6 +18,7 @@ from easy_ecom.data.store.postgres_db import build_session_factory
 from easy_ecom.data.store.runtime import build_runtime_engine
 from easy_ecom.domain.models.auth import AuthenticatedUser
 from easy_ecom.domain.services.admin_service import AdminService
+from easy_ecom.domain.services.ai_chat_service import AIChatService
 from easy_ecom.domain.services.auth_service import AuthService
 from easy_ecom.domain.services.billing_service import BillingService
 from easy_ecom.domain.services.commerce_service import (
@@ -65,6 +66,7 @@ class ServiceContainer:
         self._session_factory = session_factory
         self.auth = AuthService(PostgresAuthRepo(session_factory))
         self.admin = AdminService(session_factory)
+        self.ai_chat = AIChatService(session_factory)
         self.billing = BillingService(session_factory)
         self.dashboard = DashboardAnalyticsService(session_factory)
         self.overview = OverviewService(session_factory)

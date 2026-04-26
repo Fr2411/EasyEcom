@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
+from easy_ecom.api.middleware.public_chat_cors import PublicChatCorsMiddleware
 from easy_ecom.api.middleware.request_context import RequestContextMiddleware
 from easy_ecom.api.routers import api_router
 from easy_ecom.core.config import settings
@@ -44,6 +45,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
         expose_headers=[settings.request_id_header],
     )
+    app.add_middleware(PublicChatCorsMiddleware)
     app.add_exception_handler(HTTPException, http_exception_response)
     app.add_exception_handler(Exception, unexpected_exception_response)
     app.include_router(api_router)
