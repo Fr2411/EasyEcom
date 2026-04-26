@@ -24,10 +24,12 @@ class AIAgentSettingsResponse(BaseModel):
     profile_id: str
     channel_id: str
     widget_key: str
+    ai_runtime: str
+    model_name: str
+    model_configured: bool
     channel_status: str
     is_enabled: bool
     display_name: str
-    n8n_webhook_url: str
     persona_prompt: str
     store_policy: str
     faq_entries: list[AIAgentFAQEntry]
@@ -45,7 +47,6 @@ class AIAgentSettingsUpdateRequest(BaseModel):
     channel_status: Literal["active", "inactive"] = "active"
     is_enabled: bool = False
     display_name: str = Field(default="Website sales assistant", min_length=2, max_length=255)
-    n8n_webhook_url: str = ""
     persona_prompt: str = ""
     store_policy: str = ""
     faq_entries: list[AIAgentFAQEntry] = Field(default_factory=list)
@@ -56,7 +57,7 @@ class AIAgentSettingsUpdateRequest(BaseModel):
     opening_message: str = ""
     handoff_message: str = ""
 
-    @field_validator("n8n_webhook_url", "persona_prompt", "store_policy", "opening_message", "handoff_message", mode="before")
+    @field_validator("persona_prompt", "store_policy", "opening_message", "handoff_message", mode="before")
     @classmethod
     def strip_strings(cls, value: object) -> object:
         if isinstance(value, str):

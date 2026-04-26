@@ -76,7 +76,10 @@ export function AIAssistantWorkspace() {
   }, [conversations]);
 
   const scriptUrl = settings ? widgetScriptUrl(settings.widget_script) : '';
-  const channelReady = Boolean(settings?.is_enabled && settings.channel_status === 'active');
+  const channelReady = Boolean(settings?.is_enabled && settings.channel_status === 'active' && settings.model_configured);
+  const channelStatusLabel = settings?.is_enabled && settings.channel_status === 'active'
+    ? (settings.model_configured ? 'Ready' : 'Missing model key')
+    : 'Disabled';
 
   const copyScript = async () => {
     if (!settings?.widget_script || typeof navigator === 'undefined' || !navigator.clipboard) {
@@ -153,9 +156,17 @@ export function AIAssistantWorkspace() {
                 <dt>Status</dt>
                 <dd>
                   <span className={channelReady ? 'status-pill status-pill-active' : 'status-pill'}>
-                    {channelReady ? 'Ready' : 'Disabled'}
+                    {channelStatusLabel}
                   </span>
                 </dd>
+              </div>
+              <div>
+                <dt>Runtime</dt>
+                <dd>EasyEcom backend</dd>
+              </div>
+              <div>
+                <dt>Model</dt>
+                <dd>{settings.model_name}</dd>
               </div>
               <div>
                 <dt>Widget key</dt>

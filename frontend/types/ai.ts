@@ -14,10 +14,12 @@ export type AIAgentSettings = {
   profile_id: string;
   channel_id: string;
   widget_key: string;
+  ai_runtime: string;
+  model_name: string;
+  model_configured: boolean;
   channel_status: 'active' | 'inactive';
   is_enabled: boolean;
   display_name: string;
-  n8n_webhook_url: string;
   persona_prompt: string;
   store_policy: string;
   faq_entries: AIAgentFAQEntry[];
@@ -35,7 +37,6 @@ export type AIAgentSettingsUpdatePayload = {
   channel_status: 'active' | 'inactive';
   is_enabled: boolean;
   display_name: string;
-  n8n_webhook_url: string;
   persona_prompt: string;
   store_policy: string;
   faq_entries: AIAgentFAQEntry[];

@@ -88,7 +88,6 @@ export function SettingsWorkspace() {
           channel_status: aiForm.channel_status,
           is_enabled: aiForm.is_enabled,
           display_name: aiForm.display_name,
-          n8n_webhook_url: aiForm.n8n_webhook_url,
           persona_prompt: aiForm.persona_prompt,
           store_policy: aiForm.store_policy,
           faq_entries: aiForm.faq_entries,
@@ -308,7 +307,7 @@ export function SettingsWorkspace() {
           </div>
         </WorkspacePanel>
 
-        <WorkspacePanel title="AI sales assistant" description="Tenant-owned controls for the website chatbot and n8n workflow.">
+        <WorkspacePanel title="AI sales assistant" description="Tenant-owned controls for the website chatbot and EasyEcom AI model runtime.">
           <div className="operations-toggle-grid">
             <label className="operations-toggle-card">
               <input
@@ -339,13 +338,6 @@ export function SettingsWorkspace() {
                 onChange={(event) => setAiForm({ ...aiForm, display_name: event.target.value })}
               />
             </label>
-            <label>
-              n8n webhook URL
-              <input
-                value={aiForm.n8n_webhook_url}
-                onChange={(event) => setAiForm({ ...aiForm, n8n_webhook_url: event.target.value })}
-              />
-            </label>
             <label className="field-span-2">
               Allowed website origins
               <textarea
@@ -355,9 +347,27 @@ export function SettingsWorkspace() {
               />
             </label>
           </div>
+          <dl className="operations-definition-grid compact">
+            <div>
+              <dt>Runtime</dt>
+              <dd>EasyEcom backend</dd>
+            </div>
+            <div>
+              <dt>Model</dt>
+              <dd>{aiSettings.model_name}</dd>
+            </div>
+            <div>
+              <dt>Model API key</dt>
+              <dd>
+                <span className={aiSettings.model_configured ? 'status-pill status-pill-active' : 'status-pill'}>
+                  {aiSettings.model_configured ? 'Configured' : 'Missing key'}
+                </span>
+              </dd>
+            </div>
+          </dl>
         </WorkspacePanel>
 
-        <WorkspacePanel title="AI behavior" description="Policy and tone that n8n receives before it answers customers.">
+        <WorkspacePanel title="AI behavior" description="Policy and tone that EasyEcom sends to the AI model before it answers customers.">
           <div className="operations-form-grid">
             <label className="field-span-2">
               Brand voice and persona
@@ -402,7 +412,7 @@ export function SettingsWorkspace() {
           </div>
         </WorkspacePanel>
 
-        <WorkspacePanel title="AI permissions" description="Allowed actions still run through EasyEcom's tenant-safe backend tools.">
+        <WorkspacePanel title="AI permissions" description="Allowed actions run through EasyEcom's tenant-safe backend tools.">
           <div className="operations-toggle-grid">
             <label className="operations-toggle-card">
               <input
