@@ -5,6 +5,7 @@ import { useEffect, useRef } from 'react';
 import {
   BadgeDollarSign,
   BarChart3,
+  Bot,
   Boxes,
   ClipboardList,
   Gauge,
@@ -30,6 +31,7 @@ const ICONS = {
   inventory: PackageSearch,
   sales: ShoppingCart,
   customers: Users,
+  'ai-assistant': Bot,
   finance: HandCoins,
   returns: RefreshCw,
   admin: Sparkles,

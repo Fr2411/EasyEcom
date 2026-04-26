@@ -12,6 +12,7 @@ export type NavigationItem = {
     | 'inventory'
     | 'sales'
     | 'customers'
+    | 'ai-assistant'
     | 'finance'
     | 'returns'
     | 'billing'
@@ -34,6 +35,7 @@ export const NAV_ITEMS: NavigationItem[] = [
   { href: '/inventory', label: 'Inventory', group: 'Commerce', icon: 'inventory' },
   { href: '/sales', label: 'Sales', group: 'Commerce', icon: 'sales' },
   { href: '/customers', label: 'Customers', group: 'Commerce', icon: 'customers' },
+  { href: '/ai-assistant', label: 'AI Assistant', group: 'Commerce', icon: 'ai-assistant' },
   { href: '/automation', label: 'Automation', group: 'System', icon: 'automation' },
   { href: '/finance', label: 'Finance', group: 'Operations', icon: 'finance' },
   { href: '/returns', label: 'Returns', group: 'Operations', icon: 'returns' },

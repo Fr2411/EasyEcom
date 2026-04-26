@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   BarChart3,
+  Bot,
   Boxes,
   ClipboardList,
   BadgeDollarSign,
@@ -26,6 +27,7 @@ const ICONS = {
   inventory: PackageSearch,
   sales: ShoppingCart,
   customers: Users,
+  'ai-assistant': Bot,
   finance: HandCoins,
   returns: RefreshCw,
   admin: Sparkles,

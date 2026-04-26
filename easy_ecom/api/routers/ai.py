@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Header, Request, Response
+from fastapi import APIRouter, Depends, Header, Query, Request, Response
 
 from easy_ecom.api.dependencies import ServiceContainer, get_authenticated_user, get_container
 from easy_ecom.api.schemas.ai import (
@@ -10,6 +10,7 @@ from easy_ecom.api.schemas.ai import (
     AICatalogSearchResponse,
     AIConfirmOrderRequest,
     AIConfirmOrderResponse,
+    AIConversationListResponse,
     AIConversationStateRequest,
     AIConversationStateResponse,
     AIHandoffRequest,
@@ -70,6 +71,15 @@ def update_ai_agent_settings(
             payload=payload.model_dump(),
         )
     )
+
+
+@router.get("/conversations", response_model=AIConversationListResponse)
+def list_ai_conversations(
+    limit: int = Query(default=20, ge=1, le=100),
+    user: AuthenticatedUser = Depends(get_authenticated_user),
+    container: ServiceContainer = Depends(get_container),
+) -> AIConversationListResponse:
+    return AIConversationListResponse.model_validate(container.ai_chat.list_conversations(user, limit=limit))
 
 
 @router.get("/chat/widget.js", include_in_schema=False)

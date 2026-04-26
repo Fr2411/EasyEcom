@@ -79,6 +79,27 @@ class AIAgentSettingsUpdateRequest(BaseModel):
         return value
 
 
+class AIConversationSummaryResponse(BaseModel):
+    conversation_id: str
+    channel_id: str
+    channel_type: str
+    channel_display_name: str
+    status: str
+    customer_name: str
+    customer_phone: str
+    customer_email: str
+    latest_intent: str
+    latest_summary: str
+    handoff_reason: str
+    last_message_preview: str
+    last_message_at: str | None
+    message_count: int
+
+
+class AIConversationListResponse(BaseModel):
+    items: list[AIConversationSummaryResponse]
+
+
 class AIChatCustomerInput(BaseModel):
     name: str = ""
     phone: str = ""

@@ -45,3 +45,24 @@ export type AIAgentSettingsUpdatePayload = {
   opening_message: string;
   handoff_message: string;
 };
+
+export type AIConversationSummary = {
+  conversation_id: string;
+  channel_id: string;
+  channel_type: string;
+  channel_display_name: string;
+  status: 'open' | 'handoff' | 'closed' | string;
+  customer_name: string;
+  customer_phone: string;
+  customer_email: string;
+  latest_intent: string;
+  latest_summary: string;
+  handoff_reason: string;
+  last_message_preview: string;
+  last_message_at: string | null;
+  message_count: number;
+};
+
+export type AIConversationList = {
+  items: AIConversationSummary[];
+};

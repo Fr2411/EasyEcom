@@ -1,5 +1,5 @@
 import type { SessionUser } from '@/lib/api/auth';
-import { canSeePageInNavigation } from '@/lib/rbac';
+import { canAccessPage } from '@/lib/rbac';
 import { NAV_ITEMS } from '@/types/navigation';
 
 export function redirectToExternalUrl(url: string) {
@@ -11,7 +11,7 @@ export function redirectToExternalUrl(url: string) {
 }
 
 export function getVisibleNavigationItems(user: SessionUser | null | undefined) {
-  return NAV_ITEMS.filter((item) => canSeePageInNavigation(user?.roles, item.label));
+  return NAV_ITEMS.filter((item) => canAccessPage(user?.roles, item.label, user?.allowed_pages));
 }
 
 export function getMobilePrimaryItems(user: SessionUser | null | undefined) {

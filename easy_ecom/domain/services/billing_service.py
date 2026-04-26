@@ -28,6 +28,7 @@ from easy_ecom.domain.models.auth import AuthenticatedUser
 PAID_ONLY_PAGES: tuple[str, ...] = (
     "Purchases",
     "Customers",
+    "AI Assistant",
     "Reports",
     "Automation",
 )

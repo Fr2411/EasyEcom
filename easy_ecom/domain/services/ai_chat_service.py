@@ -90,11 +90,72 @@ class AIChatService(CommerceBaseService):
         self._sales = SalesService(session_factory)
 
     def get_settings(self, user: AuthenticatedUser, *, api_base_url: str) -> dict[str, Any]:
-        self._require_settings_access(user)
+        self._require_ai_assistant_access(user)
         with self._session_factory() as session:
             profile, channel = self._get_or_create_profile_and_channel(session, user=user)
             session.commit()
             return self._settings_payload(profile, channel, api_base_url=api_base_url)
+
+    def list_conversations(self, user: AuthenticatedUser, *, limit: int) -> dict[str, Any]:
+        self._require_ai_assistant_access(user)
+        safe_limit = max(1, min(int(limit), 100))
+        with self._session_factory() as session:
+            rows = session.execute(
+                select(AIConversationModel, AIChatChannelModel)
+                .join(
+                    AIChatChannelModel,
+                    AIChatChannelModel.ai_chat_channel_id == AIConversationModel.ai_chat_channel_id,
+                )
+                .where(
+                    AIConversationModel.client_id == user.client_id,
+                    AIChatChannelModel.client_id == user.client_id,
+                )
+                .order_by(
+                    func.coalesce(AIConversationModel.last_message_at, AIConversationModel.created_at).desc(),
+                    AIConversationModel.created_at.desc(),
+                )
+                .limit(safe_limit)
+            ).all()
+
+            conversation_ids = [conversation.ai_conversation_id for conversation, _channel in rows]
+            message_counts: dict[str, int] = {}
+            if conversation_ids:
+                message_counts = {
+                    str(conversation_id): int(count)
+                    for conversation_id, count in session.execute(
+                        select(
+                            AIMessageModel.ai_conversation_id,
+                            func.count(AIMessageModel.ai_message_id),
+                        )
+                        .where(
+                            AIMessageModel.client_id == user.client_id,
+                            AIMessageModel.ai_conversation_id.in_(conversation_ids),
+                        )
+                        .group_by(AIMessageModel.ai_conversation_id)
+                    ).all()
+                }
+
+            return {
+                "items": [
+                    {
+                        "conversation_id": str(conversation.ai_conversation_id),
+                        "channel_id": str(channel.ai_chat_channel_id),
+                        "channel_type": channel.channel_type,
+                        "channel_display_name": channel.display_name,
+                        "status": conversation.status,
+                        "customer_name": conversation.customer_name_snapshot,
+                        "customer_phone": conversation.customer_phone_snapshot,
+                        "customer_email": conversation.customer_email_snapshot,
+                        "latest_intent": conversation.latest_intent,
+                        "latest_summary": conversation.latest_summary,
+                        "handoff_reason": conversation.handoff_reason,
+                        "last_message_preview": conversation.last_message_preview,
+                        "last_message_at": conversation.last_message_at.isoformat() if conversation.last_message_at else None,
+                        "message_count": message_counts.get(str(conversation.ai_conversation_id), 0),
+                    }
+                    for conversation, channel in rows
+                ]
+            }
 
     def update_settings(
         self,
@@ -962,6 +1023,14 @@ class AIChatService(CommerceBaseService):
         if "Settings" not in user.allowed_pages and "SUPER_ADMIN" not in user.roles:
             raise ApiException(status_code=403, code="ACCESS_DENIED", message="Access denied for Settings")
 
+    def _require_ai_assistant_access(self, user: AuthenticatedUser) -> None:
+        if (
+            "AI Assistant" not in user.allowed_pages
+            and "Settings" not in user.allowed_pages
+            and "SUPER_ADMIN" not in user.roles
+        ):
+            raise ApiException(status_code=403, code="ACCESS_DENIED", message="Access denied for AI Assistant")
+
     def _internal_user(self, client_id: str) -> AuthenticatedUser:
         return AuthenticatedUser(
             user_id=None,  # type: ignore[arg-type]
@@ -970,7 +1039,7 @@ class AIChatService(CommerceBaseService):
             email="ai-agent@system.easy-ecom",
             business_name=None,
             roles=["CLIENT_OWNER"],
-            allowed_pages=["Sales", "Catalog", "Inventory", "Customers", "Settings"],
+            allowed_pages=["Sales", "Catalog", "Inventory", "Customers", "AI Assistant", "Settings"],
             billing_plan_code="internal",
             billing_status="internal",
             billing_access_state="paid_active",

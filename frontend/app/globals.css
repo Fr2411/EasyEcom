@@ -8228,6 +8228,44 @@ html[data-theme='dark'] .settings-section-status.is-empty {
   margin-top: 0.2rem;
 }
 
+.ai-assistant-module .operations-toolbar-actions button,
+.ai-assistant-module .operations-toolbar-actions a,
+.ai-assistant-script-row button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+}
+
+.ai-assistant-code-text {
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-size: 0.83rem;
+  line-height: 1.45;
+}
+
+.ai-assistant-script-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: stretch;
+}
+
+.ai-assistant-script-row textarea {
+  width: 100%;
+  min-height: 5.2rem;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.ai-assistant-conversation-card .workspace-notice.compact {
+  margin-top: 0.1rem;
+  padding: 0.55rem 0.65rem;
+  font-size: 0.84rem;
+}
+
 @media (max-width: 1100px) {
   .operations-split-layout,
   .operations-dual-section,
@@ -8259,6 +8297,10 @@ html[data-theme='dark'] .settings-section-status.is-empty {
 
   .operations-search-bar input {
     min-width: 0;
+  }
+
+  .ai-assistant-script-row {
+    grid-template-columns: 1fr;
   }
 }
 
