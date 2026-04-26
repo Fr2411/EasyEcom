@@ -38,3 +38,6 @@
 - Availability responses must resolve from variant-level stock truth.
 - AI must not promise unavailable stock, invalid pricing, or unauthorized catalog data.
 - Human-review controls remain mandatory for risky outbound communication flows.
+- Customer communication AI must receive backend-prepared facts for price, stock, customer, recommendation, policy, memory, and draft-order data; raw SQL access is forbidden.
+- Customer-facing AI sales wording should be model-composed from tenant-safe context, not assembled from canned backend response templates.
+- Tenant playbooks may shape tone and domain questions, but they cannot override tenant isolation, variant-level stock, pricing bounds, or escalation requirements.

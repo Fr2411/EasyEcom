@@ -15,6 +15,7 @@ CORE_MODULES = [
     "purchases",
     "sales",
     "customers",
+    "customer_communication",
     "finance",
     "returns",
     "reports",

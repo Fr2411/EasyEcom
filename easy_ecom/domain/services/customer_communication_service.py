@@ -1,0 +1,3332 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime
+from copy import deepcopy
+from decimal import Decimal
+import json
+import re
+from typing import Any
+
+import httpx
+from sqlalchemy import func, or_, select
+from sqlalchemy.orm import Session, sessionmaker
+
+from easy_ecom.core.config import settings
+from easy_ecom.core.errors import ApiException
+from easy_ecom.core.ids import new_uuid
+from easy_ecom.core.time_utils import now_utc
+from easy_ecom.data.store.postgres_models import (
+    AssistantPlaybookModel,
+    AssistantRunModel,
+    AssistantToolCallModel,
+    CategoryModel,
+    ClientModel,
+    CustomerChannelModel,
+    CustomerConversationModel,
+    CustomerMessageModel,
+    CustomerModel,
+    InventoryLedgerModel,
+    LocationModel,
+    ProductModel,
+    ProductVariantModel,
+    SalesOrderItemModel,
+    SalesOrderModel,
+    SupplierModel,
+)
+from easy_ecom.domain.models.auth import AuthenticatedUser
+from easy_ecom.domain.services.commerce_service import (
+    MONEY_QUANTUM,
+    ZERO,
+    SalesService,
+    as_decimal,
+    as_optional_decimal,
+    build_variant_label,
+    normalize_email,
+    normalize_phone,
+)
+
+
+GROUNDING_TOOLS = {
+    "search_catalog_variants",
+    "get_variant_availability",
+    "get_variant_price",
+    "get_product_recommendations",
+    "create_draft_order",
+}
+
+CATALOG_PRICE_RE = re.compile(r"\b(price|cost|how much|rate|unit price)\b")
+CATALOG_STOCK_RE = re.compile(r"\b(available|availability|stock|in stock|do you have|do u have)\b")
+CATALOG_ORDER_RE = re.compile(r"\b(order|buy|purchase|reserve|book it|take it)\b")
+CATALOG_LOOKUP_RE = re.compile(r"\b(check|check if|look up|what about|compare|show me)\b")
+CATALOG_BROWSE_RE = re.compile(
+    r"\b(collections?|ranges?|options?|models?|styles?|variants?|formal shoes?|casual shoes?|running shoes?|sneakers?|loafers?|sandals?|boots?)\b"
+)
+PRICE_NEGOTIATION_RE = re.compile(
+    r"\b(best price|last price|final price|best you can do|your best|lowest|do better|better price|better deal)\b"
+)
+GREETING_RE = re.compile(
+    r"^\s*(hi|hello|hey|salam|assalamu\s+alaikum|good morning|good afternoon|good evening)\s*[!.]*\s*$",
+    re.IGNORECASE,
+)
+CATALOG_RECOMMENDATION_RE = re.compile(
+    r"\b(recommend|suggest|best|which|what should i buy|looking for|need help choosing|need food|need shoes?|need sneakers?)\b"
+)
+CATALOG_SEARCH_STOPWORDS = {
+    "a",
+    "about",
+    "and",
+    "any",
+    "are",
+    "available",
+    "availability",
+    "buy",
+    "can",
+    "choosing",
+    "collection",
+    "collections",
+    "cost",
+    "do",
+    "for",
+    "have",
+    "hello",
+    "hey",
+    "hi",
+    "how",
+    "in",
+    "is",
+    "it",
+    "item",
+    "much",
+    "need",
+    "of",
+    "order",
+    "option",
+    "options",
+    "please",
+    "price",
+    "product",
+    "purchase",
+    "range",
+    "ranges",
+    "rate",
+    "recommend",
+    "size",
+    "stock",
+    "suggest",
+    "the",
+    "there",
+    "this",
+    "to",
+    "u",
+    "want",
+    "what",
+    "whats",
+    "you",
+}
+
+
+@dataclass(frozen=True)
+class CatalogGrounding:
+    query: str
+    tool_names: tuple[str, ...]
+    search_result: dict[str, Any]
+    availability_result: dict[str, Any] | None = None
+    price_result: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True)
+class PreparedReplyContext:
+    kind: str
+    next_best_action: str
+    facts: dict[str, Any]
+    tool_names: tuple[str, ...] = ()
+
+INDUSTRY_TEMPLATES: dict[str, dict[str, Any]] = {
+    "general_retail": {
+        "questions": ["product preference", "budget", "quantity needed"],
+        "safety": ["Do not invent policies or availability."],
+    },
+    "pet_food": {
+        "questions": ["pet type", "breed or size", "age", "allergies", "current diet", "health concerns"],
+        "safety": [
+            "Never diagnose medical issues.",
+            "For symptoms, medication, disease, allergies, or serious health concerns, recommend a veterinarian.",
+        ],
+    },
+    "fashion": {
+        "questions": ["size", "color", "occasion", "budget", "fit preference"],
+        "safety": ["Confirm size/color variant before stock or price answers."],
+    },
+    "shoe_store": {
+        "questions": ["shoe size", "intended use", "color or style", "fit preference", "budget"],
+        "safety": [
+            "Confirm size and color before stock or price promises.",
+            "Do not claim orthopedic or medical benefits unless tenant data explicitly supports it.",
+        ],
+    },
+    "electronics": {
+        "questions": ["device model", "compatibility need", "warranty preference", "budget"],
+        "safety": ["Do not claim compatibility unless product data or tenant policy supports it."],
+    },
+    "cosmetics": {
+        "questions": ["skin type", "sensitivity", "allergies", "desired result"],
+        "safety": ["Do not give medical claims or guaranteed results."],
+    },
+    "grocery": {
+        "questions": ["quantity", "brand preference", "delivery timing", "dietary restrictions"],
+        "safety": ["Do not claim ingredient or allergy details unless product data supports them."],
+    },
+}
+
+DEFAULT_POLICIES: dict[str, Any] = {
+    "delivery": "",
+    "returns": "",
+    "payment": "",
+    "warranty": "",
+    "discounts": "",
+}
+
+DEFAULT_ESCALATION_RULES: dict[str, Any] = {
+    "angry_customer": True,
+    "medical_or_health": True,
+    "legal_or_safety": True,
+    "refund_dispute": True,
+    "high_value_order": True,
+    "unavailable_product": True,
+}
+
+
+def _require_page(user: AuthenticatedUser, page: str) -> None:
+    if page not in user.allowed_pages and "SUPER_ADMIN" not in user.roles:
+        raise ApiException(status_code=403, code="ACCESS_DENIED", message=f"Access denied for {page}")
+
+
+def _json_ready(value: Any) -> Any:
+    if isinstance(value, Decimal):
+        return str(value.quantize(MONEY_QUANTUM) if value.as_tuple().exponent < -3 else value)
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, list):
+        return [_json_ready(item) for item in value]
+    if isinstance(value, dict):
+        return {str(key): _json_ready(item) for key, item in value.items()}
+    return value
+
+
+def _preview(text: str, limit: int = 280) -> str:
+    normalized = " ".join(text.strip().split())
+    return normalized[:limit]
+
+
+class NvidiaChatClient:
+    def __init__(self) -> None:
+        self.provider = settings.ai_provider
+        if self.provider == "openai":
+            self.base_url = settings.openai_base_url.rstrip("/")
+            self.model = settings.openai_model
+            self.fallback_model = settings.openai_helper_model
+            self.api_key = settings.openai_api_key
+            self.timeout_seconds = settings.openai_timeout_seconds
+            self.primary_timeout_seconds = settings.openai_timeout_seconds
+            self.fallback_timeout_seconds = settings.openai_timeout_seconds
+        else:
+            self.base_url = settings.nvidia_base_url.rstrip("/")
+            self.model = settings.nvidia_model
+            self.fallback_model = settings.nvidia_fallback_model
+            self.api_key = settings.nvidia_api_key
+            self.timeout_seconds = settings.ai_timeout_seconds
+            self.primary_timeout_seconds = settings.nvidia_primary_timeout_seconds
+            self.fallback_timeout_seconds = settings.nvidia_fallback_timeout_seconds
+
+    @property
+    def is_configured(self) -> bool:
+        return self.provider in {"nvidia", "openai"} and bool(self.base_url and self.model and self.api_key)
+
+    def create_chat_completion(self, *, messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> dict[str, Any]:
+        if not self.is_configured:
+            raise ApiException(
+                status_code=503,
+                code="AI_PROVIDER_NOT_CONFIGURED",
+                message="AI provider is not configured",
+            )
+        primary_timeout = self.primary_timeout_seconds or self.timeout_seconds
+        fallback_model = self.fallback_model.strip()
+        try:
+            payload = self._create_chat_completion(
+                model=self.model,
+                messages=messages,
+                tools=tools,
+                timeout_seconds=primary_timeout,
+            )
+            payload["_easy_ecom_model_name"] = self.model
+            return payload
+        except Exception as exc:
+            if not self._should_try_fallback(exc, fallback_model):
+                raise
+            payload = self._create_chat_completion(
+                model=fallback_model,
+                messages=messages,
+                tools=tools,
+                timeout_seconds=self.fallback_timeout_seconds or self.timeout_seconds,
+            )
+            payload["_easy_ecom_model_name"] = fallback_model
+            payload["_easy_ecom_fallback_from"] = self.model
+            payload["_easy_ecom_fallback_reason"] = exc.__class__.__name__
+            return payload
+
+    def _should_try_fallback(self, exc: Exception, fallback_model: str) -> bool:
+        if not fallback_model or fallback_model == self.model:
+            return False
+        if isinstance(exc, (httpx.TimeoutException, httpx.NetworkError)):
+            return True
+        if isinstance(exc, httpx.HTTPStatusError):
+            return exc.response.status_code in {408, 429, 500, 502, 503, 504}
+        return False
+
+    def _create_chat_completion(
+        self,
+        *,
+        model: str,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        timeout_seconds: int,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "temperature": 0.35,
+            "max_tokens": 650,
+        }
+        if tools:
+            payload["tools"] = tools
+            payload["tool_choice"] = "auto"
+
+        response = httpx.post(
+            f"{self.base_url}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=timeout_seconds,
+        )
+        response.raise_for_status()
+        return response.json()
+
+
+class CustomerCommunicationService:
+    def __init__(self, session_factory: sessionmaker[Session], ai_client: NvidiaChatClient | None = None) -> None:
+        self._session_factory = session_factory
+        self._ai_client = ai_client or NvidiaChatClient()
+        self._sales = SalesService(session_factory)
+
+    def overview(self, user: AuthenticatedUser):
+        from easy_ecom.api.schemas.common import ModuleOverviewResponse, OverviewMetric
+
+        _require_page(user, "Customer Communication")
+        with self._session_factory() as session:
+            channels = self._count(session, CustomerChannelModel, user.client_id)
+            conversations = self._count(session, CustomerConversationModel, user.client_id)
+            escalated = self._count_where(
+                session,
+                CustomerConversationModel,
+                user.client_id,
+                CustomerConversationModel.status == "escalated",
+            )
+            return ModuleOverviewResponse(
+                module="customer_communication",
+                status="foundation",
+                summary="AI customer conversations are grounded in tenant catalog, pricing, stock, and assistant playbook rules.",
+                metrics=[
+                    OverviewMetric(label="Channels", value=str(channels)),
+                    OverviewMetric(label="Conversations", value=str(conversations)),
+                    OverviewMetric(label="Escalations", value=str(escalated)),
+                    OverviewMetric(
+                        label="AI Provider",
+                        value=self._ai_client.provider.upper() if self._ai_client.is_configured else "Not configured",
+                    ),
+                ],
+            )
+
+    def workspace(self, user: AuthenticatedUser, *, conversation_id: str | None = None) -> dict[str, Any]:
+        _require_page(user, "Customer Communication")
+        with self._session_factory() as session:
+            playbook = self._get_or_create_playbook(session, user.client_id)
+            channels = list(
+                session.execute(
+                    select(CustomerChannelModel)
+                    .where(CustomerChannelModel.client_id == user.client_id)
+                    .order_by(CustomerChannelModel.created_at.desc())
+                ).scalars()
+            )
+            conversations = self._conversation_rows(session, user.client_id, limit=30)
+            active = None
+            if conversation_id:
+                active_record = self._get_conversation(session, user.client_id, conversation_id)
+                active = self._conversation_detail(session, active_record)
+            elif conversations:
+                active = self._conversation_detail(session, conversations[0][0])
+            session.commit()
+            return {
+                "playbook": self._playbook_payload(playbook),
+                "channels": [self._channel_payload(channel) for channel in channels],
+                "conversations": [self._conversation_summary_payload(*row) for row in conversations],
+                "active_conversation": active,
+            }
+
+    def update_playbook(self, user: AuthenticatedUser, payload: dict[str, Any]) -> dict[str, Any]:
+        _require_page(user, "Customer Communication")
+        with self._session_factory() as session:
+            playbook = self._get_or_create_playbook(session, user.client_id)
+            business_type = str(payload.get("business_type", "general_retail")).strip() or "general_retail"
+            playbook.business_type = business_type
+            playbook.brand_personality = str(payload.get("brand_personality", "friendly")).strip() or "friendly"
+            playbook.custom_instructions = str(payload.get("custom_instructions", "")).strip()
+            playbook.forbidden_claims = str(payload.get("forbidden_claims", "")).strip()
+            playbook.sales_goals_json = dict(payload.get("sales_goals") or {})
+            playbook.policy_json = {**DEFAULT_POLICIES, **dict(payload.get("policies") or {})}
+            playbook.escalation_rules_json = {**DEFAULT_ESCALATION_RULES, **dict(payload.get("escalation_rules") or {})}
+            playbook.industry_template_json = INDUSTRY_TEMPLATES.get(business_type, INDUSTRY_TEMPLATES["general_retail"])
+            session.commit()
+            session.refresh(playbook)
+            return self._playbook_payload(playbook)
+
+    def create_channel(self, user: AuthenticatedUser, payload: dict[str, Any]) -> dict[str, Any]:
+        _require_page(user, "Customer Communication")
+        with self._session_factory() as session:
+            channel = CustomerChannelModel(
+                channel_id=new_uuid(),
+                client_id=user.client_id,
+                provider=str(payload.get("provider", "website")).strip() or "website",
+                display_name=str(payload.get("display_name", "")).strip(),
+                status=str(payload.get("status", "active")).strip() or "active",
+                external_account_id=str(payload.get("external_account_id", "")).strip(),
+                webhook_key=f"cc_{new_uuid().replace('-', '')}",
+                default_location_id=payload.get("default_location_id") or None,
+                auto_send_enabled=bool(payload.get("auto_send_enabled", True)),
+                config_json=dict(payload.get("config") or {}),
+                created_by_user_id=user.user_id,
+            )
+            if not channel.external_account_id:
+                channel.external_account_id = str(channel.channel_id)
+            session.add(channel)
+            session.commit()
+            session.refresh(channel)
+            return self._channel_payload(channel)
+
+    def update_channel(self, user: AuthenticatedUser, channel_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        _require_page(user, "Customer Communication")
+        with self._session_factory() as session:
+            channel = session.execute(
+                select(CustomerChannelModel).where(
+                    CustomerChannelModel.client_id == user.client_id,
+                    CustomerChannelModel.channel_id == channel_id,
+                )
+            ).scalar_one_or_none()
+            if channel is None:
+                raise ApiException(status_code=404, code="CHANNEL_NOT_FOUND", message="Customer channel not found")
+            channel.provider = str(payload.get("provider", channel.provider)).strip() or channel.provider
+            channel.display_name = str(payload.get("display_name", channel.display_name)).strip() or channel.display_name
+            channel.status = str(payload.get("status", channel.status)).strip() or channel.status
+            channel.external_account_id = str(payload.get("external_account_id", channel.external_account_id)).strip() or str(channel.channel_id)
+            channel.default_location_id = payload.get("default_location_id") or None
+            channel.auto_send_enabled = bool(payload.get("auto_send_enabled", channel.auto_send_enabled))
+            channel.config_json = dict(payload.get("config") or {})
+            session.commit()
+            session.refresh(channel)
+            return self._channel_payload(channel)
+
+    def receive_public_message(
+        self,
+        *,
+        channel_key: str,
+        external_sender_id: str,
+        message_text: str,
+        sender_name: str = "",
+        sender_phone: str = "",
+        sender_email: str = "",
+        provider_event_id: str = "",
+        metadata: dict[str, Any] | None = None,
+        raw_payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        with self._session_factory() as session:
+            channel = session.execute(
+                select(CustomerChannelModel).where(
+                    CustomerChannelModel.webhook_key == channel_key,
+                    CustomerChannelModel.status == "active",
+                )
+            ).scalar_one_or_none()
+            if channel is None:
+                raise ApiException(status_code=404, code="CHANNEL_NOT_FOUND", message="Customer channel not found")
+            if provider_event_id:
+                existing = session.execute(
+                    select(CustomerMessageModel).where(
+                        CustomerMessageModel.client_id == channel.client_id,
+                        CustomerMessageModel.provider_event_id == provider_event_id,
+                    )
+                ).scalar_one_or_none()
+                if existing is not None:
+                    conversation = self._get_conversation(session, str(existing.client_id), str(existing.conversation_id))
+                    outbound = self._latest_outbound_for_inbound(session, conversation)
+                    return {
+                        "conversation": self._conversation_summary_payload(conversation, channel),
+                        "inbound_message": self._message_payload(existing),
+                        "outbound_message": self._message_payload(outbound) if outbound else None,
+                        "assistant_run": None,
+                    }
+
+            conversation = self._get_or_create_conversation(
+                session,
+                channel=channel,
+                external_sender_id=external_sender_id,
+                sender_name=sender_name,
+                sender_phone=sender_phone,
+                sender_email=sender_email,
+            )
+            self._link_customer_from_contact(session, conversation)
+            self._seed_memory_from_related(session, conversation)
+            inbound = self._create_message(
+                session,
+                channel=channel,
+                conversation=conversation,
+                direction="inbound",
+                sender_role="customer",
+                message_text=message_text,
+                provider_event_id=provider_event_id,
+                metadata=metadata or {},
+                raw_payload=raw_payload,
+                outbound_status="received",
+            )
+            channel.last_inbound_at = now_utc()
+            conversation.last_message_preview = _preview(message_text)
+            conversation.last_message_at = now_utc()
+            session.flush()
+
+            run = None
+            outbound = None
+            if channel.auto_send_enabled:
+                run, outbound = self._run_assistant(session, channel=channel, conversation=conversation, inbound=inbound)
+            session.commit()
+            return {
+                "conversation": self._conversation_summary_payload(conversation, channel),
+                "inbound_message": self._message_payload(inbound),
+                "outbound_message": self._message_payload(outbound) if outbound else None,
+                "assistant_run": self._run_payload(session, run) if run else None,
+            }
+
+    def mark_escalated(self, user: AuthenticatedUser, conversation_id: str, reason: str) -> dict[str, Any]:
+        _require_page(user, "Customer Communication")
+        with self._session_factory() as session:
+            conversation = self._get_conversation(session, user.client_id, conversation_id)
+            conversation.status = "escalated"
+            conversation.escalation_reason = reason.strip() or "Manual escalation"
+            session.commit()
+            return self._conversation_detail(session, conversation)
+
+    def _run_assistant(
+        self,
+        session: Session,
+        *,
+        channel: CustomerChannelModel,
+        conversation: CustomerConversationModel,
+        inbound: CustomerMessageModel,
+    ) -> tuple[AssistantRunModel, CustomerMessageModel]:
+        client = session.execute(select(ClientModel).where(ClientModel.client_id == channel.client_id)).scalar_one()
+        playbook = self._get_or_create_playbook(session, str(channel.client_id))
+        run = AssistantRunModel(
+            run_id=new_uuid(),
+            client_id=channel.client_id,
+            conversation_id=conversation.conversation_id,
+            inbound_message_id=inbound.message_id,
+            status="running",
+            model_provider=self._ai_client.provider,
+            model_name=self._ai_client.model,
+            prompt_snapshot_json={
+                "business_type": playbook.business_type,
+                "brand_personality": playbook.brand_personality,
+                "channel_provider": channel.provider,
+            },
+        )
+        session.add(run)
+        session.flush()
+
+        final_text = ""
+        tool_names: list[str] = []
+        error_message = ""
+        try:
+            final_text, tool_names, usage = self._complete_with_prepared_context(
+                session,
+                client=client,
+                playbook=playbook,
+                channel=channel,
+                conversation=conversation,
+                inbound=inbound,
+                run=run,
+            )
+            run.prompt_tokens = usage.get("prompt_tokens")
+            run.completion_tokens = usage.get("completion_tokens")
+            run.total_tokens = usage.get("total_tokens")
+        except Exception as exc:
+            error_message = str(exc)[:1000]
+            final_text = self._safe_escalation_text(client.business_name, inbound.message_text)
+            run.error_message = error_message
+
+        if error_message:
+            validation_status = "escalated"
+            escalation_reason = f"Assistant model call failed: {error_message}"
+        else:
+            validation_status, escalation_reason = self._validate_response(
+                inbound_text=inbound.message_text,
+                response_text=final_text,
+                tool_names=tool_names,
+                playbook=playbook,
+            )
+        if validation_status != "ok":
+            if "request_human_escalation" not in tool_names or not final_text.strip():
+                final_text = self._safe_escalation_text(client.business_name, inbound.message_text)
+            conversation.status = "escalated"
+            conversation.escalation_reason = escalation_reason
+
+        outbound = self._create_message(
+            session,
+            channel=channel,
+            conversation=conversation,
+            direction="outbound",
+            sender_role="assistant",
+            message_text=final_text,
+            provider_event_id="",
+            metadata={
+                "assistant_run_id": str(run.run_id),
+                "validation_status": validation_status,
+                "escalation_reason": escalation_reason,
+            },
+            raw_payload=None,
+            outbound_status="sent" if validation_status == "ok" else "escalated",
+        )
+        channel.last_outbound_at = now_utc()
+        conversation.last_message_preview = _preview(final_text)
+        conversation.last_message_at = now_utc()
+        conversation.latest_summary = self._conversation_summary_text(conversation.latest_summary, inbound.message_text, final_text)
+        run.status = "completed" if not error_message else "failed"
+        run.response_text = final_text
+        run.validation_status = validation_status
+        run.escalation_required = validation_status != "ok"
+        run.escalation_reason = escalation_reason
+        run.finished_at = now_utc()
+        return run, outbound
+
+    def _complete_with_prepared_context(
+        self,
+        session: Session,
+        *,
+        client: ClientModel,
+        playbook: AssistantPlaybookModel,
+        channel: CustomerChannelModel,
+        conversation: CustomerConversationModel,
+        inbound: CustomerMessageModel,
+        run: AssistantRunModel,
+    ) -> tuple[str, list[str], dict[str, int | None]]:
+        system_prompt = self._system_prompt(client, playbook, channel)
+        history = self._conversation_history(session, str(conversation.client_id), str(conversation.conversation_id))
+        tool_names: list[str] = []
+        usage: dict[str, int | None] = {"prompt_tokens": None, "completion_tokens": None, "total_tokens": None}
+        self._remember_inbound_context(
+            conversation,
+            playbook,
+            inbound.message_text,
+            metadata=inbound.metadata_json or {},
+            raw_payload=inbound.raw_payload_json or {},
+        )
+        strategy_snapshot = self._conversation_strategy_snapshot(
+            conversation,
+            inbound.message_text,
+            metadata=inbound.metadata_json or {},
+            raw_payload=inbound.raw_payload_json or {},
+        )
+        self._apply_strategy_update(conversation, strategy_snapshot)
+        memory_snapshot = self._memory_graph_snapshot(session, conversation, inbound_text=inbound.message_text)
+        prepared = self._prepare_reply_context(
+            session,
+            client=client,
+            playbook=playbook,
+            channel=channel,
+            conversation=conversation,
+            inbound=inbound,
+            run=run,
+            strategy_snapshot=strategy_snapshot,
+            memory_snapshot=memory_snapshot,
+        )
+        tool_names.extend(prepared.tool_names)
+        final_text, usage = self._compose_model_customer_reply(
+            client=client,
+            playbook=playbook,
+            channel=channel,
+            conversation=conversation,
+            inbound=inbound,
+            run=run,
+            system_prompt=system_prompt,
+            history=history,
+            strategy_snapshot=strategy_snapshot,
+            memory_snapshot=memory_snapshot,
+            prepared=prepared,
+        )
+        return final_text, tool_names, usage
+
+    def _execute_tool(
+        self,
+        session: Session,
+        *,
+        tool_name: str,
+        arguments: dict[str, Any],
+        channel: CustomerChannelModel,
+        conversation: CustomerConversationModel,
+        run: AssistantRunModel,
+    ) -> dict[str, Any]:
+        if tool_name == "search_catalog_variants":
+            return self._tool_search_catalog(session, str(channel.client_id), arguments, channel)
+        if tool_name == "get_variant_availability":
+            return self._tool_variant_availability(session, str(channel.client_id), arguments, channel)
+        if tool_name == "get_variant_price":
+            return self._tool_variant_price(session, str(channel.client_id), arguments)
+        if tool_name == "get_product_recommendations":
+            return self._tool_recommendations(session, str(channel.client_id), arguments, channel)
+        if tool_name == "lookup_customer":
+            return self._tool_lookup_customer(session, str(channel.client_id), conversation)
+        if tool_name == "create_draft_order":
+            return self._tool_create_draft_order(session, conversation, arguments)
+        if tool_name == "request_human_escalation":
+            reason = str(arguments.get("reason", "Assistant requested human support")).strip()
+            conversation.status = "escalated"
+            conversation.escalation_reason = reason
+            run.escalation_required = True
+            run.escalation_reason = reason
+            return {"ok": True, "status": "escalated", "reason": reason}
+        return {"ok": False, "error": f"Unknown tool: {tool_name}"}
+
+    def _prepare_reply_context(
+        self,
+        session: Session,
+        *,
+        client: ClientModel,
+        playbook: AssistantPlaybookModel,
+        channel: CustomerChannelModel,
+        conversation: CustomerConversationModel,
+        inbound: CustomerMessageModel,
+        run: AssistantRunModel,
+        strategy_snapshot: dict[str, Any],
+        memory_snapshot: dict[str, Any],
+    ) -> PreparedReplyContext:
+        inbound_text = inbound.message_text
+        lower = inbound_text.lower()
+        policy_facts = self._policy_facts_for_message(playbook, inbound_text)
+        common_facts = {
+            "business_name": client.business_name,
+            "business_type": playbook.business_type,
+            "currency": {"symbol": client.currency_symbol, "code": client.currency_code},
+            "policy_context": policy_facts,
+            "strategy": strategy_snapshot,
+            "memory": memory_snapshot,
+        }
+
+        if self._has_escalation_risk_terms(lower) or (
+            playbook.business_type == "electronics" and self._has_electronics_safety_terms(lower)
+        ):
+            conversation.status = "escalated"
+            conversation.escalation_reason = "Customer message needs staff review before advice is given."
+            run.escalation_required = True
+            run.escalation_reason = conversation.escalation_reason
+            return PreparedReplyContext(
+                kind="human_handoff",
+                next_best_action="bring_staff_into_chat",
+                facts={
+                    **common_facts,
+                    "risk_flags": self._risk_flags(playbook, inbound_text),
+                    "allowed_claims": ["acknowledge", "handoff", "ask_staff_to_review"],
+                    "forbidden_claims": ["diagnosis", "legal_advice", "refund_decision", "safety_repair_instruction"],
+                },
+                tool_names=("request_human_escalation",),
+            )
+
+        if playbook.business_type in {"pet_food", "cosmetics", "grocery"} and self._has_risk_terms(lower):
+            return PreparedReplyContext(
+                kind="safety_guidance",
+                next_best_action="answer_safely_then_collect_preferences",
+                facts={
+                    **common_facts,
+                    "risk_flags": self._risk_flags(playbook, inbound_text),
+                    "required_safety_boundary": {
+                        "pet_food": "recommend veterinarian review before food changes when illness, allergy, medication, or symptoms are mentioned",
+                        "cosmetics": "recommend qualified professional or ingredient-label review before use when allergies, burning, sensitivity, or rash are mentioned",
+                        "grocery": "recommend ingredient-label and staff confirmation when allergy concerns are mentioned",
+                    }.get(playbook.business_type, ""),
+                    "preference_questions": self._template_questions(playbook),
+                },
+            )
+
+        media_context = self._media_reply_context(conversation=conversation, inbound_text=inbound_text)
+        if media_context:
+            return PreparedReplyContext(
+                kind="media_clarification",
+                next_best_action="ask_for_identifiable_product_or_issue_detail",
+                facts={**common_facts, **media_context},
+            )
+
+        progress_context = self._sales_progress_context(client=client, conversation=conversation, inbound_text=inbound_text)
+        if progress_context:
+            return PreparedReplyContext(
+                kind=str(progress_context.pop("kind")),
+                next_best_action=str(progress_context.pop("next_best_action")),
+                facts={**common_facts, **progress_context},
+            )
+
+        catalog_intent_present = any(self._catalog_intent_flags(inbound_text))
+        if not catalog_intent_present:
+            negotiation_context = self._negotiation_context(
+                client=client,
+                playbook=playbook,
+                conversation=conversation,
+                inbound_text=inbound_text,
+            )
+            if negotiation_context:
+                return PreparedReplyContext(
+                    kind=str(negotiation_context.pop("kind")),
+                    next_best_action=str(negotiation_context.pop("next_best_action")),
+                    facts={**common_facts, **negotiation_context},
+                )
+
+        recommendation_context = self._recommendation_reply_context(
+            session,
+            client=client,
+            playbook=playbook,
+            channel=channel,
+            conversation=conversation,
+            inbound_text=inbound_text,
+            run=run,
+        )
+        if recommendation_context is not None:
+            return PreparedReplyContext(
+                kind="recommendation",
+                next_best_action="present_ranked_options_then_ask_customer_to_choose",
+                facts={**common_facts, **recommendation_context},
+                tool_names=("search_catalog_variants",),
+            )
+
+        if GREETING_RE.match(inbound_text):
+            return PreparedReplyContext(
+                kind="greeting",
+                next_best_action="continue_existing_focus_or_open_discovery",
+                facts={
+                    **common_facts,
+                    "current_focus": str((self._memory(conversation).get("sales_state") or {}).get("focus_label") or ""),
+                    "preference_questions": self._template_questions(playbook),
+                },
+            )
+
+        discovery_context = self._discovery_reply_context(playbook=playbook, conversation=conversation, inbound_text=inbound_text)
+        if discovery_context:
+            return PreparedReplyContext(
+                kind="discovery",
+                next_best_action="ask_for_missing_purchase_preferences",
+                facts={**common_facts, **discovery_context},
+            )
+
+        catalog_grounding = self._build_catalog_grounding(
+            session,
+            channel=channel,
+            conversation=conversation,
+            inbound_text=inbound_text,
+            run=run,
+        )
+        if catalog_grounding is not None:
+            draft_context = self._draft_order_reply_context(
+                session,
+                client=client,
+                channel=channel,
+                conversation=conversation,
+                inbound=inbound,
+                run=run,
+                grounding=catalog_grounding,
+            )
+            if draft_context is not None:
+                draft_tool_names = tuple(
+                    dict.fromkeys((*catalog_grounding.tool_names, *draft_context.pop("tool_names", ())))
+                )
+                return PreparedReplyContext(
+                    kind=str(draft_context.pop("kind")),
+                    next_best_action=str(draft_context.pop("next_best_action")),
+                    facts={**common_facts, **draft_context},
+                    tool_names=draft_tool_names,
+                )
+            self._remember_catalog_grounding(conversation, catalog_grounding)
+            return PreparedReplyContext(
+                kind="catalog_grounded_answer",
+                next_best_action="answer_grounded_fact_then_offer_one_next_step",
+                facts={**common_facts, **self._catalog_grounding_reply_context(client, playbook, conversation, inbound_text, catalog_grounding)},
+                tool_names=catalog_grounding.tool_names,
+            )
+
+        if policy_facts.get("requested_policy_keys"):
+            return PreparedReplyContext(
+                kind="policy_answer",
+                next_best_action="answer_known_policy_or_offer_staff_confirmation",
+                facts=common_facts,
+            )
+
+        return PreparedReplyContext(
+            kind="general_sales_conversation",
+            next_best_action=str(strategy_snapshot.get("next_best_action") or "move_conversation_forward"),
+            facts=common_facts,
+        )
+
+    def _compose_model_customer_reply(
+        self,
+        *,
+        client: ClientModel,
+        playbook: AssistantPlaybookModel,
+        channel: CustomerChannelModel,
+        conversation: CustomerConversationModel,
+        inbound: CustomerMessageModel,
+        run: AssistantRunModel,
+        system_prompt: str,
+        history: list[dict[str, Any]],
+        strategy_snapshot: dict[str, Any],
+        memory_snapshot: dict[str, Any],
+        prepared: PreparedReplyContext,
+    ) -> tuple[str, dict[str, int | None]]:
+        prompt_snapshot = dict(run.prompt_snapshot_json or {})
+        prompt_snapshot["reply_context"] = {
+            "kind": prepared.kind,
+            "next_best_action": prepared.next_best_action,
+            "facts": prepared.facts,
+            "tool_names": list(prepared.tool_names),
+        }
+        run.prompt_snapshot_json = _json_ready(prompt_snapshot)
+
+        composer_instruction = "\n".join(
+            [
+                "Write the final customer-facing reply from the structured EasyEcom context.",
+                "The backend has already selected safe facts and performed any required DB tools. You are responsible for natural wording only.",
+                "Do not expose JSON, internal field names, validation rules, or tool names.",
+                "Use only the supplied facts for product, price, stock, policy, discount, order, payment, delivery, and customer memory.",
+                "If a price, quantity, SKU, stock count, draft order number, or requested price is supplied and relevant to the customer's message, include it exactly.",
+                "If the context says the order is draft-only, make clear it is not confirmed, charged, reserved, fulfilled, or delivered.",
+                "If a policy is unknown or a decision requires staff review, say staff will confirm instead of guessing.",
+                "Ask at most one useful question unless the context contains multiple product options.",
+                "Sound like a capable store owner or senior CS/salesperson: concise, human, contextual, and commercially useful.",
+                "Do not include reasoning, planning, source-context commentary, or phrases like 'the context says', 'we should', or 'let us craft'.",
+                "Return only the message to send to the customer.",
+                f"Prepared reply context: {json.dumps(_json_ready({'kind': prepared.kind, 'next_best_action': prepared.next_best_action, 'facts': prepared.facts}))}",
+            ]
+        )
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "system", "content": self._language_instruction(conversation)},
+            {"role": "system", "content": self._strategy_message(strategy_snapshot)},
+            {"role": "system", "content": self._memory_graph_message(memory_snapshot)},
+            {"role": "system", "content": composer_instruction},
+            *history,
+            {"role": "user", "content": inbound.message_text},
+        ]
+        usage: dict[str, int | None] = {"prompt_tokens": None, "completion_tokens": None, "total_tokens": None}
+        final_text = ""
+        for attempt in range(2):
+            payload = self._ai_client.create_chat_completion(messages=messages, tools=[])
+            model_name = str(payload.get("_easy_ecom_model_name") or "").strip()
+            if model_name:
+                run.model_name = model_name
+            fallback_from = str(payload.get("_easy_ecom_fallback_from") or "").strip()
+            if fallback_from:
+                prompt_snapshot = dict(run.prompt_snapshot_json or {})
+                prompt_snapshot["model_fallback"] = {
+                    "from": fallback_from,
+                    "to": model_name,
+                    "reason": str(payload.get("_easy_ecom_fallback_reason") or ""),
+                }
+                run.prompt_snapshot_json = _json_ready(prompt_snapshot)
+            usage_payload = payload.get("usage") or {}
+            usage = {
+                "prompt_tokens": usage_payload.get("prompt_tokens"),
+                "completion_tokens": usage_payload.get("completion_tokens"),
+                "total_tokens": usage_payload.get("total_tokens"),
+            }
+            choice = (payload.get("choices") or [{}])[0]
+            message = choice.get("message") or {}
+            final_text = str(message.get("content") or "").strip()
+            if not self._contains_internal_reasoning(final_text):
+                return final_text, usage
+            if attempt == 0:
+                messages.append({"role": "assistant", "content": final_text})
+                messages.append(
+                    {
+                        "role": "system",
+                        "content": (
+                            "The previous response exposed internal reasoning or source context. Rewrite it as only the final "
+                            "customer-facing store reply. Do not mention context, tools, strategy, fields, or what you are planning."
+                        ),
+                    }
+                )
+        return final_text, usage
+
+    def _contains_internal_reasoning(self, response_text: str) -> bool:
+        lower = response_text.lower()
+        markers = (
+            "prepared reply context",
+            "the context says",
+            "according to strategy",
+            "next best action",
+            "we should",
+            "we need to",
+            "let's craft",
+            "let us craft",
+            "final reply:",
+            "customer-facing",
+            "unit_price",
+            "match_status",
+            "draft_order_guardrail",
+            "tool_names",
+            "customer asking",
+        )
+        return any(marker in lower for marker in markers)
+
+    def _risk_flags(self, playbook: AssistantPlaybookModel, inbound_text: str) -> dict[str, bool]:
+        lower = inbound_text.lower()
+        return {
+            "complaint_or_dispute": bool(re.search(r"\b(angry|complaint|refund|lawsuit|legal)\b", lower)),
+            "medical_or_health": bool(self._has_risk_terms(lower) and playbook.business_type in {"pet_food", "cosmetics", "grocery"}),
+            "electronics_safety": bool(self._has_electronics_safety_terms(lower)),
+            "urgent_safety": bool(re.search(r"\b(unsafe|emergency|toxic|poison)\b", lower)),
+        }
+
+    def _template_questions(self, playbook: AssistantPlaybookModel) -> list[str]:
+        template = playbook.industry_template_json or INDUSTRY_TEMPLATES.get(playbook.business_type, INDUSTRY_TEMPLATES["general_retail"])
+        return [str(question).strip() for question in template.get("questions", []) if str(question).strip()]
+
+    def _discovery_reply_context(
+        self,
+        *,
+        playbook: AssistantPlaybookModel,
+        conversation: CustomerConversationModel,
+        inbound_text: str,
+    ) -> dict[str, Any]:
+        lower = inbound_text.lower()
+        price_intent, stock_intent, _ = self._catalog_intent_flags(inbound_text)
+        if not (CATALOG_RECOMMENDATION_RE.search(lower) or self._has_shopping_discovery_intent(lower)):
+            return {}
+        if price_intent or stock_intent:
+            return {}
+        memory = self._memory(conversation)
+        preferences = dict(memory.get("preferences") or {})
+        if memory.get("pending_recommendation") and self._has_enough_recommendation_preferences(playbook, preferences):
+            return {}
+        expected = self._template_questions(playbook)
+        missing = [
+            question
+            for question in expected
+            if not self._preference_question_is_satisfied(question, preferences)
+        ]
+        return {
+            "known_preferences": preferences,
+            "preference_questions": expected,
+            "missing_preference_questions": missing[:4] or expected[:4],
+            "repeat_buyer": bool(dict(memory.get("customer_signals") or {}).get("repeat_buyer")),
+        }
+
+    def _preference_question_is_satisfied(self, question: str, preferences: dict[str, Any]) -> bool:
+        normalized = question.lower()
+        if "size" in normalized:
+            return bool(preferences.get("size") or preferences.get("pet_type"))
+        if "color" in normalized or "style" in normalized:
+            return bool(preferences.get("colors") or preferences.get("style"))
+        if "use" in normalized or "occasion" in normalized:
+            return bool(preferences.get("occasion"))
+        if "budget" in normalized:
+            return bool(preferences.get("budget"))
+        if "allerg" in normalized:
+            return bool(preferences.get("allergy_concern"))
+        if "device" in normalized or "compatibility" in normalized:
+            return bool(preferences.get("device_or_model"))
+        if "skin" in normalized or "result" in normalized:
+            return bool(preferences.get("skin_need"))
+        return bool(preferences.get(normalized.replace(" ", "_")))
+
+    def _media_reply_context(
+        self,
+        *,
+        conversation: CustomerConversationModel,
+        inbound_text: str,
+    ) -> dict[str, Any]:
+        memory = self._memory(conversation)
+        modality = dict(memory.get("message_modality") or {})
+        if not modality.get("has_image"):
+            return {}
+        if self._catalog_intent_flags(inbound_text)[0] or self._catalog_intent_flags(inbound_text)[1]:
+            return {}
+        return {
+            "message_modality": modality,
+            "vision_available": False,
+            "needed_details": ["product name", "size or color", "SKU", "exact issue or desired comparison"],
+        }
+
+    def _recommendation_reply_context(
+        self,
+        session: Session,
+        *,
+        client: ClientModel,
+        playbook: AssistantPlaybookModel,
+        channel: CustomerChannelModel,
+        conversation: CustomerConversationModel,
+        inbound_text: str,
+        run: AssistantRunModel,
+    ) -> dict[str, Any] | None:
+        memory = conversation.memory_json or {}
+        pending_recommendation = bool(memory.get("pending_recommendation"))
+        if not pending_recommendation or any(self._catalog_intent_flags(inbound_text)):
+            return None
+        preferences = dict(memory.get("preferences") or {})
+        if not self._has_enough_recommendation_preferences(playbook, preferences):
+            return None
+        result = self._execute_and_record_tool(
+            session,
+            tool_name="search_catalog_variants",
+            arguments={"query": ""},
+            channel=channel,
+            conversation=conversation,
+            run=run,
+        )
+        items = [
+            item
+            for item in (result.get("items") or [])
+            if as_decimal(item.get("available_to_sell") or ZERO) > ZERO
+        ]
+        ranked = sorted(
+            ((self._recommendation_score(preferences, item), item) for item in items),
+            key=lambda pair: pair[0],
+            reverse=True,
+        )
+        choices = [item for score, item in ranked if score > 0][:3]
+        if not choices:
+            return None
+        self._remember_catalog_choices(conversation, choices)
+        return {
+            "known_preferences": preferences,
+            "preference_summary": self._preference_summary(preferences),
+            "ranked_available_choices": [self._variant_customer_fact(item, client) for item in choices],
+            "customer_signals": dict(memory.get("customer_signals") or {}),
+        }
+
+    def _draft_order_reply_context(
+        self,
+        session: Session,
+        *,
+        client: ClientModel,
+        channel: CustomerChannelModel,
+        conversation: CustomerConversationModel,
+        inbound: CustomerMessageModel,
+        run: AssistantRunModel,
+        grounding: CatalogGrounding,
+    ) -> dict[str, Any] | None:
+        price_intent, _, order_intent = self._catalog_intent_flags(inbound.message_text)
+        if not order_intent or price_intent or PRICE_NEGOTIATION_RE.search(inbound.message_text.lower()):
+            return None
+        requested_price = self._extract_requested_price(inbound.message_text)
+        items = list(grounding.search_result.get("items") or [])
+        if len(items) != 1:
+            return None
+
+        variant = (grounding.availability_result or {}).get("variant") or items[0]
+        label = str(variant.get("label") or variant.get("product_name") or "")
+        available = as_decimal(variant.get("available_to_sell") or ZERO)
+        if available <= ZERO:
+            self._update_sales_memory(conversation, focus_label=label, offer_state="out_of_stock", next_step="offer_alternative")
+            return {
+                "kind": "out_of_stock_order_request",
+                "next_best_action": "offer_available_alternative",
+                "selected_variant": self._variant_customer_fact(variant, client),
+                "stock_status": "out_of_stock",
+            }
+
+        memory = self._memory(conversation)
+        if requested_price is None:
+            requested_price = as_optional_decimal(dict(memory.get("sales_state") or {}).get("requested_price"))
+        contact = dict(memory.get("customer_contact") or {})
+        customer_name = (
+            str(contact.get("name") or conversation.external_sender_name or "").strip()
+            or self._extract_customer_name(inbound.message_text)
+            or "Customer"
+        )
+        customer_phone = str(contact.get("phone") or conversation.external_sender_phone or self._extract_phone(inbound.message_text) or "").strip()
+        customer_email = str(contact.get("email") or conversation.external_sender_email or self._extract_email(inbound.message_text) or "").strip()
+        if not normalize_phone(customer_phone) and not normalize_email(customer_email):
+            self._remember_catalog_grounding(conversation, grounding)
+            self._update_sales_memory(conversation, focus_label=label, offer_state="contact_needed", next_step="collect_contact")
+            if requested_price is not None:
+                memory = self._memory(conversation)
+                sales_state = dict(memory.get("sales_state") or {})
+                sales_state["requested_price"] = str(requested_price)
+                memory["sales_state"] = sales_state
+                conversation.memory_json = _json_ready(memory)
+            return {
+                "kind": "draft_order_contact_needed",
+                "next_best_action": "collect_phone_or_email",
+                "selected_variant": self._variant_customer_fact(variant, client),
+                "requested_price": self._money_fact(requested_price, client) if requested_price is not None else None,
+                "required_contact_fields": ["phone", "email"],
+                "draft_order_guardrail": "only prepare draft after customer contact is available",
+            }
+
+        quantity = self._extract_quantity(inbound.message_text)
+        quantity = max(Decimal("1"), min(quantity, available))
+        result = self._execute_and_record_tool(
+            session,
+            tool_name="create_draft_order",
+            arguments={
+                "customer_name": customer_name,
+                "customer_phone": customer_phone,
+                "customer_email": customer_email,
+                "location_id": variant.get("location_id") or grounding.search_result.get("location_id") or "",
+                "lines": [{"variant_id": str(variant.get("variant_id") or ""), "quantity": quantity}],
+                "requested_price": str(requested_price) if requested_price is not None else "",
+            },
+            channel=channel,
+            conversation=conversation,
+            run=run,
+        )
+        if not result.get("ok"):
+            return {
+                "kind": "draft_order_error",
+                "next_best_action": "ask_staff_to_finish_order_review",
+                "selected_variant": self._variant_customer_fact(variant, client),
+                "tool_error": str(result.get("error") or ""),
+                "tool_names": ("create_draft_order",),
+            }
+
+        self._remember_catalog_grounding(conversation, grounding)
+        memory = self._memory(conversation)
+        memory["draft_order"] = _json_ready(result.get("draft_order") or {})
+        conversation.memory_json = memory
+        draft = result.get("draft_order") or {}
+        self._update_sales_memory(
+            conversation,
+            focus_label=label,
+            offer_state="draft_created",
+            draft_order=draft,
+            next_step="confirm_delivery_details",
+        )
+        return {
+            "kind": "draft_order_created",
+            "next_best_action": "explain_draft_status_and_collect_delivery_details",
+            "selected_variant": self._variant_customer_fact(variant, client),
+            "quantity": self._format_quantity(quantity),
+            "requested_price": self._money_fact(requested_price, client) if requested_price is not None else None,
+            "draft_order": draft,
+            "order_status_guardrail": {
+                "status": "draft",
+                "staff_review_required": True,
+                "not_confirmed": True,
+                "not_charged": True,
+                "stock_not_reserved_or_fulfilled": True,
+            },
+            "tool_names": ("create_draft_order",),
+        }
+
+    def _memory(self, conversation: CustomerConversationModel) -> dict[str, Any]:
+        memory = conversation.memory_json if isinstance(conversation.memory_json, dict) else {}
+        return dict(memory)
+
+    def _link_customer_from_contact(self, session: Session, conversation: CustomerConversationModel) -> None:
+        if conversation.customer_id:
+            return
+        filters = []
+        normalized_phone = normalize_phone(conversation.external_sender_phone)
+        normalized_email = normalize_email(conversation.external_sender_email)
+        if normalized_phone:
+            filters.append(CustomerModel.phone_normalized == normalized_phone)
+        if normalized_email:
+            filters.append(CustomerModel.email_normalized == normalized_email)
+        if not filters:
+            return
+        customer = session.execute(
+            select(CustomerModel).where(CustomerModel.client_id == conversation.client_id, or_(*filters))
+        ).scalar_one_or_none()
+        if customer is not None:
+            conversation.customer_id = customer.customer_id
+
+    def _related_conversations(
+        self,
+        session: Session,
+        conversation: CustomerConversationModel,
+        *,
+        limit: int = 3,
+    ) -> list[CustomerConversationModel]:
+        stmt = (
+            select(CustomerConversationModel)
+            .where(
+                CustomerConversationModel.client_id == conversation.client_id,
+                CustomerConversationModel.conversation_id != conversation.conversation_id,
+            )
+            .order_by(CustomerConversationModel.last_message_at.desc().nullslast(), CustomerConversationModel.created_at.desc())
+            .limit(12)
+        )
+        candidates = list(session.execute(stmt).scalars())
+        normalized_phone = normalize_phone(conversation.external_sender_phone)
+        normalized_email = normalize_email(conversation.external_sender_email)
+        related: list[CustomerConversationModel] = []
+        for candidate in candidates:
+            same_customer = bool(conversation.customer_id and candidate.customer_id == conversation.customer_id)
+            same_phone = bool(normalized_phone and normalize_phone(candidate.external_sender_phone) == normalized_phone)
+            same_email = bool(normalized_email and normalize_email(candidate.external_sender_email) == normalized_email)
+            if same_customer or same_phone or same_email:
+                related.append(candidate)
+            if len(related) >= limit:
+                break
+        return related
+
+    def _merge_memory(self, base: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
+        merged = deepcopy(base)
+        for key, value in incoming.items():
+            if value in (None, "", [], {}):
+                continue
+            current = merged.get(key)
+            if isinstance(current, dict) and isinstance(value, dict):
+                merged[key] = self._merge_memory(current, value)
+            elif isinstance(current, list) and isinstance(value, list):
+                merged[key] = value + [item for item in current if item not in value]
+            else:
+                merged[key] = deepcopy(value)
+        return merged
+
+    def _seed_memory_from_related(self, session: Session, conversation: CustomerConversationModel) -> None:
+        memory = self._memory(conversation)
+        if memory.get("graph_seeded"):
+            return
+        related = self._related_conversations(session, conversation)
+        if not related:
+            memory["graph_seeded"] = True
+            conversation.memory_json = memory
+            return
+        latest = related[0]
+        latest_memory = self._memory(latest)
+        carry = {
+            "preferences": latest_memory.get("preferences") or {},
+            "customer_contact": latest_memory.get("customer_contact") or {},
+            "last_variant": latest_memory.get("last_variant") or {},
+            "recent_choices": latest_memory.get("recent_choices") or [],
+            "sales_state": latest_memory.get("sales_state") or {},
+            "customer_journey": latest_memory.get("customer_journey") or {},
+            "thread_graph": {
+                "related_conversations": [
+                    {
+                        "conversation_id": str(item.conversation_id),
+                        "channel_id": str(item.channel_id),
+                        "latest_intent": item.latest_intent,
+                        "latest_summary": item.latest_summary,
+                        "last_message_preview": item.last_message_preview,
+                        "last_message_at": item.last_message_at.isoformat() if item.last_message_at else None,
+                    }
+                    for item in related[:3]
+                ]
+            },
+        }
+        memory = self._merge_memory(memory, carry)
+        memory["graph_seeded"] = True
+        memory.setdefault("thread_graph", {})
+        memory["thread_graph"]["restored_from_conversation_id"] = str(latest.conversation_id)
+        conversation.memory_json = _json_ready(memory)
+
+    def _memory_graph_snapshot(
+        self,
+        session: Session,
+        conversation: CustomerConversationModel,
+        *,
+        inbound_text: str,
+    ) -> dict[str, Any]:
+        memory = self._memory(conversation)
+        related = self._related_conversations(session, conversation, limit=2)
+        snapshot = {
+            "customer_contact": memory.get("customer_contact") or {},
+            "preferences": memory.get("preferences") or {},
+            "last_variant": memory.get("last_variant") or {},
+            "recent_choices": memory.get("recent_choices") or [],
+            "sales_state": memory.get("sales_state") or {},
+            "customer_journey": memory.get("customer_journey") or {},
+            "conversation_status": conversation.status,
+            "latest_intent": conversation.latest_intent,
+            "latest_summary": conversation.latest_summary,
+            "related_conversations": [
+                {
+                    "channel_id": str(item.channel_id),
+                    "latest_intent": item.latest_intent,
+                    "latest_summary": item.latest_summary,
+                    "last_message_preview": item.last_message_preview,
+                }
+                for item in related
+            ],
+            "current_message_signals": {
+                "asks_price": self._catalog_intent_flags(inbound_text)[0],
+                "asks_stock": self._catalog_intent_flags(inbound_text)[1],
+                "wants_to_order": self._catalog_intent_flags(inbound_text)[2],
+            },
+        }
+        return _json_ready(snapshot)
+
+    def _memory_graph_message(self, snapshot: dict[str, Any]) -> str:
+        return (
+            "Tenant-safe memory graph snapshot for this customer. Use it to continue naturally, avoid repeating questions, "
+            "and keep selling context consistent. Treat it as tenant-local structured memory, not as permission to invent facts: "
+            "related conversations are historical context only and must never be treated as the current order, current draft, "
+            "or current payment/fulfillment status unless the current reply context explicitly says so. "
+            f"{json.dumps(snapshot)}"
+        )
+
+    def _update_sales_memory(
+        self,
+        conversation: CustomerConversationModel,
+        *,
+        focus_label: str = "",
+        last_offered_price: Any | None = None,
+        offer_state: str = "",
+        draft_order: dict[str, Any] | None = None,
+        next_step: str = "",
+    ) -> None:
+        memory = self._memory(conversation)
+        sales_state = dict(memory.get("sales_state") or {})
+        if focus_label:
+            sales_state["focus_label"] = focus_label
+        if last_offered_price is not None:
+            sales_state["last_offered_price"] = _json_ready(last_offered_price)
+        if offer_state:
+            sales_state["offer_state"] = offer_state
+        if draft_order:
+            sales_state["draft_order"] = _json_ready(draft_order)
+        if next_step:
+            sales_state["next_step"] = next_step
+        memory["sales_state"] = sales_state
+        journey = dict(memory.get("customer_journey") or {})
+        if focus_label:
+            journey["current_focus"] = focus_label
+        if offer_state:
+            journey["stage"] = offer_state
+        if next_step:
+            journey["next_step"] = next_step
+        memory["customer_journey"] = journey
+        conversation.memory_json = _json_ready(memory)
+
+    def _update_negotiation_memory(
+        self,
+        conversation: CustomerConversationModel,
+        *,
+        price_objection: bool = False,
+        best_price_ask: bool = False,
+        hesitation: bool = False,
+        alternative_offered: bool = False,
+        bundle_interest: bool = False,
+        close_attempt: bool = False,
+        last_move: str = "",
+    ) -> None:
+        memory = self._memory(conversation)
+        state = dict(memory.get("negotiation_state") or {})
+        if price_objection:
+            state["price_objection_count"] = int(state.get("price_objection_count") or 0) + 1
+        if best_price_ask:
+            state["best_price_asked_count"] = int(state.get("best_price_asked_count") or 0) + 1
+        if hesitation:
+            state["stall_count"] = int(state.get("stall_count") or 0) + 1
+        if alternative_offered:
+            state["alternatives_offered_count"] = int(state.get("alternatives_offered_count") or 0) + 1
+        if bundle_interest:
+            state["bundle_interest_count"] = int(state.get("bundle_interest_count") or 0) + 1
+        if close_attempt:
+            state["close_attempt_count"] = int(state.get("close_attempt_count") or 0) + 1
+        if last_move:
+            state["last_move"] = last_move
+        memory["negotiation_state"] = state
+        conversation.memory_json = _json_ready(memory)
+
+    def _remember_inbound_context(
+        self,
+        conversation: CustomerConversationModel,
+        playbook: AssistantPlaybookModel,
+        inbound_text: str,
+        *,
+        metadata: dict[str, Any] | None = None,
+        raw_payload: dict[str, Any] | None = None,
+    ) -> None:
+        memory = self._memory(conversation)
+        preferences = dict(memory.get("preferences") or {})
+        preferences.update(self._extract_customer_preferences(playbook, inbound_text))
+        if preferences:
+            memory["preferences"] = preferences
+
+        contact = dict(memory.get("customer_contact") or {})
+        name = self._extract_customer_name(inbound_text)
+        phone = self._extract_phone(inbound_text)
+        email = self._extract_email(inbound_text)
+        if name:
+            contact["name"] = name
+            if not conversation.external_sender_name:
+                conversation.external_sender_name = name
+        if phone:
+            contact["phone"] = phone
+            if not conversation.external_sender_phone:
+                conversation.external_sender_phone = phone
+        if email:
+            contact["email"] = email
+            if not conversation.external_sender_email:
+                conversation.external_sender_email = email
+        if contact:
+            memory["customer_contact"] = contact
+
+        lead_context = self._extract_lead_context(inbound_text)
+        if lead_context:
+            memory["lead_context"] = {**dict(memory.get("lead_context") or {}), **lead_context}
+
+        language_hint = self._detect_language_hint(inbound_text)
+        if language_hint:
+            memory["language_hint"] = language_hint
+
+        modality = self._extract_message_modality(inbound_text, metadata, raw_payload)
+        if modality.get("has_attachment"):
+            memory["message_modality"] = modality
+
+        if self._has_shopping_discovery_intent(inbound_text.lower()) or memory.get("pending_recommendation"):
+            memory["pending_recommendation"] = True
+        journey = dict(memory.get("customer_journey") or {})
+        if preferences:
+            journey["preference_summary"] = self._preference_summary(preferences)
+        if contact:
+            journey["contact_ready"] = bool(contact.get("phone") or contact.get("email"))
+        if lead_context:
+            journey["lead_source"] = lead_context.get("source") or lead_context.get("source_type") or ""
+        if language_hint:
+            journey["language"] = language_hint
+        if modality.get("has_attachment"):
+            journey["has_attachment"] = True
+        if self._has_shopping_discovery_intent(inbound_text.lower()):
+            journey["stage"] = "discovery"
+            journey["next_step"] = "narrow_recommendation"
+        memory["customer_journey"] = journey
+        conversation.memory_json = memory
+
+    def _remember_catalog_grounding(self, conversation: CustomerConversationModel, grounding: CatalogGrounding) -> None:
+        items = list(grounding.search_result.get("items") or [])
+        if len(items) != 1:
+            return
+        variant = dict((grounding.availability_result or {}).get("variant") or items[0])
+        price_variant = (grounding.price_result or {}).get("variant") or {}
+        if price_variant.get("unit_price") is not None:
+            variant["unit_price"] = price_variant.get("unit_price")
+        memory = self._memory(conversation)
+        memory["last_variant"] = _json_ready(variant)
+        memory["pending_recommendation"] = False
+        conversation.memory_json = memory
+        self._update_sales_memory(
+            conversation,
+            focus_label=str(variant.get("label") or variant.get("product_name") or ""),
+            next_step="confirm_variant_or_order",
+        )
+
+    def _remember_catalog_choices(self, conversation: CustomerConversationModel, choices: list[dict[str, Any]]) -> None:
+        memory = self._memory(conversation)
+        memory["recent_choices"] = _json_ready([dict(choice) for choice in choices[:5]])
+        memory["pending_recommendation"] = False
+        conversation.memory_json = memory
+        top_choice = choices[0] if choices else {}
+        self._update_sales_memory(
+            conversation,
+            focus_label=str(top_choice.get("label") or top_choice.get("product_name") or ""),
+            offer_state="recommendation_ready",
+            next_step="customer_pick_option",
+        )
+
+    def _extract_customer_preferences(self, playbook: AssistantPlaybookModel, text: str) -> dict[str, Any]:
+        lower = text.lower()
+        preferences: dict[str, Any] = {}
+
+        budget_match = re.search(
+            r"\b(?:under|below|less than|max|maximum|budget(?: is)?|up to)\s*(?:aed|dh|dhs|usd|\$)?\s*([0-9]{2,6})\b",
+            lower,
+        ) or re.search(r"\b(?:aed|dh|dhs|usd|\$)\s*([0-9]{2,6})\b", lower)
+        if budget_match:
+            preferences["budget"] = budget_match.group(1)
+
+        size_match = re.search(r"\b(?:size|sz)\s*([a-z]{1,3}|[0-9]{1,2})\b", lower)
+        if not size_match and playbook.business_type in {"shoe_store", "fashion"}:
+            size_match = re.search(r"\b(?:eu|uk|us)\s*([0-9]{1,2})\b", lower)
+        if size_match:
+            preferences["size"] = size_match.group(1).upper()
+
+        color_terms = [
+            "black",
+            "white",
+            "sand",
+            "beige",
+            "cream",
+            "brown",
+            "tan",
+            "navy",
+            "blue",
+            "indigo",
+            "grey",
+            "gray",
+            "charcoal",
+            "green",
+            "emerald",
+            "red",
+            "pink",
+            "clear",
+            "neutral",
+        ]
+        colors = [color for color in color_terms if re.search(rf"\b{re.escape(color)}s?\b", lower)]
+        if "not too flashy" in lower or "nothing flashy" in lower:
+            colors.append("neutral")
+            preferences["style"] = "not too flashy"
+        if colors:
+            preferences["colors"] = sorted(set(colors))
+
+        if re.search(r"\boffice party\b", lower):
+            preferences["occasion"] = "office party"
+        elif re.search(r"\b(work|office|formal|casual|running|gym|breakfast|gift|travel)\b", lower):
+            preferences["occasion"] = re.search(r"\b(work|office|formal|casual|running|gym|breakfast|gift|travel)\b", lower).group(1)
+
+        if playbook.business_type == "pet_food":
+            pet_match = re.search(r"\b(dog|puppy|cat|kitten|bird|rabbit)\b", lower)
+            if pet_match:
+                preferences["pet_type"] = pet_match.group(1)
+            if self._has_allergy_terms(lower):
+                preferences["allergy_concern"] = True
+        if playbook.business_type == "electronics":
+            model_match = re.search(r"\b(iphone|ipad|samsung|galaxy|macbook|laptop|usb-c|type-c|android)\b", lower)
+            if model_match:
+                preferences["device_or_model"] = model_match.group(1)
+        if playbook.business_type == "cosmetics":
+            skin_match = re.search(r"\b(oily|dry|combination|sensitive|acne|dull|hydration|brightening)\b", lower)
+            if skin_match:
+                preferences["skin_need"] = skin_match.group(1)
+
+        return preferences
+
+    def _extract_customer_name(self, text: str) -> str:
+        match = re.search(r"\bmy name is\s+([A-Za-z][A-Za-z .'-]{1,80})", text, re.IGNORECASE)
+        if not match:
+            return ""
+        name = re.split(r"\b(?:phone|mobile|email|and|,)\b", match.group(1).strip(), maxsplit=1, flags=re.IGNORECASE)[0]
+        return " ".join(name.split()).strip(" .,'-")
+
+    def _extract_phone(self, text: str) -> str:
+        match = re.search(r"(?<!\w)(\+?\d[\d\s().-]{6,}\d)(?!\w)", text)
+        if not match:
+            return ""
+        return " ".join(match.group(1).split())
+
+    def _extract_email(self, text: str) -> str:
+        match = re.search(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", text, re.IGNORECASE)
+        return match.group(0).lower() if match else ""
+
+    def _extract_quantity(self, text: str) -> Decimal:
+        lower = text.lower()
+        match = re.search(r"\b(?:qty|quantity|take|need|want|buy|order)\s+([0-9]{1,3})\b", lower)
+        if not match:
+            return Decimal("1")
+        return as_decimal(match.group(1))
+
+    def _extract_requested_price(self, text: str) -> Decimal | None:
+        lower = text.lower()
+        match = re.search(
+            r"\b(?:aed|usd|bdt)\s*([0-9]{2,7}(?:\.[0-9]{1,2})?)\b|[৳$]\s*([0-9]{2,7}(?:\.[0-9]{1,2})?)",
+            lower,
+        )
+        if not match:
+            match = re.search(r"\b(?:can you do|could you do|do it for|make it)\s+([0-9]{2,7}(?:\.[0-9]{1,2})?)\b", lower)
+        if not match:
+            return None
+        raw_amount = next((group for group in match.groups() if group), "")
+        amount = as_decimal(raw_amount)
+        return amount if amount > ZERO else None
+
+    def _extract_lead_context(self, text: str) -> dict[str, Any]:
+        lower = text.lower()
+        source = ""
+        if re.search(r"\binstagram|insta|ig|reel|story\b", lower):
+            source = "instagram"
+        elif re.search(r"\bfacebook|fb\b", lower):
+            source = "facebook"
+        elif re.search(r"\btiktok\b", lower):
+            source = "tiktok"
+        elif re.search(r"\bgoogle\b", lower):
+            source = "google"
+        elif re.search(r"\bwebsite\b", lower):
+            source = "website"
+        elif re.search(r"\bwhatsapp\b", lower):
+            source = "whatsapp"
+
+        source_type = ""
+        if re.search(r"\b(ad|ads|campaign|promo|promotion|sponsored)\b", lower):
+            source_type = "campaign"
+        elif re.search(r"\b(post|reel|story|video)\b", lower):
+            source_type = "content"
+        elif re.search(r"\b(referred|referral|friend told me|someone told me|recommended by)\b", lower):
+            source_type = "referral"
+        elif source:
+            source_type = "organic"
+
+        if not source and not source_type:
+            return {}
+        return {"source": source, "source_type": source_type}
+
+    def _detect_language_hint(self, text: str) -> str:
+        if re.search(r"[\u0600-\u06FF]", text):
+            return "arabic"
+        if re.search(r"[\u0980-\u09FF]", text):
+            return "bengali"
+        if re.search(r"[\u0900-\u097F]", text):
+            return "hindi"
+        lower = text.lower()
+        banglish_hits = re.findall(
+            r"\b(ami|amra|apni|tumi|kono|akta|ekta|je|khujchi|khujtesi|khujte|chai|lagbe|moddhe|bhalo|juta|budgeter)\b",
+            lower,
+        )
+        if len(set(banglish_hits)) >= 2:
+            return "bengali"
+        latin_letters = re.findall(r"[A-Za-z]", text)
+        if latin_letters:
+            return "english"
+        return ""
+
+    def _extract_message_modality(
+        self,
+        text: str,
+        metadata: dict[str, Any] | None = None,
+        raw_payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        lower = text.lower()
+        metadata = metadata or {}
+        raw_payload = raw_payload or {}
+        attachments = metadata.get("attachments") or raw_payload.get("attachments") or []
+        has_attachment = bool(attachments or metadata.get("attachment") or raw_payload.get("attachment"))
+        has_image = has_attachment and any("image" in str(item).lower() for item in attachments) if isinstance(attachments, list) else has_attachment
+        mentions_image = bool(re.search(r"\b(image|photo|pic|picture|screenshot|screen shot|attached)\b", lower))
+        if mentions_image and not has_attachment:
+            has_image = True
+        return {
+            "has_attachment": bool(has_attachment or mentions_image),
+            "has_image": bool(has_image or mentions_image),
+        }
+
+    def _has_shopping_discovery_intent(self, lower_text: str) -> bool:
+        return bool(
+            re.search(
+                r"\b(looking for|need something|need help|help me choose|recommend|suggest|which|what should i buy|best|suitable|khujchi|khujtesi|khujte|chai|lagbe)\b",
+                lower_text,
+            )
+            or ("formal" in lower_text and "shoe" in lower_text and "budget" in lower_text)
+        )
+
+    def _has_enough_recommendation_preferences(self, playbook: AssistantPlaybookModel, preferences: dict[str, Any]) -> bool:
+        if playbook.business_type in {"fashion", "shoe_store"}:
+            return bool(preferences.get("size") and (preferences.get("colors") or preferences.get("occasion") or preferences.get("budget")))
+        if playbook.business_type == "pet_food":
+            return bool(preferences.get("pet_type") and not preferences.get("allergy_concern"))
+        if playbook.business_type == "electronics":
+            return bool(preferences.get("device_or_model") or preferences.get("budget"))
+        if playbook.business_type == "cosmetics":
+            return bool(preferences.get("skin_need"))
+        return bool(preferences)
+
+    def _recommendation_score(self, preferences: dict[str, Any], item: dict[str, Any]) -> int:
+        haystack = " ".join(
+            str(item.get(field) or "")
+            for field in ("label", "sku", "product_name", "brand", "category")
+        ).lower()
+        score = 0
+        size = str(preferences.get("size") or "").lower()
+        if size and re.search(rf"\b{re.escape(size)}\b", haystack):
+            score += 5
+        colors = [str(color).lower() for color in preferences.get("colors") or []]
+        if "neutral" in colors:
+            neutral_terms = ["sand", "beige", "cream", "tan", "black", "white", "navy", "grey", "gray", "charcoal"]
+            if any(term in haystack for term in neutral_terms):
+                score += 3
+        score += sum(3 for color in colors if color != "neutral" and color in haystack)
+        occasion = str(preferences.get("occasion") or "").lower()
+        if occasion:
+            occasion_terms = {
+                "office party": ["blazer", "dress", "shirt", "trouser", "loafer"],
+                "office": ["blazer", "shirt", "trouser", "loafer"],
+                "work": ["blazer", "shirt", "trouser", "loafer", "sneaker"],
+                "running": ["run", "running", "trainer"],
+                "breakfast": ["oats", "coffee", "bread", "honey"],
+            }
+            score += sum(2 for term in occasion_terms.get(occasion, [occasion]) if term in haystack)
+        budget = preferences.get("budget")
+        if budget and item.get("unit_price") is not None:
+            price = as_decimal(item.get("unit_price"))
+            budget_amount = as_decimal(budget)
+            if price <= budget_amount:
+                score += 4
+            elif price <= budget_amount * Decimal("1.15"):
+                score += 1
+            else:
+                score -= 4
+        if as_decimal(item.get("available_to_sell") or ZERO) > ZERO:
+            score += 1
+        return score
+
+    def _preference_summary(self, preferences: dict[str, Any]) -> str:
+        parts: list[str] = []
+        if preferences.get("size"):
+            parts.append(f"size {preferences['size']}")
+        if preferences.get("colors"):
+            parts.append(f"{self._human_join([str(color) for color in preferences['colors']])} colors")
+        if preferences.get("occasion"):
+            parts.append(str(preferences["occasion"]))
+        if preferences.get("budget"):
+            parts.append(f"budget around {preferences['budget']}")
+        return self._human_join(parts) if parts else "what you shared"
+
+    def _buyer_archetype(self, conversation: CustomerConversationModel, inbound_text: str) -> str:
+        memory = self._memory(conversation)
+        lower = inbound_text.lower()
+        preferences = dict(memory.get("preferences") or {})
+        lead_context = dict(memory.get("lead_context") or {})
+        if conversation.customer_id or dict(memory.get("thread_graph") or {}).get("restored_from_conversation_id"):
+            return "repeat_buyer"
+        if re.search(r"\b(cheap|cheaper|budget|within budget|budget er|budgeter|moddhe|discount|best price|lower|offer)\b", lower) or preferences.get("budget"):
+            return "budget_buyer"
+        if re.search(r"\b(urgent|quick|fast|asap|today|immediately|right now)\b", lower):
+            return "convenience_buyer"
+        if lead_context.get("source_type") == "campaign":
+            return "campaign_buyer"
+        if re.search(r"\b(best|premium|top|quality|comfortable|long lasting|leather)\b", lower):
+            return "premium_buyer"
+        stored = str(memory.get("buyer_archetype") or "").strip()
+        if stored:
+            return stored
+        return "explorer"
+
+    def _persuasion_style(self, archetype: str) -> dict[str, str]:
+        styles = {
+            "repeat_buyer": {
+                "commercial_strategy": "reduce repeat-purchase friction",
+                "tone": "familiar, efficient, and context-aware",
+                "decision_bias": "favor the previously trusted path unless the customer asks to change direction",
+            },
+            "budget_buyer": {
+                "commercial_strategy": "protect margin while making value easy to understand",
+                "tone": "respectful, practical, and budget-aware",
+                "decision_bias": "compare value and lower-price alternatives without promising unauthorized discounts",
+            },
+            "convenience_buyer": {
+                "commercial_strategy": "remove friction and shorten decision time",
+                "tone": "clear, direct, and helpful",
+                "decision_bias": "offer the cleanest next step with minimal back-and-forth",
+            },
+            "campaign_buyer": {
+                "commercial_strategy": "preserve ad or content momentum",
+                "tone": "focused and easy to act on",
+                "decision_bias": "connect the request to the campaign context when useful",
+            },
+            "premium_buyer": {
+                "commercial_strategy": "justify quality and confidence without exaggerating claims",
+                "tone": "assured and knowledgeable",
+                "decision_bias": "explain the stronger option before discussing cheaper alternatives",
+            },
+            "explorer": {
+                "commercial_strategy": "guide discovery without pressure",
+                "tone": "curious, calm, and helpful",
+                "decision_bias": "ask for the smallest missing detail needed to make progress",
+            },
+        }
+        return styles.get(archetype, styles["explorer"])
+
+    def _language_instruction(self, conversation: CustomerConversationModel) -> str:
+        language_hint = str(self._memory(conversation).get("language_hint") or "").strip().lower()
+        labels = {
+            "arabic": "Reply in Arabic unless the customer switches language.",
+            "bengali": "Reply in Bengali unless the customer switches language.",
+            "hindi": "Reply in Hindi unless the customer switches language.",
+            "english": "Reply in natural English unless the customer switches language.",
+        }
+        return labels.get(language_hint, "Reply in the customer's clearest language.")
+
+    def _extract_customer_signals(
+        self,
+        conversation: CustomerConversationModel,
+        inbound_text: str,
+    ) -> dict[str, Any]:
+        lower = inbound_text.lower()
+        memory = self._memory(conversation)
+        sales_state = dict(memory.get("sales_state") or {})
+        customer_contact = dict(memory.get("customer_contact") or {})
+        lead_context = dict(memory.get("lead_context") or {})
+        buyer_archetype = self._buyer_archetype(conversation, inbound_text)
+        return {
+            "price_sensitive": bool(re.search(r"\b(cheap|cheaper|budget|discount|best price|lower|offer|expensive|too much|too high)\b", lower)),
+            "hesitant": bool(re.search(r"\b(later|think about it|let me think|maybe later|not sure|i'll come back)\b", lower)),
+            "high_intent": bool(self._catalog_intent_flags(inbound_text)[2] or sales_state.get("draft_order") or re.search(r"\b(take it|book it|let's do it|prepare it|i want this)\b", lower)),
+            "repeat_buyer": bool(conversation.customer_id or dict(memory.get("thread_graph") or {}).get("restored_from_conversation_id")),
+            "contact_ready": bool(customer_contact.get("phone") or customer_contact.get("email") or conversation.external_sender_phone or conversation.external_sender_email),
+            "campaign_origin": bool(lead_context.get("source_type") == "campaign"),
+            "referral_origin": bool(lead_context.get("source_type") == "referral"),
+            "buyer_archetype": buyer_archetype,
+        }
+
+    def _conversation_strategy_snapshot(
+        self,
+        conversation: CustomerConversationModel,
+        inbound_text: str,
+        *,
+        metadata: dict[str, Any] | None = None,
+        raw_payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        memory = self._memory(conversation)
+        journey = dict(memory.get("customer_journey") or {})
+        sales_state = dict(memory.get("sales_state") or {})
+        negotiation_state = dict(memory.get("negotiation_state") or {})
+        lead_context = dict(memory.get("lead_context") or {})
+        language_hint = str(memory.get("language_hint") or self._detect_language_hint(inbound_text) or "")
+        message_modality = self._extract_message_modality(inbound_text, metadata, raw_payload)
+        signals = self._extract_customer_signals(conversation, inbound_text)
+        buyer_archetype = str(signals.get("buyer_archetype") or self._buyer_archetype(conversation, inbound_text))
+        persuasion = self._persuasion_style(buyer_archetype)
+        lower = inbound_text.lower()
+        price_intent, stock_intent, order_intent = self._catalog_intent_flags(inbound_text)
+        if self._has_escalation_risk_terms(lower):
+            stage = "support"
+        elif order_intent or sales_state.get("offer_state") in {"draft_created", "contact_needed"}:
+            stage = "closing"
+        elif signals["price_sensitive"] or sales_state.get("last_offered_price"):
+            stage = "negotiation"
+        elif journey.get("stage") == "discovery" and sales_state.get("focus_label"):
+            stage = "comparison"
+        elif self._has_shopping_discovery_intent(lower):
+            stage = "discovery"
+        elif price_intent or stock_intent or sales_state.get("focus_label"):
+            stage = "consideration"
+        else:
+            stage = str(journey.get("stage") or "discovery")
+
+        if stage == "support":
+            next_best_action = "handoff_to_human"
+        elif stage == "closing" and not signals["contact_ready"]:
+            next_best_action = "collect_contact_and_prepare_draft"
+        elif stage == "closing":
+            next_best_action = "prepare_or_advance_order"
+        elif stage == "negotiation" and sales_state.get("focus_label"):
+            if int(negotiation_state.get("stall_count") or 0) >= 2:
+                next_best_action = "reduce_pressure_and_hold_context"
+            elif int(negotiation_state.get("price_objection_count") or 0) >= 2 and int(negotiation_state.get("alternatives_offered_count") or 0) == 0:
+                next_best_action = "offer_alternative_then_close"
+            elif int(negotiation_state.get("best_price_asked_count") or 0) >= 2:
+                next_best_action = "restate_policy_then_close"
+            else:
+                next_best_action = "handle_price_objection_and_soft_close"
+        elif stage == "comparison" and sales_state.get("focus_label"):
+            next_best_action = "compare_and_reduce_choice"
+        elif stage == "consideration" and stock_intent and price_intent:
+            next_best_action = "answer_facts_then_soft_close"
+        elif stage == "consideration":
+            next_best_action = "answer_facts_and_offer_next_step"
+        else:
+            next_best_action = "narrow_need_with_one_question"
+
+        return {
+            "journey_stage": stage,
+            "customer_signals": signals,
+            "lead_context": lead_context,
+            "language_hint": language_hint,
+            "message_modality": message_modality,
+            "negotiation_state": negotiation_state,
+            "buyer_archetype": buyer_archetype,
+            "persuasion_style": persuasion,
+            "commercial_goal": {
+                "discovery": "move_from_need_to_shortlist",
+                "comparison": "reduce_choice_friction",
+                "consideration": "build_confidence_and_keep_momentum",
+                "negotiation": "protect_margin_and_close",
+                "closing": "convert_to_draft_order",
+                "support": "preserve_trust_and_handoff",
+            }.get(stage, "move_conversation_forward"),
+            "next_best_action": next_best_action,
+            "current_focus": sales_state.get("focus_label") or journey.get("current_focus") or "",
+        }
+
+    def _strategy_message(self, snapshot: dict[str, Any]) -> str:
+        return (
+            "Conversation strategy snapshot. Use it to decide the most commercially useful next move instead of replying only to the last sentence. "
+            "Customers may be random, may switch topics, may arrive from ads or referrals, and may use different languages. "
+            "Match the customer's language when it is clear, do not force a rigid script, and steer the conversation forward with one smart next step: "
+            f"{json.dumps(_json_ready(snapshot))}"
+        )
+
+    def _apply_strategy_update(self, conversation: CustomerConversationModel, snapshot: dict[str, Any]) -> None:
+        memory = self._memory(conversation)
+        journey = dict(memory.get("customer_journey") or {})
+        journey["stage"] = snapshot.get("journey_stage")
+        journey["next_best_action"] = snapshot.get("next_best_action")
+        journey["commercial_goal"] = snapshot.get("commercial_goal")
+        if snapshot.get("current_focus"):
+            journey["current_focus"] = snapshot.get("current_focus")
+        memory["customer_journey"] = journey
+        memory["customer_signals"] = snapshot.get("customer_signals") or {}
+        if snapshot.get("lead_context"):
+            memory["lead_context"] = snapshot.get("lead_context") or {}
+        if snapshot.get("buyer_archetype"):
+            memory["buyer_archetype"] = snapshot.get("buyer_archetype")
+        if snapshot.get("persuasion_style"):
+            memory["persuasion_style"] = snapshot.get("persuasion_style") or {}
+        if snapshot.get("language_hint"):
+            memory["language_hint"] = snapshot.get("language_hint")
+        if snapshot.get("message_modality"):
+            memory["message_modality"] = snapshot.get("message_modality") or {}
+        if snapshot.get("negotiation_state"):
+            memory["negotiation_state"] = snapshot.get("negotiation_state") or {}
+        conversation.memory_json = _json_ready(memory)
+        conversation.latest_intent = str(snapshot.get("journey_stage") or "")
+
+    def _negotiation_context(
+        self,
+        *,
+        client: ClientModel,
+        playbook: AssistantPlaybookModel,
+        conversation: CustomerConversationModel,
+        inbound_text: str,
+    ) -> dict[str, Any]:
+        memory = self._memory(conversation)
+        lower = inbound_text.lower()
+        sales_state = dict(memory.get("sales_state") or {})
+        negotiation_state = dict(memory.get("negotiation_state") or {})
+        focus_label = str(sales_state.get("focus_label") or memory.get("last_variant", {}).get("label") or "").strip()
+        if not focus_label:
+            return {}
+
+        archetype = str(memory.get("buyer_archetype") or self._buyer_archetype(conversation, inbound_text))
+        last_offered_price = sales_state.get("last_offered_price")
+        price_fact = self._money_fact(last_offered_price, client) if last_offered_price not in {None, ""} else None
+        discounts_policy = str(({**DEFAULT_POLICIES, **(playbook.policy_json or {})}.get("discounts") or "")).strip()
+        cross_sell_enabled = bool((playbook.sales_goals_json or {}).get("cross_sell"))
+
+        asks_best_price = bool(PRICE_NEGOTIATION_RE.search(lower))
+        says_expensive = bool(re.search(r"\b(expensive|too much|too high|pricey|costly)\b", lower))
+        asks_bundle = bool(re.search(r"\b(bundle|care kit|laces|socks|accessories|anything to go with it|match with it)\b", lower))
+        urgency = bool(re.search(r"\b(today|now|right away|asap|quickly)\b", lower))
+        repeated_price_push = int(negotiation_state.get("best_price_asked_count") or 0) >= 1
+        stalled = int(negotiation_state.get("stall_count") or 0) >= 2
+
+        if asks_best_price and not price_fact:
+            return {}
+
+        if asks_best_price and price_fact:
+            self._update_negotiation_memory(conversation, best_price_ask=True, close_attempt=True, last_move="price_policy_close")
+            return {
+                "kind": "price_negotiation",
+                "next_best_action": "state_current_price_policy_and_offer_staff_review_or_alternative",
+                "focus_label": focus_label,
+                "current_price": price_fact,
+                "discount_policy": discounts_policy,
+                "repeated_price_push": repeated_price_push,
+                "buyer_archetype": archetype,
+                "staff_review_required_for_discount": True,
+            }
+
+        if says_expensive:
+            self._update_negotiation_memory(conversation, price_objection=True, alternative_offered=True, last_move="offer_lower_price_alternative")
+            return {
+                "kind": "price_objection",
+                "next_best_action": "acknowledge_objection_and_offer_lower_price_alternative",
+                "focus_label": focus_label,
+                "buyer_archetype": archetype,
+                "current_price": price_fact,
+                "allowed_moves": ["compare value", "show lower-price alternative", "prepare draft for staff review"],
+            }
+
+        if asks_bundle and cross_sell_enabled:
+            self._update_negotiation_memory(conversation, bundle_interest=True, last_move="bundle_interest")
+            bundle_categories = ["care items", "accessories"]
+            if playbook.business_type == "shoe_store":
+                bundle_categories = ["socks", "care items", "insoles"]
+            return {
+                "kind": "bundle_interest",
+                "next_best_action": "offer_relevant_add_ons_without_overloading",
+                "focus_label": focus_label,
+                "bundle_categories": bundle_categories,
+            }
+
+        if urgency and self._catalog_intent_flags(inbound_text)[2]:
+            self._update_negotiation_memory(conversation, close_attempt=True, last_move="urgent_close")
+            return {
+                "kind": "urgent_order_intent",
+                "next_best_action": "collect_contact_or_prepare_draft_order",
+                "focus_label": focus_label,
+                "contact_ready": bool(
+                    dict(memory.get("customer_contact") or {}).get("phone")
+                    or dict(memory.get("customer_contact") or {}).get("email")
+                    or conversation.external_sender_phone
+                    or conversation.external_sender_email
+                ),
+            }
+
+        if stalled:
+            return {
+                "kind": "stalled_negotiation",
+                "next_best_action": "reduce_pressure_and_preserve_context",
+                "focus_label": focus_label,
+                "available_moves": ["continue same option", "compare one alternative", "prepare draft order"],
+            }
+
+        return {}
+
+    def _sales_progress_context(
+        self,
+        *,
+        client: ClientModel,
+        conversation: CustomerConversationModel,
+        inbound_text: str,
+    ) -> dict[str, Any]:
+        memory = self._memory(conversation)
+        lower = inbound_text.lower()
+        recent_choices = [dict(item) for item in (memory.get("recent_choices") or []) if isinstance(item, dict)]
+        preferences = dict(memory.get("preferences") or {})
+        lead_context = dict(memory.get("lead_context") or {})
+        focus_variant = dict(memory.get("last_variant") or {})
+        focus_label = str((memory.get("sales_state") or {}).get("focus_label") or focus_variant.get("label") or "").strip()
+        archetype = str(memory.get("buyer_archetype") or self._buyer_archetype(conversation, inbound_text))
+        sales_state = dict(memory.get("sales_state") or {})
+        draft_order = dict(sales_state.get("draft_order") or memory.get("draft_order") or {})
+        order_status_question = bool(
+            re.search(r"\b(order|draft|purchase)\b", lower)
+            and re.search(r"\b(confirm|confirmed|final|approved|done|placed|status)\b", lower)
+        )
+        if order_status_question:
+            if draft_order or conversation.draft_order_id:
+                return {
+                    "kind": "draft_order_status",
+                    "next_best_action": "explain_draft_is_not_confirmed",
+                    "draft_order": draft_order,
+                    "focus_label": focus_label,
+                    "order_status_guardrail": {
+                        "status": "draft",
+                        "staff_review_required": True,
+                        "not_confirmed": True,
+                        "not_charged": True,
+                        "not_fulfilled": True,
+                    },
+                }
+            return {
+                "kind": "order_status_unknown_current_chat",
+                "next_best_action": "explain_no_current_draft_and_request_order_identifier_or_staff_review",
+                "focus_label": focus_label,
+                "order_status_guardrail": {
+                    "current_chat_has_draft_order": False,
+                    "do_not_use_related_conversation_as_current_order": True,
+                    "do_not_claim_order_exists": True,
+                    "do_not_confirm_payment_or_fulfillment": True,
+                },
+            }
+
+        if re.search(r"\b(which one|which is better|better one|difference|compare|vs\.?|versus)\b", lower) and len(recent_choices) >= 2:
+            first, second = recent_choices[0], recent_choices[1]
+            budget = as_decimal(preferences.get("budget") or ZERO)
+            first_amount = as_decimal(first.get("unit_price") or ZERO)
+            second_amount = as_decimal(second.get("unit_price") or ZERO)
+            if budget > ZERO and second_amount > ZERO and first_amount > ZERO:
+                preferred = first if abs(first_amount - budget) <= abs(second_amount - budget) else second
+            else:
+                preferred = first
+            return {
+                "kind": "comparison",
+                "next_best_action": "compare_recent_options_and_recommend_one",
+                "recent_choices": [self._variant_customer_fact(item, client) for item in recent_choices[:3]],
+                "preferred_choice": self._variant_customer_fact(preferred, client),
+                "preference_summary": self._preference_summary(preferences),
+                "buyer_archetype": archetype,
+                "comparison_basis": {
+                    "budget": preferences.get("budget"),
+                    "use_case": preferences.get("occasion"),
+                    "colors": preferences.get("colors"),
+                },
+            }
+
+        if re.search(r"\b(later|think about it|let me think|maybe later|not sure|i'll come back)\b", lower):
+            self._update_negotiation_memory(conversation, hesitation=True, last_move="hesitation_soft_hold")
+            if focus_label or recent_choices:
+                return {
+                    "kind": "customer_hesitation",
+                    "next_best_action": "reduce_pressure_and_keep_purchase_context_available",
+                    "focus_label": focus_label,
+                    "recent_choices": [self._variant_customer_fact(item, client) for item in recent_choices[:3]],
+                    "lead_context": lead_context,
+                    "buyer_archetype": archetype,
+                    "available_moves": ["compare alternative", "prepare draft order", "continue later with same context"],
+                }
+
+        return {}
+
+    def _policy_facts_for_message(self, playbook: AssistantPlaybookModel, inbound_text: str) -> dict[str, Any]:
+        lower = inbound_text.lower()
+        policies = {**DEFAULT_POLICIES, **(playbook.policy_json or {})}
+        policy_keys: list[str] = []
+        if re.search(r"\b(return|returns|exchange|fit|refund)\b", lower):
+            policy_keys.append("returns")
+        if re.search(r"\b(delivery|deliver|shipping|ship|courier)\b", lower):
+            policy_keys.append("delivery")
+        if re.search(r"\b(payment|pay|card|cash|cod)\b", lower):
+            policy_keys.append("payment")
+        if re.search(r"\b(warranty|guarantee)\b", lower):
+            policy_keys.append("warranty")
+        if re.search(r"\b(discount|discounts|offer|offers|promo|coupon)\b", lower) or PRICE_NEGOTIATION_RE.search(lower):
+            policy_keys.append("discounts")
+        known: dict[str, str] = {}
+        unknown: list[str] = []
+        for policy_key in policy_keys:
+            policy = str(policies.get(policy_key) or "").strip()
+            if policy:
+                known[policy_key] = policy
+            else:
+                unknown.append(policy_key)
+        return {
+            "requested_policy_keys": policy_keys,
+            "known_policies": known,
+            "unknown_policy_keys": unknown,
+            "staff_confirmation_required": bool(unknown),
+        }
+
+    def _remembered_variant_for_message(
+        self,
+        conversation: CustomerConversationModel,
+        inbound_text: str,
+    ) -> dict[str, Any] | None:
+        memory = self._memory(conversation)
+        recent_choices = memory.get("recent_choices")
+        if isinstance(recent_choices, list):
+            lower = inbound_text.lower()
+            ordinal_index: int | None = None
+            if re.search(r"\b(first|1st|option 1|number 1)\b", lower):
+                ordinal_index = 0
+            elif re.search(r"\b(second|2nd|option 2|number 2)\b", lower):
+                ordinal_index = 1
+            elif re.search(r"\b(third|3rd|option 3|number 3)\b", lower):
+                ordinal_index = 2
+            if ordinal_index is not None and ordinal_index < len(recent_choices) and isinstance(recent_choices[ordinal_index], dict):
+                return dict(recent_choices[ordinal_index])
+            if PRICE_NEGOTIATION_RE.search(lower) and recent_choices and isinstance(recent_choices[0], dict):
+                return dict(recent_choices[0])
+
+        variant = memory.get("last_variant")
+        if not isinstance(variant, dict) or not variant.get("variant_id"):
+            return None
+        lower = inbound_text.lower()
+        if PRICE_NEGOTIATION_RE.search(lower):
+            return dict(variant)
+        if re.search(
+            r"\b(it|that|this|same one|same item|that one|take it|book it|reserve it|price again|what was the price)\b",
+            lower,
+        ):
+            return dict(variant)
+        if self._catalog_intent_flags(inbound_text)[2] and re.search(
+            r"\b(draft order|prepare(?: a)?(?: draft)? order|make(?: the| an| a)? order|place(?: the| an| a)? order)\b",
+            lower,
+        ):
+            return dict(variant)
+        if self._catalog_intent_flags(inbound_text)[2] and not self._catalog_search_queries(inbound_text):
+            return dict(variant)
+        return None
+
+    def _record_tool_call(
+        self,
+        session: Session,
+        *,
+        run: AssistantRunModel,
+        conversation: CustomerConversationModel,
+        tool_name: str,
+        arguments: dict[str, Any],
+        result: dict[str, Any],
+        provider_tool_call_id: str = "",
+    ) -> None:
+        session.add(
+            AssistantToolCallModel(
+                tool_call_id=new_uuid(),
+                client_id=run.client_id,
+                run_id=run.run_id,
+                conversation_id=conversation.conversation_id,
+                provider_tool_call_id=provider_tool_call_id,
+                tool_name=tool_name,
+                tool_arguments_json=_json_ready(arguments),
+                tool_result_json=_json_ready(result),
+                validation_status="ok" if result.get("ok", True) else "error",
+            )
+        )
+
+    def _execute_and_record_tool(
+        self,
+        session: Session,
+        *,
+        tool_name: str,
+        arguments: dict[str, Any],
+        channel: CustomerChannelModel,
+        conversation: CustomerConversationModel,
+        run: AssistantRunModel,
+    ) -> dict[str, Any]:
+        result = self._execute_tool(
+            session,
+            tool_name=tool_name,
+            arguments=arguments,
+            channel=channel,
+            conversation=conversation,
+            run=run,
+        )
+        self._record_tool_call(
+            session,
+            run=run,
+            conversation=conversation,
+            tool_name=tool_name,
+            arguments=arguments,
+            result=result,
+        )
+        return result
+
+    def _catalog_intent_flags(self, text: str) -> tuple[bool, bool, bool]:
+        lower = text.lower()
+        return bool(CATALOG_PRICE_RE.search(lower)), bool(CATALOG_STOCK_RE.search(lower)), bool(CATALOG_ORDER_RE.search(lower))
+
+    def _needs_catalog_grounding(self, text: str) -> bool:
+        lower = text.lower()
+        return any(self._catalog_intent_flags(text)) or bool(
+            (CATALOG_LOOKUP_RE.search(lower) or CATALOG_BROWSE_RE.search(lower))
+            and self._catalog_search_queries(text)
+        )
+
+    def _catalog_search_queries(self, text: str) -> list[str]:
+        normalized = re.sub(r"[^a-z0-9+.#/-]+", " ", text.lower()).strip()
+        words = [
+            word.strip("./-")
+            for word in normalized.split()
+            if word.strip("./-") and word.strip("./-") not in CATALOG_SEARCH_STOPWORDS
+        ]
+        words = [word for word in words if len(word) > 1 or any(char.isdigit() for char in word)]
+        queries: list[str] = []
+        if words:
+            queries.append(" ".join(words[:6]))
+            queries.extend(words[:6])
+        if not queries and normalized:
+            queries.append(normalized)
+        deduped: list[str] = []
+        for query in queries:
+            cleaned = " ".join(query.split())
+            if cleaned and cleaned not in deduped:
+                deduped.append(cleaned)
+        return deduped[:4]
+
+    def _build_catalog_grounding(
+        self,
+        session: Session,
+        *,
+        channel: CustomerChannelModel,
+        conversation: CustomerConversationModel,
+        inbound_text: str,
+        run: AssistantRunModel,
+    ) -> CatalogGrounding | None:
+        if not self._needs_catalog_grounding(inbound_text):
+            return None
+
+        price_intent, stock_intent, order_intent = self._catalog_intent_flags(inbound_text)
+        lower_inbound = inbound_text.lower()
+        lookup_intent = bool(CATALOG_LOOKUP_RE.search(lower_inbound) or CATALOG_BROWSE_RE.search(lower_inbound))
+        tool_names: list[str] = []
+        remembered_variant = self._remembered_variant_for_message(conversation, inbound_text)
+        if remembered_variant is not None:
+            variant_id = str(remembered_variant.get("variant_id") or "").strip()
+            search_result = {
+                "ok": True,
+                "location_id": remembered_variant.get("location_id") or "",
+                "items": [remembered_variant],
+            }
+            availability_result = None
+            price_result = None
+            if variant_id and (stock_intent or order_intent or lookup_intent):
+                availability_result = self._execute_and_record_tool(
+                    session,
+                    tool_name="get_variant_availability",
+                    arguments={"variant_id": variant_id, "location_id": remembered_variant.get("location_id") or ""},
+                    channel=channel,
+                    conversation=conversation,
+                    run=run,
+                )
+                tool_names.append("get_variant_availability")
+            if variant_id and (price_intent or order_intent):
+                price_result = self._execute_and_record_tool(
+                    session,
+                    tool_name="get_variant_price",
+                    arguments={"variant_id": variant_id},
+                    channel=channel,
+                    conversation=conversation,
+                    run=run,
+                )
+                tool_names.append("get_variant_price")
+            session.flush()
+            return CatalogGrounding(
+                query=str(remembered_variant.get("sku") or remembered_variant.get("label") or "previous item"),
+                tool_names=tuple(tool_names),
+                search_result=search_result,
+                availability_result=availability_result,
+                price_result=price_result,
+            )
+
+        search_result: dict[str, Any] | None = None
+        selected_query = ""
+        merged_items: dict[str, dict[str, Any]] = {}
+        for query in self._catalog_search_queries(inbound_text):
+            selected_query = query
+            candidate_result = self._execute_and_record_tool(
+                session,
+                tool_name="search_catalog_variants",
+                arguments={"query": query},
+                channel=channel,
+                conversation=conversation,
+                run=run,
+            )
+            tool_names.append("search_catalog_variants")
+            for item in candidate_result.get("items") or []:
+                variant_id = str(item.get("variant_id") or "")
+                if variant_id and variant_id not in merged_items:
+                    merged_items[variant_id] = item
+            if candidate_result.get("items") and search_result is None:
+                search_result = candidate_result
+            if len(candidate_result.get("items") or []) == 1 and self._is_exact_catalog_match(query, candidate_result["items"][0]):
+                break
+
+        if search_result is None:
+            search_result = self._execute_and_record_tool(
+                session,
+                tool_name="search_catalog_variants",
+                arguments={"query": ""},
+                channel=channel,
+                conversation=conversation,
+                run=run,
+            )
+            tool_names.append("search_catalog_variants")
+            for item in search_result.get("items") or []:
+                variant_id = str(item.get("variant_id") or "")
+                if variant_id and variant_id not in merged_items:
+                    merged_items[variant_id] = item
+
+        if merged_items:
+            items = list(merged_items.values())
+            selected = self._select_best_catalog_item(inbound_text, items)
+            search_result = {**search_result, "items": [selected] if selected is not None else items[:8]}
+
+        items = list(search_result.get("items") or [])
+        availability_result = None
+        price_result = None
+        if len(items) == 1:
+            variant_id = str(items[0].get("variant_id") or "").strip()
+            if variant_id and (stock_intent or order_intent or lookup_intent):
+                availability_result = self._execute_and_record_tool(
+                    session,
+                    tool_name="get_variant_availability",
+                    arguments={"variant_id": variant_id, "location_id": items[0].get("location_id") or ""},
+                    channel=channel,
+                    conversation=conversation,
+                    run=run,
+                )
+                tool_names.append("get_variant_availability")
+            if variant_id and price_intent:
+                price_result = self._execute_and_record_tool(
+                    session,
+                    tool_name="get_variant_price",
+                    arguments={"variant_id": variant_id},
+                    channel=channel,
+                    conversation=conversation,
+                    run=run,
+                )
+                tool_names.append("get_variant_price")
+
+        session.flush()
+        return CatalogGrounding(
+            query=selected_query,
+            tool_names=tuple(tool_names),
+            search_result=search_result,
+            availability_result=availability_result,
+            price_result=price_result,
+        )
+
+    def _is_exact_catalog_match(self, query: str, item: dict[str, Any]) -> bool:
+        normalized_query = query.strip().lower()
+        if not normalized_query:
+            return False
+        sku = str(item.get("sku") or "").strip().lower()
+        return bool(sku and normalized_query == sku)
+
+    def _select_best_catalog_item(self, inbound_text: str, items: list[dict[str, Any]]) -> dict[str, Any] | None:
+        tokens = self._catalog_search_tokens(inbound_text)
+        if not tokens or len(items) <= 1:
+            return items[0] if len(items) == 1 else None
+        scored = sorted(
+            ((self._catalog_item_score(tokens, item), item) for item in items),
+            key=lambda pair: pair[0],
+            reverse=True,
+        )
+        top_score, top_item = scored[0]
+        second_score = scored[1][0] if len(scored) > 1 else 0
+        if top_score >= 3 and top_score >= second_score + 1:
+            return top_item
+        return None
+
+    def _catalog_search_tokens(self, text: str) -> list[str]:
+        normalized = re.sub(r"[^a-z0-9+.#/-]+", " ", text.lower()).strip()
+        return [
+            word.strip("./-")
+            for word in normalized.split()
+            if word.strip("./-") and word.strip("./-") not in CATALOG_SEARCH_STOPWORDS
+        ]
+
+    def _catalog_item_score(self, tokens: list[str], item: dict[str, Any]) -> int:
+        haystack = " ".join(
+            str(item.get(field) or "")
+            for field in ("label", "sku", "product_name", "brand", "category")
+        ).lower()
+        score = 0
+        for token in tokens:
+            if not token:
+                continue
+            if token == str(item.get("sku") or "").lower():
+                score += 6
+            elif token in haystack:
+                score += 1
+        return score
+
+    def _catalog_grounding_reply_context(
+        self,
+        client: ClientModel,
+        playbook: AssistantPlaybookModel,
+        conversation: CustomerConversationModel,
+        inbound_text: str,
+        grounding: CatalogGrounding,
+    ) -> dict[str, Any]:
+        price_intent, stock_intent, order_intent = self._catalog_intent_flags(inbound_text)
+        lower_inbound = inbound_text.lower()
+        lookup_intent = bool(CATALOG_LOOKUP_RE.search(lower_inbound) or CATALOG_BROWSE_RE.search(lower_inbound))
+        items = list(grounding.search_result.get("items") or [])
+        policy_facts = self._policy_facts_for_message(playbook, inbound_text)
+        context: dict[str, Any] = {
+            "customer_intent": {
+                "asks_price": price_intent,
+                "asks_stock": stock_intent,
+                "wants_order": order_intent,
+                "lookup_or_browse": lookup_intent,
+            },
+            "grounding_query": grounding.query,
+            "policy_context": policy_facts,
+            "health_boundary": (
+                "recommend veterinarian review before food changes because the customer mentioned a health concern"
+                if playbook.business_type == "pet_food" and self._has_risk_terms(inbound_text.lower())
+                else ""
+            ),
+        }
+
+        if not items:
+            return {
+                **context,
+                "match_status": "no_confident_active_match",
+                "needed_details": ["product name", "variant option", "size", "color", "flavor", "device model", "SKU"],
+            }
+
+        if len(items) > 1:
+            self._remember_catalog_choices(conversation, [dict(item) for item in items[:5]])
+            return {
+                **context,
+                "match_status": "multiple_close_matches",
+                "choices": [self._variant_customer_fact(item, client) for item in items[:5]],
+                "needed_details": ["option number", "size", "color", "SKU"],
+            }
+
+        variant = (grounding.availability_result or {}).get("variant") or items[0]
+        price_variant = (grounding.price_result or {}).get("variant") or variant
+        variant_fact = self._variant_customer_fact({**dict(variant), **dict(price_variant)}, client)
+        available = as_decimal(variant.get("available_to_sell") or ZERO)
+        strategy = self._conversation_strategy_snapshot(conversation, inbound_text)
+        if available <= ZERO:
+            self._update_sales_memory(
+                conversation,
+                focus_label=str(variant.get("label") or variant.get("product_name") or ""),
+                offer_state="out_of_stock",
+                next_step="offer_alternative",
+            )
+            return {
+                **context,
+                "match_status": "single_match_out_of_stock",
+                "selected_variant": variant_fact,
+                "next_step_policy": "offer available alternative; do not imply stock exists",
+            }
+
+        self._update_sales_memory(
+            conversation,
+            focus_label=str(variant.get("label") or variant.get("product_name") or ""),
+            last_offered_price=price_variant.get("unit_price") if price_variant.get("unit_price") is not None else None,
+            offer_state="available",
+            next_step=str(strategy.get("next_best_action") or "offer_next_step"),
+        )
+        return {
+            **context,
+            "match_status": "single_available_match",
+            "selected_variant": variant_fact,
+            "buyer_archetype": strategy.get("buyer_archetype") or self._buyer_archetype(conversation, inbound_text),
+            "next_step_policy": strategy.get("next_best_action") or "answer and offer one useful next step",
+        }
+
+    def _money_fact(self, value: Any, client: ClientModel) -> dict[str, Any]:
+        amount = as_decimal(value).quantize(MONEY_QUANTUM)
+        return {
+            "amount": str(amount),
+            "currency_symbol": (client.currency_symbol or "").strip(),
+            "currency_code": (client.currency_code or "").strip().upper(),
+            "display": self._format_money(amount, client),
+        }
+
+    def _variant_customer_fact(self, item: dict[str, Any], client: ClientModel) -> dict[str, Any]:
+        available = as_decimal(item.get("available_to_sell") or ZERO)
+        unit_price = item.get("unit_price")
+        min_price = item.get("min_price")
+        return {
+            "variant_id": str(item.get("variant_id") or ""),
+            "product_id": str(item.get("product_id") or ""),
+            "label": str(item.get("label") or item.get("product_name") or item.get("sku") or ""),
+            "product_name": str(item.get("product_name") or ""),
+            "sku": str(item.get("sku") or ""),
+            "brand": str(item.get("brand") or ""),
+            "category": str(item.get("category") or ""),
+            "supplier": str(item.get("supplier") or ""),
+            "location_id": str(item.get("location_id") or ""),
+            "available_to_sell": self._format_quantity(available),
+            "stock_status": "available" if available > ZERO else "out_of_stock",
+            "unit_price": self._money_fact(unit_price, client) if unit_price is not None else None,
+            "min_price": self._money_fact(min_price, client) if min_price is not None else None,
+        }
+
+    def _format_money(self, value: Any, client: ClientModel) -> str:
+        amount = as_decimal(value).quantize(MONEY_QUANTUM)
+        symbol = (client.currency_symbol or "").strip()
+        code = (client.currency_code or "").strip().upper()
+        if symbol:
+            separator = " " if symbol[-1:].isalnum() else ""
+            return f"{symbol}{separator}{amount}"
+        return f"{amount} {code}".strip()
+
+    def _format_quantity(self, value: Decimal) -> str:
+        normalized = value.normalize()
+        if normalized == normalized.to_integral():
+            return str(int(normalized))
+        return str(value.quantize(Decimal("0.001")).normalize())
+
+    def _human_join(self, values: list[str]) -> str:
+        if not values:
+            return "a little more detail"
+        if len(values) == 1:
+            return values[0]
+        return ", ".join(values[:-1]) + f", and {values[-1]}"
+
+    def _tool_search_catalog(
+        self,
+        session: Session,
+        client_id: str,
+        arguments: dict[str, Any],
+        channel: CustomerChannelModel,
+    ) -> dict[str, Any]:
+        query = str(arguments.get("query", "")).strip()
+        location_id = self._tool_location_id(session, client_id, str(arguments.get("location_id") or ""), channel)
+        on_hand, reserved = self._stock_maps(session, client_id, location_id)
+        pattern = f"%{query.lower()}%"
+        stmt = (
+            select(ProductModel, ProductVariantModel, SupplierModel, CategoryModel)
+            .join(ProductVariantModel, ProductVariantModel.product_id == ProductModel.product_id)
+            .outerjoin(SupplierModel, SupplierModel.supplier_id == ProductModel.supplier_id)
+            .outerjoin(CategoryModel, CategoryModel.category_id == ProductModel.category_id)
+            .where(
+                ProductModel.client_id == client_id,
+                ProductVariantModel.client_id == client_id,
+                ProductModel.status == "active",
+                ProductVariantModel.status == "active",
+            )
+            .order_by(ProductModel.name.asc(), ProductVariantModel.title.asc())
+            .limit(8)
+        )
+        if query:
+            stmt = stmt.where(
+                or_(
+                    func.lower(ProductModel.name).like(pattern),
+                    func.lower(ProductVariantModel.title).like(pattern),
+                    func.lower(ProductVariantModel.sku).like(pattern),
+                    func.lower(ProductModel.brand).like(pattern),
+                    func.lower(SupplierModel.name).like(pattern),
+                    func.lower(CategoryModel.name).like(pattern),
+                )
+            )
+        items = []
+        for product, variant, supplier, category in session.execute(stmt).all():
+            available = on_hand.get(str(variant.variant_id), ZERO) - reserved.get(str(variant.variant_id), ZERO)
+            items.append(self._variant_tool_payload(product, variant, supplier, category, available, location_id))
+        return {"ok": True, "location_id": location_id, "items": items}
+
+    def _tool_variant_availability(
+        self,
+        session: Session,
+        client_id: str,
+        arguments: dict[str, Any],
+        channel: CustomerChannelModel,
+    ) -> dict[str, Any]:
+        variant_id = str(arguments.get("variant_id", "")).strip()
+        location_id = self._tool_location_id(session, client_id, str(arguments.get("location_id") or ""), channel)
+        row = self._variant_row(session, client_id, variant_id)
+        if row is None:
+            return {"ok": False, "error": "Variant not found"}
+        on_hand, reserved = self._stock_maps(session, client_id, location_id)
+        product, variant, supplier, category = row
+        available = on_hand.get(variant_id, ZERO) - reserved.get(variant_id, ZERO)
+        return {
+            "ok": True,
+            "location_id": location_id,
+            "variant": self._variant_tool_payload(product, variant, supplier, category, available, location_id),
+        }
+
+    def _tool_variant_price(self, session: Session, client_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        variant_id = str(arguments.get("variant_id", "")).strip()
+        row = self._variant_row(session, client_id, variant_id)
+        if row is None:
+            return {"ok": False, "error": "Variant not found"}
+        product, variant, supplier, category = row
+        price = as_optional_decimal(variant.price_amount) if variant.price_amount is not None else as_optional_decimal(product.default_price_amount)
+        min_price = as_optional_decimal(variant.min_price_amount) if variant.min_price_amount is not None else as_optional_decimal(product.min_price_amount)
+        return {
+            "ok": True,
+            "variant": {
+                "variant_id": str(variant.variant_id),
+                "product_id": str(product.product_id),
+                "product_name": product.name,
+                "label": build_variant_label(product.name, variant.title),
+                "sku": variant.sku,
+                "brand": product.brand,
+                "supplier": supplier.name if supplier else "",
+                "category": category.name if category else "",
+                "unit_price": price,
+                "min_price": min_price,
+            },
+        }
+
+    def _tool_recommendations(
+        self,
+        session: Session,
+        client_id: str,
+        arguments: dict[str, Any],
+        channel: CustomerChannelModel,
+    ) -> dict[str, Any]:
+        query = str(arguments.get("query", "")).strip()
+        result = self._tool_search_catalog(session, client_id, {"query": query}, channel)
+        recommendations = []
+        for item in result["items"]:
+            if as_decimal(item["available_to_sell"]) > ZERO:
+                item["recommendation_reason_code"] = "available_catalog_match"
+                recommendations.append(item)
+        return {"ok": True, "items": recommendations[:5]}
+
+    def _tool_lookup_customer(
+        self,
+        session: Session,
+        client_id: str,
+        conversation: CustomerConversationModel,
+    ) -> dict[str, Any]:
+        filters = []
+        phone = normalize_phone(conversation.external_sender_phone)
+        email = normalize_email(conversation.external_sender_email)
+        if phone:
+            filters.append(CustomerModel.phone_normalized == phone)
+        if email:
+            filters.append(CustomerModel.email_normalized == email)
+        if not filters:
+            return {"ok": True, "customer": None, "message": "No phone or email is available yet."}
+        customer = session.execute(
+            select(CustomerModel).where(CustomerModel.client_id == client_id, or_(*filters))
+        ).scalar_one_or_none()
+        if customer is None:
+            return {"ok": True, "customer": None}
+        conversation.customer_id = customer.customer_id
+        return {
+            "ok": True,
+            "customer": {
+                "customer_id": str(customer.customer_id),
+                "name": customer.name,
+                "phone": customer.phone,
+                "email": customer.email,
+            },
+        }
+
+    def _tool_create_draft_order(
+        self,
+        session: Session,
+        conversation: CustomerConversationModel,
+        arguments: dict[str, Any],
+    ) -> dict[str, Any]:
+        lines = list(arguments.get("lines") or [])
+        if not lines:
+            return {"ok": False, "error": "At least one line is required to create a draft order."}
+        phone = str(arguments.get("customer_phone") or conversation.external_sender_phone or "").strip()
+        email = str(arguments.get("customer_email") or conversation.external_sender_email or "").strip()
+        if not normalize_phone(phone) and not normalize_email(email):
+            return {"ok": False, "error": "Customer phone or email is required before creating a draft order."}
+        customer_name = str(arguments.get("customer_name") or conversation.external_sender_name or "Customer").strip()
+        requested_price = str(arguments.get("requested_price") or "").strip()
+        note_lines = [f"Draft created from AI conversation {conversation.conversation_id}. Staff must review before confirming."]
+        if requested_price:
+            note_lines.append(f"Customer requested price {requested_price} for staff review.")
+        assistant_user = AuthenticatedUser(
+            user_id=None,  # type: ignore[arg-type]
+            client_id=str(conversation.client_id),
+            roles=["CLIENT_OWNER"],
+            allowed_pages=["Sales"],
+            email="assistant@easy-ecom.internal",
+            name="AI Assistant",
+            business_name=None,
+        )
+        order_record = self._sales._upsert_order(
+            session,
+            assistant_user,
+            sales_order_id=None,
+            location_id=arguments.get("location_id") or None,
+            customer_id=None,
+            customer_payload={"name": customer_name, "phone": phone, "email": email, "address": ""},
+            payment_status="unpaid",
+            shipment_status="pending",
+            notes=" ".join(note_lines),
+            lines=[
+                {
+                    "variant_id": str(line.get("variant_id")),
+                    "quantity": as_decimal(line.get("quantity")),
+                    "unit_price": None,
+                    "discount_amount": ZERO,
+                }
+                for line in lines
+            ],
+            action="save_draft",
+        )
+        order_record.source_type = "assistant"
+        session.flush()
+        order = self._sales._sales_order_payload(session, order_record)
+        conversation.draft_order_id = order["sales_order_id"]
+        return {
+            "ok": True,
+            "draft_order": {
+                "sales_order_id": order["sales_order_id"],
+                "order_number": order["order_number"],
+                "status": order["status"],
+                "total_amount": order["total_amount"],
+            },
+        }
+
+    def _validate_response(
+        self,
+        *,
+        inbound_text: str,
+        response_text: str,
+        tool_names: list[str],
+        playbook: AssistantPlaybookModel,
+    ) -> tuple[str, str]:
+        lower = inbound_text.lower()
+        response_lower = response_text.lower()
+        grounded = bool(GROUNDING_TOOLS.intersection(tool_names))
+        asks_clarifying_question = "?" in response_text and not re.search(r"\b(aed|usd|\$|available|in stock)\b", response_lower)
+        safe_draft_status_response = bool(
+            re.search(r"\b(order|draft|purchase)\b", lower)
+            and re.search(r"\b(confirm|confirmed|final|approved|done|placed|status)\b", lower)
+            and re.search(r"\b(not confirmed|draft|staff|team|review|not charged|not fulfilled)\b", response_lower)
+        )
+        safe_unknown_order_status_response = bool(
+            re.search(r"\b(order|draft|purchase)\b", lower)
+            and re.search(r"\b(confirm|confirmed|final|approved|done|placed|status)\b", lower)
+            and re.search(r"\b(do not see|don't see|no current|no draft|order number|team|staff|check)\b", response_lower)
+        )
+        if re.search(r"\b(price|cost|how much|available|availability|stock|in stock|do you have|order)\b", lower):
+            if not grounded and not asks_clarifying_question and not safe_draft_status_response and not safe_unknown_order_status_response:
+                return "escalated", "Assistant attempted to answer a price, stock, or order question without tool grounding."
+        if self._contains_internal_reasoning(response_text):
+            return "escalated", "Assistant exposed internal reasoning instead of a customer-facing reply."
+        if self._has_risk_terms(lower):
+            if "request_human_escalation" in tool_names:
+                return "escalated", "Assistant requested human escalation for a risky customer message."
+            if self._has_escalation_risk_terms(lower):
+                return "escalated", "Risky customer message needs human escalation."
+            if playbook.business_type == "pet_food" and not re.search(r"\b(vet|veterinarian)\b", response_lower):
+                return "escalated", "Pet health concern needs veterinarian-safe handling."
+            if playbook.business_type == "electronics" and self._has_electronics_safety_terms(lower):
+                return "escalated", "Electronics safety concern needs human escalation."
+        if not response_text.strip():
+            return "escalated", "Assistant produced an empty response."
+        return "ok", ""
+
+    def _system_prompt(self, client: ClientModel, playbook: AssistantPlaybookModel, channel: CustomerChannelModel) -> str:
+        template = playbook.industry_template_json or INDUSTRY_TEMPLATES.get(playbook.business_type, INDUSTRY_TEMPLATES["general_retail"])
+        policies = {**DEFAULT_POLICIES, **(playbook.policy_json or {})}
+        sales_goals = playbook.sales_goals_json or {}
+        escalation_rules = {**DEFAULT_ESCALATION_RULES, **(playbook.escalation_rules_json or {})}
+        return "\n".join(
+            [
+                f"You are the customer service and sales assistant for {client.business_name}.",
+                "Personality: natural, warm, observant, concise, helpful, and commercially sensible without sounding scripted.",
+                f"Brand personality: {playbook.brand_personality}. Channel: {channel.provider}.",
+                "Conversation flow: understand intent, continue naturally from prior context, use remembered buyer signals, buyer archetype, lead source, language, and message modality when helpful, ask one useful clarifying question only when needed, use the backend-prepared facts, answer clearly, then offer one smart next step.",
+                "For simple greetings, reply in one short sentence with one useful opening question; do not give a checklist unless the customer asks for a comparison or several options.",
+                "Sound like a top store salesperson who remembers the shopper, understands buying intent, adapts style to the buyer, and reduces friction without sounding pushy or scripted.",
+                "Customers may write in messy, random, mixed, or multi-turn ways. Follow meaning, not a rigid flowchart.",
+                "When the customer's language is clear, answer in that language. If they switch language, adapt.",
+                "If they refer to an image or screenshot and no vision tool is available, do not pretend you saw it. Ask for the exact detail you should focus on.",
+                "Never invent price, availability, discount, delivery, return, warranty, or product facts.",
+                "For price or stock questions, use only backend-prepared price and availability facts. Availability is variant-level only.",
+                "If the requested size, color, flavor, device model, or variant is unclear, ask a clarifying question instead of guessing.",
+                "You may prepare a draft order only when the customer clearly wants to buy and enough customer contact data is available.",
+                "Do not confirm orders, take payment, promise fulfillment, or mutate stock.",
+                "Escalate politely for anger, disputes, medical/legal/safety questions, unavailable items without alternatives, or low confidence.",
+                f"Business type: {playbook.business_type}. Ask about: {', '.join(template.get('questions', []))}.",
+                f"Safety notes: {' '.join(template.get('safety', []))}",
+                f"Tenant policies: {json.dumps(policies)}",
+                f"Sales goals: {json.dumps(sales_goals)}",
+                f"Escalation rules: {json.dumps(escalation_rules)}",
+                f"Custom instructions: {playbook.custom_instructions}",
+                f"Forbidden claims: {playbook.forbidden_claims}",
+            ]
+        )
+
+    def _conversation_history(self, session: Session, client_id: str, conversation_id: str) -> list[dict[str, str]]:
+        rows = list(
+            session.execute(
+                select(CustomerMessageModel)
+                .where(
+                    CustomerMessageModel.client_id == client_id,
+                    CustomerMessageModel.conversation_id == conversation_id,
+                )
+                .order_by(CustomerMessageModel.occurred_at.desc())
+                .limit(8)
+            ).scalars()
+        )
+        messages = []
+        for message in reversed(rows):
+            role = "assistant" if message.sender_role == "assistant" else "user"
+            messages.append({"role": role, "content": message.message_text})
+        return messages
+
+    def _stock_maps(self, session: Session, client_id: str, location_id: str) -> tuple[dict[str, Decimal], dict[str, Decimal]]:
+        on_hand = {
+            str(variant_id): as_decimal(quantity)
+            for variant_id, quantity in session.execute(
+                select(InventoryLedgerModel.variant_id, func.coalesce(func.sum(InventoryLedgerModel.quantity_delta), ZERO))
+                .where(
+                    InventoryLedgerModel.client_id == client_id,
+                    InventoryLedgerModel.location_id == location_id,
+                )
+                .group_by(InventoryLedgerModel.variant_id)
+            ).all()
+        }
+        reserved = {
+            str(variant_id): as_decimal(quantity)
+            for variant_id, quantity in session.execute(
+                select(
+                    SalesOrderItemModel.variant_id,
+                    func.coalesce(
+                        func.sum(
+                            SalesOrderItemModel.quantity
+                            - SalesOrderItemModel.quantity_fulfilled
+                            - SalesOrderItemModel.quantity_cancelled
+                        ),
+                        ZERO,
+                    ),
+                )
+                .join(SalesOrderModel, SalesOrderModel.sales_order_id == SalesOrderItemModel.sales_order_id)
+                .where(
+                    SalesOrderItemModel.client_id == client_id,
+                    SalesOrderModel.client_id == client_id,
+                    SalesOrderModel.location_id == location_id,
+                    SalesOrderModel.status == "confirmed",
+                )
+                .group_by(SalesOrderItemModel.variant_id)
+            ).all()
+        }
+        return on_hand, reserved
+
+    def _variant_row(self, session: Session, client_id: str, variant_id: str):
+        return session.execute(
+            select(ProductModel, ProductVariantModel, SupplierModel, CategoryModel)
+            .join(ProductVariantModel, ProductVariantModel.product_id == ProductModel.product_id)
+            .outerjoin(SupplierModel, SupplierModel.supplier_id == ProductModel.supplier_id)
+            .outerjoin(CategoryModel, CategoryModel.category_id == ProductModel.category_id)
+            .where(
+                ProductModel.client_id == client_id,
+                ProductVariantModel.client_id == client_id,
+                ProductVariantModel.variant_id == variant_id,
+                ProductModel.status == "active",
+                ProductVariantModel.status == "active",
+            )
+        ).first()
+
+    def _variant_tool_payload(
+        self,
+        product: ProductModel,
+        variant: ProductVariantModel,
+        supplier: SupplierModel | None,
+        category: CategoryModel | None,
+        available: Decimal,
+        location_id: str,
+    ) -> dict[str, Any]:
+        price = as_optional_decimal(variant.price_amount) if variant.price_amount is not None else as_optional_decimal(product.default_price_amount)
+        min_price = as_optional_decimal(variant.min_price_amount) if variant.min_price_amount is not None else as_optional_decimal(product.min_price_amount)
+        return {
+            "variant_id": str(variant.variant_id),
+            "product_id": str(product.product_id),
+            "product_name": product.name,
+            "label": build_variant_label(product.name, variant.title),
+            "sku": variant.sku,
+            "brand": product.brand,
+            "supplier": supplier.name if supplier else "",
+            "category": category.name if category else "",
+            "location_id": location_id,
+            "unit_price": price,
+            "min_price": min_price,
+            "available_to_sell": available,
+            "stock_status": "available" if available > ZERO else "unavailable",
+        }
+
+    def _tool_location_id(
+        self,
+        session: Session,
+        client_id: str,
+        requested_location_id: str,
+        channel: CustomerChannelModel,
+    ) -> str:
+        if requested_location_id:
+            location = session.execute(
+                select(LocationModel).where(
+                    LocationModel.client_id == client_id,
+                    LocationModel.location_id == requested_location_id,
+                    LocationModel.status == "active",
+                )
+            ).scalar_one_or_none()
+            if location:
+                return str(location.location_id)
+        if channel.default_location_id:
+            return str(channel.default_location_id)
+        location = session.execute(
+            select(LocationModel)
+            .where(LocationModel.client_id == client_id, LocationModel.status == "active")
+            .order_by(LocationModel.is_default.desc(), LocationModel.name.asc())
+        ).scalars().first()
+        if location is None:
+            raise ApiException(status_code=400, code="LOCATION_REQUIRED", message="No active location is configured")
+        return str(location.location_id)
+
+    def _get_or_create_playbook(self, session: Session, client_id: str) -> AssistantPlaybookModel:
+        playbook = session.execute(
+            select(AssistantPlaybookModel).where(AssistantPlaybookModel.client_id == client_id)
+        ).scalar_one_or_none()
+        if playbook is not None:
+            if not playbook.industry_template_json:
+                playbook.industry_template_json = INDUSTRY_TEMPLATES.get(playbook.business_type, INDUSTRY_TEMPLATES["general_retail"])
+            return playbook
+        playbook = AssistantPlaybookModel(
+            playbook_id=new_uuid(),
+            client_id=client_id,
+            business_type="general_retail",
+            brand_personality="friendly",
+            sales_goals_json={},
+            policy_json=DEFAULT_POLICIES,
+            escalation_rules_json=DEFAULT_ESCALATION_RULES,
+            industry_template_json=INDUSTRY_TEMPLATES["general_retail"],
+        )
+        session.add(playbook)
+        session.flush()
+        return playbook
+
+    def _get_or_create_conversation(
+        self,
+        session: Session,
+        *,
+        channel: CustomerChannelModel,
+        external_sender_id: str,
+        sender_name: str,
+        sender_phone: str,
+        sender_email: str,
+    ) -> CustomerConversationModel:
+        conversation = session.execute(
+            select(CustomerConversationModel).where(
+                CustomerConversationModel.client_id == channel.client_id,
+                CustomerConversationModel.channel_id == channel.channel_id,
+                CustomerConversationModel.external_sender_id == external_sender_id,
+            )
+        ).scalar_one_or_none()
+        if conversation is not None:
+            if sender_name and not conversation.external_sender_name:
+                conversation.external_sender_name = sender_name
+            if sender_phone and not conversation.external_sender_phone:
+                conversation.external_sender_phone = sender_phone
+            if sender_email and not conversation.external_sender_email:
+                conversation.external_sender_email = sender_email
+            return conversation
+        conversation = CustomerConversationModel(
+            conversation_id=new_uuid(),
+            client_id=channel.client_id,
+            channel_id=channel.channel_id,
+            external_sender_id=external_sender_id,
+            external_sender_name=sender_name.strip(),
+            external_sender_phone=sender_phone.strip(),
+            external_sender_email=sender_email.strip().lower(),
+            status="open",
+            memory_json={"thread_graph": {}, "customer_journey": {}, "sales_state": {}},
+        )
+        session.add(conversation)
+        session.flush()
+        return conversation
+
+    def _create_message(
+        self,
+        session: Session,
+        *,
+        channel: CustomerChannelModel,
+        conversation: CustomerConversationModel,
+        direction: str,
+        sender_role: str,
+        message_text: str,
+        provider_event_id: str,
+        metadata: dict[str, Any],
+        raw_payload: dict[str, Any] | None,
+        outbound_status: str,
+    ) -> CustomerMessageModel:
+        message = CustomerMessageModel(
+            message_id=new_uuid(),
+            client_id=channel.client_id,
+            conversation_id=conversation.conversation_id,
+            channel_id=channel.channel_id,
+            direction=direction,
+            sender_role=sender_role,
+            provider_event_id=provider_event_id.strip(),
+            message_text=message_text.strip(),
+            content_summary=_preview(message_text),
+            outbound_status=outbound_status,
+            raw_payload_json=raw_payload,
+            metadata_json=metadata,
+            occurred_at=now_utc(),
+        )
+        session.add(message)
+        session.flush()
+        return message
+
+    def _conversation_rows(self, session: Session, client_id: str, *, limit: int):
+        return list(
+            session.execute(
+                select(CustomerConversationModel, CustomerChannelModel)
+                .join(CustomerChannelModel, CustomerChannelModel.channel_id == CustomerConversationModel.channel_id)
+                .where(CustomerConversationModel.client_id == client_id, CustomerChannelModel.client_id == client_id)
+                .order_by(CustomerConversationModel.last_message_at.desc().nullslast(), CustomerConversationModel.created_at.desc())
+                .limit(limit)
+            ).all()
+        )
+
+    def _get_conversation(self, session: Session, client_id: str, conversation_id: str) -> CustomerConversationModel:
+        conversation = session.execute(
+            select(CustomerConversationModel).where(
+                CustomerConversationModel.client_id == client_id,
+                CustomerConversationModel.conversation_id == conversation_id,
+            )
+        ).scalar_one_or_none()
+        if conversation is None:
+            raise ApiException(status_code=404, code="CONVERSATION_NOT_FOUND", message="Conversation not found")
+        return conversation
+
+    def _conversation_detail(self, session: Session, conversation: CustomerConversationModel) -> dict[str, Any]:
+        channel = session.execute(
+            select(CustomerChannelModel).where(
+                CustomerChannelModel.client_id == conversation.client_id,
+                CustomerChannelModel.channel_id == conversation.channel_id,
+            )
+        ).scalar_one()
+        messages = list(
+            session.execute(
+                select(CustomerMessageModel)
+                .where(
+                    CustomerMessageModel.client_id == conversation.client_id,
+                    CustomerMessageModel.conversation_id == conversation.conversation_id,
+                )
+                .order_by(CustomerMessageModel.occurred_at.asc())
+                .limit(80)
+            ).scalars()
+        )
+        runs = list(
+            session.execute(
+                select(AssistantRunModel)
+                .where(
+                    AssistantRunModel.client_id == conversation.client_id,
+                    AssistantRunModel.conversation_id == conversation.conversation_id,
+                )
+                .order_by(AssistantRunModel.created_at.desc())
+                .limit(10)
+            ).scalars()
+        )
+        payload = self._conversation_summary_payload(conversation, channel)
+        payload["memory"] = conversation.memory_json or {}
+        payload["messages"] = [self._message_payload(message) for message in messages]
+        payload["runs"] = [self._run_payload(session, run) for run in runs]
+        return payload
+
+    def _latest_outbound_for_inbound(self, session: Session, conversation: CustomerConversationModel) -> CustomerMessageModel | None:
+        return session.execute(
+            select(CustomerMessageModel)
+            .where(
+                CustomerMessageModel.client_id == conversation.client_id,
+                CustomerMessageModel.conversation_id == conversation.conversation_id,
+                CustomerMessageModel.direction == "outbound",
+            )
+            .order_by(CustomerMessageModel.occurred_at.desc())
+        ).scalars().first()
+
+    def _playbook_payload(self, playbook: AssistantPlaybookModel) -> dict[str, Any]:
+        return {
+            "playbook_id": str(playbook.playbook_id),
+            "status": playbook.status,
+            "business_type": playbook.business_type,
+            "brand_personality": playbook.brand_personality,
+            "custom_instructions": playbook.custom_instructions,
+            "forbidden_claims": playbook.forbidden_claims,
+            "sales_goals": playbook.sales_goals_json or {},
+            "policies": {**DEFAULT_POLICIES, **(playbook.policy_json or {})},
+            "escalation_rules": {**DEFAULT_ESCALATION_RULES, **(playbook.escalation_rules_json or {})},
+            "industry_template": playbook.industry_template_json or {},
+        }
+
+    def _channel_payload(self, channel: CustomerChannelModel) -> dict[str, Any]:
+        return {
+            "channel_id": str(channel.channel_id),
+            "provider": channel.provider,
+            "display_name": channel.display_name,
+            "status": channel.status,
+            "external_account_id": channel.external_account_id,
+            "webhook_key": channel.webhook_key,
+            "default_location_id": str(channel.default_location_id) if channel.default_location_id else None,
+            "auto_send_enabled": bool(channel.auto_send_enabled),
+            "config": channel.config_json or {},
+            "last_inbound_at": channel.last_inbound_at.isoformat() if channel.last_inbound_at else None,
+            "last_outbound_at": channel.last_outbound_at.isoformat() if channel.last_outbound_at else None,
+        }
+
+    def _conversation_summary_payload(
+        self,
+        conversation: CustomerConversationModel,
+        channel: CustomerChannelModel,
+    ) -> dict[str, Any]:
+        return {
+            "conversation_id": str(conversation.conversation_id),
+            "channel_id": str(channel.channel_id),
+            "channel_provider": channel.provider,
+            "channel_display_name": channel.display_name,
+            "customer_id": str(conversation.customer_id) if conversation.customer_id else None,
+            "draft_order_id": str(conversation.draft_order_id) if conversation.draft_order_id else None,
+            "external_sender_id": conversation.external_sender_id,
+            "external_sender_name": conversation.external_sender_name,
+            "external_sender_phone": conversation.external_sender_phone,
+            "external_sender_email": conversation.external_sender_email,
+            "status": conversation.status,
+            "latest_intent": conversation.latest_intent,
+            "latest_summary": conversation.latest_summary,
+            "escalation_reason": conversation.escalation_reason,
+            "last_message_preview": conversation.last_message_preview,
+            "last_message_at": conversation.last_message_at.isoformat() if conversation.last_message_at else None,
+        }
+
+    def _message_payload(self, message: CustomerMessageModel) -> dict[str, Any]:
+        return {
+            "message_id": str(message.message_id),
+            "conversation_id": str(message.conversation_id),
+            "channel_id": str(message.channel_id),
+            "direction": message.direction,
+            "sender_role": message.sender_role,
+            "provider_event_id": message.provider_event_id,
+            "message_text": message.message_text,
+            "outbound_status": message.outbound_status,
+            "metadata": message.metadata_json or {},
+            "occurred_at": message.occurred_at.isoformat() if message.occurred_at else None,
+        }
+
+    def _run_payload(self, session: Session, run: AssistantRunModel) -> dict[str, Any]:
+        tool_calls = list(
+            session.execute(
+                select(AssistantToolCallModel)
+                .where(AssistantToolCallModel.client_id == run.client_id, AssistantToolCallModel.run_id == run.run_id)
+                .order_by(AssistantToolCallModel.created_at.asc())
+            ).scalars()
+        )
+        return {
+            "run_id": str(run.run_id),
+            "conversation_id": str(run.conversation_id),
+            "inbound_message_id": str(run.inbound_message_id),
+            "status": run.status,
+            "model_provider": run.model_provider,
+            "model_name": run.model_name,
+            "response_text": run.response_text,
+            "validation_status": run.validation_status,
+            "escalation_required": bool(run.escalation_required),
+            "escalation_reason": run.escalation_reason,
+            "total_tokens": run.total_tokens,
+            "created_at": run.created_at.isoformat() if run.created_at else None,
+            "tool_calls": [
+                {
+                    "tool_call_id": str(tool.tool_call_id),
+                    "run_id": str(tool.run_id),
+                    "tool_name": tool.tool_name,
+                    "tool_arguments": tool.tool_arguments_json or {},
+                    "tool_result": tool.tool_result_json or {},
+                    "validation_status": tool.validation_status,
+                    "created_at": tool.created_at.isoformat() if tool.created_at else None,
+                }
+                for tool in tool_calls
+            ],
+        }
+
+    def _safe_escalation_text(self, business_name: str, inbound_text: str = "") -> str:
+        lower = inbound_text.lower()
+        if self._has_electronics_safety_terms(lower):
+            return (
+                f"Thanks for reaching out to {business_name}. Please stop using that device or charger now, unplug it if it is safe, "
+                "and keep it away from heat or flammable items. I’m bringing a team member into this chat to help with the safest next step."
+            )
+        if re.search(r"\b(refund|complaint|angry)\b", lower):
+            return (
+                f"Thanks for reaching out to {business_name}. I’m bringing a team member into this chat so they can review the issue "
+                "and help you with the right next step."
+            )
+        return (
+            f"Thanks for reaching out to {business_name}. I want to make sure you get the right answer, "
+            "so I’m bringing a team member into this chat to help with the details."
+        )
+
+    def _conversation_summary_text(self, previous: str, inbound: str, outbound: str) -> str:
+        parts = [previous.strip(), f"Customer: {_preview(inbound, 120)}", f"Assistant: {_preview(outbound, 120)}"]
+        return " | ".join(part for part in parts if part)[-1000:]
+
+    def _has_risk_terms(self, text: str) -> bool:
+        return bool(
+            re.search(
+                r"\b(angry|complaint|refund|lawsuit|legal|unsafe|sick|vomit|vomiting|diarrhea|allergy|allergic|sensitive|sensitivity|rash|burning|medicine|disease|pain|emergency|toxic|poison|smoke|overheat|overheating|shock|spark|swollen|battery)\b",
+                text,
+            )
+        )
+
+    def _has_escalation_risk_terms(self, text: str) -> bool:
+        return bool(re.search(r"\b(angry|complaint|refund|lawsuit|legal|unsafe|emergency|toxic|poison)\b", text))
+
+    def _has_allergy_terms(self, text: str) -> bool:
+        return bool(re.search(r"\b(allergy|allergic|sensitive|sensitivity|rash|burning)\b", text))
+
+    def _has_electronics_safety_terms(self, text: str) -> bool:
+        return bool(re.search(r"\b(smoke|smoking|overheat|overheating|shock|spark|sparking|swollen|battery swelling|burning smell)\b", text))
+
+    def _count(self, session: Session, model, client_id: str) -> int:
+        return int(session.execute(select(func.count()).select_from(model).where(model.client_id == client_id)).scalar_one() or 0)
+
+    def _count_where(self, session: Session, model, client_id: str, *conditions) -> int:
+        return int(
+            session.execute(select(func.count()).select_from(model).where(model.client_id == client_id, *conditions)).scalar_one()
+            or 0
+        )

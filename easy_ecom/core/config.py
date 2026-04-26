@@ -112,6 +112,32 @@ class Settings:
     openai_helper_model: str = field(default_factory=lambda: os.getenv("OPENAI_HELPER_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini")
     openai_base_url: str = field(default_factory=lambda: os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").strip() or "https://api.openai.com/v1")
     openai_timeout_seconds: int = field(default_factory=lambda: _to_int(os.getenv("OPENAI_TIMEOUT_SECONDS"), 20))
+    ai_provider: str = field(default_factory=lambda: os.getenv("AI_PROVIDER", "nvidia").strip().lower() or "nvidia")
+    ai_timeout_seconds: int = field(default_factory=lambda: _to_int(os.getenv("AI_TIMEOUT_SECONDS"), 45))
+    nvidia_api_key: str = field(default_factory=lambda: (os.getenv("NVIDIA_API_KEY", "").strip() or os.getenv("ASSISTANT_API_KEY", "").strip()))
+    nvidia_model: str = field(
+        default_factory=lambda: (
+            os.getenv("NVIDIA_MODEL", "").strip()
+            or os.getenv("ASSISTANT_MODEL", "").strip()
+            or "google/gemma-4-31b-it"
+        )
+    )
+    nvidia_fallback_model: str = field(
+        default_factory=lambda: (
+            os.getenv("NVIDIA_FALLBACK_MODEL", "").strip()
+            or "nvidia/nemotron-3-super-120b-a12b"
+        )
+    )
+    nvidia_primary_timeout_seconds: int = field(
+        default_factory=lambda: _to_int(os.getenv("NVIDIA_PRIMARY_TIMEOUT_SECONDS"), 45)
+    )
+    nvidia_fallback_timeout_seconds: int = field(
+        default_factory=lambda: _to_int(os.getenv("NVIDIA_FALLBACK_TIMEOUT_SECONDS"), 25)
+    )
+    nvidia_base_url: str = field(
+        default_factory=lambda: (os.getenv("NVIDIA_BASE_URL", "").strip() or os.getenv("ASSISTANT_BASE_URL", "").strip() or "https://integrate.api.nvidia.com/v1").strip()
+        or "https://integrate.api.nvidia.com/v1"
+    )
     app_base_url: str = field(default_factory=lambda: os.getenv("APP_BASE_URL", "http://localhost:3000").strip() or "http://localhost:3000")
     stripe_secret_key: str = field(default_factory=lambda: os.getenv("STRIPE_SECRET_KEY", "").strip())
     stripe_webhook_secret: str = field(default_factory=lambda: os.getenv("STRIPE_WEBHOOK_SECRET", "").strip())

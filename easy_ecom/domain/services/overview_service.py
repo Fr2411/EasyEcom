@@ -10,6 +10,8 @@ from easy_ecom.data.store.postgres_models import (
     CategoryModel,
     ClientModel,
     ClientSettingsModel,
+    CustomerChannelModel,
+    CustomerConversationModel,
     CustomerModel,
     ExpenseModel,
     InventoryLedgerModel,
@@ -124,6 +126,29 @@ class OverviewService:
                 "Customer identity is back as a first-class tenant-safe module.",
                 [
                     OverviewMetric(label="Customers", value=str(self._count(session, CustomerModel, context))),
+                ],
+            )
+
+    def customer_communication(self, user: AuthenticatedUser) -> ModuleOverviewResponse:
+        context = OverviewContext(user)
+        with self._session_factory() as session:
+            return self._overview(
+                "customer_communication",
+                "Customer communication connects channel conversations to grounded AI sales and support assistance.",
+                [
+                    OverviewMetric(label="Channels", value=str(self._count(session, CustomerChannelModel, context))),
+                    OverviewMetric(label="Conversations", value=str(self._count(session, CustomerConversationModel, context))),
+                    OverviewMetric(
+                        label="Escalated",
+                        value=str(
+                            self._count_where(
+                                session,
+                                CustomerConversationModel,
+                                context,
+                                CustomerConversationModel.status == "escalated",
+                            )
+                        ),
+                    ),
                 ],
             )
 
