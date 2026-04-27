@@ -102,6 +102,36 @@ class AIConversationListResponse(BaseModel):
     items: list[AIConversationSummaryResponse]
 
 
+class AIConversationMessageResponse(BaseModel):
+    message_id: str
+    direction: str
+    text: str
+    occurred_at: str | None
+
+
+class AIConversationDetailResponse(BaseModel):
+    conversation_id: str
+    channel_id: str
+    channel_type: str
+    channel_display_name: str
+    status: str
+    customer_name: str
+    customer_phone: str
+    customer_email: str
+    customer_address: str
+    latest_intent: str
+    latest_summary: str
+    handoff_reason: str
+    last_message_preview: str
+    last_message_at: str | None
+    messages: list[AIConversationMessageResponse]
+
+
+class AIConversationStatusUpdateRequest(BaseModel):
+    status: Literal["open", "handoff", "closed"]
+    handoff_reason: str = ""
+
+
 class AIChatCustomerInput(BaseModel):
     name: str = ""
     phone: str = ""
@@ -111,6 +141,7 @@ class AIChatCustomerInput(BaseModel):
 
 class PublicChatMessageRequest(BaseModel):
     browser_session_id: str = Field(min_length=8, max_length=128)
+    client_message_id: str | None = Field(default=None, min_length=3, max_length=128)
     message: str = Field(min_length=1, max_length=4000)
     customer: AIChatCustomerInput | None = None
     metadata: dict[str, Any] | None = None
@@ -125,6 +156,13 @@ class PublicChatMessageResponse(BaseModel):
     handoff_required: bool = False
     handoff_reason: str = ""
     order_status: str | None = None
+    was_duplicate: bool = False
+
+
+class PublicChatBootstrapResponse(BaseModel):
+    widget_key: str
+    assistant_name: str
+    opening_message: str
 
 
 class AIToolContextResponse(BaseModel):

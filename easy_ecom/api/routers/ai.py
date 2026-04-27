@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import json
 
 from fastapi import APIRouter, Depends, Header, Query, Request, Response
@@ -13,14 +14,17 @@ from easy_ecom.api.schemas.ai import (
     AICatalogSearchResponse,
     AIConfirmOrderRequest,
     AIConfirmOrderResponse,
+    AIConversationDetailResponse,
     AIConversationListResponse,
     AIConversationStateRequest,
     AIConversationStateResponse,
+    AIConversationStatusUpdateRequest,
     AIHandoffRequest,
     AIHandoffResponse,
     AIToolContextResponse,
     AIVariantAvailabilityRequest,
     AIVariantAvailabilityResponse,
+    PublicChatBootstrapResponse,
     PublicChatMessageRequest,
     PublicChatMessageResponse,
 )
@@ -33,6 +37,17 @@ router = APIRouter(prefix="/ai", tags=["ai"])
 
 def _api_base_url(request: Request) -> str:
     return str(request.base_url).rstrip("/")
+
+
+def render_public_chat_page_html(*, api_base_url: str, widget_key: str, assistant_name: str, opening_message: str) -> str:
+    safe_opening_message_json = json.dumps(opening_message).replace("</", "<\\/")
+    return (
+        PUBLIC_CHAT_PAGE_HTML
+        .replace("__EASY_ECOM_API_BASE_URL__", json.dumps(api_base_url))
+        .replace("__EASY_ECOM_WIDGET_KEY__", json.dumps(widget_key))
+        .replace("__EASY_ECOM_ASSISTANT_NAME__", html.escape(assistant_name))
+        .replace("__EASY_ECOM_OPENING_MESSAGE_JSON__", safe_opening_message_json)
+    )
 
 
 def require_ai_tool_auth(
@@ -85,18 +100,61 @@ def list_ai_conversations(
     return AIConversationListResponse.model_validate(container.ai_chat.list_conversations(user, limit=limit))
 
 
+@router.get("/conversations/{conversation_id}", response_model=AIConversationDetailResponse)
+def get_ai_conversation_detail(
+    conversation_id: str,
+    message_limit: int = Query(default=50, ge=1, le=100),
+    user: AuthenticatedUser = Depends(get_authenticated_user),
+    container: ServiceContainer = Depends(get_container),
+) -> AIConversationDetailResponse:
+    return AIConversationDetailResponse.model_validate(
+        container.ai_chat.get_conversation_detail(user, conversation_id=conversation_id, message_limit=message_limit)
+    )
+
+
+@router.patch("/conversations/{conversation_id}", response_model=AIConversationDetailResponse)
+def update_ai_conversation_status(
+    conversation_id: str,
+    payload: AIConversationStatusUpdateRequest,
+    user: AuthenticatedUser = Depends(get_authenticated_user),
+    container: ServiceContainer = Depends(get_container),
+) -> AIConversationDetailResponse:
+    return AIConversationDetailResponse.model_validate(
+        container.ai_chat.update_conversation_status(
+            user,
+            conversation_id=conversation_id,
+            status=payload.status,
+            handoff_reason=payload.handoff_reason,
+        )
+    )
+
+
 @router.get("/chat/widget.js", include_in_schema=False)
 def website_chat_widget() -> Response:
     return Response(content=WIDGET_JS, media_type="application/javascript")
 
 
+@router.get("/chat/public/{widget_key}/bootstrap", response_model=PublicChatBootstrapResponse, include_in_schema=False)
+def public_chat_bootstrap(
+    widget_key: str,
+    container: ServiceContainer = Depends(get_container),
+) -> PublicChatBootstrapResponse:
+    return PublicChatBootstrapResponse.model_validate(container.ai_chat.public_chat_bootstrap(widget_key=widget_key))
+
+
 @router.get("/chat/public/{widget_key}", include_in_schema=False)
-def public_chat_page(widget_key: str, request: Request) -> HTMLResponse:
+def public_chat_page(
+    widget_key: str,
+    request: Request,
+    container: ServiceContainer = Depends(get_container),
+) -> HTMLResponse:
     api_base_url = _api_base_url(request)
-    content = (
-        PUBLIC_CHAT_PAGE_HTML
-        .replace("__EASY_ECOM_API_BASE_URL__", json.dumps(api_base_url))
-        .replace("__EASY_ECOM_WIDGET_KEY__", json.dumps(widget_key))
+    bootstrap = container.ai_chat.public_chat_bootstrap(widget_key=widget_key)
+    content = render_public_chat_page_html(
+        api_base_url=api_base_url,
+        widget_key=widget_key,
+        assistant_name=str(bootstrap.get("assistant_name", "Store assistant")),
+        opening_message=str(bootstrap.get("opening_message", "Hi, how can I help you today?")),
     )
     return HTMLResponse(content=content)
 
@@ -112,12 +170,12 @@ def public_chat_message(
     result = container.ai_chat.handle_public_message(
         widget_key=widget_key,
         browser_session_id=payload.browser_session_id,
+        client_message_id=payload.client_message_id,
         message=payload.message,
         customer=payload.customer.model_dump() if payload.customer else None,
         metadata=payload.metadata,
         origin=request.headers.get("origin", ""),
         client_ip=client_ip,
-        tool_base_url=f"{_api_base_url(request)}/ai/tools",
         trusted_origins={_api_base_url(request)},
     )
     return PublicChatMessageResponse.model_validate(result)
@@ -274,11 +332,15 @@ WIDGET_JS = r"""
   panel.style.overflow = 'hidden';
 
   var header = document.createElement('div');
-  header.textContent = 'EasyEcom assistant';
+  header.textContent = 'Store assistant';
   header.style.padding = '12px 14px';
   header.style.fontWeight = '700';
   header.style.background = '#111827';
   header.style.color = '#fff';
+
+  var assistantName = 'Store assistant';
+  var openingMessage = 'Hi, how can I help you today?';
+  var greetingSeeded = false;
 
   var messages = document.createElement('div');
   messages.style.height = '328px';
@@ -324,11 +386,44 @@ WIDGET_JS = r"""
     messages.scrollTop = messages.scrollHeight;
   }
 
+  function buildClientMessageId() {
+    return 'msg_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
+  }
+
+  function seedGreeting() {
+    if (greetingSeeded) return;
+    greetingSeeded = true;
+    addMessage(openingMessage, 'inbound');
+  }
+
+  function loadBootstrap() {
+    return fetch(apiBase + '/ai/chat/public/' + encodeURIComponent(widgetKey) + '/bootstrap')
+      .then(function (response) {
+        if (!response.ok) throw new Error('bootstrap failed');
+        return response.json();
+      })
+      .then(function (payload) {
+        assistantName = (payload && payload.assistant_name) || assistantName;
+        openingMessage = (payload && payload.opening_message) || openingMessage;
+        header.textContent = assistantName;
+      })
+      .catch(function () {
+        header.textContent = assistantName;
+      });
+  }
+
+  var bootstrapPromise = loadBootstrap();
+
   button.addEventListener('click', function () {
     var open = panel.style.display !== 'none';
     panel.style.display = open ? 'none' : 'block';
     button.style.display = open ? 'block' : 'none';
-    if (!open) input.focus();
+    if (!open) {
+      bootstrapPromise.finally(function () {
+        seedGreeting();
+        input.focus();
+      });
+    }
   });
 
   header.addEventListener('click', function () {
@@ -340,14 +435,22 @@ WIDGET_JS = r"""
     event.preventDefault();
     var text = input.value.trim();
     if (!text) return;
+    var clientMessageId = buildClientMessageId();
     input.value = '';
     addMessage(text, 'outbound');
     fetch(apiBase + '/ai/chat/public/' + encodeURIComponent(widgetKey) + '/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ browser_session_id: sessionId, message: text })
+      body: JSON.stringify({ browser_session_id: sessionId, client_message_id: clientMessageId, message: text })
     })
-      .then(function (response) { return response.json(); })
+      .then(function (response) {
+        return response.json().then(function (payload) {
+          if (!response.ok) {
+            throw new Error(payload && payload.error && payload.error.message ? payload.error.message : 'Chat request failed');
+          }
+          return payload;
+        });
+      })
       .then(function (payload) {
         var reply = payload.reply_text || 'Our team will follow up shortly.';
         addMessage(reply, 'inbound');
@@ -534,7 +637,7 @@ PUBLIC_CHAT_PAGE_HTML = r"""
   <main>
     <section class="chat-shell" aria-label="Store chat">
       <header>
-        <h1>Chat with us</h1>
+        <h1>__EASY_ECOM_ASSISTANT_NAME__</h1>
         <p>Send a message and the store assistant will reply here.</p>
       </header>
       <div class="customer-fields">
@@ -577,12 +680,17 @@ PUBLIC_CHAT_PAGE_HTML = r"""
       messages.scrollTop = messages.scrollHeight;
     }
 
-    addMessage("Hi, how can we help you today?", "assistant");
+    function buildClientMessageId() {
+      return "msg_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 10);
+    }
+
+    addMessage(__EASY_ECOM_OPENING_MESSAGE_JSON__, "assistant");
 
     form.addEventListener("submit", async function (event) {
       event.preventDefault();
       const text = input.value.trim();
       if (!text) return;
+      const clientMessageId = buildClientMessageId();
       input.value = "";
       addMessage(text, "customer");
       sendButton.disabled = true;
@@ -592,6 +700,7 @@ PUBLIC_CHAT_PAGE_HTML = r"""
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             browser_session_id: sessionId,
+            client_message_id: clientMessageId,
             message: text,
             customer: {
               name: customerName.value.trim(),

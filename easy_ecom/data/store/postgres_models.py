@@ -197,6 +197,7 @@ class AIMessageModel(TenantMixin, Base):
     __tablename__ = "ai_messages"
     __table_args__ = (
         UniqueConstraint("client_id", "ai_message_id", name="uq_ai_messages_client_message_id"),
+        UniqueConstraint("client_id", "ai_conversation_id", "client_message_id", name="uq_ai_messages_client_conversation_client_message_id"),
         ForeignKeyConstraint(
             ["client_id", "ai_conversation_id"],
             ["ai_conversations.client_id", "ai_conversations.ai_conversation_id"],
@@ -207,12 +208,20 @@ class AIMessageModel(TenantMixin, Base):
             ["ai_chat_channels.client_id", "ai_chat_channels.ai_chat_channel_id"],
             name="fk_ai_messages_channel_tenant",
         ),
+        ForeignKeyConstraint(
+            ["client_id", "responded_to_ai_message_id"],
+            ["ai_messages.client_id", "ai_messages.ai_message_id"],
+            name="fk_ai_messages_responded_to_tenant",
+        ),
         Index("ix_ai_messages_client_conversation", "client_id", "ai_conversation_id", "occurred_at"),
+        Index("ix_ai_messages_client_response_link", "client_id", "responded_to_ai_message_id"),
     )
 
     ai_message_id: Mapped[str] = mapped_column(GUID(), primary_key=True)
     ai_conversation_id: Mapped[str] = mapped_column(GUID(), nullable=False)
     ai_chat_channel_id: Mapped[str] = mapped_column(GUID(), nullable=False)
+    responded_to_ai_message_id: Mapped[str | None] = mapped_column(GUID())
+    client_message_id: Mapped[str | None] = mapped_column(String(128))
     direction: Mapped[str] = mapped_column(String(16), nullable=False)
     message_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
     content_summary: Mapped[str] = mapped_column(String(280), nullable=False, default="")

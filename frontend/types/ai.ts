@@ -68,3 +68,28 @@ export type AIConversationSummary = {
 export type AIConversationList = {
   items: AIConversationSummary[];
 };
+
+export type AIConversationMessage = {
+  message_id: string;
+  direction: string;
+  text: string;
+  occurred_at: string | null;
+};
+
+export type AIConversationDetail = {
+  conversation_id: string;
+  channel_id: string;
+  channel_type: string;
+  channel_display_name: string;
+  status: 'open' | 'handoff' | 'closed' | string;
+  customer_name: string;
+  customer_phone: string;
+  customer_email: string;
+  customer_address: string;
+  latest_intent: string;
+  latest_summary: string;
+  handoff_reason: string;
+  last_message_preview: string;
+  last_message_at: string | null;
+  messages: AIConversationMessage[];
+};

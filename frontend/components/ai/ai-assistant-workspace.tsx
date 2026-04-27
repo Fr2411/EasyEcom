@@ -4,9 +4,9 @@ import { Copy, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { WorkspaceEmpty, WorkspaceNotice, WorkspacePanel } from '@/components/commerce/workspace-primitives';
-import { getAIAgentSettings, listAIConversations } from '@/lib/api/ai';
+import { getAIAgentSettings, getAIConversationDetail, listAIConversations, updateAIConversationStatus } from '@/lib/api/ai';
 import { formatDateTime } from '@/lib/commerce-format';
-import type { AIAgentSettings, AIConversationSummary } from '@/types/ai';
+import type { AIAgentSettings, AIConversationDetail, AIConversationSummary } from '@/types/ai';
 
 function widgetScriptUrl(script: string) {
   return script.match(/src="([^"]+)"/)?.[1] ?? '';
@@ -35,6 +35,9 @@ function statusClassName(status: string) {
 export function AIAssistantWorkspace() {
   const [settings, setSettings] = useState<AIAgentSettings | null>(null);
   const [conversations, setConversations] = useState<AIConversationSummary[]>([]);
+  const [selectedConversationId, setSelectedConversationId] = useState('');
+  const [selectedConversation, setSelectedConversation] = useState<AIConversationDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
@@ -49,6 +52,7 @@ export function AIAssistantWorkspace() {
       ]);
       setSettings(settingsPayload);
       setConversations(conversationsPayload.items);
+      setSelectedConversationId((current) => current || conversationsPayload.items[0]?.conversation_id || '');
       setError('');
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load AI assistant workspace.');
@@ -57,9 +61,31 @@ export function AIAssistantWorkspace() {
     }
   }, []);
 
+  const loadConversationDetail = useCallback(async (conversationId: string) => {
+    setDetailLoading(true);
+    try {
+      const detail = await getAIConversationDetail(conversationId, 50);
+      setSelectedConversation(detail);
+      setError('');
+    } catch (detailError) {
+      setSelectedConversation(null);
+      setError(detailError instanceof Error ? detailError.message : 'Unable to load the conversation transcript.');
+    } finally {
+      setDetailLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     void loadWorkspace();
   }, [loadWorkspace]);
+
+  useEffect(() => {
+    if (!selectedConversationId) {
+      setSelectedConversation(null);
+      return;
+    }
+    void loadConversationDetail(selectedConversationId);
+  }, [loadConversationDetail, selectedConversationId]);
 
   const metrics = useMemo(() => {
     return conversations.reduce(
@@ -104,6 +130,33 @@ export function AIAssistantWorkspace() {
       window.setTimeout(() => setCopiedLink(false), 1800);
     } catch {
       setError('Unable to copy the customer chat link from this browser.');
+    }
+  };
+
+  const changeConversationStatus = async (status: 'open' | 'handoff' | 'closed') => {
+    if (!selectedConversationId) {
+      return;
+    }
+    try {
+      const detail = await updateAIConversationStatus(selectedConversationId, {
+        status,
+        handoff_reason: status === 'handoff'
+          ? (selectedConversation?.handoff_reason || 'Conversation requires a human follow-up')
+          : '',
+      });
+      setSelectedConversation(detail);
+      setConversations((current) => current.map((item) => item.conversation_id === detail.conversation_id ? {
+        ...item,
+        status: detail.status,
+        handoff_reason: detail.handoff_reason,
+        latest_intent: detail.latest_intent,
+        latest_summary: detail.latest_summary,
+        last_message_preview: detail.last_message_preview,
+        last_message_at: detail.last_message_at,
+      } : item));
+      setError('');
+    } catch (statusError) {
+      setError(statusError instanceof Error ? statusError.message : 'Unable to update the conversation status.');
     }
   };
 
@@ -224,7 +277,11 @@ export function AIAssistantWorkspace() {
         {!loading && conversations.length ? (
           <div className="operations-list-stack">
             {conversations.map((conversation) => (
-              <article key={conversation.conversation_id} className="operations-list-card static ai-assistant-conversation-card">
+              <article
+                key={conversation.conversation_id}
+                className="operations-list-card static ai-assistant-conversation-card"
+                aria-current={selectedConversationId === conversation.conversation_id ? 'true' : undefined}
+              >
                 <div className="operations-list-card-head">
                   <strong>{customerLabel(conversation)}</strong>
                   <span className={statusClassName(conversation.status)}>{statusLabel(conversation.status)}</span>
@@ -245,8 +302,87 @@ export function AIAssistantWorkspace() {
                 {conversation.handoff_reason ? (
                   <div className="workspace-notice info compact">{conversation.handoff_reason}</div>
                 ) : null}
+                <div className="operations-toolbar-actions">
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => setSelectedConversationId(conversation.conversation_id)}
+                  >
+                    {selectedConversationId === conversation.conversation_id ? 'Viewing transcript' : 'Open transcript'}
+                  </button>
+                </div>
               </article>
             ))}
+          </div>
+        ) : null}
+      </WorkspacePanel>
+
+      <WorkspacePanel title="Conversation transcript" description="Inspect the actual customer and assistant messages for the selected conversation.">
+        {!selectedConversationId && !conversations.length ? (
+          <WorkspaceEmpty
+            title="No conversation selected"
+            message="Choose a conversation after customers begin chatting through the tenant widget."
+          />
+        ) : null}
+        {detailLoading ? <div className="reports-loading">Loading transcript...</div> : null}
+        {!detailLoading && selectedConversation ? (
+          <div className="operations-detail-stack">
+            <div className="operations-inline-meta compact">
+              <span>{selectedConversation.channel_display_name}</span>
+              <span>{statusLabel(selectedConversation.status)}</span>
+              {selectedConversation.latest_intent ? <span>{selectedConversation.latest_intent}</span> : null}
+              <span>{formatDateTime(selectedConversation.last_message_at)}</span>
+            </div>
+            {selectedConversation.customer_phone || selectedConversation.customer_email || selectedConversation.customer_address ? (
+              <div className="operations-inline-meta compact">
+                {selectedConversation.customer_phone ? <span>{selectedConversation.customer_phone}</span> : null}
+                {selectedConversation.customer_email ? <span>{selectedConversation.customer_email}</span> : null}
+                {selectedConversation.customer_address ? <span>{selectedConversation.customer_address}</span> : null}
+              </div>
+            ) : null}
+            {selectedConversation.handoff_reason ? (
+              <WorkspaceNotice tone="info">{selectedConversation.handoff_reason}</WorkspaceNotice>
+            ) : null}
+            <div className="operations-toolbar-actions">
+              {selectedConversation.status !== 'open' ? (
+                <button type="button" className="secondary" onClick={() => void changeConversationStatus('open')}>
+                  Reopen for AI
+                </button>
+              ) : null}
+              {selectedConversation.status !== 'handoff' ? (
+                <button type="button" className="secondary" onClick={() => void changeConversationStatus('handoff')}>
+                  Mark handoff
+                </button>
+              ) : null}
+              {selectedConversation.status !== 'closed' ? (
+                <button type="button" className="secondary" onClick={() => void changeConversationStatus('closed')}>
+                  Close conversation
+                </button>
+              ) : null}
+            </div>
+            {!selectedConversation.messages.length ? (
+              <WorkspaceEmpty
+                title="Transcript is empty"
+                message="This conversation has no stored messages yet."
+              />
+            ) : (
+              <div className="operations-list-stack">
+                {selectedConversation.messages.map((message) => (
+                  <article key={message.message_id} className="operations-list-card static ai-assistant-conversation-card">
+                    <div className="operations-list-card-head">
+                      <strong>{message.direction === 'outbound' ? settings?.display_name || 'Assistant' : selectedConversation.customer_name || 'Customer'}</strong>
+                      <span className={message.direction === 'outbound' ? 'status-pill status-pill-active' : 'status-pill'}>
+                        {message.direction === 'outbound' ? 'Assistant' : 'Customer'}
+                      </span>
+                    </div>
+                    <p>{message.text}</p>
+                    <div className="operations-inline-meta compact">
+                      <span>{formatDateTime(message.occurred_at)}</span>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
           </div>
         ) : null}
       </WorkspacePanel>

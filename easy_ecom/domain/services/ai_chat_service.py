@@ -8,6 +8,7 @@ from typing import Any
 
 import httpx
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from easy_ecom.core.config import settings
@@ -45,6 +46,24 @@ DEFAULT_ALLOWED_ACTIONS = {
 
 DEFAULT_HANDOFF_MESSAGE = "I am sending this to our team so they can handle it properly."
 DEFAULT_OPENING_MESSAGE = "Hi, how can I help you today?"
+CATALOG_DISCOVERY_PHRASES = (
+    "what do you have",
+    "show me what you have",
+    "show me your products",
+    "show me products",
+    "show products",
+    "show catalog",
+    "browse products",
+    "browse catalog",
+    "what products",
+    "what items",
+    "what's available",
+    "whats available",
+    "available products",
+    "available items",
+    "catalog",
+    "collection",
+)
 HANDOFF_KEYWORDS = (
     "refund",
     "return",
@@ -195,6 +214,69 @@ class AIChatService(CommerceBaseService):
                 ]
             }
 
+    def public_chat_bootstrap(self, *, widget_key: str) -> dict[str, Any]:
+        with self._session_factory() as session:
+            channel, profile = self._load_public_channel_bundle_by_widget(session, widget_key)
+            if channel.status != "active" or not profile.is_enabled:
+                raise ApiException(status_code=403, code="AI_WIDGET_DISABLED", message="Chat widget is not enabled")
+            return {
+                "widget_key": widget_key,
+                "assistant_name": profile.display_name.strip() or channel.display_name.strip() or "Store assistant",
+                "opening_message": profile.opening_message.strip() or DEFAULT_OPENING_MESSAGE,
+            }
+
+    def get_conversation_detail(
+        self,
+        user: AuthenticatedUser,
+        *,
+        conversation_id: str,
+        message_limit: int,
+    ) -> dict[str, Any]:
+        self._require_ai_assistant_access(user)
+        safe_limit = max(1, min(int(message_limit), 100))
+        with self._session_factory() as session:
+            conversation, channel, _profile = self._load_conversation_bundle(session, user.client_id, conversation_id)
+            messages = self._recent_messages(session, user.client_id, conversation_id, limit=safe_limit)
+            return {
+                "conversation_id": str(conversation.ai_conversation_id),
+                "channel_id": str(channel.ai_chat_channel_id),
+                "channel_type": channel.channel_type,
+                "channel_display_name": channel.display_name,
+                "status": conversation.status,
+                "customer_name": conversation.customer_name_snapshot,
+                "customer_phone": conversation.customer_phone_snapshot,
+                "customer_email": conversation.customer_email_snapshot,
+                "customer_address": conversation.customer_address_snapshot,
+                "latest_intent": conversation.latest_intent,
+                "latest_summary": conversation.latest_summary,
+                "handoff_reason": conversation.handoff_reason,
+                "last_message_preview": conversation.last_message_preview,
+                "last_message_at": conversation.last_message_at.isoformat() if conversation.last_message_at else None,
+                "messages": messages,
+            }
+
+    def update_conversation_status(
+        self,
+        user: AuthenticatedUser,
+        *,
+        conversation_id: str,
+        status: str,
+        handoff_reason: str,
+    ) -> dict[str, Any]:
+        self._require_ai_assistant_access(user)
+        normalized_status = str(status).strip().lower()
+        if normalized_status not in {"open", "handoff", "closed"}:
+            raise ApiException(status_code=400, code="AI_CONVERSATION_STATUS_INVALID", message="Conversation status is invalid")
+        with self._session_factory() as session:
+            conversation, _channel, _profile = self._load_conversation_bundle(session, user.client_id, conversation_id)
+            conversation.status = normalized_status
+            if normalized_status == "open":
+                conversation.handoff_reason = ""
+            elif normalized_status == "handoff":
+                conversation.handoff_reason = handoff_reason.strip() or conversation.handoff_reason or "Conversation requires a human follow-up"
+            session.commit()
+        return self.get_conversation_detail(user, conversation_id=conversation_id, message_limit=50)
+
     def update_settings(
         self,
         user: AuthenticatedUser,
@@ -259,17 +341,18 @@ class AIChatService(CommerceBaseService):
         *,
         widget_key: str,
         browser_session_id: str,
+        client_message_id: str | None,
         message: str,
         customer: dict[str, Any] | None,
         metadata: dict[str, Any] | None,
         origin: str,
         client_ip: str,
-        tool_base_url: str,
         trusted_origins: set[str] | None = None,
     ) -> dict[str, Any]:
         inbound_payload = self._record_public_inbound(
             widget_key=widget_key,
             browser_session_id=browser_session_id,
+            client_message_id=client_message_id,
             message=message,
             customer=customer,
             metadata=metadata,
@@ -277,6 +360,9 @@ class AIChatService(CommerceBaseService):
             client_ip=client_ip,
             trusted_origins=trusted_origins,
         )
+
+        if inbound_payload.get("final_response"):
+            return dict(inbound_payload["final_response"])
 
         if inbound_payload["handoff_required"]:
             reply_payload = {
@@ -723,6 +809,7 @@ class AIChatService(CommerceBaseService):
         *,
         widget_key: str,
         browser_session_id: str,
+        client_message_id: str | None,
         message: str,
         customer: dict[str, Any] | None,
         metadata: dict[str, Any] | None,
@@ -730,18 +817,9 @@ class AIChatService(CommerceBaseService):
         client_ip: str,
         trusted_origins: set[str] | None,
     ) -> dict[str, Any]:
+        normalized_client_message_id = str(client_message_id or "").strip() or None
         with self._session_factory() as session:
-            row = session.execute(
-                select(AIChatChannelModel, AIAgentProfileModel)
-                .join(
-                    AIAgentProfileModel,
-                    AIAgentProfileModel.ai_agent_profile_id == AIChatChannelModel.agent_profile_id,
-                )
-                .where(AIChatChannelModel.widget_key == widget_key)
-            ).first()
-            if row is None:
-                raise ApiException(status_code=404, code="AI_WIDGET_NOT_FOUND", message="Chat widget was not found")
-            channel, profile = row
+            channel, profile = self._load_public_channel_bundle_by_widget(session, widget_key)
             if channel.status != "active" or not profile.is_enabled:
                 raise ApiException(status_code=403, code="AI_WIDGET_DISABLED", message="Chat widget is not enabled")
             self._validate_public_origin(origin, channel.allowed_origins_json or [], trusted_origins=trusted_origins)
@@ -753,8 +831,24 @@ class AIChatService(CommerceBaseService):
                 customer=customer,
                 metadata=metadata,
             )
+            if normalized_client_message_id:
+                duplicate_payload = self._duplicate_public_message_response(
+                    session,
+                    client_id=str(channel.client_id),
+                    conversation_id=str(conversation.ai_conversation_id),
+                    client_message_id=normalized_client_message_id,
+                )
+                if duplicate_payload is not None:
+                    session.commit()
+                    return {"final_response": duplicate_payload}
             self._enforce_public_rate_limit(session, conversation)
-            handoff_reason = self._keyword_handoff_reason(message)
+            existing_handoff_reason = str(conversation.handoff_reason or "").strip()
+            if conversation.status == "closed":
+                handoff_reason = existing_handoff_reason or "Conversation is closed and waiting for a human follow-up"
+            elif conversation.status == "handoff":
+                handoff_reason = existing_handoff_reason or "Conversation requires a human follow-up"
+            else:
+                handoff_reason = self._keyword_handoff_reason(message)
             now = now_utc()
             inbound = AIMessageModel(
                 ai_message_id=new_uuid(),
@@ -762,6 +856,7 @@ class AIChatService(CommerceBaseService):
                 ai_conversation_id=conversation.ai_conversation_id,
                 ai_chat_channel_id=channel.ai_chat_channel_id,
                 direction="inbound",
+                client_message_id=normalized_client_message_id,
                 message_text=message.strip(),
                 content_summary=_preview(message),
                 raw_payload_json={
@@ -775,11 +870,26 @@ class AIChatService(CommerceBaseService):
             session.add(inbound)
             conversation.last_message_preview = _preview(message)
             conversation.last_message_at = now
-            if handoff_reason:
+            if handoff_reason and conversation.status != "closed":
                 conversation.status = "handoff"
                 conversation.handoff_reason = handoff_reason
+            elif handoff_reason:
+                conversation.handoff_reason = handoff_reason
             channel.last_inbound_at = now
-            session.commit()
+            try:
+                session.commit()
+            except IntegrityError:
+                session.rollback()
+                if normalized_client_message_id:
+                    duplicate_payload = self._duplicate_public_message_response(
+                        session,
+                        client_id=str(channel.client_id),
+                        conversation_id=str(conversation.ai_conversation_id),
+                        client_message_id=normalized_client_message_id,
+                    )
+                    if duplicate_payload is not None:
+                        return {"final_response": duplicate_payload}
+                raise
             recent_context = self._recent_messages(session, str(channel.client_id), str(conversation.ai_conversation_id), limit=12)
             return {
                 "client_id": str(channel.client_id),
@@ -791,6 +901,76 @@ class AIChatService(CommerceBaseService):
                 "handoff_required": bool(handoff_reason),
                 "handoff_reason": handoff_reason,
             }
+
+    def _load_public_channel_bundle_by_widget(
+        self,
+        session: Session,
+        widget_key: str,
+    ) -> tuple[AIChatChannelModel, AIAgentProfileModel]:
+        row = session.execute(
+            select(AIChatChannelModel, AIAgentProfileModel)
+            .join(
+                AIAgentProfileModel,
+                AIAgentProfileModel.ai_agent_profile_id == AIChatChannelModel.agent_profile_id,
+            )
+            .where(AIChatChannelModel.widget_key == widget_key)
+        ).first()
+        if row is None:
+            raise ApiException(status_code=404, code="AI_WIDGET_NOT_FOUND", message="Chat widget was not found")
+        return row
+
+    def _duplicate_public_message_response(
+        self,
+        session: Session,
+        *,
+        client_id: str,
+        conversation_id: str,
+        client_message_id: str,
+    ) -> dict[str, Any] | None:
+        existing_inbound = session.execute(
+            select(AIMessageModel).where(
+                AIMessageModel.client_id == client_id,
+                AIMessageModel.ai_conversation_id == conversation_id,
+                AIMessageModel.direction == "inbound",
+                AIMessageModel.client_message_id == client_message_id,
+            )
+        ).scalar_one_or_none()
+        if existing_inbound is None:
+            return None
+        outbound = session.execute(
+            select(AIMessageModel)
+            .where(
+                AIMessageModel.client_id == client_id,
+                AIMessageModel.ai_conversation_id == conversation_id,
+                AIMessageModel.direction == "outbound",
+                AIMessageModel.responded_to_ai_message_id == existing_inbound.ai_message_id,
+            )
+            .order_by(AIMessageModel.occurred_at.desc(), AIMessageModel.created_at.desc())
+        ).scalars().first()
+        if outbound is None:
+            return {
+                "conversation_id": str(conversation_id),
+                "inbound_message_id": str(existing_inbound.ai_message_id),
+                "outbound_message_id": None,
+                "reply_text": "We are still processing your last message. Please wait a moment.",
+                "status": "open",
+                "handoff_required": False,
+                "handoff_reason": "",
+                "order_status": None,
+                "was_duplicate": True,
+            }
+        conversation = session.execute(
+            select(AIConversationModel).where(
+                AIConversationModel.client_id == client_id,
+                AIConversationModel.ai_conversation_id == conversation_id,
+            )
+        ).scalar_one()
+        return self._public_response_payload(
+            conversation=conversation,
+            inbound_message_id=str(existing_inbound.ai_message_id),
+            outbound=outbound,
+            was_duplicate=True,
+        )
 
     def _record_public_outbound(
         self,
@@ -805,7 +985,7 @@ class AIChatService(CommerceBaseService):
         now = now_utc()
         with self._session_factory() as session:
             conversation, channel, _profile = self._load_conversation_bundle(session, client_id, conversation_id)
-            if bool(reply_payload.get("handoff_required")):
+            if bool(reply_payload.get("handoff_required")) and conversation.status != "closed":
                 conversation.status = "handoff"
                 conversation.handoff_reason = str(reply_payload.get("handoff_reason", "")).strip() or conversation.handoff_reason
             latest_intent = str(reply_payload.get("latest_intent", "")).strip()[:64]
@@ -819,6 +999,7 @@ class AIChatService(CommerceBaseService):
                 client_id=client_id,
                 ai_conversation_id=conversation_id,
                 ai_chat_channel_id=channel_id,
+                responded_to_ai_message_id=inbound_message_id,
                 direction="outbound",
                 message_text=reply_text,
                 content_summary=_preview(reply_text),
@@ -835,16 +1016,33 @@ class AIChatService(CommerceBaseService):
             conversation.last_message_at = now
             channel.last_outbound_at = now
             session.commit()
-            return {
-                "conversation_id": str(conversation.ai_conversation_id),
-                "inbound_message_id": inbound_message_id,
-                "outbound_message_id": str(outbound.ai_message_id),
-                "reply_text": reply_text,
-                "status": conversation.status,
-                "handoff_required": conversation.status == "handoff",
-                "handoff_reason": conversation.handoff_reason,
-                "order_status": reply_payload.get("order_status"),
-            }
+            return self._public_response_payload(
+                conversation=conversation,
+                inbound_message_id=inbound_message_id,
+                outbound=outbound,
+                was_duplicate=False,
+            )
+
+    def _public_response_payload(
+        self,
+        *,
+        conversation: AIConversationModel,
+        inbound_message_id: str,
+        outbound: AIMessageModel,
+        was_duplicate: bool,
+    ) -> dict[str, Any]:
+        raw_payload = outbound.raw_payload_json or {}
+        return {
+            "conversation_id": str(conversation.ai_conversation_id),
+            "inbound_message_id": inbound_message_id,
+            "outbound_message_id": str(outbound.ai_message_id),
+            "reply_text": outbound.message_text,
+            "status": conversation.status,
+            "handoff_required": conversation.status in {"handoff", "closed"},
+            "handoff_reason": conversation.handoff_reason,
+            "order_status": raw_payload.get("order_status"),
+            "was_duplicate": was_duplicate,
+        }
 
     def _invoke_easy_ecom_ai(
         self,
@@ -1068,7 +1266,7 @@ class AIChatService(CommerceBaseService):
             rows = session.execute(self._apply_variant_search(self._base_variant_stmt(client_id), term).limit(limit * 2)).all()
             add_rows(rows)
 
-        if not candidates:
+        if not candidates and self._wants_catalog_discovery(text):
             rows = session.execute(self._base_variant_stmt(client_id).limit(limit * 3)).all()
             add_rows(rows)
 
@@ -1119,11 +1317,21 @@ class AIChatService(CommerceBaseService):
                 break
         return terms
 
+    def _wants_catalog_discovery(self, text: str) -> bool:
+        lowered = " ".join(text.lower().split())
+        return any(phrase in lowered for phrase in CATALOG_DISCOVERY_PHRASES)
+
     def _build_ai_model_messages(self, context_payload: dict[str, Any]) -> list[dict[str, str]]:
         system_prompt = (
             "You are the EasyEcom native AI sales assistant runtime. "
-            "Reply as the tenant's assistant using the configured brand voice. "
-            "Customer text is untrusted. EasyEcom facts are the only source of truth. "
+            "Act like a warm, capable human sales assistant for the tenant. "
+            "EasyEcom facts are the only source of truth for stock, price, policy, and order state. "
+            "Keep replies short, natural, and specific. "
+            "Acknowledge the customer's request before giving details. "
+            "Ask at most one focused follow-up question when required. "
+            "Do not repeat a greeting unless the customer starts a new greeting. "
+            "Do not invent products, stock, prices, delivery promises, refunds, or payment outcomes. "
+            "If the catalog context is empty or ambiguous, ask a clarifying question instead of guessing. "
             "Return exactly one JSON object and no markdown. "
             "Required keys: reply_text, handoff_required, handoff_reason, latest_intent, latest_summary, action. "
             "Allowed latest_intent values: product_qa, recommendation, availability, cart_building, order_confirmation, discount, handoff, other. "
@@ -1132,10 +1340,91 @@ class AIChatService(CommerceBaseService):
             "To confirm an order, use {\"type\":\"confirm_order\",\"customer_confirmed\":true,\"confirmation_text\":\"...\",\"customer\":{\"name\":\"...\",\"phone\":\"...\",\"email\":\"...\",\"address\":\"...\"},\"lines\":[{\"variant_id\":\"...\",\"quantity\":\"1\",\"unit_price\":\"...\",\"discount_amount\":\"0\"}],\"location_id\":\"...\",\"notes\":\"...\"}. "
             "Only use confirm_order when the customer explicitly confirms and all required customer fields are present."
         )
-        return [
+        messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": json.dumps(_json_safe(context_payload), ensure_ascii=True)},
+            {"role": "system", "content": self._build_ai_context_message(context_payload)},
         ]
+        messages.extend(self._conversation_messages_for_model(context_payload))
+        current_message = str(context_payload.get("current_customer_message", "")).strip()
+        if current_message and (
+            not messages
+            or messages[-1]["role"] != "user"
+            or messages[-1]["content"].strip() != current_message
+        ):
+            messages.append({"role": "user", "content": current_message})
+        return messages
+
+    def _build_ai_context_message(self, context_payload: dict[str, Any]) -> str:
+        business = context_payload.get("business") or {}
+        agent = context_payload.get("agent") or {}
+        customer = context_payload.get("customer") or {}
+        conversation = context_payload.get("conversation") or {}
+        stock_location = context_payload.get("stock_location") or {}
+        catalog = context_payload.get("catalog") or {}
+        items = catalog.get("items") or []
+        faq_entries = agent.get("faq_entries") or []
+        guardrails = context_payload.get("guardrails") or []
+
+        lines = [
+            f"Business name: {str(business.get('business_name') or '').strip() or 'Unknown business'}",
+            f"Assistant display name: {str(agent.get('display_name') or '').strip() or 'Store assistant'}",
+            f"Brand voice/persona: {str(agent.get('persona_prompt') or '').strip() or 'Not configured'}",
+            f"Store policy: {str(agent.get('store_policy') or '').strip() or 'Not configured'}",
+            f"Fallback handoff message: {str(agent.get('handoff_message') or DEFAULT_HANDOFF_MESSAGE).strip()}",
+            f"Conversation status: {str(conversation.get('status') or 'open').strip()}",
+            f"Latest conversation summary: {str(conversation.get('latest_summary') or '').strip() or 'None'}",
+            f"Latest conversation intent: {str(conversation.get('latest_intent') or '').strip() or 'unknown'}",
+            f"Stock location: {str(stock_location.get('location_name') or '').strip() or 'Default location'}",
+            f"Customer name: {str(customer.get('name') or '').strip() or 'Unknown'}",
+            f"Customer phone: {str(customer.get('phone') or '').strip() or 'Unknown'}",
+            f"Customer email: {str(customer.get('email') or '').strip() or 'Unknown'}",
+            f"Customer address: {str(customer.get('address') or '').strip() or 'Unknown'}",
+        ]
+
+        if faq_entries:
+            lines.append("Approved FAQ:")
+            for item in faq_entries[:6]:
+                question = str(item.get("question") or "").strip()
+                answer = str(item.get("answer") or "").strip()
+                if question or answer:
+                    lines.append(f"- Q: {question or 'Unknown'} | A: {answer or 'Unknown'}")
+
+        lines.append("Catalog matches:")
+        if items:
+            for item in items[:8]:
+                label = str(item.get("label") or item.get("product_name") or "Unknown item").strip()
+                description = str(item.get("description") or '').strip() or 'No description'
+                price = str(item.get("unit_price") or 'unknown').strip()
+                min_price = str(item.get("min_price") or 'unknown').strip()
+                available = str(item.get("available_to_sell") or '0').strip()
+                sku = str(item.get("sku") or '').strip() or 'n/a'
+                can_sell = bool(item.get("can_sell"))
+                lines.append(
+                    f"- {label} | sku={sku} | unit_price={price} | min_price={min_price} | available_to_sell={available} | can_sell={'yes' if can_sell else 'no'} | description={description}"
+                )
+        else:
+            lines.append("- No confident catalog matches were found for this message. Ask a short clarifying question before recommending a product.")
+
+        if guardrails:
+            lines.append("Guardrails:")
+            for rule in guardrails:
+                if str(rule).strip():
+                    lines.append(f"- {str(rule).strip()}")
+
+        return "\n".join(lines)
+
+    def _conversation_messages_for_model(self, context_payload: dict[str, Any]) -> list[dict[str, str]]:
+        conversation = context_payload.get("conversation") or {}
+        recent_messages = conversation.get("recent_messages") or []
+        messages: list[dict[str, str]] = []
+        for item in recent_messages:
+            direction = str(item.get("direction") or "").strip().lower()
+            text = str(item.get("text") or "").strip()
+            if not text:
+                continue
+            role = "assistant" if direction == "outbound" else "user"
+            messages.append({"role": role, "content": text})
+        return messages
 
     def _call_ai_model(self, messages: list[dict[str, str]]) -> tuple[str, dict[str, Any]]:
         response = httpx.post(
@@ -1174,21 +1463,40 @@ class AIChatService(CommerceBaseService):
             if lines and lines[-1].startswith("```"):
                 lines = lines[:-1]
             content = "\n".join(lines).strip()
+        payload = self._extract_json_object(content)
+        if payload is not None:
+            return payload
+        return {
+            "reply_text": "",
+            "handoff_required": True,
+            "handoff_reason": "AI model returned invalid structured output",
+            "latest_intent": "handoff",
+            "latest_summary": _preview(content),
+            "action": {"type": "none"},
+            "ai_metadata": {
+                "parse_status": "invalid_json",
+                "raw_response_preview": _preview(content, limit=500),
+            },
+        }
+
+    def _extract_json_object(self, content: str) -> dict[str, Any] | None:
+        decoder = json.JSONDecoder()
         try:
             payload = json.loads(content)
         except json.JSONDecodeError:
-            return {
-                "reply_text": content,
-                "handoff_required": False,
-                "handoff_reason": "",
-                "latest_intent": "other",
-                "latest_summary": _preview(content),
-                "action": {"type": "none"},
-                "ai_metadata": {"parse_status": "plain_text_fallback"},
-            }
-        if not isinstance(payload, dict):
-            raise ValueError("AI model response JSON must be an object")
-        return payload
+            payload = None
+        if isinstance(payload, dict):
+            return payload
+        for index, character in enumerate(content):
+            if character != "{":
+                continue
+            try:
+                candidate, _end = decoder.raw_decode(content[index:])
+            except json.JSONDecodeError:
+                continue
+            if isinstance(candidate, dict):
+                return candidate
+        return None
 
     def _normalize_ai_reply(self, payload: dict[str, Any], *, fallback_message: str, text: str) -> dict[str, Any]:
         reply_text = str(payload.get("reply_text") or payload.get("reply") or payload.get("message") or "").strip()
@@ -1214,7 +1522,7 @@ class AIChatService(CommerceBaseService):
             "latest_intent": latest_intent,
             "latest_summary": latest_summary,
             "action": action,
-            "ai_metadata": {"model_reply": _json_safe(payload)},
+            "ai_metadata": dict((payload.get("ai_metadata") or {}) | {"model_reply": _json_safe(payload)}),
         }
 
     def _maybe_execute_ai_action(
