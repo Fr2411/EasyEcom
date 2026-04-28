@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import timedelta
 from decimal import Decimal
 import json
+import re
 import secrets
 from typing import Any
 
@@ -77,33 +78,68 @@ HANDOFF_KEYWORDS = (
     "manager",
     "human",
     "real person",
+    "talk to someone",
+    "speak to someone",
 )
 AI_SEARCH_STOPWORDS = {
     "about",
+    "actually",
+    "aed",
     "after",
+    "ahead",
     "also",
+    "and",
+    "another",
+    "arrival",
+    "arrive",
     "available",
+    "below",
     "can",
     "could",
     "does",
+    "delivery",
+    "dh",
+    "dhs",
+    "dirham",
+    "dirhams",
+    "else",
     "for",
+    "good",
     "have",
     "hello",
     "help",
+    "instead",
+    "looking",
+    "minutes",
     "need",
+    "option",
+    "options",
+    "one",
     "please",
     "price",
+    "rather",
     "show",
+    "shipping",
+    "similar",
     "size",
+    "slot",
+    "slots",
+    "something",
+    "still",
     "stock",
     "tell",
     "that",
     "the",
     "this",
+    "under",
+    "usd",
+    "use",
     "want",
+    "what",
     "with",
     "you",
 }
+
 AI_ALLOWED_INTENTS = {
     "product_qa",
     "recommendation",
@@ -114,6 +150,179 @@ AI_ALLOWED_INTENTS = {
     "handoff",
     "other",
 }
+SHOPPING_COLOR_WORDS = {
+    "black",
+    "white",
+    "blue",
+    "red",
+    "green",
+    "grey",
+    "gray",
+    "yellow",
+    "orange",
+    "purple",
+    "brown",
+    "pink",
+    "beige",
+    "navy",
+}
+SHOPPING_USE_CASE_PHRASES = (
+    "daily running",
+    "gym",
+    "walking",
+    "office",
+    "formal",
+    "casual",
+    "school",
+    "training",
+    "workout",
+    "treadmill",
+)
+SHOPPING_RECOMMENDATION_PHRASES = (
+    "recommend",
+    "suggest",
+    "show me",
+    "something else",
+    "another option",
+    "another one",
+    "similar",
+    "cheaper",
+    "more affordable",
+    "under ",
+    "below ",
+    "budget option",
+    "budget-friendly",
+    "on a budget",
+)
+SHOPPING_PRODUCT_HINTS = (
+    "shoe",
+    "shoes",
+    "sneaker",
+    "sneakers",
+    "trainer",
+    "trainers",
+    "bag",
+    "bags",
+    "backpack",
+    "backpacks",
+    "boot",
+    "boots",
+    "sandal",
+    "sandals",
+    "loafer",
+    "loafers",
+    "sock",
+    "socks",
+    "color",
+    "colour",
+    "size",
+)
+SHOPPING_AVAILABILITY_PHRASES = (
+    "do you have",
+    "is it available",
+    "is this available",
+    "are these available",
+    "in stock",
+    "have this",
+)
+SHOPPING_SIMPLE_DISCOVERY_PHRASES = (
+    "need ",
+    "looking for",
+    "want ",
+    "show me",
+)
+SHOPPING_ORDER_ACTION_PHRASES = (
+    "place the order",
+    "place order",
+    "confirm the order",
+    "confirm order",
+    "i'll take",
+    "i will take",
+    "buy this",
+    "buy it",
+    "checkout",
+    "add to cart",
+    "reserve it",
+)
+SHOPPING_PRODUCT_QA_PHRASES = (
+    "what material",
+    "is it leather",
+    "is this good for",
+    "are these good for",
+    "is this okay for",
+    "are these okay for",
+)
+SHOPPING_NON_PRODUCT_TOPIC_PHRASES = (
+    "delivery",
+    "shipping",
+    "slot",
+    "slots",
+    "arrive",
+    "arrival",
+    "minutes",
+)
+SHOPPING_DISCOUNT_NEGOTIATION_PHRASES = (
+    "better price",
+    "best price",
+    "discount",
+    "lower the price",
+    "cheapest you can do",
+)
+SHOPPING_NON_SPECIFIC_PRODUCT_TERMS = {
+    "aed",
+    "affordable",
+    "below",
+    "cheaper",
+    "dh",
+    "dhs",
+    "dirham",
+    "dirhams",
+    "good",
+    "item",
+    "items",
+    "model",
+    "option",
+    "options",
+    "pair",
+    "product",
+    "products",
+    "recommend",
+    "recommended",
+    "similar",
+    "something",
+    "still",
+    "suggest",
+    "suggested",
+    "under",
+    "use",
+    "usd",
+}
+SHOPPING_PRODUCT_HINT_SYNONYMS = {
+    "shoe": {"shoe", "shoes", "sneaker", "sneakers", "trainer", "trainers"},
+    "shoes": {"shoe", "shoes", "sneaker", "sneakers", "trainer", "trainers"},
+    "sneaker": {"shoe", "shoes", "sneaker", "sneakers", "trainer", "trainers"},
+    "sneakers": {"shoe", "shoes", "sneaker", "sneakers", "trainer", "trainers"},
+    "trainer": {"shoe", "shoes", "sneaker", "sneakers", "trainer", "trainers"},
+    "trainers": {"shoe", "shoes", "sneaker", "sneakers", "trainer", "trainers"},
+    "backpack": {"backpack", "backpacks", "bag", "bags"},
+    "backpacks": {"backpack", "backpacks", "bag", "bags"},
+    "bag": {"backpack", "backpacks", "bag", "bags"},
+    "bags": {"backpack", "backpacks", "bag", "bags"},
+    "boot": {"boot", "boots"},
+    "boots": {"boot", "boots"},
+    "sandal": {"sandal", "sandals"},
+    "sandals": {"sandal", "sandals"},
+    "loafer": {"loafer", "loafers"},
+    "loafers": {"loafer", "loafers"},
+    "sock": {"sock", "socks"},
+    "socks": {"sock", "socks"},
+}
+SHOPPING_SIZE_PATTERN = re.compile(r"\b(?:eu|size)\s*([0-9]{1,2}(?:\.[0-9])?)\b", re.IGNORECASE)
+SHOPPING_BUDGET_PATTERN = re.compile(
+    r"\b(?:under|below|less than|budget(?:\s+of)?|upto|up to|max(?:imum)?\s+(?:budget|price|spend|of)|(?:my\s+)?max(?:imum)?\s+is)\s*(?:aed|usd|dhs?|dirhams?)?\s*([0-9]+(?:\.[0-9]{1,2})?)\b",
+    re.IGNORECASE,
+)
+SHOPPING_PRICE_PATTERN = re.compile(r"\b(?:aed|usd|dhs?|dirhams?)\s*([0-9]+(?:\.[0-9]{1,2})?)\b", re.IGNORECASE)
 
 
 def _json_safe(value: Any) -> Any:
@@ -1055,24 +1264,6 @@ class AIChatService(CommerceBaseService):
         fallback_message: str,
     ) -> dict[str, Any]:
         model_name = settings.openai_model
-        if not settings.openai_api_key:
-            payload = self._ai_handoff_payload(
-                fallback_message=fallback_message,
-                handoff_reason="AI model API key is not configured",
-                latest_summary=_preview(text),
-                metadata={"model_status": "missing_api_key"},
-            )
-            payload["model_name"] = model_name
-            self._audit_ai_model_step(
-                client_id=client_id,
-                conversation_id=conversation_id,
-                inbound_message_id=inbound_message_id,
-                request_json={"model": model_name, "message_preview": _preview(text)},
-                response_json=payload,
-                status="failed",
-                error_message="AI model API key is not configured",
-            )
-            return payload
 
         try:
             context_payload = self._build_ai_context(
@@ -1100,12 +1291,52 @@ class AIChatService(CommerceBaseService):
             )
             return payload
 
-        model_messages = self._build_ai_model_messages(context_payload)
         model_request = {
             "model": model_name,
             "message_preview": _preview(text),
             "catalog_item_count": len(context_payload.get("catalog", {}).get("items", [])),
         }
+
+        deterministic_reply = self._deterministic_catalog_reply(context_payload)
+        if deterministic_reply is not None:
+            deterministic_reply["model_name"] = model_name
+            deterministic_reply["ai_metadata"] = dict(
+                {
+                    "ai_runtime": "easy_ecom",
+                    "model": model_name,
+                    "model_status": "deterministic_catalog",
+                }
+                | (deterministic_reply.get("ai_metadata") or {})
+            )
+            self._audit_ai_model_step(
+                client_id=client_id,
+                conversation_id=conversation_id,
+                inbound_message_id=inbound_message_id,
+                request_json=dict(model_request | {"strategy": "deterministic_catalog"}),
+                response_json=deterministic_reply,
+            )
+            return deterministic_reply
+
+        if not settings.openai_api_key:
+            payload = self._ai_handoff_payload(
+                fallback_message=fallback_message,
+                handoff_reason="AI model API key is not configured",
+                latest_summary=_preview(text),
+                metadata={"model_status": "missing_api_key"},
+            )
+            payload["model_name"] = model_name
+            self._audit_ai_model_step(
+                client_id=client_id,
+                conversation_id=conversation_id,
+                inbound_message_id=inbound_message_id,
+                request_json=model_request,
+                response_json=payload,
+                status="failed",
+                error_message="AI model API key is not configured",
+            )
+            return payload
+
+        model_messages = self._build_ai_model_messages(context_payload)
         try:
             model_text, model_response = self._call_ai_model(model_messages)
             parsed = self._parse_ai_model_response(model_text)
@@ -1135,6 +1366,28 @@ class AIChatService(CommerceBaseService):
             )
             return normalized
         except Exception as exc:
+            fallback_reply = self._deterministic_catalog_reply(context_payload)
+            if fallback_reply is not None:
+                fallback_reply["model_name"] = model_name
+                fallback_reply["ai_metadata"] = dict(
+                    {
+                        "ai_runtime": "easy_ecom",
+                        "model": model_name,
+                        "model_status": "request_failed_recovered_with_deterministic_catalog",
+                        "error": str(exc)[:500],
+                    }
+                    | (fallback_reply.get("ai_metadata") or {})
+                )
+                self._audit_ai_model_step(
+                    client_id=client_id,
+                    conversation_id=conversation_id,
+                    inbound_message_id=inbound_message_id,
+                    request_json=dict(model_request | {"strategy": "deterministic_catalog_recovery"}),
+                    response_json=fallback_reply,
+                    status="degraded",
+                    error_message=str(exc)[:1000],
+                )
+                return fallback_reply
             payload = self._ai_handoff_payload(
                 fallback_message=fallback_message,
                 handoff_reason="AI model request failed",
@@ -1166,7 +1419,21 @@ class AIChatService(CommerceBaseService):
             client = session.execute(select(ClientModel).where(ClientModel.client_id == client_id)).scalar_one()
             location_id = str(profile.default_location_id or channel.default_location_id or "") or None
             location_context = self._location_context(session, client_id, location_id)
-            catalog_items = self._catalog_items_for_ai(session, client_id, text, location_context.active_location_id)
+            metadata = conversation.metadata_json if isinstance(conversation.metadata_json, dict) else {}
+            existing_preferences = metadata.get("shopping_preferences") if isinstance(metadata.get("shopping_preferences"), dict) else {}
+            shopping_preferences = self._extract_shopping_preferences(
+                text=text,
+                recent_context=recent_context,
+                existing_preferences=existing_preferences,
+            )
+            conversation.metadata_json = dict(metadata | {"shopping_preferences": shopping_preferences})
+            catalog_items = self._catalog_items_for_ai(
+                session,
+                client_id,
+                text,
+                location_context.active_location_id,
+                preferences=shopping_preferences,
+            )
             payload = {
                 "business": {
                     "business_name": client.business_name,
@@ -1200,6 +1467,7 @@ class AIChatService(CommerceBaseService):
                     "latest_intent": conversation.latest_intent,
                     "latest_summary": conversation.latest_summary,
                     "recent_messages": recent_context,
+                    "shopping_preferences": shopping_preferences,
                 },
                 "stock_location": {
                     "location_id": location_context.active_location_id,
@@ -1217,6 +1485,7 @@ class AIChatService(CommerceBaseService):
                     "Do not offer or accept a unit price below min_price. Hand off discount requests that violate min_price.",
                     "For refunds, returns, payment disputes, angry customers, human requests, unsupported requests, or uncertain action validation, hand off.",
                     "For order confirmation, require explicit customer confirmation plus customer name, phone, and delivery address. The backend will re-check stock before creating any order.",
+                    "For normal shopping questions, prefer one direct answer or one clarifying question before human handoff.",
                     "Never fulfill, refund, cancel, or record payment automatically.",
                 ],
             }
@@ -1230,6 +1499,7 @@ class AIChatService(CommerceBaseService):
                     "catalog_item_count": len(catalog_items),
                     "location_id": location_context.active_location_id,
                     "recent_message_count": len(recent_context),
+                    "shopping_preferences": shopping_preferences,
                 },
             )
             session.commit()
@@ -1243,6 +1513,7 @@ class AIChatService(CommerceBaseService):
         location_id: str,
         *,
         limit: int = 8,
+        preferences: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         on_hand_map, reserved_map = self._stock_maps(session, client_id, location_id)
         candidates: list[tuple[Any, Any, Any, Any]] = []
@@ -1257,7 +1528,7 @@ class AIChatService(CommerceBaseService):
                 seen_variants.add(variant_id)
                 candidates.append(row)
 
-        search_terms = [text.strip()] + self._ai_search_terms(text)
+        search_terms = self._catalog_search_terms(text=text, preferences=preferences)
         for term in search_terms:
             if len(candidates) >= limit * 3:
                 break
@@ -1272,8 +1543,6 @@ class AIChatService(CommerceBaseService):
 
         items: list[dict[str, Any]] = []
         for product, variant, supplier, category in candidates:
-            if len(items) >= limit:
-                break
             if product.status != "active" or variant.status != "active":
                 continue
             variant_id = str(variant.variant_id)
@@ -1302,14 +1571,14 @@ class AIChatService(CommerceBaseService):
                     "can_sell": available > Decimal("0") and price is not None and price > Decimal("0"),
                 }
             )
-        return items
+        return self._rank_catalog_items_for_preferences(items, preferences, limit=limit)
 
     def _ai_search_terms(self, text: str) -> list[str]:
         normalized = "".join(char.lower() if char.isalnum() else " " for char in text)
         terms: list[str] = []
         seen: set[str] = set()
         for token in normalized.split():
-            if len(token) < 3 or token in AI_SEARCH_STOPWORDS or token in seen:
+            if token.isdigit() or len(token) < 3 or token in AI_SEARCH_STOPWORDS or token in seen:
                 continue
             seen.add(token)
             terms.append(token)
@@ -1320,6 +1589,788 @@ class AIChatService(CommerceBaseService):
     def _wants_catalog_discovery(self, text: str) -> bool:
         lowered = " ".join(text.lower().split())
         return any(phrase in lowered for phrase in CATALOG_DISCOVERY_PHRASES)
+
+    def _extract_shopping_preferences(
+        self,
+        *,
+        text: str,
+        recent_context: list[dict[str, Any]],
+        existing_preferences: dict[str, Any],
+    ) -> dict[str, Any]:
+        base = existing_preferences if isinstance(existing_preferences, dict) else {}
+        preferences = {
+            "product_terms": [str(item).strip().lower() for item in base.get("product_terms", []) if str(item).strip()],
+            "colors": [str(item).strip().lower() for item in base.get("colors", []) if str(item).strip()],
+            "sizes": [str(item).strip() for item in base.get("sizes", []) if str(item).strip()],
+            "use_case_terms": [str(item).strip().lower() for item in base.get("use_case_terms", []) if str(item).strip()],
+            "max_budget": str(base.get("max_budget") or "").strip(),
+            "last_referenced_price": str(base.get("last_referenced_price") or "").strip(),
+            "price_preference": str(base.get("price_preference") or "any").strip() or "any",
+            "wants_recommendation": bool(base.get("wants_recommendation")),
+            "wants_availability": bool(base.get("wants_availability")),
+        }
+
+        customer_turns = [
+            str(item.get("text") or "").strip()
+            for item in recent_context
+            if str(item.get("direction") or "").strip().lower() != "outbound" and str(item.get("text") or "").strip()
+        ]
+        current_text = text.strip()
+        if current_text and (not customer_turns or customer_turns[-1] != current_text):
+            customer_turns.append(current_text)
+        combined_text = " ".join(customer_turns).strip()
+        lowered_combined = combined_text.lower()
+        lowered_current = current_text.lower()
+
+        current_search_terms = self._ai_search_terms(current_text)
+        current_product_hints = [
+            hint
+            for hint in SHOPPING_PRODUCT_HINTS
+            if hint not in {"color", "colour", "size"} and self._text_contains_token(lowered_current, hint)
+        ]
+        if current_product_hints and not re.search(r"\bthe\b", lowered_current):
+            current_search_terms = [term for term in current_search_terms if term not in {"premium", "budget"}]
+        current_model_number_terms = self._product_model_number_terms(current_text)
+        combined_search_terms = self._ai_search_terms(combined_text)
+        if current_product_hints and not re.search(r"\bthe\b", lowered_current):
+            combined_search_terms = [term for term in combined_search_terms if term not in {"premium", "budget"}]
+        combined_model_number_terms = self._product_model_number_terms(combined_text)
+        existing_product_terms = [term for term in preferences["product_terms"] if term]
+        existing_product_hints = [
+            term
+            for term in existing_product_terms
+            if term in SHOPPING_PRODUCT_HINTS and term not in {"color", "colour", "size"}
+        ]
+        switching_request = any(token in lowered_current for token in ("instead", "actually", "rather"))
+        pronoun_follow_up = bool(re.search(r"\b(this|it|that|these|those)\b", lowered_current))
+        current_non_product_topic = any(phrase in lowered_current for phrase in SHOPPING_NON_PRODUCT_TOPIC_PHRASES)
+        current_product_hint_tokens = self._product_hint_token_set(current_product_hints)
+        existing_product_hint_tokens = self._product_hint_token_set(existing_product_hints)
+        current_product_context_terms = set(current_model_number_terms) | current_product_hint_tokens | {
+            term for term in current_search_terms if term not in SHOPPING_COLOR_WORDS
+        }
+        existing_product_context_terms = set(existing_product_terms) | existing_product_hint_tokens
+        explicit_product_request = bool(
+            current_product_hints
+            and (
+                switching_request
+                or any(phrase in lowered_current for phrase in SHOPPING_AVAILABILITY_PHRASES)
+                or any(phrase in lowered_current for phrase in SHOPPING_RECOMMENDATION_PHRASES)
+                or any(phrase in lowered_current for phrase in SHOPPING_SIMPLE_DISCOVERY_PHRASES)
+            )
+        )
+        reset_for_product_switch = bool(
+            explicit_product_request
+            and existing_product_context_terms
+            and current_product_context_terms
+            and current_product_context_terms.isdisjoint(existing_product_context_terms)
+        )
+
+        if reset_for_product_switch:
+            preferences["product_terms"] = self._merge_unique_texts([], current_product_hints + current_search_terms + current_model_number_terms)
+        elif combined_text and not current_non_product_topic:
+            preference_terms = combined_search_terms + combined_model_number_terms
+            if current_product_hints and switching_request:
+                preference_terms = current_product_hints + current_search_terms + current_model_number_terms
+            preferences["product_terms"] = self._merge_unique_texts(preferences["product_terms"], preference_terms)
+
+        current_colors = self._colors_in_text(lowered_current)
+        combined_colors = self._colors_in_text(lowered_combined)
+        if reset_for_product_switch:
+            preferences["colors"] = current_colors
+        else:
+            preferences["colors"] = current_colors or self._merge_unique_texts(preferences["colors"], combined_colors)
+
+        current_sizes = [match.group(1).strip() for match in SHOPPING_SIZE_PATTERN.finditer(current_text)]
+        if not current_sizes and not current_non_product_topic:
+            in_size_matches = [match.group(1) for match in re.finditer(r"\bin\s+([3-5][0-9](?:\.[0-9])?)\b", current_text.lower())]
+            if in_size_matches and (current_product_hints or pronoun_follow_up or existing_product_terms):
+                current_sizes = [in_size_matches[-1]]
+        if not current_sizes and switching_request and not current_non_product_topic:
+            bare_size_matches = [match.group(1) for match in re.finditer(r"\b([3-5][0-9])\b", current_text)]
+            if bare_size_matches:
+                current_sizes = [bare_size_matches[-1]]
+        combined_sizes = [match.group(1).strip() for match in SHOPPING_SIZE_PATTERN.finditer(combined_text)]
+        if reset_for_product_switch:
+            preferences["sizes"] = current_sizes
+        else:
+            preferences["sizes"] = current_sizes or self._merge_unique_texts(preferences["sizes"], combined_sizes)
+
+        current_use_case_terms = [phrase for phrase in SHOPPING_USE_CASE_PHRASES if phrase in lowered_current]
+        combined_use_case_terms = [phrase for phrase in SHOPPING_USE_CASE_PHRASES if phrase in lowered_combined]
+        if reset_for_product_switch:
+            preferences["use_case_terms"] = current_use_case_terms
+        else:
+            preferences["use_case_terms"] = self._merge_unique_texts(
+                preferences["use_case_terms"],
+                combined_use_case_terms,
+            )
+
+        wants_lower_price = any(token in lowered_current for token in ("cheaper", "under ", "below ", "affordable", "budget option", "budget-friendly", "on a budget"))
+        wants_higher_price = any(
+            token in lowered_current
+            for token in (
+                "more premium",
+                "higher price",
+                "higher priced",
+                "higher-end",
+                "better option",
+                "better one",
+                "something better",
+                "more expensive",
+                "show me premium",
+                "premium option",
+                "premium options",
+                "premium one",
+                "premium version",
+                "upgrade",
+            )
+        )
+        current_budget_match = SHOPPING_BUDGET_PATTERN.search(current_text) if not current_non_product_topic else None
+        if wants_higher_price and not current_non_product_topic:
+            preferences["max_budget"] = ""
+        elif current_budget_match:
+            preferences["max_budget"] = self._normalized_decimal_string(current_budget_match.group(1))
+        elif not preferences["max_budget"] and combined_text and not current_non_product_topic:
+            budget_match = SHOPPING_BUDGET_PATTERN.search(combined_text)
+            if budget_match:
+                preferences["max_budget"] = self._normalized_decimal_string(budget_match.group(1))
+
+        prior_outbound_text = " ".join(
+            str(item.get("text") or "").strip()
+            for item in recent_context
+            if str(item.get("direction") or "").strip().lower() == "outbound"
+        )
+        price_matches = [
+            self._normalized_decimal_string(match.group(1))
+            for match in SHOPPING_PRICE_PATTERN.finditer(prior_outbound_text)
+        ]
+        if price_matches:
+            preferences["last_referenced_price"] = price_matches[-1]
+
+        if any(phrase in lowered_current for phrase in SHOPPING_RECOMMENDATION_PHRASES):
+            preferences["wants_recommendation"] = True
+        if any(phrase in lowered_current for phrase in SHOPPING_AVAILABILITY_PHRASES):
+            preferences["wants_availability"] = True
+
+        if wants_higher_price and not current_non_product_topic:
+            preferences["price_preference"] = "higher"
+        elif (wants_lower_price or preferences["max_budget"]) and not current_non_product_topic:
+            preferences["price_preference"] = "lower"
+
+        return preferences
+
+    def _merge_unique_texts(self, existing: list[str], new_items: list[str]) -> list[str]:
+        values: list[str] = []
+        seen: set[str] = set()
+        for item in [*(existing or []), *(new_items or [])]:
+            normalized = str(item).strip().lower()
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            values.append(normalized)
+        return values
+
+    def _colors_in_text(self, lowered_text: str) -> list[str]:
+        return [color for color in SHOPPING_COLOR_WORDS if re.search(rf"\b{re.escape(color)}\b", lowered_text)]
+
+    def _product_hint_token_set(self, hints: list[str]) -> set[str]:
+        tokens: set[str] = set()
+        for hint in hints:
+            tokens.update(self._product_hint_terms(hint))
+        return tokens
+
+    def _product_model_number_terms(self, text: str) -> list[str]:
+        tokens = re.findall(r"\b[a-z0-9]+\b", text.lower())
+        if not tokens:
+            return []
+
+        disallowed_previous = set(AI_SEARCH_STOPWORDS) | set(SHOPPING_COLOR_WORDS) | set(SHOPPING_PRODUCT_HINTS) | {
+            "aed",
+            "budget",
+            "below",
+            "delivery",
+            "dh",
+            "dhs",
+            "dirham",
+            "dirhams",
+            "eu",
+            "hour",
+            "hours",
+            "in",
+            "less",
+            "minute",
+            "minutes",
+            "shipping",
+            "size",
+            "slot",
+            "slots",
+            "than",
+            "to",
+            "under",
+            "up",
+            "upto",
+            "usd",
+        }
+        disallowed_next = {"day", "days", "hour", "hours", "minute", "minutes"}
+        terms: list[str] = []
+        seen: set[str] = set()
+
+        for index, token in enumerate(tokens):
+            if not token.isdigit():
+                continue
+            previous = tokens[index - 1] if index > 0 else ""
+            previous_previous = tokens[index - 2] if index > 1 else ""
+            next_token = tokens[index + 1] if index + 1 < len(tokens) else ""
+            if not previous or previous in disallowed_previous or next_token in disallowed_next:
+                continue
+            if previous in {"max", "maximum"} and (
+                not previous_previous or previous_previous in AI_SEARCH_STOPWORDS or previous_previous in {"budget", "my", "price", "spend"}
+            ):
+                continue
+            if token in seen:
+                continue
+            seen.add(token)
+            terms.append(token)
+
+        return terms
+
+    def _compact_alnum_text(self, text: str) -> str:
+        return "".join(char.lower() for char in str(text or "") if char.isalnum())
+
+    def _exact_product_compact_phrase(self, specific_terms: list[str], product_hints: list[str]) -> str:
+        normalized_specific_terms = [str(term).strip().lower() for term in specific_terms if str(term).strip()]
+        normalized_hints = [str(term).strip().lower() for term in product_hints if str(term).strip()]
+        if len(normalized_specific_terms) >= 2 or any(re.fullmatch(r"\d+(?:\.\d+)?", term) for term in normalized_specific_terms):
+            return self._compact_alnum_text(" ".join(normalized_specific_terms))
+        if len(normalized_specific_terms) == 1 and normalized_hints:
+            return self._compact_alnum_text(f"{normalized_specific_terms[0]} {normalized_hints[0]}")
+        if normalized_specific_terms:
+            return self._compact_alnum_text(" ".join(normalized_specific_terms))
+        return ""
+
+    def _catalog_search_terms(self, *, text: str, preferences: dict[str, Any] | None) -> list[str]:
+        terms: list[str] = []
+        seen: set[str] = set()
+
+        def add(term: str, *, expand_product_hints: bool = False) -> None:
+            normalized = str(term).strip().lower()
+            if not normalized or normalized in seen:
+                return
+            seen.add(normalized)
+            terms.append(normalized)
+            if expand_product_hints and normalized in SHOPPING_PRODUCT_HINTS:
+                for synonym in sorted(self._product_hint_terms(normalized)):
+                    if synonym != normalized:
+                        add(synonym)
+
+        add(text.strip())
+        current_search_terms = self._ai_search_terms(text)
+        current_model_terms = self._product_model_number_terms(text)
+        current_specific_terms = [
+            term
+            for term in current_search_terms
+            if not self._is_non_specific_product_term(term) and term not in SHOPPING_COLOR_WORDS
+        ]
+        if current_model_terms and current_specific_terms:
+            exact_phrase_terms = current_specific_terms[:2] + [
+                term for term in current_model_terms if term not in current_specific_terms[:2]
+            ]
+            if len(exact_phrase_terms) >= 2:
+                add(" ".join(exact_phrase_terms[:3]))
+        for term in current_model_terms:
+            add(term)
+        for term in current_search_terms:
+            add(term, expand_product_hints=True)
+
+        if isinstance(preferences, dict):
+            product_terms = [str(item).strip().lower() for item in preferences.get("product_terms", []) if str(item).strip()]
+            specific_product_terms = [term for term in product_terms if not self._is_non_specific_product_term(term)]
+            product_model_terms = [term for term in specific_product_terms if re.fullmatch(r"\d+(?:\.\d+)?", term)]
+            exact_saved_terms = [
+                term for term in specific_product_terms if term not in product_model_terms and term not in SHOPPING_COLOR_WORDS
+            ]
+            if product_model_terms and exact_saved_terms:
+                exact_phrase_terms = exact_saved_terms[:2] + [term for term in product_model_terms if term not in exact_saved_terms[:2]]
+                if len(exact_phrase_terms) >= 2:
+                    add(" ".join(exact_phrase_terms[:3]))
+            for term in product_model_terms:
+                add(term)
+            if len(product_terms) >= 2:
+                add(" ".join(product_terms[:2]))
+            for key in ("colors", "sizes", "use_case_terms", "product_terms"):
+                values = preferences.get(key, [])
+                if not isinstance(values, list):
+                    continue
+                for item in values:
+                    add(str(item), expand_product_hints=key == "product_terms")
+
+        return terms[:16]
+
+    def _normalized_decimal_string(self, value: Any) -> str:
+        try:
+            decimal_value = Decimal(str(value).strip())
+        except Exception:
+            return ""
+        if decimal_value == decimal_value.to_integral():
+            return format(decimal_value.quantize(Decimal("1")), "f")
+        return format(decimal_value.normalize(), "f")
+
+    def _money_value(self, value: Any) -> Decimal | None:
+        if value is None or value == "":
+            return None
+        try:
+            return Decimal(str(value).strip())
+        except Exception:
+            return None
+
+    def _is_non_specific_product_term(self, term: str) -> bool:
+        normalized = str(term).strip().lower()
+        if not normalized:
+            return True
+        if re.fullmatch(r"\d+(?:\.\d+)?", normalized):
+            return False
+        use_case_tokens = {token for phrase in SHOPPING_USE_CASE_PHRASES for token in phrase.split()}
+        return normalized in (
+            set(AI_SEARCH_STOPWORDS)
+            | set(SHOPPING_COLOR_WORDS)
+            | set(SHOPPING_PRODUCT_HINTS)
+            | SHOPPING_NON_SPECIFIC_PRODUCT_TERMS
+            | use_case_tokens
+        )
+
+    def _catalog_item_text(self, item: dict[str, Any]) -> str:
+        return " ".join(
+            str(item.get(key) or "").strip().lower()
+            for key in ("label", "product_name", "variant_title", "description", "category", "brand", "sku")
+        )
+
+    def _text_contains_token(self, haystack: str, token: str) -> bool:
+        normalized_token = str(token).strip().lower()
+        if not normalized_token:
+            return False
+        if re.fullmatch(r"\d+(?:\.\d+)?", normalized_token):
+            return re.search(rf"(?<![\d.]){re.escape(normalized_token)}(?![\d.])", haystack) is not None
+        return re.search(rf"\b{re.escape(normalized_token)}\b", haystack) is not None
+
+    def _product_hint_terms(self, hint: str) -> set[str]:
+        normalized = str(hint).strip().lower()
+        if not normalized:
+            return set()
+        return set(SHOPPING_PRODUCT_HINT_SYNONYMS.get(normalized, {normalized}))
+
+    def _rank_catalog_items_for_preferences(
+        self,
+        items: list[dict[str, Any]],
+        preferences: dict[str, Any] | None,
+        *,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        ranked = [dict(item) for item in items if isinstance(item, dict)]
+        if not ranked:
+            return []
+        if not preferences:
+            return ranked[:limit]
+
+        colors = [str(item).strip().lower() for item in preferences.get("colors", []) if str(item).strip()]
+        sizes = [str(item).strip() for item in preferences.get("sizes", []) if str(item).strip()]
+        use_case_terms = [str(item).strip().lower() for item in preferences.get("use_case_terms", []) if str(item).strip()]
+        product_terms = [str(item).strip().lower() for item in preferences.get("product_terms", []) if str(item).strip()]
+        specific_product_terms = [term for term in product_terms if not self._is_non_specific_product_term(term)]
+        preserve_exact_identity = bool(specific_product_terms)
+        max_budget = self._money_value(preferences.get("max_budget"))
+        price_preference = str(preferences.get("price_preference") or "any").strip().lower()
+
+        if max_budget is not None and not preserve_exact_identity:
+            budget_matches = [
+                item
+                for item in ranked
+                if bool(item.get("can_sell"))
+                and self._money_value(item.get("unit_price")) is not None
+                and self._money_value(item.get("unit_price")) <= max_budget
+            ]
+            if budget_matches:
+                ranked = budget_matches
+
+        if sizes:
+            size_matches = [item for item in ranked if any(self._text_contains_token(self._catalog_item_text(item), size) for size in sizes)]
+            if size_matches:
+                ranked = size_matches
+
+        if colors:
+            color_matches = [item for item in ranked if any(self._text_contains_token(self._catalog_item_text(item), color) for color in colors)]
+            if color_matches:
+                ranked = color_matches
+
+        can_sell_matches = [item for item in ranked if bool(item.get("can_sell"))]
+        if can_sell_matches and not preserve_exact_identity:
+            ranked = can_sell_matches
+
+        def sort_key(item: dict[str, Any]) -> tuple[int, Decimal, str]:
+            haystack = self._catalog_item_text(item)
+            score = 0
+            if bool(item.get("can_sell")):
+                score += 30
+            available = self._money_value(item.get("available_to_sell"))
+            if available is not None and available > Decimal("0"):
+                score += 6
+            for color in colors:
+                if self._text_contains_token(haystack, color):
+                    score += 12
+            for size in sizes:
+                if self._text_contains_token(haystack, size):
+                    score += 14
+            for term in use_case_terms:
+                if self._text_contains_token(haystack, term):
+                    score += 8
+            for term in product_terms[:6]:
+                if self._text_contains_token(haystack, term):
+                    score += 4
+            price = self._money_value(item.get("unit_price")) or Decimal("999999")
+            if max_budget is not None:
+                score += 18 if price <= max_budget else -12
+            if price_preference == "lower":
+                score += 4
+            elif price_preference == "higher":
+                score += 4
+            price_sort = -price if price_preference == "higher" else price
+            return (-score, price_sort, str(item.get("label") or item.get("product_name") or ""))
+
+        ranked.sort(key=sort_key)
+        return ranked[:limit]
+
+    def _clarifying_shopping_question(self, preferences: dict[str, Any]) -> str:
+        product_terms = [
+            str(item).strip().lower()
+            for item in preferences.get("product_terms", [])
+            if str(item).strip() and not self._is_non_specific_product_term(str(item))
+        ]
+        has_product_hint = any(
+            str(item).strip().lower() in SHOPPING_PRODUCT_HINTS
+            for item in preferences.get("product_terms", [])
+            if str(item).strip()
+        )
+        if not product_terms and not has_product_hint:
+            return "I can help with that. What product are you looking for?"
+        if not preferences.get("sizes"):
+            return "I can help with that. What size do you need?"
+        if not preferences.get("colors"):
+            return "I can help with that. What color do you prefer?"
+        if not preferences.get("max_budget"):
+            return "I can help with that. What budget would you like me to stay under?"
+        return "I can help with that. Do you want me to focus on a lower price, a different color, or another size?"
+
+    def _price_display(self, value: Any, currency_symbol: str, currency_code: str) -> str:
+        amount = self._money_value(value)
+        if amount is None:
+            return "the listed price"
+        prefix = str(currency_symbol or currency_code or "").strip() or "AED"
+        return f"{prefix} {amount.quantize(Decimal('0.01'))}"
+
+    def _deterministic_catalog_reply(self, context_payload: dict[str, Any]) -> dict[str, Any] | None:
+        business = context_payload.get("business") or {}
+        conversation = context_payload.get("conversation") or {}
+        catalog = context_payload.get("catalog") or {}
+        current_message = str(context_payload.get("current_customer_message") or "").strip()
+        recent_messages = conversation.get("recent_messages") or []
+        preferences = conversation.get("shopping_preferences") if isinstance(conversation.get("shopping_preferences"), dict) else {}
+        preferences = self._extract_shopping_preferences(
+            text=current_message,
+            recent_context=recent_messages,
+            existing_preferences=preferences,
+        )
+        current_preferences = self._extract_shopping_preferences(
+            text=current_message,
+            recent_context=[],
+            existing_preferences={},
+        )
+        lowered_current = current_message.lower()
+        current_product_hints = [
+            str(item).strip().lower()
+            for item in current_preferences.get("product_terms", [])
+            if str(item).strip().lower() in SHOPPING_PRODUCT_HINTS
+        ]
+        has_order_action = any(phrase in lowered_current for phrase in SHOPPING_ORDER_ACTION_PHRASES)
+        has_product_qa = bool(
+            re.search(
+                r"\b(is|are)\b.*\b(comfortable|comfort|material|leather|durable|waterproof|soft|lightweight|support|cushion|good for|okay for)\b",
+                lowered_current,
+            )
+        ) or any(phrase in lowered_current for phrase in SHOPPING_PRODUCT_QA_PHRASES)
+        has_non_product_topic = any(phrase in lowered_current for phrase in SHOPPING_NON_PRODUCT_TOPIC_PHRASES)
+        has_discount_negotiation = any(phrase in lowered_current for phrase in SHOPPING_DISCOUNT_NEGOTIATION_PHRASES)
+        has_human_request = any(phrase in lowered_current for phrase in ("talk to someone", "speak to someone"))
+        has_simple_discovery = any(phrase in lowered_current for phrase in SHOPPING_SIMPLE_DISCOVERY_PHRASES)
+
+        if has_order_action or has_product_qa or has_non_product_topic or has_discount_negotiation or has_human_request:
+            return None
+
+        shopping_signal = bool(
+            current_preferences.get("wants_recommendation")
+            or current_preferences.get("wants_availability")
+            or current_preferences.get("max_budget")
+            or current_preferences.get("colors")
+            or current_preferences.get("sizes")
+            or (has_simple_discovery and (current_preferences.get("product_terms") or current_preferences.get("use_case_terms")))
+        )
+        if not shopping_signal:
+            return None
+
+        catalog_items = [dict(item) for item in catalog.get("items") or [] if isinstance(item, dict)]
+        current_product_hints = [
+            str(item).strip().lower()
+            for item in current_preferences.get("product_terms", [])
+            if str(item).strip().lower() in SHOPPING_PRODUCT_HINTS
+        ]
+        current_specific_product_terms = [
+            str(item).strip().lower()
+            for item in current_preferences.get("product_terms", [])
+            if str(item).strip().lower()
+            and not self._is_non_specific_product_term(str(item))
+        ]
+        current_model_number_terms = [
+            term for term in current_specific_product_terms if re.fullmatch(r"\d+(?:\.\d+)?", term)
+        ]
+        saved_specific_product_terms = [
+            str(item).strip().lower()
+            for item in preferences.get("product_terms", [])
+            if str(item).strip() and not self._is_non_specific_product_term(str(item))
+        ]
+        saved_product_hints = [
+            str(item).strip().lower()
+            for item in preferences.get("product_terms", [])
+            if str(item).strip().lower() in SHOPPING_PRODUCT_HINTS
+        ]
+        pronoun_follow_up = bool(re.search(r"\b(this|it|that|these|those)\b", lowered_current))
+        effective_specific_product_terms = current_specific_product_terms
+        effective_product_hints = current_product_hints
+        if pronoun_follow_up and not effective_specific_product_terms and saved_specific_product_terms:
+            effective_specific_product_terms = saved_specific_product_terms
+        if pronoun_follow_up and not effective_product_hints and saved_product_hints:
+            effective_product_hints = saved_product_hints
+        if pronoun_follow_up and not effective_specific_product_terms and not effective_product_hints:
+            return {
+                "reply_text": "I can help with that. Which item are you asking about?",
+                "handoff_required": False,
+                "handoff_reason": "",
+                "order_status": None,
+                "latest_intent": "availability",
+                "latest_summary": _preview(current_message),
+                "action": {"type": "none"},
+                "ai_metadata": {"ai_runtime": "easy_ecom", "response_strategy": "deterministic_catalog_pronoun_clarify"},
+            }
+        combined_product_terms = [
+            str(item).strip().lower()
+            for item in preferences.get("product_terms", [])
+            if str(item).strip()
+        ]
+        has_combined_product_context = bool(
+            any(not self._is_non_specific_product_term(term) for term in combined_product_terms)
+            or any(term in SHOPPING_PRODUCT_HINTS for term in combined_product_terms)
+        )
+        underconstrained_current_turn = bool(
+            not has_combined_product_context
+            and (
+                current_preferences.get("colors")
+                or current_preferences.get("sizes")
+                or current_preferences.get("max_budget")
+                or current_preferences.get("wants_availability")
+                or current_preferences.get("wants_recommendation")
+            )
+        )
+        if underconstrained_current_turn:
+            return {
+                "reply_text": self._clarifying_shopping_question(preferences),
+                "handoff_required": False,
+                "handoff_reason": "",
+                "order_status": None,
+                "latest_intent": "recommendation",
+                "latest_summary": _preview(current_message),
+                "action": {"type": "none"},
+                "ai_metadata": {"ai_runtime": "easy_ecom", "response_strategy": "deterministic_catalog_underconstrained_clarify"},
+            }
+        exact_product_compact_phrase = self._exact_product_compact_phrase(effective_specific_product_terms, effective_product_hints)
+        exact_named_request = bool(
+            exact_product_compact_phrase
+            and (
+                pronoun_follow_up
+                or re.search(r"\bthe\b", lowered_current)
+                or len(effective_specific_product_terms) >= 2
+                or any(re.fullmatch(r"\d+(?:\.\d+)?", term) for term in effective_specific_product_terms)
+            )
+        )
+        strict_constraints_present = bool(preferences.get("colors") or preferences.get("sizes") or effective_product_hints or effective_specific_product_terms)
+        candidate_items = catalog_items
+        if strict_constraints_present:
+            colors = [str(item).strip().lower() for item in preferences.get("colors", []) if str(item).strip()]
+            sizes = [str(item).strip() for item in preferences.get("sizes", []) if str(item).strip()]
+            exact_compact_matches = [
+                item
+                for item in candidate_items
+                if exact_product_compact_phrase and exact_product_compact_phrase in self._compact_alnum_text(self._catalog_item_text(item))
+            ]
+            if exact_compact_matches:
+                candidate_items = exact_compact_matches
+            elif exact_named_request:
+                candidate_items = []
+            else:
+                require_all_specific_terms = bool(
+                    any(re.fullmatch(r"\d+(?:\.\d+)?", term) for term in effective_specific_product_terms)
+                    or len(effective_specific_product_terms) >= 2
+                )
+                if effective_specific_product_terms:
+                    match_fn = all if require_all_specific_terms else any
+                    candidate_items = [
+                        item
+                        for item in candidate_items
+                        if match_fn(
+                            self._text_contains_token(self._catalog_item_text(item), term)
+                            for term in effective_specific_product_terms
+                        )
+                    ]
+                if effective_product_hints:
+                    candidate_items = [
+                        item
+                        for item in candidate_items
+                        if any(
+                            any(self._text_contains_token(self._catalog_item_text(item), token) for token in self._product_hint_terms(hint))
+                            for hint in effective_product_hints
+                        )
+                    ]
+            if colors:
+                candidate_items = [
+                    item for item in candidate_items if any(self._text_contains_token(self._catalog_item_text(item), color) for color in colors)
+                ]
+            if sizes:
+                candidate_items = [
+                    item for item in candidate_items if any(self._text_contains_token(self._catalog_item_text(item), size) for size in sizes)
+                ]
+            if not candidate_items and catalog_items:
+                return {
+                    "reply_text": "I do not currently see a matching option with those details. If you want, I can suggest a similar option or help with another color or size.",
+                    "handoff_required": False,
+                    "handoff_reason": "",
+                    "order_status": None,
+                    "latest_intent": "availability",
+                    "latest_summary": _preview(current_message),
+                    "action": {"type": "none"},
+                    "ai_metadata": {"ai_runtime": "easy_ecom", "response_strategy": "deterministic_catalog_no_strict_match"},
+                }
+
+        ranked_items = self._rank_catalog_items_for_preferences(candidate_items, preferences, limit=3)
+        max_budget = self._money_value(preferences.get("max_budget"))
+        budget_scope_items = [item for item in candidate_items if bool(item.get("can_sell"))]
+        has_budget_match = (
+            max_budget is None
+            or any(
+                self._money_value(item.get("unit_price")) is not None
+                and self._money_value(item.get("unit_price")) <= max_budget
+                for item in budget_scope_items
+            )
+        )
+        currency_symbol = str(business.get("currency_symbol") or "").strip()
+        currency_code = str(business.get("currency_code") or "AED").strip()
+
+        if not ranked_items:
+            return {
+                "reply_text": self._clarifying_shopping_question(preferences),
+                "handoff_required": False,
+                "handoff_reason": "",
+                "order_status": None,
+                "latest_intent": "recommendation",
+                "latest_summary": _preview(current_message),
+                "action": {"type": "none"},
+                "ai_metadata": {"ai_runtime": "easy_ecom", "response_strategy": "deterministic_catalog_clarify"},
+            }
+
+        sellable_ranked_items = [item for item in ranked_items if bool(item.get("can_sell"))]
+        if sellable_ranked_items:
+            ranked_items = sellable_ranked_items
+        else:
+            top_item = ranked_items[0]
+            return {
+                "reply_text": (
+                    f"I do not currently see {str(top_item.get('label') or top_item.get('product_name') or 'that item').strip()} ready to sell right now. "
+                    "If you want, I can suggest a similar option or help with another color or size."
+                ),
+                "handoff_required": False,
+                "handoff_reason": "",
+                "order_status": None,
+                "latest_intent": "availability",
+                "latest_summary": _preview(current_message),
+                "action": {"type": "none"},
+                "ai_metadata": {"ai_runtime": "easy_ecom", "response_strategy": "deterministic_catalog_out_of_stock"},
+            }
+
+        if max_budget is not None and not has_budget_match:
+            top_item = ranked_items[0]
+            return {
+                "reply_text": (
+                    f"I do not currently see an in-stock option within {self._price_display(max_budget, currency_symbol, currency_code)}. "
+                    f"The closest match I found is {str(top_item.get('label') or top_item.get('product_name') or 'that option').strip()} at "
+                    f"{self._price_display(top_item.get('unit_price'), currency_symbol, currency_code)}. "
+                    "Would you like to see that option, or should I look for another color or size?"
+                ),
+                "handoff_required": False,
+                "handoff_reason": "",
+                "order_status": None,
+                "latest_intent": "recommendation",
+                "latest_summary": _preview(current_message),
+                "action": {"type": "none"},
+                "ai_metadata": {"ai_runtime": "easy_ecom", "response_strategy": "deterministic_catalog_budget_gap"},
+            }
+
+        wants_recommendation = (
+            bool(current_preferences.get("wants_recommendation"))
+            or bool(current_preferences.get("max_budget"))
+            or str(current_preferences.get("price_preference") or "") == "lower"
+        )
+        if wants_recommendation:
+            options = ranked_items[:2]
+            if len(options) == 1:
+                option = options[0]
+                reply_text = (
+                    f"Yes — a good option is {str(option.get('label') or option.get('product_name') or 'this item').strip()} at "
+                    f"{self._price_display(option.get('unit_price'), currency_symbol, currency_code)}. "
+                    "It is in stock. Would you like this one, or should I show another option?"
+                )
+            else:
+                first, second = options[0], options[1]
+                reply_text = (
+                    f"Yes — two good options are {str(first.get('product_name') or first.get('label') or 'Option 1').strip()} at "
+                    f"{self._price_display(first.get('unit_price'), currency_symbol, currency_code)} and "
+                    f"{str(second.get('product_name') or second.get('label') or 'Option 2').strip()} at "
+                    f"{self._price_display(second.get('unit_price'), currency_symbol, currency_code)}. "
+                    "Both are in stock. Would you like the first option or the second one?"
+                )
+            return {
+                "reply_text": reply_text,
+                "handoff_required": False,
+                "handoff_reason": "",
+                "order_status": None,
+                "latest_intent": "recommendation",
+                "latest_summary": _preview(current_message),
+                "action": {"type": "none"},
+                "ai_metadata": {"ai_runtime": "easy_ecom", "response_strategy": "deterministic_catalog_recommendation"},
+            }
+
+        top_item = ranked_items[0]
+        description = str(top_item.get("description") or "").strip()
+        detail = f" {description}." if description else ""
+        return {
+            "reply_text": (
+                f"Yes — {str(top_item.get('label') or top_item.get('product_name') or 'that item').strip()} is available at "
+                f"{self._price_display(top_item.get('unit_price'), currency_symbol, currency_code)}.{detail} "
+                "Would you like this option, or should I suggest something else?"
+            ),
+            "handoff_required": False,
+            "handoff_reason": "",
+            "order_status": None,
+            "latest_intent": "availability",
+            "latest_summary": _preview(current_message),
+            "action": {"type": "none"},
+            "ai_metadata": {"ai_runtime": "easy_ecom", "response_strategy": "deterministic_catalog_availability"},
+        }
 
     def _build_ai_model_messages(self, context_payload: dict[str, Any]) -> list[dict[str, str]]:
         system_prompt = (
@@ -1362,6 +2413,7 @@ class AIChatService(CommerceBaseService):
         stock_location = context_payload.get("stock_location") or {}
         catalog = context_payload.get("catalog") or {}
         items = catalog.get("items") or []
+        shopping_preferences = conversation.get("shopping_preferences") or {}
         faq_entries = agent.get("faq_entries") or []
         guardrails = context_payload.get("guardrails") or []
 
@@ -1388,6 +2440,17 @@ class AIChatService(CommerceBaseService):
                 answer = str(item.get("answer") or "").strip()
                 if question or answer:
                     lines.append(f"- Q: {question or 'Unknown'} | A: {answer or 'Unknown'}")
+
+        if shopping_preferences:
+            lines.append("Structured shopping preferences:")
+            for key in ("product_terms", "colors", "sizes", "use_case_terms"):
+                values = [str(item).strip() for item in shopping_preferences.get(key, []) if str(item).strip()]
+                if values:
+                    lines.append(f"- {key}: {', '.join(values[:6])}")
+            if str(shopping_preferences.get("max_budget") or "").strip():
+                lines.append(f"- max_budget: {str(shopping_preferences.get('max_budget')).strip()}")
+            if str(shopping_preferences.get("price_preference") or "").strip():
+                lines.append(f"- price_preference: {str(shopping_preferences.get('price_preference')).strip()}")
 
         lines.append("Catalog matches:")
         if items:
