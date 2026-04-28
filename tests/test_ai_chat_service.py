@@ -353,6 +353,205 @@ class AIChatServiceTests(unittest.TestCase):
         self.assertEqual(payload["latest_intent"], "recommendation")
         audit_mock.assert_called()
 
+    def test_invoke_easy_ecom_ai_handles_simple_greeting_without_handoff_when_model_would_fail(self) -> None:
+        service = AIChatService(sessionmaker())
+        context_payload = {
+            "business": {"currency_code": "AED", "currency_symbol": "AED"},
+            "agent": {
+                "display_name": "Frabby Footwear Assistant",
+                "handoff_message": "Our team will help from here.",
+            },
+            "conversation": {"recent_messages": [], "shopping_preferences": {}},
+            "current_customer_message": "Hi",
+            "catalog": {"items": []},
+        }
+
+        with (
+            patch.object(service, "_build_ai_context", return_value=context_payload),
+            patch.object(service, "_call_ai_model") as call_model_mock,
+            patch.object(service, "_audit_ai_model_step") as audit_mock,
+        ):
+            payload = service._invoke_easy_ecom_ai(
+                client_id=str(uuid4()),
+                conversation_id=str(uuid4()),
+                inbound_message_id=str(uuid4()),
+                text="Hi",
+                recent_context=[],
+                fallback_message="A human teammate will continue from here.",
+            )
+
+        self.assertFalse(payload["handoff_required"])
+        self.assertEqual(payload["latest_intent"], "other")
+        self.assertIn("help", payload["reply_text"].lower())
+        call_model_mock.assert_not_called()
+        audit_mock.assert_called()
+
+    def test_invoke_easy_ecom_ai_handles_multiword_greeting_without_handoff_when_model_would_fail(self) -> None:
+        service = AIChatService(sessionmaker())
+        context_payload = {
+            "business": {"currency_code": "AED", "currency_symbol": "AED"},
+            "agent": {
+                "display_name": "Frabby Footwear Assistant",
+                "handoff_message": "Our team will help from here.",
+            },
+            "conversation": {"recent_messages": [], "shopping_preferences": {}},
+            "current_customer_message": "Good morning",
+            "catalog": {"items": []},
+        }
+
+        with (
+            patch.object(service, "_build_ai_context", return_value=context_payload),
+            patch.object(service, "_call_ai_model") as call_model_mock,
+            patch.object(service, "_audit_ai_model_step") as audit_mock,
+        ):
+            payload = service._invoke_easy_ecom_ai(
+                client_id=str(uuid4()),
+                conversation_id=str(uuid4()),
+                inbound_message_id=str(uuid4()),
+                text="Good morning",
+                recent_context=[],
+                fallback_message="A human teammate will continue from here.",
+            )
+
+        self.assertFalse(payload["handoff_required"])
+        self.assertEqual(payload["latest_intent"], "other")
+        self.assertIn("help", payload["reply_text"].lower())
+        call_model_mock.assert_not_called()
+        audit_mock.assert_called()
+
+    def test_invoke_easy_ecom_ai_handles_i_did_not_ask_yet_without_handoff(self) -> None:
+        service = AIChatService(sessionmaker())
+        context_payload = {
+            "business": {"currency_code": "AED", "currency_symbol": "AED"},
+            "agent": {
+                "display_name": "Frabby Footwear Assistant",
+                "handoff_message": "Our team will help from here.",
+            },
+            "conversation": {
+                "recent_messages": [
+                    {"direction": "outbound", "text": "Thanks for the details. I am sending this to the Frabby Footwear team so they can check it properly and help you."}
+                ],
+                "shopping_preferences": {},
+            },
+            "current_customer_message": "I didn't ask for anything yet.",
+            "catalog": {"items": []},
+        }
+
+        with (
+            patch.object(service, "_build_ai_context", return_value=context_payload),
+            patch.object(service, "_call_ai_model") as call_model_mock,
+            patch.object(service, "_audit_ai_model_step") as audit_mock,
+        ):
+            payload = service._invoke_easy_ecom_ai(
+                client_id=str(uuid4()),
+                conversation_id=str(uuid4()),
+                inbound_message_id=str(uuid4()),
+                text="I didn't ask for anything yet.",
+                recent_context=context_payload["conversation"]["recent_messages"],
+                fallback_message="A human teammate will continue from here.",
+            )
+
+        self.assertFalse(payload["handoff_required"])
+        self.assertEqual(payload["latest_intent"], "other")
+        self.assertIn("sorry", payload["reply_text"].lower())
+        self.assertIn("looking for", payload["reply_text"].lower())
+        call_model_mock.assert_not_called()
+        audit_mock.assert_called()
+
+    def test_invoke_easy_ecom_ai_handles_curly_apostrophe_reset_without_handoff(self) -> None:
+        service = AIChatService(sessionmaker())
+        context_payload = {
+            "business": {"currency_code": "AED", "currency_symbol": "AED"},
+            "agent": {
+                "display_name": "Frabby Footwear Assistant",
+                "handoff_message": "Our team will help from here.",
+            },
+            "conversation": {
+                "recent_messages": [
+                    {"direction": "outbound", "text": "Thanks for the details. I am sending this to the Frabby Footwear team so they can check it properly and help you."}
+                ],
+                "shopping_preferences": {},
+            },
+            "current_customer_message": "I didn’t ask for anything yet.",
+            "catalog": {"items": []},
+        }
+
+        with (
+            patch.object(service, "_build_ai_context", return_value=context_payload),
+            patch.object(service, "_call_ai_model") as call_model_mock,
+            patch.object(service, "_audit_ai_model_step") as audit_mock,
+        ):
+            payload = service._invoke_easy_ecom_ai(
+                client_id=str(uuid4()),
+                conversation_id=str(uuid4()),
+                inbound_message_id=str(uuid4()),
+                text="I didn’t ask for anything yet.",
+                recent_context=context_payload["conversation"]["recent_messages"],
+                fallback_message="A human teammate will continue from here.",
+            )
+
+        self.assertFalse(payload["handoff_required"])
+        self.assertEqual(payload["latest_intent"], "other")
+        self.assertIn("sorry", payload["reply_text"].lower())
+        call_model_mock.assert_not_called()
+        audit_mock.assert_called()
+
+    def test_deterministic_small_talk_does_not_swallow_specific_product_correction(self) -> None:
+        service = AIChatService(sessionmaker())
+
+        reply = service._deterministic_small_talk_reply(
+            {
+                "agent": {"display_name": "Frabby Footwear Assistant"},
+                "conversation": {"recent_messages": [], "shopping_preferences": {}},
+                "current_customer_message": "I didn't ask for shoes, I asked for sandals.",
+                "catalog": {"items": []},
+            }
+        )
+
+        self.assertIsNone(reply)
+
+    def test_deterministic_small_talk_does_not_swallow_reset_plus_human_request(self) -> None:
+        service = AIChatService(sessionmaker())
+
+        reply = service._deterministic_small_talk_reply(
+            {
+                "agent": {"display_name": "Frabby Footwear Assistant"},
+                "conversation": {"recent_messages": [], "shopping_preferences": {}},
+                "current_customer_message": "I didn't ask for anything yet, I want to talk to someone.",
+                "catalog": {"items": []},
+            }
+        )
+
+        self.assertIsNone(reply)
+
+    def test_deterministic_small_talk_does_not_swallow_reset_plus_shopping_request(self) -> None:
+        service = AIChatService(sessionmaker())
+
+        reply = service._deterministic_small_talk_reply(
+            {
+                "agent": {"display_name": "Frabby Footwear Assistant"},
+                "conversation": {"recent_messages": [], "shopping_preferences": {}},
+                "current_customer_message": "I didn't ask for anything yet, I need sandals in size 42.",
+                "catalog": {"items": []},
+            }
+        )
+
+        self.assertIsNone(reply)
+
+    def test_deterministic_small_talk_does_not_swallow_reset_plus_delivery_question(self) -> None:
+        service = AIChatService(sessionmaker())
+
+        reply = service._deterministic_small_talk_reply(
+            {
+                "agent": {"display_name": "Frabby Footwear Assistant"},
+                "conversation": {"recent_messages": [], "shopping_preferences": {}},
+                "current_customer_message": "I didn't ask for anything yet, what are your delivery slots?",
+                "catalog": {"items": []},
+            }
+        )
+
+        self.assertIsNone(reply)
+
     def test_deterministic_catalog_reply_asks_for_one_clarifying_detail_when_matches_are_empty(self) -> None:
         service = AIChatService(sessionmaker())
 
@@ -2888,6 +3087,496 @@ class AIChatServiceTests(unittest.TestCase):
         invoke_mock.assert_not_called()
         self.assertEqual(result["status"], "handoff")
         self.assertTrue(result["handoff_required"])
+
+    def test_technical_handoff_allows_reset_message_to_recover_and_reopen_conversation(self) -> None:
+        engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
+        Base.metadata.create_all(engine)
+        session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
+        service = AIChatService(session_factory)
+
+        client_id = str(uuid4())
+        profile_id = new_uuid()
+        channel_id = new_uuid()
+        conversation_id = new_uuid()
+        widget_key = "technical-handoff-widget-key"
+
+        with session_factory() as session:
+            session.add(
+                ClientModel(
+                    client_id=client_id,
+                    slug="tenant-store-technical-handoff",
+                    business_name="Tenant Store",
+                    contact_name="Owner",
+                    owner_name="Owner",
+                    phone="+1 555 0100",
+                    email="owner@tenant.example",
+                    address="Main Street",
+                    currency_code="USD",
+                    currency_symbol="$",
+                    timezone="UTC",
+                    website_url="https://tenant.example",
+                    facebook_url="",
+                    instagram_url="",
+                    whatsapp_number="",
+                    status="active",
+                    notes="",
+                    billing_plan_code="scale",
+                    billing_status="active",
+                    billing_access_state="paid_active",
+                )
+            )
+            session.add(
+                AIAgentProfileModel(
+                    ai_agent_profile_id=profile_id,
+                    client_id=client_id,
+                    is_enabled=True,
+                    display_name="Lina",
+                    persona_prompt="Warm and concise",
+                    store_policy="Never promise unavailable stock",
+                    faq_json=[],
+                    escalation_rules_json=[],
+                    allowed_actions_json={},
+                    opening_message="Hello!",
+                    handoff_message="A human teammate will continue from here.",
+                )
+            )
+            session.add(
+                AIChatChannelModel(
+                    ai_chat_channel_id=channel_id,
+                    client_id=client_id,
+                    agent_profile_id=profile_id,
+                    channel_type="website",
+                    display_name="Lina",
+                    status="active",
+                    widget_key=widget_key,
+                    allowed_origins_json=[],
+                )
+            )
+            session.add(
+                AIConversationModel(
+                    ai_conversation_id=conversation_id,
+                    client_id=client_id,
+                    ai_chat_channel_id=channel_id,
+                    browser_session_id="browser-session-technical-handoff",
+                    status="handoff",
+                    handoff_reason="AI model request failed",
+                )
+            )
+            session.commit()
+
+        ai_reply = {
+            "reply_text": "You’re right — sorry about that. Tell me what you are looking for, your size, and any color or budget preference, and I’ll help from here.",
+            "handoff_required": False,
+            "handoff_reason": "",
+            "order_status": None,
+            "latest_intent": "other",
+            "latest_summary": "I didn’t ask for anything yet.",
+            "ai_metadata": {"ai_runtime": "easy_ecom"},
+        }
+
+        with patch.object(service, "_invoke_easy_ecom_ai", return_value=ai_reply) as invoke_mock:
+            result = service.handle_public_message(
+                widget_key=widget_key,
+                browser_session_id="browser-session-technical-handoff",
+                client_message_id="msg-technical-handoff-001",
+                message="I didn’t ask for anything yet.",
+                customer=None,
+                metadata={"source": "unit_test"},
+                origin="",
+                client_ip="127.0.0.1",
+                trusted_origins=None,
+            )
+
+        invoke_mock.assert_called_once()
+        self.assertEqual(result["status"], "open")
+        self.assertFalse(result["handoff_required"])
+        self.assertEqual(result["handoff_reason"], "")
+
+    def test_technical_handoff_allows_reset_plus_shopping_request_to_recover(self) -> None:
+        engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
+        Base.metadata.create_all(engine)
+        session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
+        service = AIChatService(session_factory)
+
+        client_id = str(uuid4())
+        profile_id = new_uuid()
+        channel_id = new_uuid()
+        conversation_id = new_uuid()
+        widget_key = "technical-handoff-shopping-widget-key"
+
+        with session_factory() as session:
+            session.add(
+                ClientModel(
+                    client_id=client_id,
+                    slug="tenant-store-technical-handoff-shopping",
+                    business_name="Tenant Store",
+                    contact_name="Owner",
+                    owner_name="Owner",
+                    phone="+1 555 0100",
+                    email="owner@tenant.example",
+                    address="Main Street",
+                    currency_code="USD",
+                    currency_symbol="$",
+                    timezone="UTC",
+                    website_url="https://tenant.example",
+                    facebook_url="",
+                    instagram_url="",
+                    whatsapp_number="",
+                    status="active",
+                    notes="",
+                    billing_plan_code="scale",
+                    billing_status="active",
+                    billing_access_state="paid_active",
+                )
+            )
+            session.add(
+                AIAgentProfileModel(
+                    ai_agent_profile_id=profile_id,
+                    client_id=client_id,
+                    is_enabled=True,
+                    display_name="Lina",
+                    persona_prompt="Warm and concise",
+                    store_policy="Never promise unavailable stock",
+                    faq_json=[],
+                    escalation_rules_json=[],
+                    allowed_actions_json={},
+                    opening_message="Hello!",
+                    handoff_message="A human teammate will continue from here.",
+                )
+            )
+            session.add(
+                AIChatChannelModel(
+                    ai_chat_channel_id=channel_id,
+                    client_id=client_id,
+                    agent_profile_id=profile_id,
+                    channel_type="website",
+                    display_name="Lina",
+                    status="active",
+                    widget_key=widget_key,
+                    allowed_origins_json=[],
+                )
+            )
+            session.add(
+                AIConversationModel(
+                    ai_conversation_id=conversation_id,
+                    client_id=client_id,
+                    ai_chat_channel_id=channel_id,
+                    browser_session_id="browser-session-technical-handoff-shopping",
+                    status="handoff",
+                    handoff_reason="AI model request failed",
+                )
+            )
+            session.commit()
+
+        ai_reply = {
+            "reply_text": "Yes — we have sandals in size 42.",
+            "handoff_required": False,
+            "handoff_reason": "",
+            "order_status": None,
+            "latest_intent": "availability",
+            "latest_summary": "Customer asked for sandals in size 42.",
+            "ai_metadata": {"ai_runtime": "easy_ecom"},
+        }
+
+        with patch.object(service, "_invoke_easy_ecom_ai", return_value=ai_reply) as invoke_mock:
+            result = service.handle_public_message(
+                widget_key=widget_key,
+                browser_session_id="browser-session-technical-handoff-shopping",
+                client_message_id="msg-technical-handoff-shopping-001",
+                message="I didn’t ask for anything yet, I need sandals in size 42.",
+                customer=None,
+                metadata={"source": "unit_test"},
+                origin="",
+                client_ip="127.0.0.1",
+                trusted_origins=None,
+            )
+
+        invoke_mock.assert_called_once()
+        self.assertEqual(result["status"], "open")
+        self.assertFalse(result["handoff_required"])
+        self.assertEqual(result["handoff_reason"], "")
+
+    def test_technical_handoff_does_not_reopen_on_reset_plus_delivery_question(self) -> None:
+        engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
+        Base.metadata.create_all(engine)
+        session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
+        service = AIChatService(session_factory)
+
+        client_id = str(uuid4())
+        profile_id = new_uuid()
+        channel_id = new_uuid()
+        conversation_id = new_uuid()
+        widget_key = "technical-handoff-delivery-widget-key"
+
+        with session_factory() as session:
+            session.add(
+                ClientModel(
+                    client_id=client_id,
+                    slug="tenant-store-technical-handoff-delivery",
+                    business_name="Tenant Store",
+                    contact_name="Owner",
+                    owner_name="Owner",
+                    phone="+1 555 0100",
+                    email="owner@tenant.example",
+                    address="Main Street",
+                    currency_code="USD",
+                    currency_symbol="$",
+                    timezone="UTC",
+                    website_url="https://tenant.example",
+                    facebook_url="",
+                    instagram_url="",
+                    whatsapp_number="",
+                    status="active",
+                    notes="",
+                    billing_plan_code="scale",
+                    billing_status="active",
+                    billing_access_state="paid_active",
+                )
+            )
+            session.add(
+                AIAgentProfileModel(
+                    ai_agent_profile_id=profile_id,
+                    client_id=client_id,
+                    is_enabled=True,
+                    display_name="Lina",
+                    persona_prompt="Warm and concise",
+                    store_policy="Never promise unavailable stock",
+                    faq_json=[],
+                    escalation_rules_json=[],
+                    allowed_actions_json={},
+                    opening_message="Hello!",
+                    handoff_message="A human teammate will continue from here.",
+                )
+            )
+            session.add(
+                AIChatChannelModel(
+                    ai_chat_channel_id=channel_id,
+                    client_id=client_id,
+                    agent_profile_id=profile_id,
+                    channel_type="website",
+                    display_name="Lina",
+                    status="active",
+                    widget_key=widget_key,
+                    allowed_origins_json=[],
+                )
+            )
+            session.add(
+                AIConversationModel(
+                    ai_conversation_id=conversation_id,
+                    client_id=client_id,
+                    ai_chat_channel_id=channel_id,
+                    browser_session_id="browser-session-technical-handoff-delivery",
+                    status="handoff",
+                    handoff_reason="AI model request failed",
+                )
+            )
+            session.commit()
+
+        with patch.object(service, "_invoke_easy_ecom_ai") as invoke_mock:
+            result = service.handle_public_message(
+                widget_key=widget_key,
+                browser_session_id="browser-session-technical-handoff-delivery",
+                client_message_id="msg-technical-handoff-delivery-001",
+                message="I didn’t ask for anything yet, what are your delivery slots?",
+                customer=None,
+                metadata={"source": "unit_test"},
+                origin="",
+                client_ip="127.0.0.1",
+                trusted_origins=None,
+            )
+
+        invoke_mock.assert_not_called()
+        self.assertEqual(result["status"], "handoff")
+        self.assertTrue(result["handoff_required"])
+        self.assertEqual(result["handoff_reason"], "AI model request failed")
+
+    def test_technical_handoff_does_not_reopen_on_reset_plus_apology(self) -> None:
+        engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
+        Base.metadata.create_all(engine)
+        session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
+        service = AIChatService(session_factory)
+
+        client_id = str(uuid4())
+        profile_id = new_uuid()
+        channel_id = new_uuid()
+        conversation_id = new_uuid()
+        widget_key = "technical-handoff-apology-widget-key"
+
+        with session_factory() as session:
+            session.add(
+                ClientModel(
+                    client_id=client_id,
+                    slug="tenant-store-technical-handoff-apology",
+                    business_name="Tenant Store",
+                    contact_name="Owner",
+                    owner_name="Owner",
+                    phone="+1 555 0100",
+                    email="owner@tenant.example",
+                    address="Main Street",
+                    currency_code="USD",
+                    currency_symbol="$",
+                    timezone="UTC",
+                    website_url="https://tenant.example",
+                    facebook_url="",
+                    instagram_url="",
+                    whatsapp_number="",
+                    status="active",
+                    notes="",
+                    billing_plan_code="scale",
+                    billing_status="active",
+                    billing_access_state="paid_active",
+                )
+            )
+            session.add(
+                AIAgentProfileModel(
+                    ai_agent_profile_id=profile_id,
+                    client_id=client_id,
+                    is_enabled=True,
+                    display_name="Lina",
+                    persona_prompt="Warm and concise",
+                    store_policy="Never promise unavailable stock",
+                    faq_json=[],
+                    escalation_rules_json=[],
+                    allowed_actions_json={},
+                    opening_message="Hello!",
+                    handoff_message="A human teammate will continue from here.",
+                )
+            )
+            session.add(
+                AIChatChannelModel(
+                    ai_chat_channel_id=channel_id,
+                    client_id=client_id,
+                    agent_profile_id=profile_id,
+                    channel_type="website",
+                    display_name="Lina",
+                    status="active",
+                    widget_key=widget_key,
+                    allowed_origins_json=[],
+                )
+            )
+            session.add(
+                AIConversationModel(
+                    ai_conversation_id=conversation_id,
+                    client_id=client_id,
+                    ai_chat_channel_id=channel_id,
+                    browser_session_id="browser-session-technical-handoff-apology",
+                    status="handoff",
+                    handoff_reason="AI model request failed",
+                )
+            )
+            session.commit()
+
+        with patch.object(service, "_invoke_easy_ecom_ai") as invoke_mock:
+            result = service.handle_public_message(
+                widget_key=widget_key,
+                browser_session_id="browser-session-technical-handoff-apology",
+                client_message_id="msg-technical-handoff-apology-001",
+                message="I didn’t ask for anything yet, sorry.",
+                customer=None,
+                metadata={"source": "unit_test"},
+                origin="",
+                client_ip="127.0.0.1",
+                trusted_origins=None,
+            )
+
+        invoke_mock.assert_not_called()
+        self.assertEqual(result["status"], "handoff")
+        self.assertTrue(result["handoff_required"])
+        self.assertEqual(result["handoff_reason"], "AI model request failed")
+
+    def test_model_requested_handoff_does_not_reopen_on_greeting(self) -> None:
+        engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
+        Base.metadata.create_all(engine)
+        session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
+        service = AIChatService(session_factory)
+
+        client_id = str(uuid4())
+        profile_id = new_uuid()
+        channel_id = new_uuid()
+        conversation_id = new_uuid()
+        widget_key = "model-requested-handoff-widget-key"
+
+        with session_factory() as session:
+            session.add(
+                ClientModel(
+                    client_id=client_id,
+                    slug="tenant-store-model-requested-handoff",
+                    business_name="Tenant Store",
+                    contact_name="Owner",
+                    owner_name="Owner",
+                    phone="+1 555 0100",
+                    email="owner@tenant.example",
+                    address="Main Street",
+                    currency_code="USD",
+                    currency_symbol="$",
+                    timezone="UTC",
+                    website_url="https://tenant.example",
+                    facebook_url="",
+                    instagram_url="",
+                    whatsapp_number="",
+                    status="active",
+                    notes="",
+                    billing_plan_code="scale",
+                    billing_status="active",
+                    billing_access_state="paid_active",
+                )
+            )
+            session.add(
+                AIAgentProfileModel(
+                    ai_agent_profile_id=profile_id,
+                    client_id=client_id,
+                    is_enabled=True,
+                    display_name="Lina",
+                    persona_prompt="Warm and concise",
+                    store_policy="Never promise unavailable stock",
+                    faq_json=[],
+                    escalation_rules_json=[],
+                    allowed_actions_json={},
+                    opening_message="Hello!",
+                    handoff_message="A human teammate will continue from here.",
+                )
+            )
+            session.add(
+                AIChatChannelModel(
+                    ai_chat_channel_id=channel_id,
+                    client_id=client_id,
+                    agent_profile_id=profile_id,
+                    channel_type="website",
+                    display_name="Lina",
+                    status="active",
+                    widget_key=widget_key,
+                    allowed_origins_json=[],
+                )
+            )
+            session.add(
+                AIConversationModel(
+                    ai_conversation_id=conversation_id,
+                    client_id=client_id,
+                    ai_chat_channel_id=channel_id,
+                    browser_session_id="browser-session-model-requested-handoff",
+                    status="handoff",
+                    handoff_reason="AI model requested handoff",
+                )
+            )
+            session.commit()
+
+        with patch.object(service, "_invoke_easy_ecom_ai") as invoke_mock:
+            result = service.handle_public_message(
+                widget_key=widget_key,
+                browser_session_id="browser-session-model-requested-handoff",
+                client_message_id="msg-model-requested-handoff-001",
+                message="Hi",
+                customer=None,
+                metadata={"source": "unit_test"},
+                origin="",
+                client_ip="127.0.0.1",
+                trusted_origins=None,
+            )
+
+        invoke_mock.assert_not_called()
+        self.assertEqual(result["status"], "handoff")
+        self.assertTrue(result["handoff_required"])
+        self.assertEqual(result["handoff_reason"], "AI model requested handoff")
 
 
 if __name__ == "__main__":

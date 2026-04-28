@@ -293,10 +293,29 @@ SHOPPING_NON_SPECIFIC_PRODUCT_TERMS = {
     "still",
     "suggest",
     "suggested",
+    "thing",
+    "things",
     "under",
     "use",
     "usd",
 }
+SMALL_TALK_GREETING_PHRASES = {
+    "assalamualaikum",
+    "good afternoon",
+    "good evening",
+    "good morning",
+    "hello",
+    "hello there",
+    "hey",
+    "hey there",
+    "hi",
+    "hi there",
+    "salam",
+}
+SMALL_TALK_RESET_PATTERNS = (
+    r"\bi\s+(?:didn't|didnt|did not)\s+ask(?:\s+for)?\s+anything\s+yet\b",
+    r"\bi\s+(?:have not|haven't|havent)\s+asked(?:\s+for)?\s+anything\s+yet\b",
+)
 SHOPPING_PRODUCT_HINT_SYNONYMS = {
     "shoe": {"shoe", "shoes", "sneaker", "sneakers", "trainer", "trainers"},
     "shoes": {"shoe", "shoes", "sneaker", "sneakers", "trainer", "trainers"},
@@ -1052,7 +1071,29 @@ class AIChatService(CommerceBaseService):
                     return {"final_response": duplicate_payload}
             self._enforce_public_rate_limit(session, conversation)
             existing_handoff_reason = str(conversation.handoff_reason or "").strip()
-            if conversation.status == "closed":
+            small_talk_intent = self._small_talk_intent(message)
+            reset_remainder = self._small_talk_reset_remainder(message) if small_talk_intent == "reset" else ""
+            reset_requests_human = bool(reset_remainder and self._keyword_handoff_reason(reset_remainder))
+            reset_has_shopping_signal = bool(reset_remainder and self._has_specific_shopping_signal(reset_remainder))
+            can_recover_with_small_talk = bool(
+                small_talk_intent == "greeting"
+                or (
+                    small_talk_intent == "reset"
+                    and not reset_requests_human
+                    and (not reset_remainder or reset_has_shopping_signal)
+                )
+            )
+            recoverable_technical_handoff = bool(
+                conversation.status == "handoff"
+                and existing_handoff_reason
+                and can_recover_with_small_talk
+                and self._is_recoverable_technical_handoff_reason(existing_handoff_reason)
+            )
+            if recoverable_technical_handoff:
+                conversation.status = "open"
+                conversation.handoff_reason = ""
+                handoff_reason = ""
+            elif conversation.status == "closed":
                 handoff_reason = existing_handoff_reason or "Conversation is closed and waiting for a human follow-up"
             elif conversation.status == "handoff":
                 handoff_reason = existing_handoff_reason or "Conversation requires a human follow-up"
@@ -1316,6 +1357,26 @@ class AIChatService(CommerceBaseService):
                 response_json=deterministic_reply,
             )
             return deterministic_reply
+
+        small_talk_reply = self._deterministic_small_talk_reply(context_payload)
+        if small_talk_reply is not None:
+            small_talk_reply["model_name"] = model_name
+            small_talk_reply["ai_metadata"] = dict(
+                {
+                    "ai_runtime": "easy_ecom",
+                    "model": model_name,
+                    "model_status": "deterministic_small_talk",
+                }
+                | (small_talk_reply.get("ai_metadata") or {})
+            )
+            self._audit_ai_model_step(
+                client_id=client_id,
+                conversation_id=conversation_id,
+                inbound_message_id=inbound_message_id,
+                request_json=dict(model_request | {"strategy": "deterministic_small_talk"}),
+                response_json=small_talk_reply,
+            )
+            return small_talk_reply
 
         if not settings.openai_api_key:
             payload = self._ai_handoff_payload(
@@ -2059,6 +2120,118 @@ class AIChatService(CommerceBaseService):
         if not preferences.get("max_budget"):
             return "I can help with that. What budget would you like me to stay under?"
         return "I can help with that. Do you want me to focus on a lower price, a different color, or another size?"
+
+    def _small_talk_intent(self, message: str) -> str | None:
+        normalized_source = str(message or "").strip().lower().replace("’", "'").replace("‘", "'")
+        normalized = re.sub(r"[^a-z0-9' ]+", " ", normalized_source)
+        normalized = " ".join(normalized.split())
+        if not normalized:
+            return None
+        if any(re.search(pattern, normalized) for pattern in SMALL_TALK_RESET_PATTERNS):
+            return "reset"
+        if normalized in SMALL_TALK_GREETING_PHRASES:
+            return "greeting"
+        return None
+
+    def _small_talk_reset_remainder(self, message: str) -> str:
+        normalized_source = str(message or "").strip().lower().replace("’", "'").replace("‘", "'")
+        normalized = re.sub(r"[^a-z0-9' ]+", " ", normalized_source)
+        normalized = " ".join(normalized.split())
+        for pattern in SMALL_TALK_RESET_PATTERNS:
+            remainder = re.sub(pattern, "", normalized).strip()
+            remainder = " ".join(remainder.split())
+            if remainder != normalized:
+                return remainder
+        return normalized
+
+    def _has_specific_shopping_signal(self, message: str) -> bool:
+        current_preferences = self._extract_shopping_preferences(
+            text=message,
+            recent_context=[],
+            existing_preferences={},
+        )
+        product_terms = [
+            str(term).strip().lower()
+            for term in current_preferences.get("product_terms", [])
+            if str(term).strip()
+        ]
+        specific_product_terms = [term for term in product_terms if not self._is_non_specific_product_term(term)]
+        has_product_hint = any(term in SHOPPING_PRODUCT_HINTS for term in product_terms)
+        lowered = " ".join(str(message or "").lower().split())
+        has_explicit_commerce_phrase = any(
+            phrase in lowered
+            for phrase in (
+                *SHOPPING_SIMPLE_DISCOVERY_PHRASES,
+                *SHOPPING_AVAILABILITY_PHRASES,
+                *SHOPPING_RECOMMENDATION_PHRASES,
+            )
+        )
+        return bool(
+            current_preferences.get("colors")
+            or current_preferences.get("sizes")
+            or current_preferences.get("use_case_terms")
+            or current_preferences.get("max_budget")
+            or has_product_hint
+            or current_preferences.get("wants_recommendation")
+            or current_preferences.get("wants_availability")
+            or (specific_product_terms and has_explicit_commerce_phrase)
+        )
+
+    def _has_non_product_topic_signal(self, message: str) -> bool:
+        lowered = " ".join(str(message or "").lower().split())
+        return any(phrase in lowered for phrase in SHOPPING_NON_PRODUCT_TOPIC_PHRASES)
+
+    def _is_recoverable_technical_handoff_reason(self, reason: str) -> bool:
+        normalized = str(reason or "").strip().lower()
+        return normalized in {
+            "ai context preparation failed",
+            "ai model api key is not configured",
+            "ai model request failed",
+            "ai workflow is not configured",
+        }
+
+    def _deterministic_small_talk_reply(self, context_payload: dict[str, Any]) -> dict[str, Any] | None:
+        current_message = str(context_payload.get("current_customer_message") or "").strip()
+        if not current_message:
+            return None
+
+        small_talk_intent = self._small_talk_intent(current_message)
+        if small_talk_intent == "reset":
+            reset_remainder = self._small_talk_reset_remainder(current_message)
+            if reset_remainder and (
+                self._keyword_handoff_reason(reset_remainder)
+                or self._has_specific_shopping_signal(reset_remainder)
+                or self._has_non_product_topic_signal(reset_remainder)
+            ):
+                return None
+            return {
+                "reply_text": "You’re right — sorry about that. Tell me what you are looking for, your size, and any color or budget preference, and I’ll help from here.",
+                "handoff_required": False,
+                "handoff_reason": "",
+                "order_status": None,
+                "latest_intent": "other",
+                "latest_summary": _preview(current_message),
+                "action": {"type": "none"},
+                "ai_metadata": {"ai_runtime": "easy_ecom", "response_strategy": "deterministic_small_talk_reset"},
+            }
+
+        assistant_name = str(context_payload.get("agent", {}).get("display_name") or "the assistant").strip()
+        if small_talk_intent == "greeting":
+            return {
+                "reply_text": f"Hi — I can help with that. Tell me what you are looking for, your size, and any color or budget preference, and {assistant_name} will check the best options for you.",
+                "handoff_required": False,
+                "handoff_reason": "",
+                "order_status": None,
+                "latest_intent": "other",
+                "latest_summary": _preview(current_message),
+                "action": {"type": "none"},
+                "ai_metadata": {"ai_runtime": "easy_ecom", "response_strategy": "deterministic_small_talk_greeting"},
+            }
+
+        if self._has_specific_shopping_signal(current_message):
+            return None
+
+        return None
 
     def _price_display(self, value: Any, currency_symbol: str, currency_code: str) -> str:
         amount = self._money_value(value)
